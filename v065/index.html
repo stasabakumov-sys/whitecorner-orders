@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>White Corner Orders v0.6.5</title><style>html,body,iframe{margin:0;width:100%;height:100%;border:0}iframe{position:fixed;inset:0}</style></head><body><iframe id="outer" src="../v064/" title="White Corner Orders v0.6.5"></iframe><script>
+const outer=document.getElementById('outer');
+const ADDON_TERMS=['additional tabletop','custom cutouts','custom cutout','umbrella hole','customisation','customization','back panel with'];
+const TECH=['ready-to-use svg','please email us','i would like to add a logo but i dont have it in that file type'];
+function deepestDoc(){try{let d=outer.contentDocument||outer.contentWindow.document;for(let i=0;i<6;i++){const app=d?.querySelector('#app');if(app)return d;const fr=d?.querySelector('iframe');if(!fr)break;d=fr.contentDocument||fr.contentWindow.document;}return d}catch{return null}}
+function isAddonName(s){s=(s||'').toLowerCase();return ADDON_TERMS.some(t=>s.includes(t))}
+function styles(d){if(d.getElementById('v065style'))return;const s=d.createElement('style');s.id='v065style';s.textContent=`
+.dh{align-items:flex-start}.v065-headstatus{display:flex;align-items:center;gap:8px;margin-left:18px}.v065-headstatus .lab{font-size:10px;text-transform:uppercase;color:var(--mut);font-weight:700;white-space:nowrap}.v065-headstatus select{width:auto!important;min-width:96px!important;max-width:125px!important;border-radius:16px!important;padding:5px 25px 5px 9px!important;font-size:11px!important;font-weight:600!important;margin:0!important}.v065-hidden{display:none!important}.v065-addons-title{font-size:11px;text-transform:uppercase;color:#7a8599;font-weight:700;margin:20px 0 9px;padding-top:14px;border-top:1px solid var(--line)}
+`;d.head.appendChild(s)}
+function hideTechText(d){d.querySelectorAll('.item,.pcard').forEach(item=>{const raw=(item.textContent||'').toLowerCase();const noLogo=/logo or personalization\s*:\s*no|logo\s*:\s*no|personalization\s*:\s*no/.test(raw);if(!noLogo)return;item.querySelectorAll('.pill,.note,div,span').forEach(el=>{const t=(el.textContent||'').toLowerCase();if(TECH.some(x=>t.includes(x)) && !/logo or personalization\s*:\s*no/.test(t))el.classList.add('v065-hidden')})})}
+function cleanBoard(d){const board=d.querySelector('#board');if(!board)return;board.querySelectorAll('.pcard').forEach(card=>{const name=card.querySelector('.product')?.textContent||'';if(isAddonName(name))card.classList.add('v065-hidden')});board.querySelectorAll('.col').forEach(col=>{const visible=[...col.querySelectorAll('.pcard')].filter(c=>!c.classList.contains('v065-hidden')&&getComputedStyle(c).display!=='none').length;const badge=col.querySelector('.ch span:last-child');if(badge)badge.textContent=String(visible)})}
+function cleanDrawer(d){const shade=d.querySelector('#shade');if(!shade?.classList.contains('on'))return;const db=d.querySelector('#db');if(!db)return;
+ hideTechText(d);
+ const items=[...db.querySelectorAll('.item')];if(!items.length)return;
+ const delivery=items.filter(i=>/^delivery$/i.test((i.querySelector('b')?.textContent||'').trim()));delivery.forEach(i=>i.classList.add('v065-hidden'));
+ const addItems=items.filter(i=>isAddonName(i.querySelector('b')?.textContent||''));
+ addItems.forEach(i=>{i.querySelectorAll('.unitrow').forEach(r=>r.classList.add('v065-hidden'))});
+ const mainItems=items.filter(i=>!i.classList.contains('v065-hidden')&&!isAddonName(i.querySelector('b')?.textContent||''));
+ let statusSelect=null;
+ if(mainItems.length===1){statusSelect=mainItems[0].querySelector('.unitrow select');if(statusSelect){const row=statusSelect.closest('.unitrow');row?.classList.add('v065-hidden');}}
+ const dh=d.querySelector('.dh');if(dh&&statusSelect&&!d.querySelector('.v065-headstatus')){const close=dh.querySelector('.close');const wrap=d.createElement('div');wrap.className='v065-headstatus';const lab=d.createElement('span');lab.className='lab';lab.textContent='Change status';wrap.append(lab,statusSelect);dh.insertBefore(wrap,close);}
+ const itemSec=[...db.querySelectorAll('.sec')].find(sec=>sec.querySelector('.item'));if(itemSec&&addItems.length){let addTitle=db.querySelector('.v065-addons-title');if(!addTitle){addTitle=d.createElement('div');addTitle.className='v065-addons-title';addTitle.textContent='Add-ons';itemSec.appendChild(addTitle);}addItems.forEach(i=>{i.classList.remove('v065-hidden');itemSec.appendChild(i);});}
+ const oldAddonHeadings=[...db.querySelectorAll('.addon-heading,.st')].filter(x=>x!==itemSec?.querySelector('.st')&&/^add-ons$/i.test((x.textContent||'').trim()));oldAddonHeadings.forEach(x=>{if(!x.classList.contains('v065-addons-title'))x.classList.add('v065-hidden')});
+}
+function updateVersion(d){const vals=[...d.querySelectorAll('.homepanel .value b')];if(vals.length)vals[0].textContent='v0.6.5 Live'}
+function tick(){const d=deepestDoc();if(!d)return;styles(d);updateVersion(d);cleanBoard(d);cleanDrawer(d);hideTechText(d)}
+outer.addEventListener('load',()=>{setTimeout(tick,700);setInterval(tick,900)});
+</script></body></html>
