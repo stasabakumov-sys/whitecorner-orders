@@ -57,11 +57,17 @@ Deno.serve(async () => {
 
     const db = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
 
+    // Wix Search Orders uses cursor-based paging. Always follow the returned
+    // next cursor so older unfinished orders are not missed.
     let allOrders: any[] = [];
-    let offset = 0;
+    let cursor: string | undefined = undefined;
     const limit = 100;
+    let pagesScanned = 0;
 
-    for (let page = 0; page < 50; page++) {
+    for (let page = 0; page < 100; page++) {
+      const cursorPaging: Record<string, any> = { limit };
+      if (cursor) cursorPaging.cursor = cursor;
+
       const wixRes = await fetch("https://www.wixapis.com/ecom/v1/orders/search", {
         method: "POST",
         headers: {
@@ -70,8 +76,8 @@ Deno.serve(async () => {
           "wix-site-id": wixSiteId,
         },
         body: JSON.stringify({
-          query: {
-            paging: { limit, offset },
+          search: {
+            cursorPaging,
             sort: [{ fieldName: "createdDate", order: "DESC" }],
           },
         }),
@@ -84,11 +90,19 @@ Deno.serve(async () => {
 
       const batch = payload?.orders || [];
       allOrders.push(...batch);
-      if (batch.length < limit) break;
-      offset += limit;
+      pagesScanned++;
+
+      const cursors = payload?.metadata?.cursors || payload?.pagingMetadata?.cursors || {};
+      const next = cursors?.next;
+      const hasNext = cursors?.hasNext;
+
+      if (!next || hasNext === false || batch.length === 0) break;
+      cursor = next;
     }
 
-    const unfinished = allOrders.filter(isUnfinished);
+    // Defensive dedupe in case Wix returns an overlapping record between pages.
+    const uniqueOrders = Array.from(new Map(allOrders.map((o: any) => [o.id, o])).values());
+    const unfinished = uniqueOrders.filter(isUnfinished);
     let insertedOrUpdated = 0;
     let itemCount = 0;
     let unitCount = 0;
@@ -160,7 +174,6 @@ Deno.serve(async () => {
           raw_item: li,
         };
 
-        // Only Wix-owned columns are refreshed here; WC editable fields stay intact.
         const { data: savedItem, error: itemErr } = await db
           .from("wc_order_items")
           .upsert(itemRow, { onConflict: "order_id,wix_line_item_id" })
@@ -171,8 +184,6 @@ Deno.serve(async () => {
 
         const orderItemId = savedItem.id;
 
-        // Ensure one independent production unit per physical quantity.
-        // Existing statuses are preserved because the upsert only identifies the row.
         for (let unitIndex = 1; unitIndex <= quantity; unitIndex++) {
           const { error: unitErr } = await db
             .from("wc_production_units")
@@ -184,7 +195,6 @@ Deno.serve(async () => {
           unitCount++;
         }
 
-        // If Wix quantity is reduced, remove only units above the new quantity.
         const { error: trimErr } = await db
           .from("wc_production_units")
           .delete()
@@ -206,7 +216,8 @@ Deno.serve(async () => {
 
     return new Response(JSON.stringify({
       ok: true,
-      wixOrdersScanned: allOrders.length,
+      wixPagesScanned: pagesScanned,
+      wixOrdersScanned: uniqueOrders.length,
       unfinishedOrders: unfinished.length,
       ordersUpserted: insertedOrUpdated,
       lineItemsUpserted: itemCount,
