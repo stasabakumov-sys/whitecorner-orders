@@ -63,8 +63,19 @@ Deno.serve(async () => {
     let pagesScanned = 0;
 
     for (let page = 0; page < 100; page++) {
-      const cursorPaging: Record<string, any> = { limit };
-      if (cursor) cursorPaging.cursor = cursor;
+      // Filter on Wix itself so we do not scan and process the full fulfilled history.
+      // For cursor follow-up requests, Wix expects the returned cursor to carry the
+      // original filter/sort state, so only cursorPaging is sent after page 1.
+      const requestBody: Record<string, any> = cursor
+        ? { cursorPaging: { cursor } }
+        : {
+            filter: {
+              fulfillmentStatus: { "$ne": "FULFILLED" },
+              status: { "$ne": "CANCELED" },
+            },
+            cursorPaging: { limit },
+            sort: [{ fieldName: "createdDate", order: "DESC" }],
+          };
 
       const wixRes = await fetch("https://www.wixapis.com/ecom/v1/orders/search", {
         method: "POST",
@@ -73,10 +84,7 @@ Deno.serve(async () => {
           "Authorization": wixApiKey,
           "wix-site-id": wixSiteId,
         },
-        body: JSON.stringify({
-          cursorPaging,
-          sort: [{ fieldName: "createdDate", order: "DESC" }],
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const payload = await wixRes.json();
@@ -207,7 +215,7 @@ Deno.serve(async () => {
       }
     }
 
-    return new Response(JSON.stringify({
+    const result = {
       ok: true,
       wixPagesScanned: pagesScanned,
       wixOrdersScanned: uniqueOrders.length,
@@ -216,7 +224,10 @@ Deno.serve(async () => {
       lineItemsUpserted: itemCount,
       productionUnitsEnsured: unitCount,
       syncedAt: new Date().toISOString(),
-    }, null, 2), { status: 200, headers: jsonHeaders });
+    };
+
+    console.log("SYNC_RESULT", JSON.stringify(result));
+    return new Response(JSON.stringify(result, null, 2), { status: 200, headers: jsonHeaders });
   } catch (err) {
     console.error(err);
     return new Response(JSON.stringify({ error: String((err as any)?.message || err) }, null, 2), { status: 500, headers: jsonHeaders });
