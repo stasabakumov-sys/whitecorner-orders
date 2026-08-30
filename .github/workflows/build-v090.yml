@@ -1,0 +1,40 @@
+name: Build v0.9.0 standalone
+on:
+  push:
+    paths:
+      - '.github/workflows/build-v090.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build standalone v0.9.0
+        shell: python
+        run: |
+          from pathlib import Path
+          src = Path('v089/index.html').read_text()
+          s = src.replace('White Corner Orders v0.8.9','White Corner Orders v0.9.0').replace('v0.8.9 Standalone','v0.9.0 Standalone')
+
+          old = "function activityDate(v){return new Intl.DateTimeFormat('en-AU',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(v))}"
+          new = "function productionUnitLabel(a){if(!a?.production_unit_id)return'';const o=O.find(x=>x.id===a.order_id);if(!o)return'';const arr=logical(o);const idx=arr.findIndex(x=>x.u.id===a.production_unit_id);if(idx<0)return'#'+o.order_number;return arr.length>1?'#'+o.order_number+'-'+(idx+1):'#'+o.order_number}function activityDate(v){return new Intl.DateTimeFormat('en-AU',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(v))}"
+          if old not in s:
+              raise SystemExit('activityDate anchor not found')
+          s = s.replace(old,new,1)
+
+          old = "const note=a.activity_type==='note',text=note?esc(a.message||''):`Status changed from <b>${esc(a.old_status||'—')}</b> to <b>${esc(a.new_status||'—')}</b>`,who=note?`${esc(a.created_by||'User')} added a note:`:`${esc(a.created_by||'User')}`;"
+          new = "const note=a.activity_type==='note',unitLabel=productionUnitLabel(a),text=note?esc(a.message||''):`${unitLabel?'<b>'+esc(unitLabel)+'</b> · ':''}Status changed from <b>${esc(a.old_status||'—')}</b> to <b>${esc(a.new_status||'—')}</b>`,who=note?`${esc(a.created_by||'User')} added a note:`:`${esc(a.created_by||'User')}`;"
+          if old not in s:
+              raise SystemExit('activity text anchor not found')
+          s = s.replace(old,new,1)
+
+          Path('v090').mkdir(exist_ok=True)
+          Path('v090/index.html').write_text(s)
+      - name: Commit v0.9.0
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add v090/index.html
+          git commit -m "Release v0.9.0 standalone" || exit 0
+          git push
