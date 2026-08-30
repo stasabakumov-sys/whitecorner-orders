@@ -59,22 +59,22 @@ Deno.serve(async () => {
 
     let allOrders: any[] = [];
     let cursor: string | undefined = undefined;
-    const limit = 100;
     let pagesScanned = 0;
     let previousCursor: string | undefined = undefined;
 
     for (let page = 0; page < 100; page++) {
-      const cursorPaging: Record<string, any> = { limit };
-      if (cursor) cursorPaging.cursor = cursor;
-
-      const search = {
-        filter: {
-          fulfillmentStatus: { "$in": ["NOT_FULFILLED", "PARTIALLY_FULFILLED"] },
-          status: { "$ne": "CANCELED" },
-        },
-        cursorPaging,
-        sort: [{ fieldName: "createdDate", order: "DESC" }],
-      };
+      // Wix cursor paging: first request carries filter/sort/limit.
+      // Follow-up requests carry only the cursor returned by the previous page.
+      const search: Record<string, any> = cursor
+        ? { cursorPaging: { cursor } }
+        : {
+            filter: {
+              fulfillmentStatus: "NOT_FULFILLED",
+              status: { "$ne": "CANCELED" },
+            },
+            cursorPaging: { limit: 100 },
+            sort: [{ fieldName: "createdDate", order: "DESC" }],
+          };
 
       const wixRes = await fetch("https://www.wixapis.com/ecom/v1/orders/search", {
         method: "POST",
