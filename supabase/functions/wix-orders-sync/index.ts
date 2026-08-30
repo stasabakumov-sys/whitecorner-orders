@@ -63,16 +63,8 @@ Deno.serve(async () => {
     let pagesScanned = 0;
 
     for (let page = 0; page < 100; page++) {
-      const query: Record<string, any> = cursor
-        ? { cursorPaging: { cursor } }
-        : {
-            filter: {
-              fulfillmentStatus: { "$ne": "FULFILLED" },
-              status: { "$ne": "CANCELED" },
-            },
-            cursorPaging: { limit },
-            sort: [{ fieldName: "createdDate", order: "DESC" }],
-          };
+      const cursorPaging: Record<string, any> = { limit };
+      if (cursor) cursorPaging.cursor = cursor;
 
       const wixRes = await fetch("https://www.wixapis.com/ecom/v1/orders/search", {
         method: "POST",
@@ -81,7 +73,14 @@ Deno.serve(async () => {
           "Authorization": wixApiKey,
           "wix-site-id": wixSiteId,
         },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({
+          filter: {
+            fulfillmentStatus: { "$ne": "FULFILLED" },
+            status: { "$ne": "CANCELED" },
+          },
+          cursorPaging,
+          sort: [{ fieldName: "createdDate", order: "DESC" }],
+        }),
       });
 
       const payload = await wixRes.json();
@@ -93,8 +92,9 @@ Deno.serve(async () => {
       allOrders.push(...batch);
       pagesScanned++;
 
-      const next = payload?.pagingMetadata?.cursors?.next || payload?.metadata?.cursors?.next;
-      if (!next || batch.length === 0) break;
+      const next = payload?.metadata?.cursors?.next || payload?.pagingMetadata?.cursors?.next;
+      const hasNext = payload?.metadata?.cursors?.hasNext ?? payload?.pagingMetadata?.cursors?.hasNext;
+      if (!next || hasNext === false || batch.length === 0) break;
       cursor = next;
     }
 
