@@ -1,0 +1,25 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>White Corner Orders v0.6.7</title><style>html,body,iframe{margin:0;width:100%;height:100%;border:0}iframe{position:fixed;inset:0}</style></head><body><iframe id="outer" src="../v066/" title="White Corner Orders v0.6.7"></iframe><script>
+const outer=document.getElementById('outer');
+let openedFromBoard=false;
+function deepestDoc(){try{let d=outer.contentDocument||outer.contentWindow.document;for(let i=0;i<10;i++){const app=d?.querySelector('#app');if(app)return d;const fr=d?.querySelector('iframe');if(!fr)break;d=fr.contentDocument||fr.contentWindow.document;}return d}catch{return null}}
+function addStyles(d){if(d.getElementById('v067style'))return;const s=d.createElement('style');s.id='v067style';s.textContent=`
+/* Status changes belong only to Production Board cards */
+#shade .unitrow,#shade .v065-headstatus,#shade .v066-headstatus{display:none!important}
+`;d.head.appendChild(s)}
+function captureSource(d){const board=d.querySelector('#board');if(board&&board.dataset.v067capture!=='1'){board.dataset.v067capture='1';board.addEventListener('click',e=>{if(e.target.closest('.pcard'))openedFromBoard=true;},true)}
+ const orders=d.querySelector('#orders');if(orders&&orders.dataset.v067capture!=='1'){orders.dataset.v067capture='1';orders.addEventListener('click',e=>{if(e.target.closest('tbody tr'))openedFromBoard=false;},true)}
+}
+function cleanBoardNumbers(d){const board=d.querySelector('#board');if(!board)return;const cards=[...board.querySelectorAll('.pcard')].filter(c=>!c.classList.contains('v065-hidden')&&getComputedStyle(c).display!=='none');const groups=new Map();
+ cards.forEach(card=>{const el=card.querySelector('.ordercode');if(!el)return;if(!el.dataset.v067original)el.dataset.v067original=(el.textContent||'').trim();const original=el.dataset.v067original;const m=original.match(/^(#?\d+)(?:-(\d+))?$/);if(!m)return;const base=m[1];if(!groups.has(base))groups.set(base,[]);groups.get(base).push({card,el,original,base})});
+ groups.forEach(arr=>{arr.forEach(x=>{x.el.textContent=arr.length===1?x.base:x.original})});
+}
+function setDrawerQty(d){if(!openedFromBoard)return;const shade=d.querySelector('#shade');if(!shade?.classList.contains('on'))return;const db=d.querySelector('#db');if(!db)return;const items=[...db.querySelectorAll('.item')].filter(i=>!i.classList.contains('v065-hidden'));if(!items.length)return;
+ // First visible production item represents the concrete unit opened from Board.
+ const main=items.find(i=>{const title=(i.querySelector('b')?.textContent||'').toLowerCase();return !/^(delivery)$/.test(title)&&!/(additional tabletop|custom cutouts?|umbrella hole|customisation|customization|back panel with)/.test(title)})||items[0];
+ if(!main)return;const pills=[...main.querySelectorAll('.pill')];const qty=pills.find(p=>/^qty\s*:\s*\d+/i.test((p.textContent||'').trim()));if(qty)qty.textContent='qty: 1';
+}
+function removeDrawerStatus(d){const shade=d.querySelector('#shade');if(!shade?.classList.contains('on'))return;d.querySelectorAll('#shade .unitrow,#shade .v065-headstatus,#shade .v066-headstatus').forEach(el=>el.style.setProperty('display','none','important'))}
+function updateVersion(d){const vals=[...d.querySelectorAll('.homepanel .value b')];if(vals.length)vals[0].textContent='v0.6.7 Live'}
+function tick(){const d=deepestDoc();if(!d)return;addStyles(d);captureSource(d);cleanBoardNumbers(d);removeDrawerStatus(d);setDrawerQty(d);updateVersion(d)}
+outer.addEventListener('load',()=>{setTimeout(tick,700);setInterval(tick,650)});
+</script></body></html>
