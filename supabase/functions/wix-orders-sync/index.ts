@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const jsonHeaders = { "Content-Type": "application/json" };
+const EXCLUDED_ORDER_NUMBERS = new Set(["10242"]);
 
 function num(v: any): number | null {
   const x = v?.amount ?? v;
@@ -38,6 +39,7 @@ function deliveryAddress(order: any) {
 function isUnfinished(order: any) {
   const fulfillment = String(order?.fulfillmentStatus || "").toUpperCase();
   const status = String(order?.status || "").toUpperCase();
+  if (EXCLUDED_ORDER_NUMBERS.has(String(order?.number ?? ""))) return false;
   if (order?.archived === true) return false;
   if (["CANCELED", "CANCELLED"].includes(status)) return false;
   if (["FULFILLED", "COMPLETED"].includes(fulfillment)) return false;
@@ -63,8 +65,6 @@ Deno.serve(async () => {
     let previousCursor: string | undefined = undefined;
 
     for (let page = 0; page < 100; page++) {
-      // Wix cursor paging: first request carries filter/sort/limit.
-      // Follow-up requests carry only the cursor returned by the previous page.
       const search: Record<string, any> = cursor
         ? { cursorPaging: { cursor } }
         : {
@@ -108,8 +108,6 @@ Deno.serve(async () => {
         sentCursor: cursor ? cursor.slice(0, 18) : null,
         nextCursor: next ? String(next).slice(0, 18) : null,
         hasNext: hasNext ?? null,
-        metadata: payload?.metadata ? true : false,
-        pagingMetadata: payload?.pagingMetadata ? true : false,
       }));
 
       if (!next || hasNext === false || batch.length === 0) break;
@@ -169,11 +167,11 @@ Deno.serve(async () => {
       insertedOrUpdated++;
 
       const orderId = savedOrder.id;
-      const items = order.lineItems || [];
+      const orderItems = order.lineItems || [];
       const seenIds: string[] = [];
 
-      for (let i = 0; i < items.length; i++) {
-        const li = items[i];
+      for (let i = 0; i < orderItems.length; i++) {
+        const li = orderItems[i];
         const lineId = String(li.id || `${order.id}-line-${i}`);
         seenIds.push(lineId);
         const opts = li?.catalogReference?.options || {};
@@ -190,7 +188,7 @@ Deno.serve(async () => {
           wix_options: opts?.options || {},
           custom_text_fields: opts?.customTextFields || {},
           description_lines: li?.descriptionLines || [],
-          image: li?.image || {},
+          image: li?.media || li?.image || {},
           raw_item: li,
         };
 
@@ -203,33 +201,21 @@ Deno.serve(async () => {
         itemCount++;
 
         const orderItemId = savedItem.id;
-
         for (let unitIndex = 1; unitIndex <= quantity; unitIndex++) {
           const { error: unitErr } = await db
             .from("wc_production_units")
-            .upsert(
-              { order_item_id: orderItemId, unit_index: unitIndex },
-              { onConflict: "order_item_id,unit_index", ignoreDuplicates: true },
-            );
+            .upsert({ order_item_id: orderItemId, unit_index: unitIndex }, { onConflict: "order_item_id,unit_index", ignoreDuplicates: true });
           if (unitErr) throw unitErr;
           unitCount++;
         }
 
-        const { error: trimErr } = await db
-          .from("wc_production_units")
-          .delete()
-          .eq("order_item_id", orderItemId)
-          .gt("unit_index", quantity);
+        const { error: trimErr } = await db.from("wc_production_units").delete().eq("order_item_id", orderItemId).gt("unit_index", quantity);
         if (trimErr) throw trimErr;
       }
 
       if (seenIds.length) {
         const safeIds = seenIds.map(x => `\"${x.replaceAll('\\"','')}\"`).join(",");
-        const { error: delErr } = await db
-          .from("wc_order_items")
-          .delete()
-          .eq("order_id", orderId)
-          .not("wix_line_item_id", "in", `(${safeIds})`);
+        const { error: delErr } = await db.from("wc_order_items").delete().eq("order_id", orderId).not("wix_line_item_id", "in", `(${safeIds})`);
         if (delErr) console.warn("Could not prune removed line items", delErr);
       }
     }
@@ -242,6 +228,7 @@ Deno.serve(async () => {
       ordersUpserted: insertedOrUpdated,
       lineItemsUpserted: itemCount,
       productionUnitsEnsured: unitCount,
+      excludedOrders: [...EXCLUDED_ORDER_NUMBERS],
       syncedAt: new Date().toISOString(),
     };
 
