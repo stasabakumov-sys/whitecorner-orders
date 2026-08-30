@@ -1,0 +1,23 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>White Corner Orders v0.6.1</title><style>html,body,iframe{margin:0;width:100%;height:100%;border:0}iframe{position:fixed;inset:0}</style></head><body><iframe id="appframe" src="../v06/" title="White Corner Orders v0.6.1"></iframe><script>
+const f=document.getElementById('appframe');
+f.addEventListener('load',()=>{
+  const d=f.contentDocument||f.contentWindow.document;
+  const style=d.createElement('style');
+  style.textContent=`.homepanel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px;max-width:620px}.homepanel h2{margin:0 0 18px;font-size:20px}.homegrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.homebox{border:1px solid var(--line);border-radius:9px;padding:14px;background:#fbfcfd}.homebox .label{font-size:11px;text-transform:uppercase;color:var(--mut);font-weight:700;margin-bottom:6px}.homebox .value{font-size:14px}.home-signout{margin-top:16px;border:1px solid #cfd8e6;background:#fff;color:var(--txt);border-radius:8px;padding:9px 14px;cursor:pointer}.foot,.account,.logout{display:none!important}@media(max-width:900px){.homegrid{grid-template-columns:1fr}}`;
+  d.head.appendChild(style);
+  const aside=d.querySelector('.side');
+  const ordersBtn=d.querySelector('.nav[data-v="orders"]');
+  if(!aside||!ordersBtn)return;
+  const homeBtn=d.createElement('button');homeBtn.className='nav on';homeBtn.dataset.v='home';homeBtn.textContent='Home';aside.insertBefore(homeBtn,ordersBtn);
+  ordersBtn.classList.remove('on');
+  const content=d.querySelector('.content');
+  const home=d.createElement('div');home.id='home';home.innerHTML=`<div class="homepanel"><h2>White Corner Orders</h2><div class="homegrid"><div class="homebox"><div class="label">Version</div><div class="value"><b>v0.6.1 Live</b></div></div><div class="homebox"><div class="label">Account status</div><div class="value" id="homeStatus">Signed in</div></div><div class="homebox" style="grid-column:1/-1"><div class="label">Signed in as</div><div class="value" id="homeEmail">—</div></div></div><button class="home-signout" id="homeSignout">Sign out</button></div>`;
+  content.insertBefore(home,content.firstChild);
+  const stats=d.querySelector('#stats'),tools=d.querySelector('.tools'),orders=d.querySelector('#orders'),board=d.querySelector('#board'),pt=d.querySelector('#pt');
+  function view(v){d.querySelectorAll('.nav').forEach(x=>x.classList.toggle('on',x.dataset.v===v));home.classList.toggle('hidden',v!=='home');stats?.classList.toggle('hidden',v!=='orders');tools?.classList.toggle('hidden',v==='home');orders?.classList.toggle('hidden',v!=='orders');board?.classList.toggle('hidden',v!=='board');if(pt)pt.textContent=v==='home'?'Home':v==='orders'?'Orders':'Production Board';}
+  homeBtn.onclick=()=>view('home');ordersBtn.addEventListener('click',()=>view('orders'));const boardBtn=d.querySelector('.nav[data-v="board"]');boardBtn?.addEventListener('click',()=>view('board'));
+  d.querySelector('#homeSignout').onclick=()=>d.querySelector('#logout')?.click();
+  const syncAccount=()=>{const email=(d.querySelector('#account')?.textContent||'').trim();const he=d.querySelector('#homeEmail');if(he&&email)he.textContent=email;};syncAccount();setInterval(syncAccount,800);
+  view('home');
+});
+</script></body></html>
