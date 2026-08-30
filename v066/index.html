@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>White Corner Orders v0.6.6</title><style>html,body,iframe{margin:0;width:100%;height:100%;border:0}iframe{position:fixed;inset:0}</style></head><body><iframe id="outer" src="../v065/" title="White Corner Orders v0.6.6"></iframe><script>
+const outer=document.getElementById('outer');
+let selectedUnitIndex=null;
+function deepestDoc(){try{let d=outer.contentDocument||outer.contentWindow.document;for(let i=0;i<8;i++){const app=d?.querySelector('#app');if(app)return d;const fr=d?.querySelector('iframe');if(!fr)break;d=fr.contentDocument||fr.contentWindow.document;}return d}catch{return null}}
+function styles(d){if(d.getElementById('v066style'))return;const s=d.createElement('style');s.id='v066style';s.textContent=`
+.v066-hidden{display:none!important}
+.v065-headstatus select,.v066-headstatus select{min-width:150px!important;max-width:165px!important;height:40px!important;border-radius:20px!important;padding:8px 34px 8px 14px!important;font-size:14px!important;font-weight:600!important}
+.v065-headstatus,.v066-headstatus{gap:10px!important}.v065-headstatus .lab,.v066-headstatus .lab{font-size:11px!important}
+`;d.head.appendChild(s)}
+function captureBoardUnit(d){const board=d.querySelector('#board');if(!board||board.dataset.v066capture==='1')return;board.dataset.v066capture='1';board.addEventListener('click',e=>{const card=e.target.closest('.pcard');if(!card)return;const code=(card.querySelector('.ordercode')?.textContent||'').trim();const m=code.match(/-(\d+)$/);selectedUnitIndex=m?Number(m[1]):null;},true)}
+function rowIndex(row){const t=(row.textContent||'').trim();const m=t.match(/Unit\s*(\d+)/i);return m?Number(m[1]):null}
+function fixDrawer(d){const shade=d.querySelector('#shade');if(!shade?.classList.contains('on'))return;const db=d.querySelector('#db'),dh=d.querySelector('.dh');if(!db||!dh)return;
+ const rows=[...db.querySelectorAll('.unitrow')];if(!rows.length)return;
+ // remove status controls previously moved by older wrappers, returning their select to the matching row when possible
+ const old=dh.querySelector('.v065-headstatus,.v066-headstatus');
+ if(old){const sel=old.querySelector('select');if(sel){let target=rows.find(r=>!r.querySelector('select') && (selectedUnitIndex==null || rowIndex(r)===selectedUnitIndex));if(!target)target=rows.find(r=>!r.querySelector('select'));if(target)target.appendChild(sel);}old.remove();}
+ rows.forEach(r=>r.classList.add('v066-hidden'));
+ let chosen=null;
+ if(selectedUnitIndex!=null) chosen=rows.find(r=>rowIndex(r)===selectedUnitIndex);
+ if(!chosen) chosen=rows[0];
+ const sel=chosen?.querySelector('select');
+ if(sel){const close=dh.querySelector('.close');const wrap=d.createElement('div');wrap.className='v066-headstatus v065-headstatus';const lab=d.createElement('span');lab.className='lab';lab.textContent='Change status';wrap.append(lab,sel);dh.insertBefore(wrap,close);}
+}
+function updateVersion(d){const vals=[...d.querySelectorAll('.homepanel .value b')];if(vals.length)vals[0].textContent='v0.6.6 Live'}
+function tick(){const d=deepestDoc();if(!d)return;styles(d);captureBoardUnit(d);fixDrawer(d);updateVersion(d)}
+outer.addEventListener('load',()=>{setTimeout(tick,700);setInterval(tick,700)});
+</script></body></html>
