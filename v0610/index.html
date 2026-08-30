@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>White Corner Orders v0.6.10</title><style>html,body,iframe{margin:0;width:100%;height:100%;border:0}iframe{position:fixed;inset:0}</style></head><body><iframe id="outer" src="../v069/" title="White Corner Orders v0.6.10"></iframe><script>
+const outer=document.getElementById('outer');
+let installed=false,working=false;
+function doc(){try{let d=outer.contentDocument||outer.contentWindow.document;for(let i=0;i<8;i++){if(d?.querySelector('#app'))return d;const f=d?.querySelector('iframe');if(!f)break;d=f.contentDocument||f.contentWindow.document;}return d}catch{return null}}
+function orderNoFromText(t){return (String(t||'').match(/#?(\d+)/)||[])[1]||''}
+function orderNo(card){return card?.dataset?.orderNo||orderNoFromText(card?.querySelector('.ordercode')?.textContent)}
+function logicalCards(d){return [...d.querySelectorAll('#board .pcard')].filter(c=>!c.classList.contains('v069-hide')&&!c.classList.contains('v069-addonhide')&&!c.classList.contains('v069-review-hide'))}
+function inject(d){if(d.getElementById('v0610style'))return;const s=d.createElement('style');s.id='v0610style';s.textContent=`
+#board .v069-addonhide,#board .v069-review-hide{display:none!important}
+.v0610-version-old{display:none!important}
+`;d.head.appendChild(s)}
+function summaries(d){const by=new Map();logicalCards(d).forEach(c=>{const n=orderNo(c);if(!n)return;if(!by.has(n))by.set(n,[]);by.get(n).push(c)});
+ d.querySelectorAll('#orders tbody tr').forEach(tr=>{const n=orderNoFromText(tr.cells?.[0]?.textContent);if(!n)return;if(tr.classList.contains('v069-review'))return;const arr=by.get(n)||[];if(tr.cells?.[6])tr.cells[6].textContent=String(arr.length);const counts={};arr.forEach(c=>{const st=(c.closest('.col')?.querySelector('.ch span:first-child')?.textContent||'New').trim();counts[st]=(counts[st]||0)+1});const txt=Object.entries(counts).map(([s,c])=>`${c} ${s}`).join(' · ')||'—';if(tr.cells?.[7])tr.cells[7].textContent=txt;});
+ const shade=d.querySelector('#shade');if(!shade?.classList.contains('on'))return;const n=orderNoFromText(d.querySelector('#dn')?.textContent);if(!n)return;const arr=by.get(n)||[];const counts={};arr.forEach(c=>{const st=(c.closest('.col')?.querySelector('.ch span:first-child')?.textContent||'New').trim();counts[st]=(counts[st]||0)+1});const status=Object.entries(counts).map(([s,c])=>`${c} ${s}`).join(' · ')||'—';[...d.querySelectorAll('#db .box')].forEach(b=>{const t=(b.textContent||'').trim();if(/^Items\b/i.test(t))b.innerHTML='<b>Items</b><br>'+arr.length;if(/^Status\b/i.test(t))b.innerHTML='<b>Status</b><br>'+status;});}
+function version(d){const panel=d.querySelector('.homepanel');if(!panel)return;const boxes=[...panel.querySelectorAll('.homebox')];const vb=boxes.find(b=>/^Version/i.test(b.textContent||''));if(!vb)return;const val=vb.querySelector('.value');if(val&&val.textContent!=='v0.6.10 Live')val.innerHTML='<b>v0.6.10 Live</b>'}
+function apply(d){if(working)return;working=true;try{inject(d);summaries(d);version(d)}finally{working=false}}
+function boot(){const d=doc();if(!d){setTimeout(boot,250);return}apply(d);if(installed)return;installed=true;const mo=new MutationObserver(()=>{if(!working)requestAnimationFrame(()=>apply(d))});mo.observe(d.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['class']});setInterval(()=>apply(d),1200)}
+outer.addEventListener('load',()=>setTimeout(boot,300));
+</script></body></html>
