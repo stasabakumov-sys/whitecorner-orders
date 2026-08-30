@@ -31,8 +31,7 @@ create table if not exists public.wc_orders (
   raw_order jsonb not null default '{}'::jsonb,
   wix_synced_at timestamptz not null default now(),
 
-  -- White Corner fields: Wix sync MUST NOT overwrite these
-  production_status text not null default 'New',
+  -- White Corner fields. Wix sync MUST NOT overwrite these.
   internal_comment text,
   due_date date,
   priority integer not null default 0,
@@ -57,7 +56,7 @@ create table if not exists public.wc_order_items (
   image jsonb not null default '{}'::jsonb,
   raw_item jsonb not null default '{}'::jsonb,
 
-  -- Production Sheet fields. These are editable and preserved on Wix refresh.
+  -- White Corner item fields. Preserved on Wix refresh.
   size text,
   color text,
   tabletop text,
@@ -74,32 +73,44 @@ create table if not exists public.wc_order_items (
   unique(order_id, wix_line_item_id)
 );
 
+-- One record = one physical product unit on Production Board.
+-- Example: Wix quantity 4 => unit_index 1,2,3,4 with independent statuses.
+create table if not exists public.wc_production_units (
+  id uuid primary key default gen_random_uuid(),
+  order_item_id uuid not null references public.wc_order_items(id) on delete cascade,
+  unit_index integer not null check (unit_index > 0),
+  production_status text not null default 'New'
+    check (production_status in ('New','CNC','Assembly','Painting','Packing','Ready')),
+  production_comment text,
+  priority integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(order_item_id, unit_index)
+);
+
 create index if not exists wc_orders_number_idx on public.wc_orders(order_number);
-create index if not exists wc_orders_production_idx on public.wc_orders(production_status);
 create index if not exists wc_orders_fulfillment_idx on public.wc_orders(fulfillment_status);
 create index if not exists wc_order_items_order_idx on public.wc_order_items(order_id);
+create index if not exists wc_production_units_item_idx on public.wc_production_units(order_item_id);
+create index if not exists wc_production_units_status_idx on public.wc_production_units(production_status);
 
 alter table public.wc_orders enable row level security;
 alter table public.wc_order_items enable row level security;
+alter table public.wc_production_units enable row level security;
 
--- Current app is for signed-in White Corner users only.
+-- App data is available only to signed-in White Corner users.
 drop policy if exists "wc_orders_authenticated_all" on public.wc_orders;
 create policy "wc_orders_authenticated_all"
-on public.wc_orders
-for all
-to authenticated
-using (true)
-with check (true);
+on public.wc_orders for all to authenticated using (true) with check (true);
 
 drop policy if exists "wc_order_items_authenticated_all" on public.wc_order_items;
 create policy "wc_order_items_authenticated_all"
-on public.wc_order_items
-for all
-to authenticated
-using (true)
-with check (true);
+on public.wc_order_items for all to authenticated using (true) with check (true);
 
--- updated_at helper
+drop policy if exists "wc_production_units_authenticated_all" on public.wc_production_units;
+create policy "wc_production_units_authenticated_all"
+on public.wc_production_units for all to authenticated using (true) with check (true);
+
 create or replace function public.wc_set_updated_at()
 returns trigger language plpgsql as $$
 begin
@@ -109,11 +120,13 @@ end;
 $$;
 
 drop trigger if exists wc_orders_set_updated_at on public.wc_orders;
-create trigger wc_orders_set_updated_at
-before update on public.wc_orders
+create trigger wc_orders_set_updated_at before update on public.wc_orders
 for each row execute function public.wc_set_updated_at();
 
 drop trigger if exists wc_order_items_set_updated_at on public.wc_order_items;
-create trigger wc_order_items_set_updated_at
-before update on public.wc_order_items
+create trigger wc_order_items_set_updated_at before update on public.wc_order_items
+for each row execute function public.wc_set_updated_at();
+
+drop trigger if exists wc_production_units_set_updated_at on public.wc_production_units;
+create trigger wc_production_units_set_updated_at before update on public.wc_production_units
 for each row execute function public.wc_set_updated_at();
