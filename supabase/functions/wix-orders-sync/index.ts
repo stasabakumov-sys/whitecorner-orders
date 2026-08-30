@@ -67,7 +67,7 @@ Deno.serve(async () => {
       const cursorPaging: Record<string, any> = { limit };
       if (cursor) cursorPaging.cursor = cursor;
 
-      const requestBody = {
+      const search = {
         filter: {
           fulfillmentStatus: { "$in": ["NOT_FULFILLED", "PARTIALLY_FULFILLED"] },
           status: { "$ne": "CANCELED" },
@@ -83,7 +83,7 @@ Deno.serve(async () => {
           "Authorization": wixApiKey,
           "wix-site-id": wixSiteId,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ search }),
       });
 
       const payload = await wixRes.json();
@@ -96,7 +96,7 @@ Deno.serve(async () => {
       allOrders.push(...batch);
       pagesScanned++;
 
-      const cursors = payload?.metadata?.cursors || payload?.pagingMetadata?.cursors || {};
+      const cursors = payload?.pagingMetadata?.cursors || payload?.metadata?.cursors || {};
       const next = cursors?.next;
       const hasNext = cursors?.hasNext;
 
