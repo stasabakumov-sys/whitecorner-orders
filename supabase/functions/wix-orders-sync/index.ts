@@ -61,7 +61,6 @@ Deno.serve(async () => {
     let offset = 0;
     const limit = 100;
 
-    // Pull all pages, newest first. Filtering is done locally so Wix filter syntax cannot hide valid orders.
     for (let page = 0; page < 50; page++) {
       const wixRes = await fetch("https://www.wixapis.com/ecom/v1/orders/search", {
         method: "POST",
@@ -92,6 +91,7 @@ Deno.serve(async () => {
     const unfinished = allOrders.filter(isUnfinished);
     let insertedOrUpdated = 0;
     let itemCount = 0;
+    let unitCount = 0;
 
     for (const order of unfinished) {
       const c = contact(order);
@@ -126,7 +126,6 @@ Deno.serve(async () => {
         wix_synced_at: new Date().toISOString(),
       };
 
-      // Crucial: only Wix-owned columns are written here. Production fields are preserved.
       const { data: savedOrder, error: orderErr } = await db
         .from("wc_orders")
         .upsert(orderRow, { onConflict: "wix_order_id" })
@@ -144,11 +143,13 @@ Deno.serve(async () => {
         const lineId = String(li.id || `${order.id}-line-${i}`);
         seenIds.push(lineId);
         const opts = li?.catalogReference?.options || {};
+        const quantity = Math.max(1, Number(li?.quantity || 1));
+
         const itemRow = {
           order_id: orderId,
           wix_line_item_id: lineId,
           product_name: li?.productName?.original || null,
-          quantity: Number(li?.quantity || 1),
+          quantity,
           unit_price: num(li?.price),
           custom_line_item: !!li?.customLineItem,
           catalog_reference: li?.catalogReference || {},
@@ -159,21 +160,46 @@ Deno.serve(async () => {
           raw_item: li,
         };
 
-        // Wix refresh updates only Wix-owned item columns; Production Sheet fields are preserved.
-        const { error: itemErr } = await db
+        // Only Wix-owned columns are refreshed here; WC editable fields stay intact.
+        const { data: savedItem, error: itemErr } = await db
           .from("wc_order_items")
-          .upsert(itemRow, { onConflict: "order_id,wix_line_item_id" });
+          .upsert(itemRow, { onConflict: "order_id,wix_line_item_id" })
+          .select("id")
+          .single();
         if (itemErr) throw itemErr;
         itemCount++;
+
+        const orderItemId = savedItem.id;
+
+        // Ensure one independent production unit per physical quantity.
+        // Existing statuses are preserved because the upsert only identifies the row.
+        for (let unitIndex = 1; unitIndex <= quantity; unitIndex++) {
+          const { error: unitErr } = await db
+            .from("wc_production_units")
+            .upsert(
+              { order_item_id: orderItemId, unit_index: unitIndex },
+              { onConflict: "order_item_id,unit_index", ignoreDuplicates: true },
+            );
+          if (unitErr) throw unitErr;
+          unitCount++;
+        }
+
+        // If Wix quantity is reduced, remove only units above the new quantity.
+        const { error: trimErr } = await db
+          .from("wc_production_units")
+          .delete()
+          .eq("order_item_id", orderItemId)
+          .gt("unit_index", quantity);
+        if (trimErr) throw trimErr;
       }
 
-      // Remove Wix line items that were actually removed from the order, while keeping current ones.
       if (seenIds.length) {
+        const safeIds = seenIds.map(x => `\"${x.replaceAll('\\"','')}\"`).join(",");
         const { error: delErr } = await db
           .from("wc_order_items")
           .delete()
           .eq("order_id", orderId)
-          .not("wix_line_item_id", "in", `(${seenIds.map(x => `\"${x.replaceAll('\\"','')}\"`).join(",")})`);
+          .not("wix_line_item_id", "in", `(${safeIds})`);
         if (delErr) console.warn("Could not prune removed line items", delErr);
       }
     }
@@ -184,6 +210,7 @@ Deno.serve(async () => {
       unfinishedOrders: unfinished.length,
       ordersUpserted: insertedOrUpdated,
       lineItemsUpserted: itemCount,
+      productionUnitsEnsured: unitCount,
       syncedAt: new Date().toISOString(),
     }, null, 2), { status: 200, headers: jsonHeaders });
   } catch (err) {
