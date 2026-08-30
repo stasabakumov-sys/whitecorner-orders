@@ -1,0 +1,92 @@
+name: Build v0.8.9 standalone
+on:
+  push:
+    paths:
+      - '.github/workflows/build-v089.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build standalone v0.8.9
+        shell: python
+        run: |
+          from pathlib import Path
+          src = Path('v088/index.html').read_text()
+          s = src.replace('White Corner Orders v0.8.8','White Corner Orders v0.8.9').replace('v0.8.8 Standalone','v0.8.9 Standalone')
+
+          # Activity styles.
+          css_anchor = '@media(max-width:1000px)'
+          activity_css = '''.activitybox{border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}.activityadd{padding:16px 18px;border-bottom:1px solid var(--line)}.activityadd label{display:block;font-weight:600;margin-bottom:8px}.activityadd textarea{width:100%;min-height:72px;resize:vertical;border:1px solid #d4d9e2;border-radius:8px;padding:10px;font:inherit}.activityactions{display:flex;justify-content:flex-end;margin-top:8px}.timeline{padding:8px 18px 16px}.activitydate{font-size:12px;color:var(--mut);font-weight:700;margin:16px 0 8px}.activityevent{position:relative;margin-left:10px;padding:4px 82px 14px 28px;border-left:1px solid #cfd5df;min-height:36px}.activityevent:before{content:"";position:absolute;left:-5px;top:9px;width:9px;height:9px;border-radius:50%;background:#5f6b7a;border:2px solid #fff}.activityevent.note:before{width:26px;height:26px;left:-14px;top:2px;background:#aab2c1}.activitytime{position:absolute;right:0;top:4px;color:var(--mut);font-size:11px}.activitywho{font-size:12px;color:#4d5a70;margin-bottom:4px}.activitymsg{white-space:pre-wrap;line-height:1.45}.activityempty{padding:16px 0;color:var(--mut);font-size:12px}'''
+          if css_anchor not in s:
+              raise SystemExit('css anchor not found')
+          s = s.replace(css_anchor,activity_css+css_anchor,1)
+
+          # State for order activity and current user.
+          old = "let O=[],A=[],SP=[],PK=[],RL=[],viewNow='home',boardKind='all',shipKind='all',selectedProduct=null,syncing=false,hadSession=false;"
+          new = "let O=[],A=[],SP=[],PK=[],RL=[],ACT=[],viewNow='home',boardKind='all',shipKind='all',selectedProduct=null,syncing=false,hadSession=false,currentUserEmail='';"
+          if old not in s:
+              raise SystemExit('state anchor not found')
+          s = s.replace(old,new,1)
+
+          # Load activity records with the rest of app data; missing table does not break app.
+          old = "const[or,ar,spr,pkr,rlr]=await Promise.all(["
+          new = "const[or,ar,spr,pkr,rlr,acr]=await Promise.all(["
+          if old not in s:
+              raise SystemExit('load array anchor not found')
+          s = s.replace(old,new,1)
+          old = "sb.from('wc_shipping_rules').select('*').order('created_at')]);if(or.error)"
+          new = "sb.from('wc_shipping_rules').select('*').order('created_at'),sb.from('wc_order_activity').select('*').order('created_at',{ascending:false})]);if(or.error)"
+          if old not in s:
+              raise SystemExit('load query anchor not found')
+          s = s.replace(old,new,1)
+          old = "RL=rlr.error?[]:(rlr.data||[]);if(!selectedProduct"
+          new = "RL=rlr.error?[]:(rlr.data||[]);ACT=acr.error?[]:(acr.data||[]);if(!selectedProduct"
+          if old not in s:
+              raise SystemExit('load assignment anchor not found')
+          s = s.replace(old,new,1)
+
+          # Order activity renderer + note creation.
+          anchor = "function itemCard(i,o,addon=false){"
+          helpers = r'''function activityDate(v){return new Intl.DateTimeFormat('en-AU',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(v))}function activityTime(v){return new Intl.DateTimeFormat('en-AU',{hour:'numeric',minute:'2-digit'}).format(new Date(v))}function renderActivity(orderId){const list=ACT.filter(a=>a.order_id===orderId).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));let last='',html='';for(const a of list){const d=activityDate(a.created_at);if(d!==last){html+=`<div class="activitydate">${esc(d)}</div>`;last=d}const note=a.activity_type==='note',text=note?esc(a.message||''):`Status changed from <b>${esc(a.old_status||'—')}</b> to <b>${esc(a.new_status||'—')}</b>`,who=note?`${esc(a.created_by||'User')} added a note:`:`${esc(a.created_by||'User')}`;html+=`<div class="activityevent ${note?'note':''}"><div class="activitytime">${esc(activityTime(a.created_at))}</div><div class="activitywho">${who}</div><div class="activitymsg">${text}</div></div>`}return`<div class="sec activitysec" data-activity-order="${orderId}"><div class="st">Order activity</div><div class="activitybox"><div class="activityadd"><label>Add a note <span class="mut">(Customer won't see this)</span></label><textarea id="activityNote" placeholder="Write an internal note..."></textarea><div class="activityactions"><button class="btn primary" data-addnote="${orderId}">Add note</button></div></div><div class="timeline">${html||'<div class="activityempty">No activity yet.</div>'}</div></div></div>`}function bindActivity(orderId){const b=$('#db').querySelector(`[data-addnote="${orderId}"]`);if(b)b.onclick=()=>addNote(orderId)}function refreshActivity(orderId){const el=$('#db').querySelector(`[data-activity-order="${orderId}"]`);if(el){el.outerHTML=renderActivity(orderId);bindActivity(orderId)}}async function addNote(orderId){const ta=$('#db').querySelector('#activityNote'),message=ta?.value.trim();if(!message)return;const payload={order_id:orderId,activity_type:'note',message,created_by:currentUserEmail||'User'};const{data,error}=await sb.from('wc_order_activity').insert(payload).select().single();if(error)return showErr(error.message);ACT.unshift(data);refreshActivity(orderId)}'''
+          if anchor not in s:
+              raise SystemExit('itemCard anchor not found')
+          s = s.replace(anchor,helpers+anchor,1)
+
+          # Add Order activity to both order and board drawers.
+          old = "if(focus)$('#drawerStatus').onchange=e=>setStatus(focus.u.id,e.target.value);$('#shade').classList.add('on')"
+          new = "$('#db').insertAdjacentHTML('beforeend',renderActivity(o.id));bindActivity(o.id);if(focus)$('#drawerStatus').onchange=e=>setStatus(focus.u.id,e.target.value);$('#shade').classList.add('on')"
+          if old not in s:
+              raise SystemExit('drawer activity anchor not found')
+          s = s.replace(old,new,1)
+
+          # Every successful production status change writes an activity record automatically.
+          old = "async function setStatus(id,st){for(const o of O)for(const i of items(o)){const u=units(i).find(x=>x.id===id);if(u){const old=u.production_status;u.production_status=st;renderAll();const{error}=await sb.from('wc_production_units').update({production_status:st}).eq('id',id);if(error){u.production_status=old;renderAll();showErr(error.message)}return}}}"
+          new = "async function setStatus(id,st){for(const o of O)for(const i of items(o)){const u=units(i).find(x=>x.id===id);if(u){const old=u.production_status||'New';u.production_status=st;renderAll();const{error}=await sb.from('wc_production_units').update({production_status:st}).eq('id',id);if(error){u.production_status=old;renderAll();showErr(error.message);return}const payload={order_id:o.id,production_unit_id:id,activity_type:'status_change',old_status:old,new_status:st,created_by:currentUserEmail||'User'};const{data:a,error:ae}=await sb.from('wc_order_activity').insert(payload).select().single();if(a){ACT.unshift(a);refreshActivity(o.id)}else if(ae)showErr('Status changed, but activity history could not be saved: '+ae.message);return}}}"
+          if old not in s:
+              raise SystemExit('setStatus anchor not found')
+          s = s.replace(old,new,1)
+
+          # Keep the author email for notes/history and clear activity on sign-out.
+          old = "$('#homeEmail').textContent=session.user.email||'';if(!hadSession)"
+          new = "currentUserEmail=session.user.email||'';$('#homeEmail').textContent=currentUserEmail;if(!hadSession)"
+          if old not in s:
+              raise SystemExit('session email anchor not found')
+          s = s.replace(old,new,1)
+          old = "O=[];A=[];SP=[];PK=[];RL=[]}}"
+          new = "O=[];A=[];SP=[];PK=[];RL=[];ACT=[];currentUserEmail=''}}"
+          if old not in s:
+              raise SystemExit('signout state anchor not found')
+          s = s.replace(old,new,1)
+
+          Path('v089').mkdir(exist_ok=True)
+          Path('v089/index.html').write_text(s)
+      - name: Commit v0.8.9
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add v089/index.html
+          git commit -m "Release v0.8.9 order activity" || exit 0
+          git push
