@@ -61,10 +61,20 @@ Deno.serve(async () => {
     let cursor: string | undefined = undefined;
     const limit = 100;
     let pagesScanned = 0;
+    let previousCursor: string | undefined = undefined;
 
     for (let page = 0; page < 100; page++) {
       const cursorPaging: Record<string, any> = { limit };
       if (cursor) cursorPaging.cursor = cursor;
+
+      const requestBody = {
+        filter: {
+          fulfillmentStatus: { "$in": ["NOT_FULFILLED", "PARTIALLY_FULFILLED"] },
+          status: { "$ne": "CANCELED" },
+        },
+        cursorPaging,
+        sort: [{ fieldName: "createdDate", order: "DESC" }],
+      };
 
       const wixRes = await fetch("https://www.wixapis.com/ecom/v1/orders/search", {
         method: "POST",
@@ -73,18 +83,12 @@ Deno.serve(async () => {
           "Authorization": wixApiKey,
           "wix-site-id": wixSiteId,
         },
-        body: JSON.stringify({
-          filter: {
-            fulfillmentStatus: { "$ne": "FULFILLED" },
-            status: { "$ne": "CANCELED" },
-          },
-          cursorPaging,
-          sort: [{ fieldName: "createdDate", order: "DESC" }],
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const payload = await wixRes.json();
       if (!wixRes.ok) {
+        console.error("WIX_API_ERROR", JSON.stringify({ page: page + 1, status: wixRes.status, payload }));
         return new Response(JSON.stringify({ error: "Wix API error", status: wixRes.status, payload }, null, 2), { status: wixRes.status, headers: jsonHeaders });
       }
 
@@ -92,9 +96,28 @@ Deno.serve(async () => {
       allOrders.push(...batch);
       pagesScanned++;
 
-      const next = payload?.metadata?.cursors?.next || payload?.pagingMetadata?.cursors?.next;
-      const hasNext = payload?.metadata?.cursors?.hasNext ?? payload?.pagingMetadata?.cursors?.hasNext;
+      const cursors = payload?.metadata?.cursors || payload?.pagingMetadata?.cursors || {};
+      const next = cursors?.next;
+      const hasNext = cursors?.hasNext;
+
+      console.log("WIX_PAGE", JSON.stringify({
+        page: page + 1,
+        count: batch.length,
+        firstOrder: batch[0]?.number || null,
+        lastOrder: batch.at(-1)?.number || null,
+        sentCursor: cursor ? cursor.slice(0, 18) : null,
+        nextCursor: next ? String(next).slice(0, 18) : null,
+        hasNext: hasNext ?? null,
+        metadata: payload?.metadata ? true : false,
+        pagingMetadata: payload?.pagingMetadata ? true : false,
+      }));
+
       if (!next || hasNext === false || batch.length === 0) break;
+      if (next === cursor || next === previousCursor) {
+        console.warn("WIX_CURSOR_STALLED", String(next).slice(0, 40));
+        break;
+      }
+      previousCursor = cursor;
       cursor = next;
     }
 
