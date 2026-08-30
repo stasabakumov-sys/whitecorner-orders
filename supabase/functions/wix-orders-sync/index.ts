@@ -57,8 +57,6 @@ Deno.serve(async () => {
 
     const db = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
 
-    // Wix Search Orders uses cursor-based paging. Always follow the returned
-    // next cursor so older unfinished orders are not missed.
     let allOrders: any[] = [];
     let cursor: string | undefined = undefined;
     const limit = 100;
@@ -76,10 +74,8 @@ Deno.serve(async () => {
           "wix-site-id": wixSiteId,
         },
         body: JSON.stringify({
-          search: {
-            cursorPaging,
-            sort: [{ fieldName: "createdDate", order: "DESC" }],
-          },
+          cursorPaging,
+          sort: [{ fieldName: "createdDate", order: "DESC" }],
         }),
       });
 
@@ -94,13 +90,10 @@ Deno.serve(async () => {
 
       const cursors = payload?.metadata?.cursors || payload?.pagingMetadata?.cursors || {};
       const next = cursors?.next;
-      const hasNext = cursors?.hasNext;
-
-      if (!next || hasNext === false || batch.length === 0) break;
+      if (!next || batch.length === 0) break;
       cursor = next;
     }
 
-    // Defensive dedupe in case Wix returns an overlapping record between pages.
     const uniqueOrders = Array.from(new Map(allOrders.map((o: any) => [o.id, o])).values());
     const unfinished = uniqueOrders.filter(isUnfinished);
     let insertedOrUpdated = 0;
@@ -226,6 +219,6 @@ Deno.serve(async () => {
     }, null, 2), { status: 200, headers: jsonHeaders });
   } catch (err) {
     console.error(err);
-    return new Response(JSON.stringify({ error: String(err?.message || err) }, null, 2), { status: 500, headers: jsonHeaders });
+    return new Response(JSON.stringify({ error: String((err as any)?.message || err) }, null, 2), { status: 500, headers: jsonHeaders });
   }
 });
