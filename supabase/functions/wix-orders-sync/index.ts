@@ -63,10 +63,7 @@ Deno.serve(async () => {
     let pagesScanned = 0;
 
     for (let page = 0; page < 100; page++) {
-      // Filter on Wix itself so we do not scan and process the full fulfilled history.
-      // For cursor follow-up requests, Wix expects the returned cursor to carry the
-      // original filter/sort state, so only cursorPaging is sent after page 1.
-      const requestBody: Record<string, any> = cursor
+      const query: Record<string, any> = cursor
         ? { cursorPaging: { cursor } }
         : {
             filter: {
@@ -84,7 +81,7 @@ Deno.serve(async () => {
           "Authorization": wixApiKey,
           "wix-site-id": wixSiteId,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ query }),
       });
 
       const payload = await wixRes.json();
@@ -96,8 +93,7 @@ Deno.serve(async () => {
       allOrders.push(...batch);
       pagesScanned++;
 
-      const cursors = payload?.metadata?.cursors || payload?.pagingMetadata?.cursors || {};
-      const next = cursors?.next;
+      const next = payload?.pagingMetadata?.cursors?.next || payload?.metadata?.cursors?.next;
       if (!next || batch.length === 0) break;
       cursor = next;
     }
