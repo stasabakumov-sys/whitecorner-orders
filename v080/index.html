@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>White Corner Orders v0.8.0</title>
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#eef1f5}#appframe{position:fixed;inset:0;width:100%;height:100%;border:0;visibility:hidden}</style>
+</head>
+<body>
+<iframe id="appframe" src="../v079/" title="White Corner Orders v0.8.0"></iframe>
+<script>
+const outer=document.getElementById('appframe');
+let boardFilter='all', shippingFilter='all';
+const norm=s=>String(s||'').toLowerCase();
+function kindFromName(name){const n=norm(name);if(/cart|mobile bar|serving table|event bar/.test(n))return'carts';if(/backdrop|arch|panel|wall|plinth/.test(n))return'backdrops';return'others'}
+function getDocs(){try{const d1=outer.contentDocument;const f2=d1?.getElementById('appframe');const d2=f2?.contentDocument;const f3=d2?.getElementById('appframe');const d3=f3?.contentDocument;return{d1,d2,d3}}catch{return{}}}
+function chipsHtml(scope){return `<div class="wcTypeFilter" data-scope="${scope}"><button data-k="all" class="on">All</button><button data-k="backdrops">Backdrops</button><button data-k="carts">Carts</button><button data-k="others">Others</button></div>`}
+function applyBoard(d){if(!d)return;const board=d.getElementById('board');if(!board)return;board.querySelectorAll('.col').forEach(col=>{let count=0;col.querySelectorAll('.pcard').forEach(card=>{const name=card.querySelector('.product')?.textContent||'';const show=boardFilter==='all'||kindFromName(name)===boardFilter;card.style.display=show?'':'none';if(show)count++});const ch=col.querySelector('.ch span:last-child');if(ch)ch.textContent=count});}
+function applyShipping(d){if(!d)return;const root=d.getElementById('shippingData');if(!root)return;const buttons=[...root.querySelectorAll('.shipList button[data-sp]')];buttons.forEach(b=>{const name=b.querySelector('.pn')?.textContent||'';b.style.display=(shippingFilter==='all'||kindFromName(name)===shippingFilter)?'':'none'});const selected=buttons.find(b=>b.classList.contains('on'));if(selected&&selected.style.display==='none'){const first=buttons.find(b=>b.style.display!=='none');if(first)first.click()}}
+function enhance(){const {d3}=getDocs();if(!d3)return false;if(!d3.getElementById('v080style')){const s=d3.createElement('style');s.id='v080style';s.textContent=`
+.wcTypeFilter{display:inline-flex;align-items:center;gap:4px;padding:3px;background:#f3f5f8;border:1px solid #e1e5eb;border-radius:999px}
+.wcTypeFilter button{border:0;background:transparent;color:#5f6b7a;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer}
+.wcTypeFilter button:hover{background:#fff}.wcTypeFilter button.on{background:#fff;color:#116dff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+#boardTypeFilterWrap{margin-right:8px;display:flex;align-items:center}
+#shippingData .shipHead{flex-wrap:wrap}#shippingData .shipHead .wcTypeFilter{margin-left:8px}
+`;d3.head.appendChild(s)}
+// Production Board filter: hide legacy type select and add segmented control.
+const typef=d3.getElementById('typef');if(typef){typef.value='';typef.style.display='none';const tools=d3.getElementById('tools');if(tools&&!d3.getElementById('boardTypeFilterWrap')){const w=d3.createElement('div');w.id='boardTypeFilterWrap';w.innerHTML=chipsHtml('board');tools.insertBefore(w,tools.firstChild);w.style.display='none';w.querySelectorAll('button').forEach(b=>b.onclick=()=>{boardFilter=b.dataset.k;w.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));applyBoard(d3)})}}
+// Show board chips only while Production Board is active.
+const updateBoardFilterVisibility=()=>{const w=d3.getElementById('boardTypeFilterWrap');if(w)w.style.display=d3.querySelector('.nav.on[data-v="board"]')?'flex':'none';applyBoard(d3)};
+d3.querySelectorAll('.nav[data-v]').forEach(n=>n.addEventListener('click',()=>setTimeout(updateBoardFilterVisibility,0)));
+const board=d3.getElementById('board');if(board&&!board.dataset.v080obs){board.dataset.v080obs='1';new MutationObserver(()=>applyBoard(d3)).observe(board,{childList:true,subtree:true})}
+// Shipping Data segmented filter.
+const injectShippingFilter=()=>{const root=d3.getElementById('shippingData');const head=root?.querySelector('.shipHead');if(head&&!head.querySelector('.wcTypeFilter[data-scope="shipping"]')){head.insertAdjacentHTML('beforeend',chipsHtml('shipping'));const f=head.querySelector('.wcTypeFilter[data-scope="shipping"]');f.querySelectorAll('button').forEach(b=>b.onclick=()=>{shippingFilter=b.dataset.k;f.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));applyShipping(d3)});}applyShipping(d3)};
+const shipRoot=d3.getElementById('shippingData');if(shipRoot&&!shipRoot.dataset.v080obs){shipRoot.dataset.v080obs='1';new MutationObserver(injectShippingFilter).observe(shipRoot,{childList:true,subtree:true});injectShippingFilter()}
+const versionBox=[...d3.querySelectorAll('.homebox')].find(x=>x.textContent.includes('Version'))?.querySelector('b');if(versionBox)versionBox.textContent='v0.8.0 Live';d3.title='White Corner Orders v0.8.0';updateBoardFilterVisibility();return true}
+outer.addEventListener('load',()=>{let tries=0;const t=setInterval(()=>{tries++;if(enhance()||tries>30){clearInterval(t);outer.style.visibility='visible'}},150)});
+</script>
+</body>
+</html>
