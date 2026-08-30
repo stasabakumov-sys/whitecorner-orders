@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>White Corner Orders v0.7.6</title>
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#eef1f5}#appframe{position:fixed;inset:0;width:100%;height:100%;border:0;visibility:hidden}</style>
+</head>
+<body>
+<iframe id="appframe" src="../v075/" title="White Corner Orders v0.7.6"></iframe>
+<script>
+const frame=document.getElementById('appframe');
+frame.addEventListener('load',()=>{
+  try{
+    const d=frame.contentDocument;
+    let wantedView='home';
+    const navs=[...d.querySelectorAll('.nav[data-v]')];
+    navs.forEach(btn=>btn.addEventListener('click',()=>{wantedView=btn.dataset.v||'home'}));
+    const versionBox=[...d.querySelectorAll('.homebox')].find(x=>x.textContent.includes('Version'))?.querySelector('b');
+    if(versionBox)versionBox.textContent='v0.7.6 Live';
+    d.title='White Corner Orders v0.7.6';
+    const observer=new MutationObserver(()=>{
+      const active=d.querySelector('.nav.on[data-v]');
+      const actual=active?.dataset?.v||'home';
+      if(actual==='home'&&wantedView!=='home'){
+        const restore=d.querySelector(`.nav[data-v="${wantedView}"]`);
+        if(restore) restore.click();
+      }
+    });
+    navs.forEach(btn=>observer.observe(btn,{attributes:true,attributeFilter:['class']}));
+    frame.style.visibility='visible';
+  }catch(e){frame.style.visibility='visible';}
+});
+</script>
+</body>
+</html>
