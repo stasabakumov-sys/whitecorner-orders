@@ -1,0 +1,56 @@
+name: Build v0.8.8 standalone
+on:
+  push:
+    paths:
+      - '.github/workflows/build-v088.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build standalone v0.8.8
+        shell: python
+        run: |
+          from pathlib import Path
+          src = Path('v084/index.html').read_text()
+          s = src.replace('White Corner Orders v0.8.4','White Corner Orders v0.8.8').replace('v0.8.4 Standalone','v0.8.8 Standalone')
+
+          # Hide rules that do not affect packaging.
+          old = "rs=RL.filter(x=>x.shipping_product_id===p.id),inc="
+          new = "rs=RL.filter(x=>x.shipping_product_id===p.id&&x.effect_type!=='No effect'&&Number(x.package_count_delta||0)!==0),inc="
+          if old not in s:
+              raise SystemExit('rules anchor not found')
+          s = s.replace(old,new,1)
+
+          # Add package locking/status helpers before savePkg.
+          anchor = "async function savePkg(id){"
+          helpers = r'''function storedPkgComplete(id){const x=PK.find(p=>p.id===id);return !!x&&x.length_mm!=null&&x.width_mm!=null&&x.height_mm!=null&&x.weight_kg!=null}function updateShippingStatus(){const ship=$('#shipping');if(!ship)return;const rows=[...ship.querySelectorAll('.shiptable tbody tr')];if(!rows.length)return;let incomplete=0;rows.forEach(row=>{const cell=row.querySelector('td:last-child'),id=cell?.dataset.pkgid||row.querySelector('[data-savepkg]')?.dataset.savepkg;if(!id||!storedPkgComplete(id)||row.dataset.editing==='1')incomplete++});const badge=ship.querySelector('.shipdetail .badge.warn, .shipdetail .badge.ok');if(badge){badge.classList.toggle('warn',incomplete>0);badge.classList.toggle('ok',incomplete===0);badge.textContent=incomplete?`${incomplete} package${incomplete===1?'':'s'} incomplete`:'Ready for quoting'}const selected=ship.querySelector('.shipitem.on .pm');if(selected)selected.textContent=`${rows.length} base box${rows.length===1?'':'es'} · ${incomplete?`${incomplete} incomplete`:'complete'}`}function decoratePackages(){const ship=$('#shipping');if(!ship)return;ship.querySelectorAll('.shiptable tbody tr').forEach(row=>{const cell=row.querySelector('td:last-child');if(!cell)return;let id=cell.dataset.pkgid||row.querySelector('[data-savepkg]')?.dataset.savepkg;if(!id)return;cell.dataset.pkgid=id;if(storedPkgComplete(id)&&row.dataset.editing!=='1'){row.querySelectorAll('input').forEach(i=>{i.disabled=true;i.style.background='#f7f8fa';i.style.color='#566174'});cell.innerHTML=`<span class="badge ok" style="margin-right:8px">Saved ✓</span><button class="btn" data-rewritepkg="${id}">Rewrite</button>`}else{row.querySelectorAll('input').forEach(i=>{i.disabled=false;i.style.background='';i.style.color=''});if(!cell.querySelector('[data-savepkg]'))cell.innerHTML=`<button class="btn primary" data-savepkg="${id}">Save</button>`;const b=cell.querySelector('[data-savepkg]');if(b)b.onclick=()=>savePkg(id)}});ship.querySelectorAll('[data-rewritepkg]').forEach(b=>b.onclick=()=>{const row=b.closest('tr'),id=b.dataset.rewritepkg;row.dataset.editing='1';row.querySelectorAll('input').forEach(i=>{i.disabled=false;i.style.background='';i.style.color=''});const cell=b.closest('td');cell.innerHTML=`<button class="btn primary" data-savepkg="${id}">Save</button>`;cell.querySelector('[data-savepkg]').onclick=()=>savePkg(id);updateShippingStatus();row.querySelector('input')?.focus()});updateShippingStatus()}'''
+          if anchor not in s:
+              raise SystemExit('savePkg anchor not found')
+          s = s.replace(anchor,helpers+anchor,1)
+
+          # After each Shipping Data render, lock stored rows and show Saved/Rewrite.
+          old = "$('#shipping').querySelectorAll('[data-saverule]').forEach(b=>b.onclick=()=>saveRule(b.dataset.saverule))}function shipDetail"
+          new = "$('#shipping').querySelectorAll('[data-saverule]').forEach(b=>b.onclick=()=>saveRule(b.dataset.saverule));decoratePackages()}function shipDetail"
+          if old not in s:
+              raise SystemExit('renderShipping anchor not found')
+          s = s.replace(old,new,1)
+
+          # Saving one row must not re-render the table and erase unsaved values in other rows.
+          old = "Object.assign(PK.find(x=>x.id===id)||{},payload);renderShipping()}async function saveRule"
+          new = "Object.assign(PK.find(x=>x.id===id)||{},payload);const row=$(`[data-savepkg=\"${id}\"]`)?.closest('tr')||$(`[data-rewritepkg=\"${id}\"]`)?.closest('tr');if(row)row.dataset.editing='0';decoratePackages()}async function saveRule"
+          if old not in s:
+              raise SystemExit('savePkg tail anchor not found')
+          s = s.replace(old,new,1)
+
+          Path('v088').mkdir(exist_ok=True)
+          Path('v088/index.html').write_text(s)
+      - name: Commit v0.8.8
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add v088/index.html
+          git commit -m "Release v0.8.8 standalone" || exit 0
+          git push
