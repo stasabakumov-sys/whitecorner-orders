@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>White Corner Orders v0.8.1</title>
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#eef1f5}#appframe{position:fixed;inset:0;width:100%;height:100%;border:0;visibility:hidden}</style>
+</head>
+<body>
+<iframe id="appframe" src="../v080/" title="White Corner Orders v0.8.1"></iframe>
+<script>
+const outer=document.getElementById('appframe');
+const iconMap={
+ home:'⌂',orders:'▤',board:'▦',address:'◎',shipping:'⇄'
+};
+function getDeepDoc(){try{const d1=outer.contentDocument;const f2=d1?.getElementById('appframe');const d2=f2?.contentDocument;const f3=d2?.getElementById('appframe');const d3=f3?.contentDocument;const f4=d3?.getElementById('appframe');return f4?.contentDocument||d3}catch{return null}}
+function enhance(){const d=getDeepDoc();if(!d)return false;
+ if(!d.getElementById('v081style')){const s=d.createElement('style');s.id='v081style';s.textContent=`
+.side{width:240px;background:#181b22;padding:16px 10px;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+.main{margin-left:240px}.brand{padding:4px 12px 20px;font-size:18px;font-weight:600;letter-spacing:-.2px}.brand small{font-size:11px;color:#9097a5;margin-top:4px;font-weight:400}
+.nav{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 12px;border-radius:7px;color:#e6e9ef;font-size:14px;font-weight:450;letter-spacing:-.05px;margin:2px 0;transition:background .15s ease,color .15s ease}
+.nav:hover{background:#242932;color:#fff}.nav.on{background:#2d333d;color:#fff;font-weight:550}.nav.on:before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:3px;background:#5b8cff}
+.nav .wcIcon{width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:18px;line-height:1;color:#cbd1db;flex:0 0 20px}.nav.on .wcIcon{color:#fff}
+.navcount{margin-left:auto;float:none;background:#b42318;border-radius:10px;padding:1px 6px;font-size:10px}
+@media(max-width:900px){.side{width:74px;padding:16px 9px}.main{margin-left:74px}.brand{font-size:0;padding:3px 8px 18px}.brand:after{content:'WC';font-size:15px}.nav{justify-content:center;padding:10px 8px}.nav .wcLabel{display:none}.nav:before{display:none}.nav.on:before{display:block;left:-9px}.nav .wcIcon{font-size:19px}.navcount{position:absolute;right:2px;top:4px}}
+`;d.head.appendChild(s)}
+ d.querySelectorAll('.nav[data-v]').forEach(btn=>{
+   const v=btn.dataset.v||'';
+   if(!btn.querySelector('.wcIcon')){
+     const count=btn.querySelector('.navcount');
+     const text=[...btn.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join(' ').trim()||btn.textContent.replace(count?.textContent||'','').trim();
+     btn.childNodes.forEach(n=>{if(n.nodeType===3)n.remove()});
+     const icon=d.createElement('span');icon.className='wcIcon';icon.textContent=iconMap[v]||'•';
+     const label=d.createElement('span');label.className='wcLabel';label.textContent=text;
+     btn.insertBefore(icon,btn.firstChild);btn.insertBefore(label,count||null);
+   }
+ });
+ const versionBox=[...d.querySelectorAll('.homebox')].find(x=>x.textContent.includes('Version'))?.querySelector('b');if(versionBox)versionBox.textContent='v0.8.1 Live';d.title='White Corner Orders v0.8.1';return true}
+outer.addEventListener('load',()=>{let tries=0;const t=setInterval(()=>{tries++;if(enhance()||tries>40){clearInterval(t);outer.style.visibility='visible'}},150)});
+</script>
+</body>
+</html>
