@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>White Corner Orders Prototype v0.2</title>
+<title>White Corner Orders Prototype v0.3</title>
 <style>
 :root{--bg:#f4f5f7;--panel:#fff;--line:#dfe3e8;--text:#17191c;--muted:#6d737c;--done:#27ef21;--active:#fff20a;--hold:#ffb3b3;}
 *{box-sizing:border-box} body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
@@ -17,10 +17,6 @@ tr.clickable{cursor:pointer} tr.clickable:hover{background:#fafbfc} .num{font-we
 .board{display:grid;grid-template-columns:repeat(6,minmax(220px,1fr));gap:12px;overflow-x:auto} .col{background:#eceff3;border-radius:12px;padding:10px;min-height:520px} .colhead{display:flex;justify-content:space-between;font-weight:800;font-size:13px;padding:3px 4px 9px}
 .ocard{background:#fff;border:1px solid var(--line);border-radius:11px;padding:10px;margin-bottom:8px;cursor:pointer} .ocard:hover{border-color:#b8c0ca}
 .hidden{display:none!important}
-.sheetwrap{overflow:auto;background:#fff;border:1px solid #cfd4da;border-radius:12px} .sheet{min-width:1500px}
-.sheet thead th{position:sticky;top:64px;z-index:10;background:#e8eaed;color:#111;font-size:12px;text-transform:none;letter-spacing:0;border-right:1px solid #cfd4da;border-bottom:2px solid #aeb5bd}
-.sheet tbody td{padding:0;border-right:1px solid #d8dde3;border-bottom:1px solid #d8dde3;height:31px} .sheet tbody tr.done td{background:var(--done)} .sheet tbody tr.active td{background:var(--active)} .sheet tbody tr.hold td{background:var(--hold)} .sheet tbody tr.new td{background:#fff}
-.cell{width:100%;height:30px;border:0;background:transparent;padding:5px 6px;outline:none;font-size:12px} .cell:focus{background:white!important;box-shadow:inset 0 0 0 2px #2563eb} .sstatus{width:100%;height:30px;border:0;background:transparent;padding:4px;font-size:12px;font-weight:700}
 .drawerbg{position:fixed;inset:0;background:rgba(17,24,39,.35);z-index:50;display:none} .drawerbg.open{display:block} .drawer{position:absolute;right:0;top:0;bottom:0;width:min(760px,96vw);background:white;overflow:auto}
 .dhead{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;position:sticky;top:0;background:white;z-index:2} .close{border:0;background:#f0f2f4;border-radius:9px;width:34px;height:34px;font-size:18px}
 .dbody{padding:18px 20px} .section{margin-bottom:20px} .sectitle{font-size:12px;text-transform:uppercase;font-weight:800;color:#747a82;margin-bottom:8px} .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px} .box{border:1px solid var(--line);border-radius:10px;padding:9px;background:#fafbfc} .box b{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
@@ -31,11 +27,10 @@ tr.clickable{cursor:pointer} tr.clickable:hover{background:#fafbfc} .num{font-we
 </head>
 <body>
 <div class="top">
-  <div><div class="brand">White Corner Orders</div><div class="sub">Prototype v0.2 · mock data · 3 synchronized views</div></div>
+  <div><div class="brand">White Corner Orders</div><div class="sub">Prototype v0.3 · mock data · item-level production</div></div>
   <div class="tabs">
     <button class="tab active" data-view="orders">Orders</button>
     <button class="tab" data-view="board">Production Board</button>
-    <button class="tab" data-view="sheet">Production Sheet</button>
   </div>
 </div>
 <div class="toolbar">
@@ -49,66 +44,162 @@ tr.clickable{cursor:pointer} tr.clickable:hover{background:#fafbfc} .num{font-we
     <table><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Payment</th><th>Production</th><th>Fulfilment</th><th>Total</th></tr></thead><tbody id="ordersBody"></tbody></table>
   </div>
   <div id="boardView" class="hidden"><div class="board" id="board"></div></div>
-  <div id="sheetView" class="hidden sheetwrap"><div class="sheet"><table>
-    <thead><tr><th>Order</th><th>Name</th><th>Product</th><th>Size</th><th>Color</th><th>Tabletop</th><th>Additional</th><th>Side shelf</th><th>Shelf</th><th>Ice shelf</th><th>Hole</th><th>Logo</th><th>Status</th><th>Comment</th></tr></thead>
-    <tbody id="sheetBody"></tbody>
-  </table></div></div>
 </div>
 
 <div class="drawerbg" id="drawerbg"><div class="drawer"><div class="dhead"><div><div class="num" id="dnum"></div><div id="dname"></div><div class="muted" id="dcompany"></div></div><button class="close" id="close">×</button></div><div class="dbody" id="dbody"></div></div></div>
 
 <script>
-const DEFAULT_ORDERS=[{"id": "o10829", "number": "10829", "date": "29 Aug 2026", "name": "Kate Murphy", "company": "Silver Cedar", "email": "customer1@example.com", "payment": "PAID", "fulfilment": "Shipping", "total": "AU$545.00", "address": "27 Sample St, Crace ACT 2911", "buyerNote": "", "status": "New", "items": [{"product": "Portable Market Mini Table with shelves", "size": "150×60×85", "color": "white", "tabletop": "", "additional": "", "sideShelf": "yes", "shelf": "", "iceShelf": "yes", "hole": "33", "logo": "", "comment": "12 × 1/6 GN cutouts and 1 × 1/2"}]}, {"id": "o10828", "number": "10828", "date": "29 Aug 2026", "name": "Sonia Wallace", "company": "Sweet Tooth Events", "email": "customer2@example.com", "payment": "PAID", "fulfilment": "Pickup", "total": "AU$975.00", "address": "Burleigh Heads QLD 4220", "buyerNote": "Family will collect this order.", "status": "CNC", "items": [{"product": "Essential Cart - Plywood Mobile", "size": "150×60×85", "color": "white", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "", "iceShelf": "yes", "hole": "38", "logo": "", "comment": "pick up"}, {"product": "Umbrella hole for the Mobile Cart", "size": "", "color": "", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "", "iceShelf": "", "hole": "38", "logo": "", "comment": ""}]}, {"id": "o10827", "number": "10827", "date": "28 Aug 2026", "name": "Samantha Harris", "company": "Creative Co", "email": "customer3@example.com", "payment": "PAID", "fulfilment": "Shipping", "total": "AU$505.00", "address": "50 Sample Dr, Maroochy River QLD 4561", "buyerNote": "", "status": "Assembly", "items": [{"product": "Plywood Hollow Event Backdrop with Rectangular Top", "size": "150×60×85", "color": "white", "tabletop": "plain", "additional": "", "sideShelf": "", "shelf": "", "iceShelf": "", "hole": "", "logo": "", "comment": ""}]}, {"id": "o10825", "number": "10825", "date": "27 Aug 2026", "name": "Sarah Walton", "company": "Alepat Taylor", "email": "customer4@example.com", "payment": "PAID", "fulfilment": "Shipping", "total": "AU$3,205.00", "address": "992 Sample Rd, Albert Park SA 5014", "buyerNote": "Please confirm custom cutout layout before production.", "status": "Painting", "items": [{"product": "MDF Mobile Bar Cart with Decorative Wheels", "size": "120×90×60", "color": "pink", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": ""}, {"product": "Umbrella hole for the Mobile Cart", "size": "", "color": "", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "", "iceShelf": "", "hole": "38", "logo": "", "comment": ""}, {"product": "Back panel with a pair of closable doors", "size": "", "color": "white", "tabletop": "", "additional": "custom", "sideShelf": "", "shelf": "", "iceShelf": "", "hole": "", "logo": "", "comment": "White finish"}, {"product": "Customisation of the tabletop and shelf height", "size": "", "color": "", "tabletop": "custom cutout", "additional": "custom", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": "Custom cutout and adjusted support shelf"}]}, {"id": "o10824", "number": "10824", "date": "26 Aug 2026", "name": "Modena Trading", "company": "", "email": "customer5@example.com", "payment": "PAID", "fulfilment": "Shipping", "total": "AU$2,085.00", "address": "Unit 6, Sample St, Alexandria NSW 2015", "buyerNote": "", "status": "Packing", "items": [{"product": "MDF Mobile Bar Cart with Decorative Wheels", "size": "130×60×90", "color": "white", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": ""}, {"product": "Delivery", "size": "", "color": "", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "", "iceShelf": "", "hole": "", "logo": "", "comment": ""}]}, {"id": "o10812", "number": "10812", "date": "25 Aug 2026", "name": "Gareth Keenan", "company": "", "email": "customer6@example.com", "payment": "PAID", "fulfilment": "Shipping", "total": "AU$4,100.00", "address": "Sample address", "buyerNote": "", "status": "New", "items": [{"product": "Plywood Mobile Bar “Classic”", "size": "140×60×100", "color": "white", "tabletop": "tasmanian oak", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": ""}, {"product": "Plywood Mobile Bar “Classic”", "size": "140×60×100", "color": "white", "tabletop": "tasmanian oak", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": ""}, {"product": "Plywood Mobile Bar “Classic”", "size": "140×60×100", "color": "white", "tabletop": "tasmanian oak", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": ""}, {"product": "Plywood Mobile Bar “Classic”", "size": "140×60×100", "color": "white", "tabletop": "tasmanian oak", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": ""}]}];
+const DEFAULT_ORDERS=[{"id": "o10829", "number": "10829", "date": "29 Aug 2026", "name": "Kate Murphy", "company": "Silver Cedar", "email": "customer1@example.com", "payment": "PAID", "fulfilment": "Shipping", "total": "AU$545.00", "address": "27 Sample St, Crace ACT 2911", "buyerNote": "", "items": [{"product": "Portable Market Mini Table with shelves", "size": "150×60×85", "color": "white", "tabletop": "", "additional": "", "sideShelf": "yes", "shelf": "", "iceShelf": "yes", "hole": "33", "logo": "", "comment": "12 × 1/6 GN cutouts and 1 × 1/2", "status": "New"}]}, {"id": "o10828", "number": "10828", "date": "29 Aug 2026", "name": "Sonia Wallace", "company": "Sweet Tooth Events", "email": "customer2@example.com", "payment": "PAID", "fulfilment": "Pickup", "total": "AU$975.00", "address": "Burleigh Heads QLD 4220", "buyerNote": "Family will collect this order.", "items": [{"product": "Essential Cart - Plywood Mobile", "size": "150×60×85", "color": "white", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "", "iceShelf": "yes", "hole": "38", "logo": "", "comment": "pick up", "status": "CNC"}, {"product": "Umbrella hole for the Mobile Cart", "size": "", "color": "", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "", "iceShelf": "", "hole": "38", "logo": "", "comment": "", "status": null}]}, {"id": "o10827", "number": "10827", "date": "28 Aug 2026", "name": "Samantha Harris", "company": "Creative Co", "email": "customer3@example.com", "payment": "PAID", "fulfilment": "Shipping", "total": "AU$505.00", "address": "50 Sample Dr, Maroochy River QLD 4561", "buyerNote": "", "items": [{"product": "Plywood Hollow Event Backdrop with Rectangular Top", "size": "150×60×85", "color": "white", "tabletop": "plain", "additional": "", "sideShelf": "", "shelf": "", "iceShelf": "", "hole": "", "logo": "", "comment": "", "status": "Assembly"}]}, {"id": "o10825", "number": "10825", "date": "27 Aug 2026", "name": "Sarah Walton", "company": "Alepat Taylor", "email": "customer4@example.com", "payment": "PAID", "fulfilment": "Shipping", "total": "AU$3,205.00", "address": "992 Sample Rd, Albert Park SA 5014", "buyerNote": "Please confirm custom cutout layout before production.", "items": [{"product": "MDF Mobile Bar Cart with Decorative Wheels", "size": "120×90×60", "color": "pink", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": "", "status": "Painting"}, {"product": "Umbrella hole for the Mobile Cart", "size": "", "color": "", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "", "iceShelf": "", "hole": "38", "logo": "", "comment": "", "status": null}, {"product": "Back panel with a pair of closable doors", "size": "", "color": "white", "tabletop": "", "additional": "custom", "sideShelf": "", "shelf": "", "iceShelf": "", "hole": "", "logo": "", "comment": "White finish", "status": null}, {"product": "Customisation of the tabletop and shelf height", "size": "", "color": "", "tabletop": "custom cutout", "additional": "custom", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": "Custom cutout and adjusted support shelf", "status": null}]}, {"id": "o10824", "number": "10824", "date": "26 Aug 2026", "name": "Modena Trading", "company": "", "email": "customer5@example.com", "payment": "PAID", "fulfilment": "Shipping", "total": "AU$2,085.00", "address": "Unit 6, Sample St, Alexandria NSW 2015", "buyerNote": "", "items": [{"product": "MDF Mobile Bar Cart with Decorative Wheels", "size": "130×60×90", "color": "white", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": "", "status": "Packing"}, {"product": "Delivery", "size": "", "color": "", "tabletop": "", "additional": "", "sideShelf": "", "shelf": "", "iceShelf": "", "hole": "", "logo": "", "comment": "", "status": null}]}, {"id": "o10812", "number": "10812", "date": "25 Aug 2026", "name": "Gareth Keenan", "company": "", "email": "customer6@example.com", "payment": "PAID", "fulfilment": "Shipping", "total": "AU$4,100.00", "address": "Sample address", "buyerNote": "", "items": [{"product": "Plywood Mobile Bar “Classic”", "size": "140×60×100", "color": "white", "tabletop": "tasmanian oak", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": "", "status": "New"}, {"product": "Plywood Mobile Bar “Classic”", "size": "140×60×100", "color": "white", "tabletop": "tasmanian oak", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": "", "status": "CNC"}, {"product": "Plywood Mobile Bar “Classic”", "size": "140×60×100", "color": "white", "tabletop": "tasmanian oak", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": "", "status": "Assembly"}, {"product": "Plywood Mobile Bar “Classic”", "size": "140×60×100", "color": "white", "tabletop": "tasmanian oak", "additional": "", "sideShelf": "", "shelf": "yes", "iceShelf": "", "hole": "", "logo": "", "comment": "", "status": "Painting"}]}];
 const STATUSES=["New","CNC","Assembly","Painting","Packing","Ready"];
-const KEY="wc-orders-unified-v02";
+const KEY="wc-orders-unified-v03";
 let orders=JSON.parse(localStorage.getItem(KEY)||"null")||DEFAULT_ORDERS;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+const ADDON_PATTERNS=["umbrella hole","delivery","customisation","customization","back panel with"];
+
 function save(){localStorage.setItem(KEY,JSON.stringify(orders))}
-function filt(){
- const q=$("#search").value.toLowerCase().trim(),s=$("#statusFilter").value,d=$("#deliveryFilter").value;
- return orders.filter(o=>{const text=[o.number,o.name,o.company,o.email,o.buyerNote,...o.items.flatMap(i=>Object.values(i))].join(" ").toLowerCase();return(!q||text.includes(q))&&(!s||o.status===s)&&(!d||o.fulfilment===d)})
+function isProductionItem(i){
+  const p=(i.product||"").toLowerCase();
+  return !ADDON_PATTERNS.some(x=>p.includes(x));
+}
+function productionItems(o){
+  return o.items.map((item,rawIndex)=>({item,rawIndex})).filter(x=>isProductionItem(x.item));
+}
+function orderMatches(o){
+  const q=$("#search").value.toLowerCase().trim();
+  const sf=$("#statusFilter").value;
+  const df=$("#deliveryFilter").value;
+  const text=[o.number,o.name,o.company,o.email,o.buyerNote,...o.items.flatMap(i=>Object.values(i).filter(v=>v!=null))].join(" ").toLowerCase();
+  const p=productionItems(o);
+  return (!q||text.includes(q)) && (!df||o.fulfilment===df) && (!sf||p.some(x=>x.item.status===sf));
+}
+function filteredOrders(){return orders.filter(orderMatches)}
+function boardEntries(){
+  const sf=$("#statusFilter").value;
+  const out=[];
+  filteredOrders().forEach(o=>{
+    let seq=0;
+    o.items.forEach((item,rawIndex)=>{
+      if(!isProductionItem(item)) return;
+      seq++;
+      if(sf && item.status!==sf) return;
+      out.push({o,item,rawIndex,seq,code:`${o.number}-${seq}`});
+    });
+  });
+  return out;
 }
 function badgePay(o){return `<span class="badge paid">${esc(o.payment)}</span>`}
-function badgeFul(o){return `<span class="badge ${o.fulfilment==="Pickup"?"pickup":"ship"}">${o.fulfilment}</span>`}
-function rowCls(status){let s=status.toLowerCase();if(s==="ready")return"done";if(["cnc","assembly","painting","packing"].includes(s))return"active";return"new"}
-function setStatus(id,s){let o=orders.find(x=>x.id===id);o.status=s;save();render();}
+function badgeFul(o){return `<span class="badge ${o.fulfilment==="Pickup"?"pickup":"ship"}">${esc(o.fulfilment)}</span>`}
+function setItemStatus(orderId,rawIndex,status){
+  const o=orders.find(x=>x.id===orderId);
+  if(!o||!o.items[rawIndex]) return;
+  o.items[rawIndex].status=status;
+  save(); render();
+}
+function productionSummary(o){
+  const p=productionItems(o);
+  if(!p.length) return "—";
+  const counts={};
+  STATUSES.forEach(s=>counts[s]=0);
+  p.forEach(x=>counts[x.item.status||"New"]=(counts[x.item.status||"New"]||0)+1);
+  return STATUSES.filter(s=>counts[s]).map(s=>`${counts[s]} ${s}`).join(" · ");
+}
 function renderOrders(){
- $("#ordersBody").innerHTML=filt().map(o=>`<tr class="clickable" onclick="openOrder('${o.id}')"><td><div class="num">#${o.number}</div></td><td><b>${esc(o.name)}</b><div class="muted">${esc(o.company)}</div></td><td>${o.date}</td><td>${badgePay(o)}</td><td><select onclick="event.stopPropagation()" onchange="setStatus('${o.id}',this.value)">${STATUSES.map(s=>`<option ${o.status===s?"selected":""}>${s}</option>`).join("")}</select></td><td>${badgeFul(o)}</td><td class="money">${o.total}</td></tr>`).join("");
+  $("#ordersBody").innerHTML=filteredOrders().map(o=>`<tr class="clickable" onclick="openOrder('${o.id}')">
+    <td><div class="num">#${esc(o.number)}</div></td>
+    <td><b>${esc(o.name)}</b><div class="muted">${esc(o.company)}</div></td>
+    <td>${esc(o.date)}</td>
+    <td>${badgePay(o)}</td>
+    <td><div style="font-size:12px;font-weight:700">${esc(productionSummary(o))}</div></td>
+    <td>${badgeFul(o)}</td>
+    <td class="money">${esc(o.total)}</td>
+  </tr>`).join("");
+}
+function specLine(i){
+  return [i.size,i.color,i.tabletop].filter(Boolean).join(" · ");
 }
 function renderBoard(){
- const rows=filt();
- $("#board").innerHTML=STATUSES.map(s=>`<div class="col"><div class="colhead"><span>${s}</span><span>${rows.filter(o=>o.status===s).length}</span></div>${rows.filter(o=>o.status===s).map(o=>`<div class="ocard" onclick="openOrder('${o.id}')"><b>#${o.number} · ${esc(o.name)}</b><div class="muted">${esc(o.company)} · ${o.total}</div><div style="margin-top:7px;font-size:12px">${esc(o.items.map(i=>i.product).join(" · "))}</div><div style="margin-top:8px">${badgePay(o)} ${badgeFul(o)}</div></div>`).join("")}</div>`).join("");
+  const entries=boardEntries();
+  $("#board").innerHTML=STATUSES.map(s=>{
+    const cards=entries.filter(x=>(x.item.status||"New")===s);
+    return `<div class="col">
+      <div class="colhead"><span>${s}</span><span>${cards.length}</span></div>
+      ${cards.map(x=>`<div class="ocard" onclick="openOrder('${x.o.id}',${x.rawIndex})">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+          <b>#${esc(x.code)}</b>
+          <span class="muted">${esc(x.o.date)}</span>
+        </div>
+        <div style="font-weight:700;margin-top:5px">${esc(x.o.name)}</div>
+        <div class="muted">${esc(x.o.company)}</div>
+        <div style="margin-top:8px;font-size:12px;line-height:1.35"><b>${esc(x.item.product)}</b></div>
+        ${specLine(x.item)?`<div class="muted" style="margin-top:4px">${esc(specLine(x.item))}</div>`:""}
+        <div style="margin-top:9px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${badgePay(x.o)} ${badgeFul(x.o)}</div>
+        <select style="width:100%;margin-top:9px" onclick="event.stopPropagation()" onchange="setItemStatus('${x.o.id}',${x.rawIndex},this.value)">
+          ${STATUSES.map(st=>`<option ${(x.item.status||"New")===st?"selected":""}>${st}</option>`).join("")}
+        </select>
+      </div>`).join("")}
+    </div>`;
+  }).join("");
 }
-function renderSheet(){
- const rows=[];
- filt().forEach(o=>o.items.forEach((i,idx)=>rows.push({o,i,idx})));
- $("#sheetBody").innerHTML=rows.map(x=>{let o=x.o,i=x.i;let vals=[o.number,o.name,i.product,i.size,i.color,i.tabletop,i.additional,i.sideShelf,i.shelf,i.iceShelf,i.hole,i.logo,o.status,i.comment];
- return `<tr class="${rowCls(o.status)}">${vals.map((v,c)=>c===12?`<td><select class="sstatus" onchange="setStatus('${o.id}',this.value)">${STATUSES.map(s=>`<option ${o.status===s?"selected":""}>${s}</option>`).join("")}</select></td>`:`<td><input class="cell" value="${esc(v)}" onchange="editCell('${o.id}',${x.idx},${c},this.value)"></td>`).join("")}</tr>`}).join("");
+function itemCode(o,rawIndex){
+  let seq=0;
+  for(let i=0;i<=rawIndex;i++) if(isProductionItem(o.items[i])) seq++;
+  return `${o.number}-${seq}`;
 }
-function editCell(id,idx,c,v){
- const o=orders.find(x=>x.id===id),i=o.items[idx];
- if(c===0)o.number=v; else if(c===1)o.name=v; else {
-   const keys=["product","size","color","tabletop","additional","sideShelf","shelf","iceShelf","hole","logo"];
-   if(c>=2&&c<=11)i[keys[c-2]]=v; else if(c===13)i.comment=v;
- }
- save(); renderOrders(); renderBoard();
+function openOrder(id,focusRawIndex=null){
+  const o=orders.find(x=>x.id===id);
+  $("#dnum").textContent="#"+o.number;
+  $("#dname").textContent=o.name;
+  $("#dcompany").textContent=o.company||"";
+  const p=productionItems(o);
+  $("#dbody").innerHTML=`
+    <div class="section"><div class="sectitle">Overview</div><div class="grid">
+      <div class="box"><b>Payment</b>${badgePay(o)}</div>
+      <div class="box"><b>Production</b>${esc(productionSummary(o))}</div>
+      <div class="box"><b>Fulfilment</b>${badgeFul(o)}</div>
+      <div class="box"><b>Total</b>${esc(o.total)}</div>
+      <div class="box"><b>Date</b>${esc(o.date)}</div>
+      <div class="box"><b>Email</b>${esc(o.email)}</div>
+    </div></div>
+    <div class="section"><div class="sectitle">Items</div>
+      ${o.items.map((i,rawIndex)=>{
+        const prod=isProductionItem(i);
+        const focused=focusRawIndex===rawIndex;
+        return `<div class="item" style="${focused?"box-shadow:inset 0 0 0 2px #111827;":""}">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+            <b>${prod?`#${esc(itemCode(o,rawIndex))} · `:""}${esc(i.product)}</b>
+            ${prod?`<span class="badge">${esc(i.status||"New")}</span>`:`<span class="pill">Add-on</span>`}
+          </div>
+          <div>${["size","color","tabletop","additional","sideShelf","shelf","iceShelf","hole","logo"].filter(k=>i[k]).map(k=>`<span class="pill">${k}: ${esc(i[k])}</span>`).join("")}</div>
+          ${i.comment?`<div class="muted" style="margin-top:7px">${esc(i.comment)}</div>`:""}
+          ${prod?`<div style="margin-top:10px"><select style="width:100%" onchange="setItemStatus('${o.id}',${rawIndex},this.value);openOrder('${o.id}',${rawIndex})">
+            ${STATUSES.map(st=>`<option ${(i.status||"New")===st?"selected":""}>${st}</option>`).join("")}
+          </select></div>`:""}
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="section"><div class="sectitle">Customer & fulfilment</div><div class="grid">
+      <div class="box"><b>Name</b>${esc(o.name)}</div>
+      <div class="box"><b>Company</b>${esc(o.company||"—")}</div>
+      <div class="box"><b>Email</b>${esc(o.email)}</div>
+      <div class="box"><b>Address</b>${esc(o.address)}</div>
+      <div class="box"><b>Method</b>${esc(o.fulfilment)}</div>
+      <div class="box"><b>Buyer note</b>${esc(o.buyerNote||"—")}</div>
+    </div></div>`;
+  $("#drawerbg").classList.add("open");
 }
-function openOrder(id){
- const o=orders.find(x=>x.id===id),ci=STATUSES.indexOf(o.status);
- $("#dnum").textContent="#"+o.number;$("#dname").textContent=o.name;$("#dcompany").textContent=o.company||"";
- $("#dbody").innerHTML=`<div class="section"><div class="sectitle">Overview</div><div class="grid"><div class="box"><b>Payment</b>${badgePay(o)}</div><div class="box"><b>Production</b>${o.status}</div><div class="box"><b>Fulfilment</b>${badgeFul(o)}</div><div class="box"><b>Total</b>${o.total}</div><div class="box"><b>Date</b>${o.date}</div><div class="box"><b>Email</b>${esc(o.email)}</div></div></div>
- <div class="section"><div class="sectitle">Production</div><div class="steps">${STATUSES.map((s,i)=>`<div class="step ${i<ci?"done":i===ci?"current":""}" onclick="setStatus('${o.id}','${s}');openOrder('${o.id}')">${s}</div>`).join("")}</div></div>
- <div class="section"><div class="sectitle">Items</div>${o.items.map(i=>`<div class="item"><b>${esc(i.product)}</b><div>${["size","color","tabletop","additional","sideShelf","shelf","iceShelf","hole","logo"].filter(k=>i[k]).map(k=>`<span class="pill">${k}: ${esc(i[k])}</span>`).join("")}</div>${i.comment?`<div class="muted" style="margin-top:7px">${esc(i.comment)}</div>`:""}</div>`).join("")}</div>
- <div class="section"><div class="sectitle">Customer & fulfilment</div><div class="grid"><div class="box"><b>Name</b>${esc(o.name)}</div><div class="box"><b>Company</b>${esc(o.company||"—")}</div><div class="box"><b>Email</b>${esc(o.email)}</div><div class="box"><b>Address</b>${esc(o.address)}</div><div class="box"><b>Method</b>${o.fulfilment}</div><div class="box"><b>Buyer note</b>${esc(o.buyerNote||"—")}</div></div></div>`;
- $("#drawerbg").classList.add("open");
-}
-function render(){renderOrders();renderBoard();renderSheet()}
+function render(){renderOrders();renderBoard()}
 STATUSES.forEach(s=>$("#statusFilter").insertAdjacentHTML("beforeend",`<option>${s}</option>`));
 ["search","statusFilter","deliveryFilter"].forEach(id=>$("#"+id).addEventListener(id==="search"?"input":"change",render));
 $("#clear").onclick=()=>{$("#search").value="";$("#statusFilter").value="";$("#deliveryFilter").value="";render()};
-document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");const v=b.dataset.view;$("#ordersView").classList.toggle("hidden",v!=="orders");$("#boardView").classList.toggle("hidden",v!=="board");$("#sheetView").classList.toggle("hidden",v!=="sheet")});
-$("#close").onclick=()=>$("#drawerbg").classList.remove("open");$("#drawerbg").onclick=e=>{if(e.target.id==="drawerbg")$("#drawerbg").classList.remove("open")};
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");
+  const v=b.dataset.view;
+  $("#ordersView").classList.toggle("hidden",v!=="orders");
+  $("#boardView").classList.toggle("hidden",v!=="board");
+});
+$("#close").onclick=()=>$("#drawerbg").classList.remove("open");
+$("#drawerbg").onclick=e=>{if(e.target.id==="drawerbg")$("#drawerbg").classList.remove("open")};
 render();
 </script>
 </body></html>
