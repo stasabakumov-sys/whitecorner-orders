@@ -1,0 +1,20 @@
+-- White Corner Orders: run Wix sync every 5 minutes.
+-- Run AFTER deploying the Edge Function `wix-orders-sync`.
+-- Replace <PROJECT_REF> and <SERVICE_ROLE_OR_CRON_SECRET> only if your setup requires them.
+-- Recommended approach in Supabase Dashboard: Integrations -> Cron -> New job -> HTTP request
+-- URL: https://<PROJECT_REF>.supabase.co/functions/v1/wix-orders-sync
+-- Method: POST
+-- Schedule: */5 * * * *
+
+-- If pg_cron + pg_net are enabled, an SQL version can also be used:
+-- select cron.schedule(
+--   'whitecorner-wix-orders-sync',
+--   '*/5 * * * *',
+--   $$
+--   select net.http_post(
+--     url := 'https://<PROJECT_REF>.supabase.co/functions/v1/wix-orders-sync',
+--     headers := '{"Content-Type":"application/json","Authorization":"Bearer <CRON_AUTH_TOKEN>"}'::jsonb,
+--     body := '{}'::jsonb
+--   );
+--   $$
+-- );
