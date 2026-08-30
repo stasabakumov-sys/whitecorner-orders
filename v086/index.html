@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>White Corner Orders v0.8.6</title><style>html,body{margin:0;min-height:100%;background:#f4f6f8}</style></head><body><script>
+(async()=>{
+  try{
+    const html=await fetch('../v085/index.html',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Unable to load v0.8.5 base');return r.text()});
+    const patch=`<script>
+(function(){
+const VERSION='v0.8.6 Standalone';
+function complete(row){return ['l_','w_','h_','kg_'].every(p=>{const el=row.querySelector('[id^="'+p+'"]');return el&&String(el.value).trim()!==''})}
+function recalc(){
+  const ship=document.querySelector('#shipping');if(!ship)return;
+  const rows=[...ship.querySelectorAll('.shipdetail .shiptable tbody tr')];if(!rows.length)return;
+  const incomplete=rows.filter(r=>r.dataset.locked!=='1'||!complete(r)).length;
+  const badge=ship.querySelector('.shipdetail .badge.warn, .shipdetail .badge.ok');
+  if(badge){badge.classList.toggle('warn',incomplete>0);badge.classList.toggle('ok',incomplete===0);badge.textContent=incomplete?(incomplete+' package'+(incomplete===1?'':'s')+' incomplete'):'Ready for quoting'}
+  const selected=ship.querySelector('.shipitem.on .pm');
+  if(selected){const total=rows.length;selected.textContent=total+' base box'+(total===1?'':'es')+' · '+(incomplete?(incomplete+' incomplete'):'complete')}
+}
+const mo=new MutationObserver(()=>setTimeout(recalc,0));mo.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['data-locked']});
+document.addEventListener('click',()=>setTimeout(recalc,250),true);
+setInterval(()=>{recalc();const vb=[...document.querySelectorAll('.homebox')].find(x=>x.textContent.includes('Version'))?.querySelector('b');if(vb)vb.textContent=VERSION;document.title='White Corner Orders v0.8.6'},700);
+})();
+<\/script>`;
+    const out=html.replace(/v0\.8\.5 Standalone/g,'v0.8.6 Standalone').replace(/White Corner Orders v0\.8\.5/g,'White Corner Orders v0.8.6').replace('</body>',patch+'</body>');
+    document.open();document.write(out);document.close();
+  }catch(e){document.body.innerHTML='<div style="font:14px Arial;padding:24px;color:#8c2f2f">v0.8.6 failed to load: '+String(e.message||e)+'</div>'}
+})();
+</script></body></html>
