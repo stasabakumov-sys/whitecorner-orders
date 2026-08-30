@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>White Corner Orders v0.7.8</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#eef1f5}#appframe{position:fixed;inset:0;width:100%;height:100%;border:0;visibility:hidden}.shipOverlay{display:block}.shipPanel{background:#fff;border:1px solid #dfe5ec;border-radius:12px;overflow:hidden}.shipHead{padding:16px 18px;border-bottom:1px solid #dfe5ec;display:flex;align-items:center;gap:12px}.shipHead b{font-size:18px}.shipHead .mut{margin-left:auto}.shipProducts{display:grid;grid-template-columns:320px 1fr;min-height:560px}.shipList{border-right:1px solid #dfe5ec;background:#f8f9fb}.shipList button{display:block;width:100%;border:0;border-bottom:1px solid #e5e9ef;background:transparent;text-align:left;padding:14px 16px;cursor:pointer}.shipList button.on{background:#fff}.shipList .pn{font-weight:700;line-height:1.3}.shipList .pm{font-size:11px;color:#758198;margin-top:4px}.shipDetail{padding:18px}.shipSection{margin-bottom:24px}.shipSection h3{margin:0 0 10px}.shipTable{width:100%;border-collapse:collapse;min-width:0!important}.shipTable th,.shipTable td{position:static!important;padding:9px 8px;border-bottom:1px solid #e8ecf1;text-align:left}.shipTable th{background:#f7f9fb;font-size:11px;text-transform:uppercase;color:#758198}.shipInput{width:90px;border:1px solid #cfd8e6;border-radius:7px;padding:7px 8px}.shipInput.name{width:180px}.shipSave,.shipAdd{border:0;background:#116dff;color:#fff;border-radius:7px;padding:8px 11px;cursor:pointer}.shipSecondary{border:1px solid #cfd8e6;background:#fff;color:#116dff;border-radius:7px;padding:7px 10px;cursor:pointer}.shipMsg{font-size:12px;color:#17643d;margin-left:10px}.shipWarn{display:inline-block;background:#fff0e6;color:#9a4b00;border-radius:4px;padding:3px 7px;font-size:11px;font-weight:700}.shipOk{display:inline-block;background:#c9efdb;color:#17643d;border-radius:4px;padding:3px 7px;font-size:11px;font-weight:700}.shipRule{background:#fbfcfd;border:1px solid #dfe5ec;border-radius:8px;padding:10px;margin-bottom:8px;display:grid;grid-template-columns:100px 1fr 120px 110px 90px;gap:8px;align-items:center}.shipRule .small{font-size:11px;color:#758198}@media(max-width:1000px){.shipProducts{grid-template-columns:1fr}.shipList{border-right:0;border-bottom:1px solid #dfe5ec;max-height:220px;overflow:auto}.shipRule{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<iframe id="appframe" src="../v075/" title="White Corner Orders v0.7.8"></iframe>
+<script type="module">
+import {createClient} from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const sb=createClient('https://zgvnrpspwluapaxnycrg.supabase.co','sb_publishable_DwutkRc9dxioIdUcdPn4gA_RfDb1-n_',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const frame=document.getElementById('appframe');
+let wantedView='home', products=[], packages=[], rules=[], selected=null;
+const esc=s=>String(s??'').replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[m]));
+async function loadShipping(){
+  const [p1,p2,p3]=await Promise.all([
+    sb.from('wc_shipping_products').select('*').eq('active',true).order('product_name'),
+    sb.from('wc_shipping_packages').select('*').eq('active',true).order('package_no'),
+    sb.from('wc_shipping_rules').select('*').order('created_at')
+  ]);
+  if(p1.error) throw p1.error;if(p2.error) throw p2.error;if(p3.error) throw p3.error;
+  products=p1.data||[];packages=p2.data||[];rules=p3.data||[];
+  if(!selected&&products.length)selected=products[0].id;
+  renderShipping();
+}
+function currentProduct(){return products.find(x=>x.id===selected)}
+function renderShipping(){
+  const d=frame.contentDocument, root=d.getElementById('shippingData');if(!root)return;
+  const p=currentProduct();
+  root.innerHTML=`<div class="shipPanel"><div class="shipHead"><b>Shipping Data</b><span>${products.length} products</span><span class="mut">Packaging profiles for freight quotes</span></div><div class="shipProducts"><div class="shipList">${products.map(x=>{const ps=packages.filter(y=>y.shipping_product_id===x.id&&y.source_type==='Base');const inc=ps.filter(y=>y.length_mm==null||y.width_mm==null||y.height_mm==null||y.weight_kg==null).length;return`<button data-sp="${x.id}" class="${x.id===selected?'on':''}"><div class="pn">${esc(x.product_name)}</div><div class="pm">${ps.length} base boxes · ${inc?`${inc} incomplete`:'complete'}</div></button>`}).join('')}</div><div class="shipDetail">${p?detailHtml(p):'<div class="mut">No products yet.</div>'}</div></div></div>`;
+  root.querySelectorAll('[data-sp]').forEach(b=>b.onclick=()=>{selected=b.dataset.sp;renderShipping()});
+  root.querySelectorAll('[data-savepkg]').forEach(b=>b.onclick=()=>savePackage(b.dataset.savepkg));
+  root.querySelectorAll('[data-saverule]').forEach(b=>b.onclick=()=>saveRule(b.dataset.saverule));
+}
+function detailHtml(p){
+  const ps=packages.filter(x=>x.shipping_product_id===p.id).sort((a,b)=>a.source_type.localeCompare(b.source_type)||a.package_no-b.package_no);
+  const rs=rules.filter(x=>x.shipping_product_id===p.id);
+  const incomplete=ps.filter(x=>x.length_mm==null||x.width_mm==null||x.height_mm==null||x.weight_kg==null).length;
+  return `<div style="display:flex;align-items:flex-start;gap:12px"><div><h2 style="margin:0 0 4px">${esc(p.product_name)}</h2><div class="small">${esc(p.product_type)}</div></div><div style="margin-left:auto">${incomplete?`<span class="shipWarn">${incomplete} packages incomplete</span>`:'<span class="shipOk">Ready for quoting</span>'}</div></div>
+  <div class="shipSection"><h3>Packages</h3><table class="shipTable"><thead><tr><th>Source</th><th>Box</th><th>Name</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th></th></tr></thead><tbody>${ps.map(x=>`<tr><td>${esc(x.source_type)}</td><td>${x.package_no}</td><td><input class="shipInput name" id="n_${x.id}" value="${esc(x.package_name||'')}"></td><td><input class="shipInput" id="l_${x.id}" type="number" step="1" value="${x.length_mm??''}"></td><td><input class="shipInput" id="w_${x.id}" type="number" step="1" value="${x.width_mm??''}"></td><td><input class="shipInput" id="h_${x.id}" type="number" step="1" value="${x.height_mm??''}"></td><td><input class="shipInput" id="kg_${x.id}" type="number" step="0.1" value="${x.weight_kg??''}"></td><td><button class="shipSave" data-savepkg="${x.id}">Save</button></td></tr>`).join('')}</tbody></table></div>
+  <div class="shipSection"><h3>Rules</h3>${rs.length?rs.map(r=>`<div class="shipRule"><div><b>${esc(r.rule_type)}</b><div class="small">${r.active?'Active':'Inactive'}</div></div><div><b>${esc(r.match_name)}</b><div class="small">${r.match_value?`Value: ${esc(r.match_value)}`:'Any value'}</div></div><div>${esc(r.effect_type)}</div><div>Boxes: <input class="shipInput" style="width:55px" id="delta_${r.id}" type="number" value="${r.package_count_delta}"></div><button class="shipSecondary" data-saverule="${r.id}">Save</button></div>`).join(''):'<div class="mut">No rules for this product.</div>'}</div>`
+}
+async function savePackage(id){
+  const d=frame.contentDocument;const val=k=>{const v=d.getElementById(`${k}_${id}`).value.trim();return v===''?null:Number(v)};
+  const payload={package_name:d.getElementById(`n_${id}`).value.trim()||null,length_mm:val('l'),width_mm:val('w'),height_mm:val('h'),weight_kg:val('kg'),updated_at:new Date().toISOString()};
+  const {error}=await sb.from('wc_shipping_packages').update(payload).eq('id',id);if(error){alert(error.message);return}await loadShipping();
+}
+async function saveRule(id){
+  const d=frame.contentDocument;const delta=Number(d.getElementById(`delta_${id}`).value||0);const {error}=await sb.from('wc_shipping_rules').update({package_count_delta:delta,updated_at:new Date().toISOString()}).eq('id',id);if(error){alert(error.message);return}await loadShipping();
+}
+function showShipping(){
+  const d=frame.contentDocument;wantedView='shipping';
+  d.querySelectorAll('.nav').forEach(x=>x.classList.toggle('on',x.dataset.v==='shipping'));
+  ['home','stats','tools','orders','board','boardScroll','address'].forEach(id=>{const el=d.getElementById(id);if(el)el.classList.add('hidden')});
+  const s=d.getElementById('shippingData');s.classList.remove('hidden');d.getElementById('pt').textContent='Shipping Data';loadShipping().catch(e=>alert(e.message));
+}
+function nativeView(v){
+  wantedView=v;const d=frame.contentDocument;const s=d.getElementById('shippingData');if(s)s.classList.add('hidden');
+}
+frame.addEventListener('load',()=>{
+  try{
+    const d=frame.contentDocument;
+    const style=d.createElement('style');style.textContent=document.querySelector('style').textContent;d.head.appendChild(style);
+    const addressBtn=d.querySelector('.nav[data-v="address"]');
+    const shipBtn=d.createElement('button');shipBtn.className='nav';shipBtn.dataset.v='shipping';shipBtn.textContent='Shipping Data';addressBtn.insertAdjacentElement('afterend',shipBtn);
+    const content=d.querySelector('.content');const ship=d.createElement('div');ship.id='shippingData';ship.className='shipOverlay hidden';content.appendChild(ship);
+    const versionBox=[...d.querySelectorAll('.homebox')].find(x=>x.textContent.includes('Version'))?.querySelector('b');if(versionBox)versionBox.textContent='v0.7.8 Live';d.title='White Corner Orders v0.7.8';
+    [...d.querySelectorAll('.nav[data-v]')].forEach(btn=>{if(btn.dataset.v==='shipping')btn.addEventListener('click',showShipping);else btn.addEventListener('click',()=>nativeView(btn.dataset.v||'home'))});
+    const observer=new MutationObserver(()=>{
+      if(wantedView==='shipping'){
+        const active=d.querySelector('.nav.on[data-v]');if(active?.dataset?.v!=='shipping')showShipping();return;
+      }
+      const active=d.querySelector('.nav.on[data-v]');const actual=active?.dataset?.v||'home';if(actual==='home'&&wantedView!=='home'){const restore=d.querySelector(`.nav[data-v="${wantedView}"]`);if(restore)restore.click()}
+    });
+    d.querySelectorAll('.nav[data-v]').forEach(btn=>observer.observe(btn,{attributes:true,attributeFilter:['class']}));
+    frame.style.visibility='visible';
+  }catch(e){console.error(e);frame.style.visibility='visible'}
+});
+</script>
+</body></html>
