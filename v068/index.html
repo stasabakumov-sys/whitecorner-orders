@@ -1,0 +1,36 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>White Corner Orders v0.6.8</title><style>html,body,iframe{margin:0;width:100%;height:100%;border:0}iframe{position:fixed;inset:0}</style></head><body><iframe id="outer" src="../v067/" title="White Corner Orders v0.6.8"></iframe><script>
+const outer=document.getElementById('outer');
+const SPECIAL='10812';
+const SUSPICIOUS=['upgrade','additional','cutout','cut-out','benchtop','tabletop','accessory','back panel','side shelf','shelves','customisation','customization'];
+const TECH=['ready-to-use svg','please email us','i would like to add a logo but i dont have it in that file type'];
+function deepestDoc(){try{let d=outer.contentDocument||outer.contentWindow.document;for(let i=0;i<12;i++){if(d?.querySelector('#app'))return d;const fr=d?.querySelector('iframe');if(!fr)break;d=fr.contentDocument||fr.contentWindow.document;}return d}catch{return null}}
+function style(d){if(d.getElementById('v068style'))return;const s=d.createElement('style');s.id='v068style';s.textContent=`
+/* Change status only inside opened drawer */
+#board .pcard select{display:none!important}
+.v068-review td{background:#fff1f1!important;border-bottom-color:#f0caca!important}.v068-review:hover td{background:#ffe9e9!important}.v068-review td:first-child{box-shadow:inset 4px 0 0 #d14343}.v068-review-badge{display:inline-block;margin-left:7px;padding:3px 7px;border-radius:4px;background:#ffdede;color:#8b2e2e;font-size:10px;font-weight:700;vertical-align:middle}.v068-hidden{display:none!important}
+`;d.head.appendChild(s)}
+function orderNoFromCard(c){const t=(c.querySelector('.ordercode')?.dataset.v067original||c.querySelector('.ordercode')?.textContent||'').trim();const m=t.match(/#?(\d+)/);return m?m[1]:''}
+function productName(c){return (c.querySelector('.product')?.textContent||'').trim()}
+function restoreDrawerStatus(d){const shade=d.querySelector('#shade');if(!shade?.classList.contains('on'))return;const hs=d.querySelector('#shade .v066-headstatus,#shade .v065-headstatus');if(hs){hs.style.setProperty('display','flex','important');hs.querySelectorAll('*').forEach(x=>x.style.removeProperty('display'))}d.querySelectorAll('#shade .unitrow').forEach(r=>r.style.setProperty('display','none','important'))}
+function hideBoardStatus(d){d.querySelectorAll('#board .pcard select').forEach(s=>s.style.setProperty('display','none','important'))}
+function cleanSvg(d){d.querySelectorAll('.pcard .meta,#shade .pill,#shade .note,#shade .item div,#shade .item span').forEach(el=>{let t=(el.textContent||'');const low=t.toLowerCase();if(!low.includes('logo or personalization: no')&&!low.includes('logo: no')&&!low.includes('personalization: no'))return;if(!TECH.some(x=>low.includes(x)))return;const cut=t.search(/please email us|ready-to-use svg/i);if(cut>=0)t=t.slice(0,cut).replace(/[·\-\s]+$/,'').trim();el.textContent=t;})}
+function applySpecial10812(d){const cards=[...d.querySelectorAll('#board .pcard')].filter(c=>orderNoFromCard(c)===SPECIAL);if(!cards.length)return;const upgrades=cards.filter(c=>/tasmanian oak timber benchtop upgrade/i.test(productName(c)));upgrades.forEach(c=>c.classList.add('v068-hidden'));const mains=cards.filter(c=>!c.classList.contains('v068-hidden'));
+ // keep exactly four production cards for this known exception
+ mains.slice(4).forEach(c=>c.classList.add('v068-hidden'));mains.slice(0,4).forEach((c,i)=>{c.classList.remove('v068-hidden');const code=c.querySelector('.ordercode');if(code)code.textContent=`#10812-${i+1}`;const meta=c.querySelector('.meta');if(meta&&!/Tasmanian Oak/i.test(meta.textContent||'')){meta.textContent=((meta.textContent||'').trim()?meta.textContent+' · ':'')+'Tasmanian Oak Benchtop Upgrade';}});
+ // counts in board columns
+ d.querySelectorAll('#board .col').forEach(col=>{const n=[...col.querySelectorAll('.pcard')].filter(c=>!c.classList.contains('v068-hidden')&&getComputedStyle(c).display!=='none').length;const b=col.querySelector('.ch span:last-child');if(b)b.textContent=String(n)});
+ // Orders row: display 4 products / 4 statuses for this known exception
+ d.querySelectorAll('#orders tbody tr').forEach(tr=>{if(!/^#?10812\b/.test((tr.cells?.[0]?.textContent||'').trim()))return;if(tr.cells?.[6])tr.cells[6].textContent='4';if(tr.cells?.[7])tr.cells[7].textContent='4 New';});
+ // Drawer overview if #10812 is open
+ if(/^#?10812\b/.test((d.querySelector('#dn')?.textContent||'').trim())){const boxes=[...d.querySelectorAll('#db .box')];boxes.forEach(b=>{const text=(b.textContent||'').trim();if(/^Status\b/i.test(text))b.innerHTML='<b>Status</b><br>4 New';if(/^Items\b/i.test(text))b.innerHTML='<b>Items</b><br>4';});const its=[...d.querySelectorAll('#db .item')];its.forEach(i=>{if(/Tasmanian Oak Timber Benchtop Upgrade/i.test(i.querySelector('b')?.textContent||'')){i.classList.remove('v068-hidden');}})}
+}
+function findAmbiguousOrders(d){const cards=[...d.querySelectorAll('#board .pcard')].filter(c=>!c.classList.contains('v065-hidden')&&!c.classList.contains('v068-hidden'));const by=new Map();cards.forEach(c=>{const n=orderNoFromCard(c);if(!n||n===SPECIAL)return;if(!by.has(n))by.set(n,[]);by.get(n).push(c)});const ambiguous=new Set();by.forEach((arr,n)=>{const names=[...new Set(arr.map(productName).filter(Boolean))];if(names.length<2)return;const suspicious=names.some(name=>SUSPICIOUS.some(k=>name.toLowerCase().includes(k)));if(suspicious)ambiguous.add(n)});return ambiguous}
+function applyReview(d){const ambiguous=findAmbiguousOrders(d);d.querySelectorAll('#orders tbody tr').forEach(tr=>{const first=(tr.cells?.[0]?.textContent||'').trim();const m=first.match(/#?(\d+)/);const n=m?m[1]:'';const need=ambiguous.has(n);tr.classList.toggle('v068-review',need);let badge=tr.querySelector('.v068-review-badge');if(need&&!badge){badge=d.createElement('span');badge.className='v068-review-badge';badge.textContent='Needs review';tr.cells[0].appendChild(badge)}if(!need&&badge)badge.remove()});
+ // do not place ambiguous orders on Production Board
+ d.querySelectorAll('#board .pcard').forEach(c=>{const n=orderNoFromCard(c);if(ambiguous.has(n))c.classList.add('v068-review-hidden');else c.classList.remove('v068-review-hidden')});
+ d.querySelectorAll('#board .v068-review-hidden').forEach(c=>c.style.setProperty('display','none','important'));d.querySelectorAll('#board .col').forEach(col=>{const n=[...col.querySelectorAll('.pcard')].filter(c=>!c.classList.contains('v065-hidden')&&!c.classList.contains('v068-hidden')&&!c.classList.contains('v068-review-hidden')&&getComputedStyle(c).display!=='none').length;const b=col.querySelector('.ch span:last-child');if(b)b.textContent=String(n)});
+}
+function updateVersion(d){const vals=[...d.querySelectorAll('.homepanel .value b')];if(vals.length)vals[0].textContent='v0.6.8 Live'}
+function tick(){const d=deepestDoc();if(!d)return;style(d);hideBoardStatus(d);restoreDrawerStatus(d);cleanSvg(d);applySpecial10812(d);applyReview(d);updateVersion(d)}
+outer.addEventListener('load',()=>{setTimeout(tick,800);setInterval(tick,750)});
+</script></body></html>
