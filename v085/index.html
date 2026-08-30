@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>White Corner Orders v0.8.5</title><style>html,body{margin:0;min-height:100%;background:#f4f6f8}</style></head><body><script>
+(async()=>{
+  try{
+    const html=await fetch('../v084/index.html',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('Unable to load v0.8.4 base');return r.text()});
+    const patch=`<script>
+(function(){
+const VERSION='v0.8.5 Standalone';
+const URL='https://zgvnrpspwluapaxnycrg.supabase.co';
+const KEY='sb_publishable_DwutkRc9dxioIdUcdPn4gA_RfDb1-n_';
+let client=null;
+function sb(){if(!client&&window.supabase)client=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return client}
+function rowComplete(row){const ids=['l_','w_','h_','kg_'];return ids.every(p=>{const el=row.querySelector('[id^="'+p+'"]');return el&&String(el.value).trim()!==''})}
+function setLocked(row,locked){row.querySelectorAll('input').forEach(i=>{i.disabled=locked;i.style.background=locked?'#f7f8fa':'#fff';i.style.color=locked?'#566174':''});row.dataset.locked=locked?'1':'0'}
+function actionCell(row){return row.querySelector('td:last-child')}
+function renderAction(row){const cell=actionCell(row);if(!cell)return;const save=row.querySelector('[data-savepkg]');const id=save?.dataset.savepkg||cell.dataset.pkgid;if(!id)return;cell.dataset.pkgid=id;const locked=row.dataset.locked==='1';cell.innerHTML=locked?'<span class="badge ok" style="margin-right:8px">Saved ✓</span><button class="btn" data-rewritepkg="'+id+'">Rewrite</button>':'<button class="btn primary" data-patchsavepkg="'+id+'">Save</button>'}
+function initialiseRows(root=document){root.querySelectorAll('#shipping .shiptable tbody tr').forEach(row=>{if(row.dataset.v085==='1')return;const save=row.querySelector('[data-savepkg]');if(!save)return;row.dataset.v085='1';const locked=rowComplete(row);setLocked(row,locked);renderAction(row)})}
+async function saveRow(btn){const row=btn.closest('tr'),id=btn.dataset.patchsavepkg;if(!row||!id)return;const get=p=>row.querySelector('[id^="'+p+'"]');const num=p=>{const v=get(p)?.value.trim()||'';return v===''?null:Number(v)};const name=get('n_')?.value.trim()||null;btn.disabled=true;btn.textContent='Saving…';const api=sb();if(!api){btn.disabled=false;btn.textContent='Save';alert('Supabase is not available');return}const {error}=await api.from('wc_shipping_packages').update({package_name:name,length_mm:num('l_'),width_mm:num('w_'),height_mm:num('h_'),weight_kg:num('kg_'),updated_at:new Date().toISOString()}).eq('id',id);if(error){btn.disabled=false;btn.textContent='Save';alert(error.message);return}setLocked(row,true);renderAction(row)}
+document.addEventListener('click',e=>{const save=e.target.closest('[data-patchsavepkg]');if(save){e.preventDefault();e.stopImmediatePropagation();saveRow(save);return}const rw=e.target.closest('[data-rewritepkg]');if(rw){e.preventDefault();e.stopImmediatePropagation();const row=rw.closest('tr');setLocked(row,false);renderAction(row);const first=row.querySelector('input');if(first)first.focus()}},true);
+const mo=new MutationObserver(()=>initialiseRows());mo.observe(document.documentElement,{childList:true,subtree:true});
+initialiseRows();
+setInterval(()=>{const vb=[...document.querySelectorAll('.homebox')].find(x=>x.textContent.includes('Version'))?.querySelector('b');if(vb)vb.textContent=VERSION;document.title='White Corner Orders v0.8.5'},700);
+})();
+<\/script>`;
+    const out=html.replace(/v0\.8\.4 Standalone/g,'v0.8.5 Standalone').replace(/White Corner Orders v0\.8\.4/g,'White Corner Orders v0.8.5').replace('</body>',patch+'</body>');
+    document.open();document.write(out);document.close();
+  }catch(e){document.body.innerHTML='<div style="font:14px Arial;padding:24px;color:#8c2f2f">v0.8.5 failed to load: '+String(e.message||e)+'</div>'}
+})();
+</script></body></html>
