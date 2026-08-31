@@ -2,6 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { OrderRow } from '../models/order.models';
 import { OrdersService } from './orders.service';
 import { SupabaseService } from './supabase.service';
+import { ProductionService } from './production.service';
 
 export interface FulfilmentRow {
   id: string;
@@ -49,11 +50,17 @@ export class FulfilmentService {
   readonly error = signal('');
   readonly loading = signal(false);
 
-  constructor(private supabase:SupabaseService, private orders:OrdersService) {}
+  constructor(
+    private supabase:SupabaseService,
+    private orders:OrdersService,
+    private production:ProductionService,
+  ) {}
 
   private isReady(order:OrderRow){
-    const units=(order.wc_order_items??[]).flatMap(i=>i.wc_production_units??[]);
-    return units.length>0 && units.every(u=>(u.production_status||'New')==='Ready');
+    // Use the exact same logical production units that are shown on Production Board.
+    // Add-on rows can contain legacy/raw wc_production_units and must not block fulfilment.
+    const units=this.production.unitsForOrder(order);
+    return units.length>0 && units.every(u=>u.status==='Ready');
   }
 
   private route(order:OrderRow):'Pickup'|'Shipping'{
