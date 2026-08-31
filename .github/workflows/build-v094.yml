@@ -1,0 +1,30 @@
+name: Build v0.9.4 standalone
+on:
+  push:
+    paths:
+      - '.github/workflows/build-v094.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build standalone v0.9.4
+        shell: python
+        run: |
+          from pathlib import Path
+          src = Path('v093/index.html').read_text()
+          s = src.replace('White Corner Orders v0.9.3','White Corner Orders v0.9.4').replace('v0.9.3 Standalone','v0.9.4 Standalone')
+          if 'activityUnitLabel(orderId,a.production_unit_id)' not in s:
+              raise SystemExit('runtime bug anchor not found')
+          s = s.replace('activityUnitLabel(orderId,a.production_unit_id)','productionUnitLabel(a)',1)
+          Path('v094').mkdir(exist_ok=True)
+          Path('v094/index.html').write_text(s)
+      - name: Commit v0.9.4
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add v094/index.html
+          git commit -m "Release v0.9.4 standalone" || exit 0
+          git push
