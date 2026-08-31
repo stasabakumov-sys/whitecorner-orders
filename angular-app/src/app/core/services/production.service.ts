@@ -2,7 +2,8 @@ import { Injectable } from '@angular/core';
 import { AuthService } from './auth.service';
 import { OrdersService } from './orders.service';
 import { SupabaseService } from './supabase.service';
-import { OrderItemRow, OrderRow, ProductionUnitRow } from '../models/order.models';
+import { ActivityService } from './activity.service';
+import { OrderActivityRow, OrderItemRow, OrderRow, ProductionUnitRow } from '../models/order.models';
 import { ProductKind, ProductionStatus, ProductionUnitView, UnitAddonView } from '../models/production.models';
 
 const STATUSES: ProductionStatus[] = ['New','CNC','Assembly','Painting','Packing','Ready'];
@@ -15,6 +16,7 @@ export class ProductionService {
     private readonly ordersService: OrdersService,
     private readonly supabase: SupabaseService,
     private readonly auth: AuthService,
+    private readonly activity: ActivityService,
   ) {}
 
   unitsForOrders(orders: OrderRow[]): ProductionUnitView[] {
@@ -62,17 +64,22 @@ export class ProductionService {
     view.status = next;
     this.ordersService.orders.set([...this.ordersService.orders()]);
 
-    const { error: activityError } = await this.supabase.client.from('wc_order_activity').insert({
-      order_id: view.order.id,
-      production_unit_id: view.unit.id,
-      activity_type: 'status_change',
-      old_status: old,
-      new_status: next,
-      created_by: this.auth.userEmail() || 'User',
-    });
+    const { data, error: activityError } = await this.supabase.client
+      .from('wc_order_activity')
+      .insert({
+        order_id: view.order.id,
+        production_unit_id: view.unit.id,
+        activity_type: 'status_change',
+        old_status: old,
+        new_status: next,
+        created_by: this.auth.userEmail() || 'User',
+      })
+      .select()
+      .single();
     if (activityError) {
       throw new Error(`Status changed, but activity history could not be saved: ${activityError.message}`);
     }
+    if (data) this.activity.rows.update((rows) => [data as OrderActivityRow, ...rows]);
   }
 
   imageUrl(item: OrderItemRow): string {
@@ -124,7 +131,7 @@ export class ProductionService {
     let perUnit = 0;
     if (totalUnits === 1) perUnit = qty;
     else if (qty % totalUnits === 0) perUnit = qty / totalUnits;
-    else return null; // ambiguous: do not invent allocation
+    else return null;
     const unitPrice = Number(addon.unit_price ?? 0);
     return { item: addon, quantity: perUnit, unitPrice, total: unitPrice * perUnit };
   }
