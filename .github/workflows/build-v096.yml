@@ -1,0 +1,50 @@
+name: Build v0.9.6 standalone
+on:
+  push:
+    paths:
+      - '.github/workflows/build-v096.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Edge Function and build v0.9.6
+        shell: python
+        run: |
+          from pathlib import Path
+
+          # 1) Add browser-safe CORS to wix-orders-sync.
+          fn = Path('supabase/functions/wix-orders-sync/index.ts')
+          s = fn.read_text()
+          s = s.replace(
+              'const jsonHeaders = { "Content-Type": "application/json" };',
+              'const corsHeaders = {\n  "Access-Control-Allow-Origin": "*",\n  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",\n  "Access-Control-Allow-Methods": "POST, OPTIONS",\n};\nconst jsonHeaders = { "Content-Type": "application/json", ...corsHeaders };'
+          )
+          s = s.replace(
+              'Deno.serve(async () => {\n  try {',
+              'Deno.serve(async (req) => {\n  if (req.method === "OPTIONS") {\n    return new Response("ok", { status: 200, headers: corsHeaders });\n  }\n  try {'
+          )
+          fn.write_text(s)
+
+          # 2) Build immutable v0.9.6 from v0.9.5 and align activity dots with text.
+          src = Path('v095/index.html').read_text()
+          out = src.replace('White Corner Orders v0.9.5','White Corner Orders v0.9.6').replace('v0.9.5 Standalone','v0.9.6 Standalone')
+          out = out.replace(
+              '.activityevent:before{content:"";position:absolute;left:-4px;top:8px;width:7px;height:7px;',
+              '.activityevent:before{content:"";position:absolute;left:-4px;top:11px;width:7px;height:7px;'
+          )
+          out = out.replace(
+              '.activityevent:after{content:"";position:absolute;left:-1px;top:15px;',
+              '.activityevent:after{content:"";position:absolute;left:-1px;top:18px;'
+          )
+          Path('v096').mkdir(exist_ok=True)
+          Path('v096/index.html').write_text(out)
+      - name: Commit v0.9.6 and CORS fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add v096/index.html supabase/functions/wix-orders-sync/index.ts
+          git commit -m "Release v0.9.6 and fix Wix sync CORS" || exit 0
+          git push
