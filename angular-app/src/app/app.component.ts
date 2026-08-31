@@ -15,17 +15,17 @@ import { LoginComponent } from './shared/login/login.component';
     } @else if (!auth.session()) {
       <app-login />
     } @else if (!workspaceReady()) {
-      <div class="boot"><div><b>White Corner Orders</b><span>Loading workspace…</span></div></div>
+      <div class="boot"><div><b>White Corner Hub</b><span>Loading workspace…</span></div></div>
     } @else {
       <aside>
-        <div class="brand">White Corner<small>Angular migration</small></div>
+        <div class="brand">White Corner<small>Hub</small></div>
         @for (n of nav; track n[1]) {
           <a [routerLink]="n[1]" routerLinkActive="active"><span>{{ n[2] }}</span>{{ n[0] }}</a>
         }
         <button (click)="auth.signOut()">Sign out</button>
       </aside>
       <main>
-        <header>White Corner Orders <small>Angular 22 preview</small></header>
+        <header>White Corner Hub <small>Angular 22 preview</small></header>
         <div class="content"><router-outlet /></div>
       </main>
     }
