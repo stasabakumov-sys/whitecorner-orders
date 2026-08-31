@@ -1,0 +1,48 @@
+name: Smoke Angular preview
+on:
+  push:
+    paths:
+      - '.github/workflows/smoke-angular-preview.yml'
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install and build
+        run: |
+          cd angular-app
+          npm ci
+          npm run build -- --base-href /whitecorner-orders/angular-preview/
+      - name: Serve build and run Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(find angular-app/dist -type f -name index.html -path '*/browser/*' -printf '%h\n' | head -1)
+          echo "OUT=$OUT"
+          mkdir -p /tmp/site/whitecorner-orders/angular-preview
+          cp -R "$OUT"/* /tmp/site/whitecorner-orders/angular-preview/
+          cd /tmp/site
+          python3 -m http.server 8123 >/tmp/http.log 2>&1 &
+          SERVER_PID=$!
+          sleep 2
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          echo "Chrome=$CHROME"
+          set +e
+          "$CHROME" --headless=new --no-sandbox --disable-gpu --enable-logging=stderr --v=1 --virtual-time-budget=5000 --dump-dom http://127.0.0.1:8123/whitecorner-orders/angular-preview/ > /tmp/dom.txt 2> /tmp/chrome.log
+          RC=$?
+          set -e
+          echo "Chrome exit=$RC"
+          echo '--- DOM ---'
+          cat /tmp/dom.txt
+          echo '--- CHROME LOG TAIL ---'
+          tail -200 /tmp/chrome.log
+          kill $SERVER_PID || true
+          if ! grep -q 'White Corner Orders' /tmp/dom.txt; then
+            echo 'Angular app did not render expected text.'
+            exit 1
+          fi
