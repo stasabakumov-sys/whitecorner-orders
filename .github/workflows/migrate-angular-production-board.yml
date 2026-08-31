@@ -1,0 +1,363 @@
+name: Migrate Angular Production Board
+on:
+  push:
+    paths:
+      - '.github/workflows/migrate-angular-production-board.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Write Production Board Angular modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p angular-app/src/app/features/production-board angular-app/src/app/shared/production-unit-drawer angular-app/src/app/core/services angular-app/src/app/core/models
+
+          cat > angular-app/src/app/core/models/production.models.ts <<'EOF'
+          import { OrderItemRow, OrderRow, ProductionUnitRow } from './order.models';
+
+          export type ProductionStatus = 'New' | 'CNC' | 'Assembly' | 'Painting' | 'Packing' | 'Ready';
+          export type ProductKind = 'backdrops' | 'carts' | 'others';
+
+          export interface UnitAddonView {
+            item: OrderItemRow;
+            quantity: number;
+            unitPrice: number;
+            total: number;
+          }
+
+          export interface ProductionUnitView {
+            order: OrderRow;
+            mainItem: OrderItemRow;
+            unit: ProductionUnitRow;
+            code: string;
+            displayIndex: number;
+            totalUnits: number;
+            kind: ProductKind;
+            status: ProductionStatus;
+            mainUnitPrice: number;
+            addons: UnitAddonView[];
+            unitTotal: number;
+          }
+          EOF
+
+          cat > angular-app/src/app/core/services/production.service.ts <<'EOF'
+          import { Injectable } from '@angular/core';
+          import { AuthService } from './auth.service';
+          import { OrdersService } from './orders.service';
+          import { SupabaseService } from './supabase.service';
+          import { OrderItemRow, OrderRow, ProductionUnitRow } from '../models/order.models';
+          import { ProductKind, ProductionStatus, ProductionUnitView, UnitAddonView } from '../models/production.models';
+
+          const STATUSES: ProductionStatus[] = ['New','CNC','Assembly','Painting','Packing','Ready'];
+          const ADDON_WORDS = ['additional tabletop','custom cutout','custom cutouts','side shelves','integrated ice storage shelf','umbrella hole','support panel','customisation','customization','back panel with','benchtop upgrade'];
+
+          @Injectable({ providedIn: 'root' })
+          export class ProductionService {
+            readonly statuses = STATUSES;
+            constructor(
+              private readonly ordersService: OrdersService,
+              private readonly supabase: SupabaseService,
+              private readonly auth: AuthService,
+            ) {}
+
+            unitsForOrders(orders: OrderRow[]): ProductionUnitView[] {
+              return orders.flatMap((order) => this.unitsForOrder(order));
+            }
+
+            unitsForOrder(order: OrderRow): ProductionUnitView[] {
+              const rows = (order.wc_order_items ?? []).filter((i) => !/^delivery$/i.test(i.product_name ?? ''));
+              const addons = rows.filter((i) => this.isAddon(i));
+              const mains = rows.filter((i) => !this.isAddon(i));
+
+              // Legacy #10812: the first working prototype created the four tracked units
+              // on the Tasmanian Oak upgrade row. Keep that mapping only as a data adapter
+              // so existing status history is preserved; UI/pricing remains generic unit-level.
+              if (String(order.order_number) === '10812') {
+                const oak = rows.find((i) => /tasmanian oak timber benchtop upgrade/i.test(i.product_name ?? ''));
+                const main = rows.find((i) => i !== oak && !this.isAddon(i));
+                const tracked = this.sortedUnits(oak);
+                if (main && oak && tracked.length) {
+                  return tracked.slice(0, Number(main.quantity ?? tracked.length)).map((unit, index) =>
+                    this.makeUnit(order, main, unit, index, tracked.length, [oak]),
+                  );
+                }
+              }
+
+              return mains.flatMap((main) => {
+                const tracked = this.sortedUnits(main);
+                const expected = Math.max(1, Number(main.quantity ?? 1));
+                return tracked.slice(0, expected).map((unit, index) =>
+                  this.makeUnit(order, main, unit, index, tracked.length || expected, addons),
+                );
+              });
+            }
+
+            async changeStatus(view: ProductionUnitView, next: ProductionStatus): Promise<void> {
+              const old = (view.unit.production_status || 'New') as ProductionStatus;
+              if (old === next) return;
+              const { error } = await this.supabase.client
+                .from('wc_production_units')
+                .update({ production_status: next })
+                .eq('id', view.unit.id);
+              if (error) throw error;
+
+              view.unit.production_status = next;
+              view.status = next;
+              this.ordersService.orders.set([...this.ordersService.orders()]);
+
+              const { error: activityError } = await this.supabase.client.from('wc_order_activity').insert({
+                order_id: view.order.id,
+                production_unit_id: view.unit.id,
+                activity_type: 'status_change',
+                old_status: old,
+                new_status: next,
+                created_by: this.auth.userEmail() || 'User',
+              });
+              if (activityError) {
+                throw new Error(`Status changed, but activity history could not be saved: ${activityError.message}`);
+              }
+            }
+
+            imageUrl(item: OrderItemRow): string {
+              const image = (item.image ?? {}) as Record<string, any>;
+              const raw = (item.raw_item ?? {}) as Record<string, any>;
+              return image['url'] || image['imageUrl'] || image['imageInfo']?.url || raw['media']?.url || raw['image']?.url || raw['image']?.imageInfo?.url || '';
+            }
+
+            optionLabels(item: OrderItemRow): string[] {
+              const out: string[] = [];
+              for (const source of [item.wix_options, item.custom_text_fields]) {
+                if (!source || typeof source !== 'object') continue;
+                for (const [key, value] of Object.entries(source)) {
+                  let label = '';
+                  if (value != null && typeof value === 'object') {
+                    const obj = value as Record<string, unknown>;
+                    label = String(obj['value'] ?? obj['name'] ?? obj['description'] ?? '');
+                  } else if (value != null) label = String(value);
+                  if (label) out.push(`${key}: ${label}`);
+                }
+              }
+              return [...new Set(out)].slice(0, 10);
+            }
+
+            private makeUnit(order: OrderRow, main: OrderItemRow, unit: ProductionUnitRow, index: number, trackedCount: number, addons: OrderItemRow[]): ProductionUnitView {
+              const totalUnits = Math.max(1, Number(main.quantity ?? trackedCount ?? 1));
+              const displayIndex = index + 1;
+              const allocated = addons.map((addon) => this.allocateAddon(addon, totalUnits)).filter((x): x is UnitAddonView => !!x);
+              const mainUnitPrice = Number(main.unit_price ?? 0);
+              const unitTotal = mainUnitPrice + allocated.reduce((sum, addon) => sum + addon.total, 0);
+              return {
+                order,
+                mainItem: main,
+                unit,
+                code: totalUnits > 1 ? `#${order.order_number}-${displayIndex}` : `#${order.order_number}`,
+                displayIndex,
+                totalUnits,
+                kind: this.kind(main.product_name),
+                status: (unit.production_status || 'New') as ProductionStatus,
+                mainUnitPrice,
+                addons: allocated,
+                unitTotal,
+              };
+            }
+
+            private allocateAddon(addon: OrderItemRow, totalUnits: number): UnitAddonView | null {
+              const qty = Math.max(0, Number(addon.quantity ?? 0));
+              if (!qty) return null;
+              let perUnit = 0;
+              if (totalUnits === 1) perUnit = qty;
+              else if (qty % totalUnits === 0) perUnit = qty / totalUnits;
+              else return null; // ambiguous: do not invent allocation
+              const unitPrice = Number(addon.unit_price ?? 0);
+              return { item: addon, quantity: perUnit, unitPrice, total: unitPrice * perUnit };
+            }
+
+            private sortedUnits(item?: OrderItemRow): ProductionUnitRow[] {
+              return [...(item?.wc_production_units ?? [])].sort((a,b) => Number(a.unit_index) - Number(b.unit_index));
+            }
+
+            private isAddon(item: OrderItemRow): boolean {
+              const name = String(item.product_name ?? '').toLowerCase();
+              return ADDON_WORDS.some((word) => name.includes(word));
+            }
+
+            private kind(name?: string | null): ProductKind {
+              const value = String(name ?? '').toLowerCase();
+              if (/cart|mobile bar|serving table|event bar/.test(value)) return 'carts';
+              if (/backdrop|arch|panel|wall|plinth/.test(value)) return 'backdrops';
+              return 'others';
+            }
+          }
+          EOF
+
+          cat > angular-app/src/app/shared/production-unit-drawer/production-unit-drawer.component.ts <<'EOF'
+          import { CurrencyPipe, DatePipe, NgFor, NgIf } from '@angular/common';
+          import { Component, EventEmitter, Input, Output, signal } from '@angular/core';
+          import { FormsModule } from '@angular/forms';
+          import { ProductionStatus, ProductionUnitView } from '../../core/models/production.models';
+          import { ProductionService } from '../../core/services/production.service';
+
+          @Component({
+            selector: 'app-production-unit-drawer',
+            standalone: true,
+            imports: [CurrencyPipe, DatePipe, NgFor, NgIf, FormsModule],
+            templateUrl: './production-unit-drawer.component.html',
+            styleUrl: './production-unit-drawer.component.css',
+          })
+          export class ProductionUnitDrawerComponent {
+            @Input({ required: true }) view!: ProductionUnitView;
+            @Output() closed = new EventEmitter<void>();
+            readonly saving = signal(false);
+            readonly error = signal('');
+            constructor(readonly production: ProductionService) {}
+
+            async statusChanged(value: string): Promise<void> {
+              this.saving.set(true);
+              this.error.set('');
+              try { await this.production.changeStatus(this.view, value as ProductionStatus); }
+              catch (e) { this.error.set(String((e as Error)?.message ?? e)); }
+              finally { this.saving.set(false); }
+            }
+          }
+          EOF
+
+          cat > angular-app/src/app/shared/production-unit-drawer/production-unit-drawer.component.html <<'EOF'
+          <div class="shade" (click)="closed.emit()">
+            <aside class="drawer" (click)="$event.stopPropagation()">
+              <header>
+                <div><b>{{ view.code }}</b><div>{{ view.order.customer_name }}</div><small>{{ view.order.company }}</small></div>
+                <div class="status"><span>Change status</span><select [disabled]="saving()" [ngModel]="view.status" (ngModelChange)="statusChanged($event)"><option *ngFor="let status of production.statuses" [value]="status">{{ status }}</option></select></div>
+                <button class="close" (click)="closed.emit()">×</button>
+              </header>
+              <div class="body">
+                <div class="error" *ngIf="error()">{{ error() }}</div>
+                <section>
+                  <div class="section-title">Overview</div>
+                  <div class="overview">
+                    <div><b>Payment</b><span>{{ view.order.payment_status || '—' }}</span></div>
+                    <div><b>Fulfilment</b><span>{{ view.order.delivery_type || 'Shipping' }}</span></div>
+                    <div><b>Unit total</b><span>{{ view.unitTotal | currency:(view.order.currency || 'AUD') }}</span></div>
+                    <div><b>Date</b><span>{{ view.order.wix_created_at | date:'dd MMM yyyy' }}</span></div>
+                    <div><b>Status</b><span>{{ view.status }}</span></div>
+                    <div><b>Items</b><span>1</span></div>
+                  </div>
+                </section>
+                <section>
+                  <div class="section-title">Item</div>
+                  <div class="item">
+                    <div class="visual"><img *ngIf="production.imageUrl(view.mainItem) as src" [src]="src" alt="" /></div>
+                    <div class="details"><b>{{ view.mainItem.product_name }}</b><div><span class="pill">qty: 1</span><span class="pill" *ngFor="let option of production.optionLabels(view.mainItem)">{{ option }}</span></div></div>
+                    <div class="money"><span>{{ view.mainUnitPrice | currency:(view.order.currency || 'AUD') }} each</span><small>qty 1</small><b>{{ view.mainUnitPrice | currency:(view.order.currency || 'AUD') }}</b></div>
+                  </div>
+                </section>
+                <section *ngIf="view.addons.length">
+                  <div class="section-title">Add-ons</div>
+                  <div class="item" *ngFor="let addon of view.addons">
+                    <div class="visual"><img *ngIf="production.imageUrl(addon.item) as src" [src]="src" alt="" /></div>
+                    <div class="details"><b>{{ addon.item.product_name }}</b><span class="pill">Add-on</span><div><span class="pill">qty: {{ addon.quantity }}</span></div></div>
+                    <div class="money"><span>{{ addon.unitPrice | currency:(view.order.currency || 'AUD') }} each</span><small>qty {{ addon.quantity }}</small><b>{{ addon.total | currency:(view.order.currency || 'AUD') }}</b></div>
+                  </div>
+                </section>
+              </div>
+            </aside>
+          </div>
+          EOF
+
+          cat > angular-app/src/app/shared/production-unit-drawer/production-unit-drawer.component.css <<'EOF'
+          .shade{position:fixed;inset:0;background:#0f172a55;z-index:50}.drawer{position:absolute;right:0;top:0;bottom:0;width:min(940px,96vw);background:#fff;overflow:auto;box-shadow:-6px 0 25px #0002}.drawer header{position:sticky;top:0;background:#fff;border-bottom:1px solid #e4e7ec;padding:18px 22px;display:flex;align-items:flex-start;z-index:2}.drawer header small{color:#758198}.status{display:flex;align-items:center;gap:10px;margin-left:auto;margin-right:12px;color:#758198}.status select{border:1px solid #d4d9e2;border-radius:8px;padding:8px 10px;background:#fff}.close{border:0;background:#eef1f5;border-radius:50%;width:42px;height:42px;font-size:18px}.body{padding:20px 22px}.body section{margin-bottom:22px}.section-title{font-size:11px;text-transform:uppercase;color:#758198;font-weight:700;margin-bottom:8px}.overview{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.overview>div{border:1px solid #e4e7ec;border-radius:8px;padding:10px;background:#fbfcfd;display:flex;flex-direction:column;gap:5px}.item{display:grid;grid-template-columns:76px 1fr auto;gap:12px;align-items:start;border:1px solid #e4e7ec;border-radius:9px;padding:10px;margin-bottom:9px}.visual{width:76px;height:76px;border:1px solid #e4e7ec;border-radius:7px;background:#f6f8fa}.visual img{width:100%;height:100%;object-fit:cover;border-radius:7px}.details>b{display:inline-block;margin-right:5px}.pill{display:inline-block;background:#f1f4f7;border-radius:5px;padding:4px 6px;font-size:11px;margin:5px 5px 0 0}.money{text-align:right;display:flex;flex-direction:column;gap:3px}.money small{color:#758198}.error{background:#fff1f1;color:#8c2f2f;border:1px solid #f0caca;padding:12px;border-radius:8px;margin-bottom:12px}@media(max-width:800px){.overview{grid-template-columns:1fr}.item{grid-template-columns:1fr}.money{text-align:left}}
+          EOF
+
+          cat > angular-app/src/app/features/production-board/production-board.component.ts <<'EOF'
+          import { NgFor, NgIf } from '@angular/common';
+          import { Component, computed, signal } from '@angular/core';
+          import { ProductKind, ProductionStatus, ProductionUnitView } from '../../core/models/production.models';
+          import { OrdersService } from '../../core/services/orders.service';
+          import { ProductionService } from '../../core/services/production.service';
+          import { ProductionUnitDrawerComponent } from '../../shared/production-unit-drawer/production-unit-drawer.component';
+
+          type FilterKind = 'all' | ProductKind;
+
+          @Component({
+            selector: 'app-production-board',
+            standalone: true,
+            imports: [NgFor, NgIf, ProductionUnitDrawerComponent],
+            templateUrl: './production-board.component.html',
+            styleUrl: './production-board.component.css',
+          })
+          export class ProductionBoardComponent {
+            readonly filter = signal<FilterKind>('all');
+            readonly selected = signal<ProductionUnitView | null>(null);
+            readonly allUnits = computed(() => this.production.unitsForOrders(this.orders.orders()));
+            readonly visibleUnits = computed(() => {
+              const filter = this.filter();
+              return this.allUnits()
+                .filter((unit) => filter === 'all' || unit.kind === filter)
+                .sort((a,b) => new Date(a.order.wix_created_at ?? 0).getTime() - new Date(b.order.wix_created_at ?? 0).getTime() || Number(a.order.order_number) - Number(b.order.order_number));
+            });
+
+            constructor(readonly orders: OrdersService, readonly production: ProductionService) {
+              if (!orders.orders().length) void orders.load();
+            }
+
+            units(status: ProductionStatus): ProductionUnitView[] { return this.visibleUnits().filter((unit) => unit.status === status); }
+            selectFilter(filter: FilterKind): void { this.filter.set(filter); }
+            open(unit: ProductionUnitView): void { this.selected.set(unit); }
+          }
+          EOF
+
+          cat > angular-app/src/app/features/production-board/production-board.component.html <<'EOF'
+          <section class="toolbar">
+            <div class="filters">
+              <button [class.active]="filter()==='all'" (click)="selectFilter('all')">All</button>
+              <button [class.active]="filter()==='backdrops'" (click)="selectFilter('backdrops')">Backdrops</button>
+              <button [class.active]="filter()==='carts'" (click)="selectFilter('carts')">Carts</button>
+              <button [class.active]="filter()==='others'" (click)="selectFilter('others')">Others</button>
+            </div>
+          </section>
+
+          <div class="error" *ngIf="orders.error()">{{ orders.error() }}</div>
+          <div class="board">
+            <section class="column" *ngFor="let status of production.statuses">
+              <header><b>{{ status }}</b><span>{{ units(status).length }}</span></header>
+              <button class="card" *ngFor="let unit of units(status)" (click)="open(unit)">
+                <img *ngIf="production.imageUrl(unit.mainItem) as src" [src]="src" alt="" />
+                <div class="code">{{ unit.code }}</div>
+                <div class="customer">{{ unit.order.customer_name || '—' }}</div>
+                <small>{{ unit.order.company }}</small>
+                <div class="product">{{ unit.mainItem.product_name }}</div>
+                <div class="meta">{{ production.optionLabels(unit.mainItem).slice(0,2).join(' · ') }}</div>
+              </button>
+            </section>
+          </div>
+
+          <app-production-unit-drawer *ngIf="selected() as unit" [view]="unit" (closed)="selected.set(null)" />
+          EOF
+
+          cat > angular-app/src/app/features/production-board/production-board.component.css <<'EOF'
+          .toolbar{background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:10px 12px;margin-bottom:10px}.filters{display:inline-flex;gap:4px;padding:3px;background:#f3f5f8;border:1px solid #e1e5eb;border-radius:999px}.filters button{border:0;background:transparent;color:#5f6b7a;border-radius:999px;padding:7px 13px;font-weight:600;cursor:pointer}.filters button.active{background:#fff;color:#116dff;box-shadow:0 1px 3px #00000014}.board{display:grid;grid-template-columns:repeat(6,minmax(220px,1fr));gap:10px;overflow-x:auto;padding-bottom:24px}.column{background:#f1f3f6;border:1px solid #e0e4e9;border-radius:12px;padding:8px;min-height:520px}.column>header{display:flex;justify-content:space-between;padding:4px 5px 9px}.card{position:relative;width:100%;min-height:116px;text-align:left;background:#fff;border:1px solid #e4e7ec;border-radius:9px;padding:10px 65px 10px 10px;margin-bottom:7px;cursor:pointer;color:#172033}.card:hover{border-color:#b9c7dd}.card img{position:absolute;right:9px;top:9px;width:48px;height:48px;border-radius:7px;border:1px solid #e4e7ec;object-fit:cover;background:#f6f8fa}.code,.customer{font-weight:700}.customer{margin-top:5px}.card small{color:#758198}.product{margin-top:7px;font-size:12px;font-weight:600}.meta{font-size:11px;color:#758198;margin-top:3px}.error{background:#fff1f1;color:#8c2f2f;border:1px solid #f0caca;padding:12px;border-radius:8px;margin-bottom:10px}
+          EOF
+
+      - name: Build and publish angular2 preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd angular-app
+          npm ci
+          npm run build -- --base-href /whitecorner-orders/angular2/
+          cd ..
+          OUT=$(find angular-app/dist -type f -name index.html -path '*/browser/*' -printf '%h\n' | head -1)
+          rm -rf angular2
+          mkdir angular2
+          cp -R "$OUT"/* angular2/
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add angular-app angular2
+          git commit -m 'Migrate Angular Production Board to unit model' || exit 0
+          git push
