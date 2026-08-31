@@ -1,0 +1,68 @@
+name: Build v0.9.5 standalone
+on:
+  push:
+    paths:
+      - '.github/workflows/build-v095.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build standalone v0.9.5
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          src = Path('v094/index.html').read_text()
+          s = src.replace('White Corner Orders v0.9.4','White Corner Orders v0.9.5').replace('v0.9.4 Standalone','v0.9.5 Standalone')
+
+          # Orders toolbar: add explicit Wix sync action.
+          anchor = '<div class="grow"></div><button id="clear" class="btn">Clear filters</button>'
+          repl = '<div class="grow"></div><button id="syncWix" class="btn primary">Sync Wix</button><button id="clear" class="btn">Clear filters</button>'
+          if anchor not in s:
+              raise SystemExit('orders toolbar anchor not found')
+          s = s.replace(anchor, repl, 1)
+
+          # Slightly tighter Wix-like timeline spacing.
+          s = s.replace('.activitydate{font-size:12px;color:var(--mut);font-weight:700;margin:16px 0 8px}',
+                        '.activitydate{font-size:12px;color:var(--mut);font-weight:700;margin:14px 0 7px}', 1)
+          s = s.replace('.activityevent{position:relative;margin-left:10px;padding:4px 82px 18px 28px;min-height:38px}',
+                        '.activityevent{position:relative;margin-left:10px;padding:4px 82px 16px 28px;min-height:36px}', 1)
+          s = s.replace('top:15px;bottom:0;width:1px;background:#9aa5b5',
+                        'top:15px;bottom:-1px;width:1px;background:#9aa5b5', 1)
+
+          # Replace Wix activity parser with a type-aware parser that also preserves receipt numbers.
+          pat = r'function wixActivityEvents\(orderId\)\{.*?\}function renderActivity\(orderId\)\{'
+          m = re.search(pat, s, flags=re.S)
+          if not m:
+              raise SystemExit('wixActivityEvents function anchor not found')
+
+          parser = r'''function wixActivityEvents(orderId){const o=O.find(x=>x.id===orderId);if(!o)return[];let raw=o.activities;try{if(typeof raw==='string')raw=JSON.parse(raw)}catch{}let arr=[];if(Array.isArray(raw))arr=raw;else if(Array.isArray(raw?.items))arr=raw.items;else if(Array.isArray(raw?.activities))arr=raw.activities;const out=[];let hasPlaced=false;const createdOf=x=>x?.created_at||x?.createdAt||x?.dateCreated||x?.createdDate||x?.timestamp||x?.date||x?.time;const typeOf=x=>String(x?.type||x?.activityType||x?.eventType||x?.kind||x?.activity?.type||'').toUpperCase();function receiptNumber(x){let found='';const walk=(v,path='')=>{if(found||!v||typeof v!=='object')return;for(const[k,val]of Object.entries(v)){const key=String(k).toLowerCase(),p=(path+'.'+key).toLowerCase();if((p.includes('receipt')||p.includes('invoice'))&&key.includes('number')&&(typeof val==='string'||typeof val==='number')&&String(val).trim()){found=String(val).trim();return}if(val&&typeof val==='object')walk(val,p)}};walk(x);return found}for(const x of arr){if(!x||typeof x!=='object')continue;const created=createdOf(x),type=typeOf(x),num=receiptNumber(x);let msg=[x.message,x.description,x.title,x.text,x.summary].find(v=>typeof v==='string'&&v.trim());if(msg)msg=msg.trim();if(/ORDER_PLACED|PLACED_ORDER|ORDER_CREATED/.test(type)){hasPlaced=true;if(!msg)msg=`${o.customer_name||'Customer'} placed an order`}else if(/ORDER_PAID|PAYMENT_PAID|MARKED_PAID/.test(type)){if(!msg)msg='Order marked as Paid'}else if(/RECEIPT/.test(type)&&/SENT|SEND/.test(type)){msg=num?`Receipt #${num} sent to customer`:(msg||'Receipt sent to customer')}else if(/RECEIPT/.test(type)&&/CREATED|CREATE/.test(type)){msg=num?`Receipt #${num} created`:(msg||'Receipt created')}else if(/INVOICE/.test(type)&&/SENT|SEND/.test(type)){msg=num?`Invoice #${num} sent to customer`:(msg||'Invoice sent to customer')}else if(/INVOICE/.test(type)&&/CREATED|CREATE/.test(type)){msg=num?`Invoice #${num} created`:(msg||'Invoice created')}if(msg&&num&&/^Receipt created$/i.test(msg))msg=`Receipt #${num} created`;if(msg&&num&&/^Receipt sent to customer$/i.test(msg))msg=`Receipt #${num} sent to customer`;if(!created||!msg)continue;out.push({activity_type:'wix',created_at:created,message:msg,created_by:'Wix'})}if(!hasPlaced&&o.wix_created_at)out.push({activity_type:'wix',created_at:o.wix_created_at,message:`${o.customer_name||'Customer'} placed an order`,created_by:'Wix'});const seen=new Set;return out.filter(a=>{const k=String(a.created_at)+'|'+a.message;if(seen.has(k))return false;seen.add(k);return true})}function renderActivity(orderId){'''
+          s = s[:m.start()] + parser + s[m.end():]
+
+          # Add the explicit sync action before renderAll.
+          anchor = 'function renderAll(){renderOrders();renderBoard();renderAddress();renderShipping()}'
+          syncfn = '''async function syncWix(){const b=$('#syncWix');if(!b)return;b.disabled=true;const old=b.textContent;b.textContent='Syncing…';showErr('');try{const{data,error}=await sb.functions.invoke('wix-orders-sync');if(error)throw error;if(data?.error)throw new Error(data.error);await load();view('orders');b.textContent='Synced ✓';setTimeout(()=>{if(b){b.textContent=old;b.disabled=false}},1400)}catch(e){b.textContent=old;b.disabled=false;showErr('Wix sync failed: '+String(e?.message||e))}}function renderAll(){renderOrders();renderBoard();renderAddress();renderShipping()}'''
+          if anchor not in s:
+              raise SystemExit('renderAll anchor not found')
+          s = s.replace(anchor, syncfn, 1)
+
+          # Bind sync button.
+          anchor = "$('#clear').onclick=()=>{$('#search').value='';$('#sf').value='';$('#ff').value='';renderOrders()};"
+          repl = "$('#syncWix').onclick=syncWix;" + anchor
+          if anchor not in s:
+              raise SystemExit('clear button bind anchor not found')
+          s = s.replace(anchor, repl, 1)
+
+          Path('v095').mkdir(exist_ok=True)
+          Path('v095/index.html').write_text(s)
+      - name: Commit v0.9.5
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add v095/index.html
+          git commit -m "Release v0.9.5 standalone" || exit 0
+          git push
