@@ -2,6 +2,7 @@ name: Build Angular2 preview
 on:
   push:
     paths:
+      - 'angular-app/**'
       - '.github/workflows/build-angular2-preview.yml'
 permissions:
   contents: write
@@ -29,5 +30,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add angular2
-          git commit -m "Publish Angular2 clean preview" || exit 0
+          git commit -m "Publish Angular2 preview" || exit 0
           git push
