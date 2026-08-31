@@ -60,7 +60,30 @@ export class FulfilmentService {
     return String(order.delivery_type||'Shipping').toLowerCase()==='pickup'?'Pickup':'Shipping';
   }
 
-  private normalise(v:string){return String(v||'').toLowerCase().replace(/[–—]/g,'-').split(' - ')[0].replace(/[^a-z0-9]+/g,' ').trim();}
+  private normalise(v:string){
+    return String(v||'').toLowerCase().replace(/[–—]/g,'-').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+  }
+
+  private profileScore(orderName:string, profileName:string){
+    const a=this.normalise(orderName), b=this.normalise(profileName);
+    if(!a||!b)return 0;
+    if(a===b)return 100;
+    if(a.includes(b)||b.includes(a))return 90;
+    const stop=new Set(['the','a','an','with','and','for','of','to','in','on','foldable','non','painted','unpainted','raw','white']);
+    const at=new Set(a.split(' ').filter(x=>x.length>2&&!stop.has(x)));
+    const bt=new Set(b.split(' ').filter(x=>x.length>2&&!stop.has(x)));
+    if(!at.size||!bt.size)return 0;
+    const common=[...at].filter(x=>bt.has(x)).length;
+    const coverage=Math.max(common/at.size,common/bt.size);
+    const union=new Set([...at,...bt]).size;
+    const jaccard=union?common/union:0;
+    return Math.round((coverage*.7+jaccard*.3)*100);
+  }
+
+  private bestProfile(name:string, products:ShippingProduct[]){
+    const ranked=products.map(p=>({p,score:this.profileScore(name,p.product_name)})).sort((a,b)=>b.score-a.score);
+    return ranked[0]&&ranked[0].score>=58?ranked[0].p:null;
+  }
 
   async load(){
     this.loading.set(true); this.error.set('');
@@ -113,10 +136,12 @@ export class FulfilmentService {
     const products=(prodRes.data??[]) as ShippingProduct[], profiles=(pkgRes.data??[]) as ShippingPackage[];
     const out:any[]=[]; let no=1;
     for(const item of order.wc_order_items??[]){
-      if(/^delivery$/i.test(item.product_name||''))continue;
-      const match=products.find(p=>this.normalise(p.product_name)===this.normalise(item.product_name||''));
+      const itemName=String(item.product_name||'');
+      if(/^delivery$/i.test(itemName)||/delivery|shipping fee/i.test(itemName))continue;
+      const match=this.bestProfile(itemName,products);
       if(!match)continue;
       const base=profiles.filter(p=>p.shipping_product_id===match.id);
+      if(!base.length)continue;
       const qty=Math.max(1,Number(item.quantity||1));
       for(let q=0;q<qty;q++)for(const p of base)out.push({shipment_id:shipment.id,package_no:no++,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,source_type:'Profile',shipping_product_id:match.id});
     }
