@@ -1,0 +1,2 @@
+import { Component } from '@angular/core'; import { AuthService } from '../../core/services/auth.service';
+@Component({selector:'app-home',standalone:true,template:`<section class="panel"><h2>White Corner Orders</h2><p><b>Angular 22 migration baseline</b></p><p>Signed in as {{auth.userEmail()}}</p></section>`,styles:[`.panel{background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:24px;max-width:760px}`]}) export class HomeComponent{constructor(readonly auth:AuthService){}}

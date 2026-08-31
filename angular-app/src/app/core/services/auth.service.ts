@@ -1,0 +1,4 @@
+import { computed, Injectable, signal } from '@angular/core';
+import type { Session } from '@supabase/supabase-js';
+import { SupabaseService } from './supabase.service';
+@Injectable({providedIn:'root'}) export class AuthService { readonly session=signal<Session|null>(null); readonly ready=signal(false); readonly userEmail=computed(()=>this.session()?.user.email??''); private initialized=false; constructor(private supabase:SupabaseService){} async initialize(){if(this.initialized)return;this.initialized=true;const{data}=await this.supabase.client.auth.getSession();this.session.set(data.session);this.ready.set(true);this.supabase.client.auth.onAuthStateChange((_e,s)=>{this.session.set(s);this.ready.set(true)});} async signIn(email:string,password:string){const{error}=await this.supabase.client.auth.signInWithPassword({email,password});return error?.message??null;} async signOut(){await this.supabase.client.auth.signOut();} }

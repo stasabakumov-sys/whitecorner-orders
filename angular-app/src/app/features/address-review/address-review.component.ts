@@ -1,0 +1,1 @@
+import { Component } from '@angular/core'; @Component({selector:'app-address-review',standalone:true,template:'<section class="p"><h2>address review</h2><p>Migration in progress. v0.9.7 remains the reference.</p></section>',styles:['.p{background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:24px}']}) export class AddressReviewComponent{}
