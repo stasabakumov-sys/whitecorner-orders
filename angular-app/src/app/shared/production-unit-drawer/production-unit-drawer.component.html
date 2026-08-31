@@ -34,6 +34,7 @@
           <div class="money"><span>{{ addon.unitPrice | currency:(view.order.currency || 'AUD') }} each</span><small>qty {{ addon.quantity }}</small><b>{{ addon.total | currency:(view.order.currency || 'AUD') }}</b></div>
         </div>
       </section>
+      <app-order-activity [order]="view.order"></app-order-activity>
     </div>
   </aside>
 </div>
