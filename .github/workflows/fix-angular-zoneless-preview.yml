@@ -1,0 +1,45 @@
+name: Fix Angular zoneless preview
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-angular-zoneless-preview.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fix Angular runtime config and build preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd angular-app
+          npm ci
+          cat > src/app/app.config.ts <<'EOF'
+          import { ApplicationConfig, provideZonelessChangeDetection } from '@angular/core';
+          import { provideRouter, withHashLocation } from '@angular/router';
+          import { routes } from './app.routes';
+
+          export const appConfig: ApplicationConfig = {
+            providers: [
+              provideZonelessChangeDetection(),
+              provideRouter(routes, withHashLocation()),
+            ],
+          };
+          EOF
+          npx ng build --base-href /whitecorner-orders/angular-preview/
+          cd ..
+          rm -rf angular-preview
+          mkdir angular-preview
+          cp -R angular-app/dist/whitecorner-angular/browser/. angular-preview/
+      - name: Commit fixed Angular preview
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add angular-app/src/app/app.config.ts angular-preview
+          git commit -m "Fix Angular preview zoneless runtime" || exit 0
+          git push
