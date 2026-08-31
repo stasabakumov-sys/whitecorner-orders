@@ -39,6 +39,7 @@ export class AppComponent {
     ['Home','/home','⌂'],
     ['Orders','/orders','▤'],
     ['Production Board','/production','▦'],
+    ['Fulfilment','/fulfilment','✓'],
     ['Address Review','/address-review','◎'],
     ['Shipping Data','/shipping-data','⇄'],
   ] as const;
