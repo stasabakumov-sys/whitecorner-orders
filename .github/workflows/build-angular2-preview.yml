@@ -1,0 +1,33 @@
+name: Build Angular2 preview
+on:
+  push:
+    paths:
+      - '.github/workflows/build-angular2-preview.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build Angular app
+        run: |
+          cd angular-app
+          npm ci
+          npm run build -- --base-href /whitecorner-orders/angular2/
+      - name: Publish clean preview path
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(find angular-app/dist -type f -name index.html -path '*/browser/*' -printf '%h\n' | head -1)
+          rm -rf angular2
+          mkdir angular2
+          cp -R "$OUT"/* angular2/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add angular2
+          git commit -m "Publish Angular2 clean preview" || exit 0
+          git push
