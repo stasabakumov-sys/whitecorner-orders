@@ -1,0 +1,39 @@
+name: Build v0.9.1 standalone
+on:
+  push:
+    paths:
+      - '.github/workflows/build-v091.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build standalone v0.9.1
+        shell: python
+        run: |
+          from pathlib import Path
+          s = Path('v090/index.html').read_text()
+          s = s.replace('White Corner Orders v0.9.0','White Corner Orders v0.9.1').replace('v0.9.0 Standalone','v0.9.1 Standalone')
+
+          # Compact Wix-like note field.
+          s = s.replace(".activityadd{padding:16px 18px;border-bottom:1px solid var(--line)}", ".activityadd{padding:12px 18px;border-bottom:1px solid var(--line)}")
+          s = s.replace(".activityadd label{display:block;font-weight:600;margin-bottom:8px}", ".activityadd label{display:block;font-weight:600;margin-bottom:6px}")
+          s = s.replace(".activityadd textarea{width:100%;min-height:72px;resize:vertical;border:1px solid #d4d9e2;border-radius:8px;padding:10px;font:inherit}", ".activityadd textarea{width:min(530px,100%);height:42px;min-height:42px;max-height:100px;resize:vertical;border:1px solid #d4d9e2;border-radius:8px;padding:8px 10px;font:inherit}")
+          s = s.replace(".activityactions{display:flex;justify-content:flex-end;margin-top:8px}", ".activityactions{display:flex;justify-content:flex-start;margin-top:6px}")
+
+          start = s.index("function renderActivity(orderId){")
+          end = s.index("function bindActivity(orderId){", start)
+          new_fn = r'''function wixActivityEvents(orderId){const o=O.find(x=>x.id===orderId);if(!o)return[];const out=[];if(o.wix_created_at)out.push({activity_type:'wix',created_at:o.wix_created_at,message:`${o.customer_name||'Customer'} placed an order`,created_by:'Wix'});let raw=o.activities;try{if(typeof raw==='string')raw=JSON.parse(raw)}catch{}let arr=[];if(Array.isArray(raw))arr=raw;else if(Array.isArray(raw?.items))arr=raw.items;else if(Array.isArray(raw?.activities))arr=raw.activities;for(const x of arr){if(!x||typeof x!=='object')continue;const created=x.created_at||x.createdAt||x.dateCreated||x.timestamp||x.date||x.time;const msg=[x.message,x.description,x.title,x.text,x.summary,x.activity].find(v=>typeof v==='string'&&v.trim());if(!created||!msg)continue;out.push({activity_type:'wix',created_at:created,message:msg.trim(),created_by:'Wix'})}const seen=new Set;return out.filter(a=>{const k=String(a.created_at)+'|'+a.message;if(seen.has(k))return false;seen.add(k);return true})}function renderActivity(orderId){const list=[...ACT.filter(a=>a.order_id===orderId),...wixActivityEvents(orderId)].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));let last='',html='';for(const a of list){const d=activityDate(a.created_at);if(d!==last){html+=`<div class="activitydate">${esc(d)}</div>`;last=d}const note=a.activity_type==='note',wix=a.activity_type==='wix',label=(!note&&!wix&&a.production_unit_id)?activityUnitLabel(orderId,a.production_unit_id):'',text=note?esc(a.message||''):wix?esc(a.message||''):`${label?`<b>${esc(label)}</b> · `:''}Status changed from <b>${esc(a.old_status||'—')}</b> to <b>${esc(a.new_status||'—')}</b>`,who=note?`${esc(a.created_by||'User')} added a note:`:wix?'':`${esc(a.created_by||'User')}`;html+=`<div class="activityevent ${note?'note':''}"><div class="activitytime">${esc(activityTime(a.created_at))}</div>${who?`<div class="activitywho">${who}</div>`:''}<div class="activitymsg">${text}</div></div>`}return`<div class="sec activitysec" data-activity-order="${orderId}"><div class="st">Order activity</div><div class="activitybox"><div class="activityadd"><label>Add a note <span class="mut">(Customer won't see this)</span></label><textarea id="activityNote" placeholder="Write an internal note..."></textarea><div class="activityactions"><button class="btn primary" data-addnote="${orderId}">Add note</button></div></div><div class="timeline">${html||'<div class="activityempty">No activity yet.</div>'}</div></div></div>`}'''
+          s = s[:start] + new_fn + s[end:]
+
+          Path('v091').mkdir(exist_ok=True)
+          Path('v091/index.html').write_text(s)
+      - name: Commit v0.9.1
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add v091/index.html
+          git commit -m "Release v0.9.1 standalone" || exit 0
+          git push
