@@ -19,9 +19,18 @@ import { LoginComponent } from './shared/login/login.component';
     } @else {
       <aside>
         <div class="brand">White Corner<small>Hub</small></div>
-        @for (n of nav; track n[1]) {
-          <a [routerLink]="n[1]" routerLinkActive="active"><span>{{ n[2] }}</span>{{ n[0] }}</a>
-        }
+        <a routerLink="/home" routerLinkActive="active"><span>⌂</span>Home</a>
+        <a routerLink="/orders" routerLinkActive="active"><span>▤</span>Orders</a>
+        <a routerLink="/production" routerLinkActive="active"><span>▦</span>Production Board</a>
+
+        <div class="navgroup">
+          <div class="grouptitle"><span>✓</span>Fulfilment</div>
+          <a class="sub" routerLink="/fulfilment/pickup" routerLinkActive="active">Pickup</a>
+          <a class="sub" routerLink="/fulfilment/delivery" routerLinkActive="active">Delivery</a>
+        </div>
+
+        <a routerLink="/address-review" routerLinkActive="active"><span>◎</span>Address Review</a>
+        <a routerLink="/shipping-data" routerLinkActive="active"><span>⇄</span>Shipping Data</a>
         <button (click)="auth.signOut()">Sign out</button>
       </aside>
       <main>
@@ -31,18 +40,15 @@ import { LoginComponent } from './shared/login/login.component';
     }
   `,
   styles: [`
-    .boot{position:fixed;inset:0;display:grid;place-items:center;background:#f4f6f8}.boot>div{display:flex;flex-direction:column;gap:8px;text-align:center}.boot span{color:#758198;font-size:12px}aside{position:fixed;inset:0 auto 0 0;width:240px;background:#17191f;color:#fff;padding:18px 10px}.brand{padding:2px 12px 22px;font-size:18px}.brand small{display:block;color:#9097a5;font-size:11px}aside a{color:#dfe4ec;text-decoration:none;padding:10px 12px;border-radius:8px;display:flex;gap:12px;margin:2px 0}aside a.active{background:#2b3039;color:#fff}aside button{position:absolute;bottom:20px;left:22px;right:22px;background:transparent;color:#fff;border:1px solid #454b57;border-radius:8px;padding:8px}main{margin-left:240px;min-height:100vh;background:#f4f6f8}header{height:56px;background:#fff;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;padding:0 24px;font-size:18px;font-weight:600}header small{margin-left:auto;color:#758198}.content{padding:18px 24px 38px}
+    .boot{position:fixed;inset:0;display:grid;place-items:center;background:#f4f6f8}.boot>div{display:flex;flex-direction:column;gap:8px;text-align:center}.boot span{color:#758198;font-size:12px}
+    aside{position:fixed;inset:0 auto 0 0;width:240px;background:#17191f;color:#fff;padding:18px 10px}.brand{padding:2px 12px 22px;font-size:18px}.brand small{display:block;color:#9097a5;font-size:11px}
+    aside a{color:#dfe4ec;text-decoration:none;padding:10px 12px;border-radius:8px;display:flex;gap:12px;margin:2px 0;align-items:center}aside a.active{background:#2b3039;color:#fff}
+    .navgroup{margin:2px 0 4px}.grouptitle{color:#fff;padding:10px 12px 5px;display:flex;gap:12px;align-items:center}.sub{margin-left:30px!important;padding:8px 12px!important;font-size:13px;color:#aeb7c6!important}.sub.active{color:#fff!important;background:#2b3039}
+    aside button{position:absolute;bottom:20px;left:22px;right:22px;background:transparent;color:#fff;border:1px solid #454b57;border-radius:8px;padding:8px}
+    main{margin-left:240px;min-height:100vh;background:#f4f6f8}header{height:56px;background:#fff;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;padding:0 24px;font-size:18px;font-weight:600}header small{margin-left:auto;color:#758198}.content{padding:18px 24px 38px}
   `],
 })
 export class AppComponent {
-  readonly nav = [
-    ['Home','/home','⌂'],
-    ['Orders','/orders','▤'],
-    ['Production Board','/production','▦'],
-    ['Fulfilment','/fulfilment','✓'],
-    ['Address Review','/address-review','◎'],
-    ['Shipping Data','/shipping-data','⇄'],
-  ] as const;
   readonly workspaceReady = signal(false);
   private preloading = false;
 
