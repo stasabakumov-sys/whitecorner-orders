@@ -18,27 +18,13 @@ jobs:
           s = src.replace('White Corner Orders v0.9.1','White Corner Orders v0.9.2').replace('v0.9.1 Standalone','v0.9.2 Standalone')
 
           old = ".activityevent{position:relative;margin-left:10px;padding:4px 82px 14px 28px;border-left:1px solid #cfd5df;min-height:36px}.activityevent:before{content:\"\";position:absolute;left:-5px;top:9px;width:9px;height:9px;border-radius:50%;background:#5f6b7a;border:2px solid #fff}"
-          new = ".activityevent{position:relative;margin-left:10px;padding:4px 82px 14px 28px;min-height:36px}.activityevent:before{content:\"\";position:absolute;left:-4px;top:9px;width:7px;height:7px;border-radius:50%;background:#68758a;z-index:2}.activityevent:after{content:\"\";position:absolute;left:-1px;top:16px;bottom:-4px;width:1px;background:#d7dce5}.activityevent+.activityevent:before{}"
+          new = ".activityevent{position:relative;margin-left:10px;padding:4px 82px 14px 28px;min-height:36px}.activityevent:after{content:\"\";position:absolute;left:-1px;top:-8px;bottom:-4px;width:1px;background:#d7dce5;z-index:0}.activityevent:before{content:\"\";position:absolute;left:-4px;top:9px;width:7px;height:7px;border-radius:50%;background:#68758a;box-shadow:0 0 0 3px #fff;z-index:2}"
           if old not in s:
               raise SystemExit('timeline css anchor not found')
           s = s.replace(old,new,1)
 
-          # Add a separate upper line segment for every event except the first in each date group.
-          old = "html+=`<div class=\"activityevent ${note?'note':''}\"><div class=\"activitytime\">${esc(activityTime(a.created_at))}</div><div class=\"activitywho\">${who}</div><div class=\"activitymsg\">${text}</div></div>`}return`"
-          new = "html+=`<div class=\"activityevent ${note?'note':''}\"><span class=\"activitytopline\"></span><div class=\"activitytime\">${esc(activityTime(a.created_at))}</div><div class=\"activitywho\">${who}</div><div class=\"activitymsg\">${text}</div></div>`}return`"
-          if old not in s:
-              raise SystemExit('activity html anchor not found')
-          s = s.replace(old,new,1)
-
-          css_anchor = ".activitytime{position:absolute;right:0;top:4px;color:var(--mut);font-size:11px}"
-          css_new = ".activitytopline{position:absolute;left:-1px;top:-8px;height:17px;width:1px;background:#d7dce5}.activitydate+.activityevent .activitytopline{display:none}.activitytime{position:absolute;right:0;top:4px;color:var(--mut);font-size:11px}"
-          if css_anchor not in s:
-              raise SystemExit('activity time css anchor not found')
-          s = s.replace(css_anchor,css_new,1)
-
-          # Keep note avatars from inheriting the small system-event dot styling.
           old = ".activityevent.note:before{width:26px;height:26px;left:-14px;top:2px;background:#aab2c1}"
-          new = ".activityevent.note:before{width:24px;height:24px;left:-13px;top:2px;background:#aab2c1;border:2px solid #fff}.activityevent.note:after{left:-1px;top:26px}"
+          new = ".activityevent.note:before{width:24px;height:24px;left:-13px;top:2px;background:#aab2c1;box-shadow:0 0 0 3px #fff}"
           if old in s:
               s = s.replace(old,new,1)
 
