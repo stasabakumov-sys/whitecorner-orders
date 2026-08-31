@@ -39,6 +39,8 @@ import { LoginComponent } from './shared/login/login.component';
     aside a{color:#dfe4ec;text-decoration:none;padding:10px 12px;border-radius:8px;display:flex;gap:12px;margin:2px 0;align-items:center}aside a.active{background:#2b3039;color:#fff}
     aside button{position:absolute;bottom:20px;left:22px;right:22px;background:transparent;color:#fff;border:1px solid #454b57;border-radius:8px;padding:8px}
     main{margin-left:240px;min-height:100vh;background:#f4f6f8}header{height:56px;background:#fff;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;padding:0 24px;font-size:18px;font-weight:600}header small{margin-left:auto;color:#758198}.content{padding:18px 24px 38px}
+    :host ::ng-deep app-fulfilment .head{align-items:flex-start!important;flex-direction:column!important;gap:12px!important}
+    :host ::ng-deep app-fulfilment .tabs{margin-left:0!important}
   `],
 })
 export class AppComponent {
