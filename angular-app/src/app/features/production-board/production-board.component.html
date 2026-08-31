@@ -8,7 +8,7 @@
 </section>
 
 <div class="error" *ngIf="orders.error()">{{ orders.error() }}</div>
-<div class="board">
+<div class="board" #boardEl (scroll)="bottomScroll.scrollLeft = boardEl.scrollLeft">
   <section class="column" *ngFor="let status of production.statuses">
     <header><b>{{ status }}</b><span>{{ units(status).length }}</span></header>
     <button class="card" *ngFor="let unit of units(status)" (click)="open(unit)">
@@ -20,6 +20,10 @@
       <div class="meta">{{ production.optionLabels(unit.mainItem).slice(0,2).join(' · ') }}</div>
     </button>
   </section>
+</div>
+
+<div class="boardscroll" #bottomScroll (scroll)="boardEl.scrollLeft = bottomScroll.scrollLeft" aria-label="Production board horizontal scroll">
+  <div class="boardscroll-inner"></div>
 </div>
 
 <app-production-unit-drawer *ngIf="selected() as unit" [view]="unit" (closed)="selected.set(null)" />
