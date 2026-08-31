@@ -2,12 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>WhitecornerAngular</title>
+  <title>White Corner Orders Angular</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <style>
+    #angular-boot-fallback{font:14px Arial,sans-serif;padding:24px;color:#172033;background:#f4f6f8;min-height:100vh}
+    #angular-boot-fallback b{display:block;margin-bottom:8px}
+    #angular-boot-error{white-space:pre-wrap;color:#8c2f2f;margin-top:10px}
+  </style>
+  <script>
+    window.addEventListener('error', function(e){
+      var el=document.getElementById('angular-boot-error');
+      if(el) el.textContent='Runtime error: '+(e.message||e.error||'Unknown error');
+    });
+    window.addEventListener('unhandledrejection', function(e){
+      var el=document.getElementById('angular-boot-error');
+      if(el) el.textContent='Promise error: '+String(e.reason&&e.reason.message||e.reason||'Unknown error');
+    });
+  </script>
 </head>
 <body>
-  <app-root></app-root>
+  <app-root>
+    <div id="angular-boot-fallback">
+      <b>White Corner Orders — Angular loading…</b>
+      <div>If this message stays on screen, the Angular bundle did not start.</div>
+      <div id="angular-boot-error"></div>
+    </div>
+  </app-root>
 </body>
 </html>
