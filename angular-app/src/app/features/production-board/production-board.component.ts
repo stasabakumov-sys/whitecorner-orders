@@ -1,5 +1,8 @@
 import { NgFor, NgIf } from '@angular/common';
 import { Component, computed, signal } from '@angular/core';
+import { ButtonModule } from 'primeng/button';
+import { CardModule } from 'primeng/card';
+import { TagModule } from 'primeng/tag';
 import { ProductKind, ProductionStatus, ProductionUnitView } from '../../core/models/production.models';
 import { OrdersService } from '../../core/services/orders.service';
 import { ProductionService } from '../../core/services/production.service';
@@ -10,7 +13,7 @@ type FilterKind = 'all' | ProductKind;
 @Component({
   selector: 'app-production-board',
   standalone: true,
-  imports: [NgFor, NgIf, ProductionUnitDrawerComponent],
+  imports: [NgFor, NgIf, ButtonModule, CardModule, TagModule, ProductionUnitDrawerComponent],
   templateUrl: './production-board.component.html',
   styleUrl: './production-board.component.css',
 })
