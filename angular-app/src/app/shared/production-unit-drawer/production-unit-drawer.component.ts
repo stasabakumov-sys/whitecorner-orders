@@ -1,6 +1,7 @@
 import { CurrencyPipe, DatePipe, NgFor, NgIf } from '@angular/common';
 import { Component, EventEmitter, Input, Output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { DrawerModule } from 'primeng/drawer';
 import { SelectModule } from 'primeng/select';
@@ -21,7 +22,7 @@ export class ProductionUnitDrawerComponent {
   @Output() closed = new EventEmitter<void>();
   readonly saving = signal(false);
   readonly error = signal('');
-  constructor(readonly production: ProductionService) {}
+  constructor(readonly production: ProductionService, private readonly router: Router) {}
 
   async statusChanged(value: string): Promise<void> {
     this.saving.set(true);
@@ -31,16 +32,9 @@ export class ProductionUnitDrawerComponent {
     finally { this.saving.set(false); }
   }
 
-  deliveryAddress(): string {
-    const a = this.view.order.delivery_address;
-    if (!a || typeof a !== 'object') return '';
-    const keys = ['addressLine','addressLine1','streetAddress','city','suburb','subdivision','state','postalCode','postcode'];
-    const values: string[] = [];
-    for (const key of keys) {
-      const value = a[key];
-      if (typeof value === 'string' && value.trim() && !values.includes(value.trim())) values.push(value.trim());
-    }
-    return values.join(', ');
+  openOrder(): void {
+    this.closed.emit();
+    void this.router.navigate(['/orders'], { queryParams: { order: this.view.order.order_number } });
   }
 
   deliveryAmount(): number {
