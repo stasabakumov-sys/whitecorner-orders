@@ -1,40 +1,43 @@
-<div class="shade" (click)="closed.emit()">
-  <aside class="drawer" (click)="$event.stopPropagation()">
-    <header>
+<p-drawer [visible]="true" position="right" [modal]="true" [dismissible]="true" [style]="{width:'min(940px,96vw)'}" (onHide)="closed.emit()">
+  <ng-template #header>
+    <div class="drawerhead">
       <div><b>{{ view.code }}</b><div>{{ view.order.customer_name }}</div><small>{{ view.order.company }}</small></div>
-      <div class="status"><span>Change status</span><select [disabled]="saving()" [ngModel]="view.status" (ngModelChange)="statusChanged($event)"><option *ngFor="let status of production.statuses" [value]="status">{{ status }}</option></select></div>
-      <button class="close" (click)="closed.emit()">×</button>
-    </header>
-    <div class="body">
-      <div class="error" *ngIf="error()">{{ error() }}</div>
-      <section>
-        <div class="section-title">Overview</div>
-        <div class="overview">
-          <div><b>Payment</b><span>{{ view.order.payment_status || '—' }}</span></div>
-          <div><b>Fulfilment</b><span>{{ view.order.delivery_type || 'Shipping' }}</span></div>
-          <div><b>Unit total</b><span>{{ view.unitTotal | currency:(view.order.currency || 'AUD') }}</span></div>
-          <div><b>Date</b><span>{{ view.order.wix_created_at | date:'dd MMM yyyy' }}</span></div>
-          <div><b>Status</b><span>{{ view.status }}</span></div>
-          <div><b>Items</b><span>1</span></div>
-        </div>
-      </section>
-      <section>
-        <div class="section-title">Item</div>
-        <div class="item">
-          <div class="visual"><img *ngIf="production.imageUrl(view.mainItem) as src" [src]="src" alt="" /></div>
-          <div class="details"><b>{{ view.mainItem.product_name }}</b><div><span class="pill">qty: 1</span><span class="pill" *ngFor="let option of production.optionLabels(view.mainItem)">{{ option }}</span></div></div>
-          <div class="money"><span>{{ view.mainUnitPrice | currency:(view.order.currency || 'AUD') }} each</span><small>qty 1</small><b>{{ view.mainUnitPrice | currency:(view.order.currency || 'AUD') }}</b></div>
-        </div>
-      </section>
-      <section *ngIf="view.addons.length">
-        <div class="section-title">Add-ons</div>
-        <div class="item" *ngFor="let addon of view.addons">
-          <div class="visual"><img *ngIf="production.imageUrl(addon.item) as src" [src]="src" alt="" /></div>
-          <div class="details"><b>{{ addon.item.product_name }}</b><span class="pill">Add-on</span><div><span class="pill">qty: {{ addon.quantity }}</span></div></div>
-          <div class="money"><span>{{ addon.unitPrice | currency:(view.order.currency || 'AUD') }} each</span><small>qty {{ addon.quantity }}</small><b>{{ addon.total | currency:(view.order.currency || 'AUD') }}</b></div>
-        </div>
-      </section>
-      <app-order-activity [order]="view.order"></app-order-activity>
+      <div class="status">
+        <span>Change status</span>
+        <p-select [options]="production.statuses" [disabled]="saving()" [ngModel]="view.status" (ngModelChange)="statusChanged($event)" appendTo="body" />
+      </div>
     </div>
-  </aside>
-</div>
+  </ng-template>
+
+  <div class="body">
+    <div class="error" *ngIf="error()">{{ error() }}</div>
+    <section>
+      <div class="section-title">Overview</div>
+      <div class="overview">
+        <div><b>Payment</b><p-tag [value]="view.order.payment_status || '—'" severity="success" /></div>
+        <div><b>Fulfilment</b><span>{{ view.order.delivery_type || 'Shipping' }}</span></div>
+        <div><b>Unit total</b><span>{{ view.unitTotal | currency:(view.order.currency || 'AUD') }}</span></div>
+        <div><b>Date</b><span>{{ view.order.wix_created_at | date:'dd MMM yyyy' }}</span></div>
+        <div><b>Status</b><p-tag [value]="view.status" severity="info" /></div>
+        <div><b>Items</b><span>1</span></div>
+      </div>
+    </section>
+    <section>
+      <div class="section-title">Item</div>
+      <div class="item">
+        <div class="visual"><img *ngIf="production.imageUrl(view.mainItem) as src" [src]="src" alt="" /></div>
+        <div class="details"><b>{{ view.mainItem.product_name }}</b><div><span class="pill">qty: 1</span><span class="pill" *ngFor="let option of production.optionLabels(view.mainItem)">{{ option }}</span></div></div>
+        <div class="money"><span>{{ view.mainUnitPrice | currency:(view.order.currency || 'AUD') }} each</span><small>qty 1</small><b>{{ view.mainUnitPrice | currency:(view.order.currency || 'AUD') }}</b></div>
+      </div>
+    </section>
+    <section *ngIf="view.addons.length">
+      <div class="section-title">Add-ons</div>
+      <div class="item" *ngFor="let addon of view.addons">
+        <div class="visual"><img *ngIf="production.imageUrl(addon.item) as src" [src]="src" alt="" /></div>
+        <div class="details"><b>{{ addon.item.product_name }}</b><span class="pill">Add-on</span><div><span class="pill">qty: {{ addon.quantity }}</span></div></div>
+        <div class="money"><span>{{ addon.unitPrice | currency:(view.order.currency || 'AUD') }} each</span><small>qty {{ addon.quantity }}</small><b>{{ addon.total | currency:(view.order.currency || 'AUD') }}</b></div>
+      </div>
+    </section>
+    <app-order-activity [order]="view.order"></app-order-activity>
+  </div>
+</p-drawer>
