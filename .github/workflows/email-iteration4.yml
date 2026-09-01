@@ -1,0 +1,56 @@
+name: Email iteration 4
+on:
+  push:
+    paths:
+      - '.github/workflows/email-iteration4.yml'
+permissions:
+  contents: write
+jobs:
+  improve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Make mail list compact and stable
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('angular-app/src/app/features/email/email.component.ts')
+          s=p.read_text()
+          old='''@for(mail of visibleRows();track mail.id){<button class="mail-card" [class.selected]="selected()?.id===mail.id" [class.unread]="mail.unread" (click)="openMail(mail)"><div class="avatar">{{mail.initials}}</div><div class="mail-copy"><div class="mail-from"><b>{{mail.correspondent}}</b><span>{{mail.time}}</span></div><div class="mail-subject">{{mail.subject}}</div><div class="mail-preview">{{mail.preview}}</div><div class="mail-meta"><span class="account-chip">{{mailboxShort(mail.mailbox)}}</span>@if(mail.linked_order){<span class="order-chip">#{{mail.linked_order}}</span>}@if(mail.needs_reply){<span class="reply-chip">Needs reply</span>}</div></div></button>}'''
+          new='''@for(mail of visibleRows();track mail.id){<button class="mail-card" [class.selected]="selected()?.id===mail.id" [class.unread]="mail.unread" (click)="openMail(mail)"><span class="unread-marker" aria-hidden="true"></span><span class="mail-star" [class.active]="mail.starred"><i class="pi" [class.pi-star-fill]="mail.starred" [class.pi-star]="!mail.starred"></i></span><b class="mail-sender">{{mail.correspondent}}</b><span class="mail-line"><strong>{{mail.subject}}</strong><span class="mail-snippet"> — {{mail.preview}}</span></span><span class="mail-row-meta"><span class="account-chip">{{mailboxShort(mail.mailbox)}}</span>@if(mail.linked_order){<span class="order-chip">#{{mail.linked_order}}</span>}@if(mail.needs_reply){<span class="reply-chip">Needs reply</span>}</span><time>{{mail.time}}</time></button>}'''
+          if old not in s: raise SystemExit('mail-card template anchor missing')
+          s=s.replace(old,new,1)
+
+          old_css='''.message-list{min-width:0;min-height:0;height:100%;max-height:100%;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid #e4e7ec;background:#fff}.list-toolbar{height:52px;min-height:52px;padding:7px 10px;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;gap:10px}.list-title{display:flex;flex-direction:column;min-width:120px}.list-title b{font-size:14px;color:#172033}.list-title span{font-size:9px;color:#98a2b3;margin-top:2px}.search{position:relative;margin-left:auto;min-width:0}.search i{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:11px;color:#98a2b3}.search input{width:190px;height:32px;padding-left:28px;font-size:11px}.mail-list-scroll{overflow-y:auto!important;overflow-x:hidden;min-height:0;height:0;flex:1 1 auto;overscroll-behavior:contain;scrollbar-gutter:stable}.mail-card{display:grid;grid-template-columns:32px minmax(0,1fr);gap:9px;width:100%;border:0;border-bottom:1px solid #edf0f3;background:#fff;padding:11px 12px;text-align:left;cursor:pointer;color:inherit;font:inherit}.mail-card:hover{background:#f8fafc}.mail-card.selected{background:#edf4ff;box-shadow:inset 3px 0 #3b82f6}.mail-card.unread .mail-from b,.mail-card.unread .mail-subject{font-weight:700}.avatar{width:31px;height:31px;border-radius:50%;background:#eef2f6;color:#475467;display:grid;place-items:center;font-size:10px;font-weight:700}.mail-copy{min-width:0}.mail-from{display:flex;gap:9px;align-items:center}.mail-from b{font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mail-from span{margin-left:auto;font-size:9px;color:#98a2b3;white-space:nowrap}.mail-subject{font-size:11px;font-weight:600;color:#344054;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mail-preview{font-size:10px;color:#758198;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mail-meta{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.mail-meta span{font-size:8px;border-radius:999px;padding:2px 5px}.account-chip{background:#f2f4f7;color:#667085}.order-chip{background:#eef4ff;color:#3056a0}.reply-chip{background:#fff4e5;color:#a35b00}'''
+          new_css='''.message-list{min-width:0;min-height:0;height:100%;max-height:100%;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid #e4e7ec;background:#fff}.list-toolbar{height:46px;min-height:46px;padding:6px 12px;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;gap:10px;background:#fff;z-index:2}.list-title{display:flex;align-items:baseline;gap:9px;min-width:0}.list-title b{font-size:14px;color:#172033;white-space:nowrap}.list-title span{font-size:9px;color:#98a2b3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.search{position:relative;margin-left:auto;min-width:0}.search i{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:11px;color:#98a2b3}.search input{width:190px;height:32px;padding-left:28px;font-size:11px}.mail-list-scroll{overflow-y:auto!important;overflow-x:hidden;min-height:0;height:0;flex:1 1 auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:#fff}.mail-card{width:100%;min-height:42px;display:grid;grid-template-columns:7px 22px minmax(105px,150px) minmax(140px,1fr) auto 54px;gap:8px;align-items:center;border:0;border-bottom:1px solid #edf0f3;background:#fff;padding:0 12px 0 9px;text-align:left;cursor:pointer;color:#344054;font:inherit;contain:layout paint}.mail-card:hover{background:#f7f9fc;box-shadow:inset 0 1px #e4e7ec,inset 0 -1px #e4e7ec}.mail-card.selected{background:#edf4ff;box-shadow:inset 3px 0 #3b82f6}.mail-card.unread{background:#f8fbff}.mail-card.unread:hover{background:#f3f7fd}.unread-marker{width:6px;height:6px;border-radius:50%;background:transparent}.mail-card.unread .unread-marker{background:#2563eb}.mail-star{width:22px;height:28px;display:grid;place-items:center;color:#c2c8d0}.mail-star i{font-size:12px}.mail-star.active{color:#d39a00}.mail-sender{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475467}.mail-card.unread .mail-sender,.mail-card.unread .mail-line strong{font-weight:700;color:#172033}.mail-line{min-width:0;display:flex;overflow:hidden;white-space:nowrap;font-size:11px}.mail-line strong{font-weight:600;color:#344054;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}.mail-snippet{min-width:24px;color:#7b8798;overflow:hidden;text-overflow:ellipsis;font-weight:400}.mail-row-meta{display:flex;gap:4px;align-items:center;min-width:0;white-space:nowrap}.mail-row-meta>span{font-size:8px;border-radius:999px;padding:2px 5px}.mail-card time{font-size:9px;color:#98a2b3;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.account-chip{background:#f2f4f7;color:#667085}.order-chip{background:#eef4ff;color:#3056a0}.reply-chip{background:#fff4e5;color:#a35b00}@media(max-width:1180px){.mail-card{grid-template-columns:7px 20px minmax(95px,125px) minmax(120px,1fr) auto 48px}.mail-row-meta .account-chip{display:none}}@media(max-width:900px){.mail-card{grid-template-columns:7px 20px minmax(85px,110px) minmax(100px,1fr) 48px}.mail-row-meta{display:none}}'''
+          if old_css not in s: raise SystemExit('mail list css anchor missing')
+          s=s.replace(old_css,new_css,1)
+          p.write_text(s)
+          PY
+      - name: Static assertions
+        run: |
+          grep -q 'grid-template-columns:7px 22px minmax(105px,150px)' angular-app/src/app/features/email/email.component.ts
+          grep -q 'class="mail-line"' angular-app/src/app/features/email/email.component.ts
+          ! grep -q 'class="mail-copy"' angular-app/src/app/features/email/email.component.ts
+      - name: Build Angular app
+        run: |
+          cd angular-app
+          npm ci --legacy-peer-deps
+          npm run build -- --base-href /whitecorner-orders/angular2/
+      - name: Publish and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(find angular-app/dist -type f -name index.html -path '*/browser/*' -printf '%h\n' | head -1)
+          test -n "$OUT"
+          rm -rf angular2
+          mkdir angular2
+          cp -R "$OUT"/* angular2/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add angular-app/src/app/features/email/email.component.ts angular2
+          git commit -m "Make Email list compact and Gmail-like"
+          git push
