@@ -17,69 +17,58 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-
-          service = Path('angular-app/src/app/core/services/email.service.ts')
-          s = service.read_text()
-
-          signal_anchor = "  readonly error = signal('');\n"
-          signal_replacement = """  readonly error = signal('');
-  private readonly messageLoads = new Map<string, Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }>>();
-"""
+          service=Path('angular-app/src/app/core/services/email.service.ts')
+          s=service.read_text()
+          anchor="  readonly error = signal('');\n"
+          insert="  readonly error = signal('');\n  private readonly messageLoads = new Map<string, Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }>>();\n"
           if 'private readonly messageLoads' not in s:
-              if signal_anchor not in s:
-                  raise SystemExit('email service signal anchor missing')
-              s = s.replace(signal_anchor, signal_replacement, 1)
-
-          old_get = """  async getMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {
-    const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'get', mailbox, messageId } });
-    if (error) throw error;
-    if (data?.unread) {
-      await this.modify(mailbox, messageId, 'markRead');
-      return { ...data, unread: false };
-    }
-    return data;
-  }
-"""
-          new_get = """  getMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {
-    const key = `${mailbox}:${messageId}`;
-    const pending = this.messageLoads.get(key);
-    if (pending) return pending;
-    const request = this.loadMessage(mailbox, messageId).finally(() => this.messageLoads.delete(key));
-    this.messageLoads.set(key, request);
-    return request;
-  }
-
-  private async loadMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {
-    const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'get', mailbox, messageId } });
-    if (error) throw error;
-    if (data?.unread) {
-      // Opening a message should never wait for a second Gmail round-trip.
-      // Mark-as-read is safe to complete in the background; a later refresh reconciles any failure.
-      void this.modify(mailbox, messageId, 'markRead').catch(e => console.warn('Gmail markRead failed', e));
-      return { ...data, unread: false };
-    }
-    return data;
-  }
-"""
-          if old_get not in s:
-              raise SystemExit('getMessage anchor missing or already changed unexpectedly')
-          s = s.replace(old_get, new_get, 1)
-          service.write_text(s)
-
-          component = Path('angular-app/src/app/features/email/email.component.ts')
-          c = component.read_text()
-          old_reader = "this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));this.selected.set(current);"
-          new_reader = "this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(current);"
-          if old_reader not in c:
-              raise SystemExit('reader selection anchor missing')
-          c = c.replace(old_reader, new_reader, 1)
-
-          old_ai = "this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));this.selected.set(updated);"
-          new_ai = "this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(updated);"
-          if old_ai not in c:
-              raise SystemExit('AI selection anchor missing')
-          c = c.replace(old_ai, new_ai, 1)
-          component.write_text(c)
+              if anchor not in s: raise SystemExit('email service signal anchor missing')
+              s=s.replace(anchor,insert,1)
+          old_get='\n'.join([
+              "  async getMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {",
+              "    const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'get', mailbox, messageId } });",
+              "    if (error) throw error;",
+              "    if (data?.unread) {",
+              "      await this.modify(mailbox, messageId, 'markRead');",
+              "      return { ...data, unread: false };",
+              "    }",
+              "    return data;",
+              "  }",
+              ""
+          ])
+          new_get='\n'.join([
+              "  getMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {",
+              "    const key = `${mailbox}:${messageId}`;",
+              "    const pending = this.messageLoads.get(key);",
+              "    if (pending) return pending;",
+              "    const request = this.loadMessage(mailbox, messageId).finally(() => this.messageLoads.delete(key));",
+              "    this.messageLoads.set(key, request);",
+              "    return request;",
+              "  }",
+              "",
+              "  private async loadMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {",
+              "    const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'get', mailbox, messageId } });",
+              "    if (error) throw error;",
+              "    if (data?.unread) {",
+              "      void this.modify(mailbox, messageId, 'markRead').catch(e => console.warn('Gmail markRead failed', e));",
+              "      return { ...data, unread: false };",
+              "    }",
+              "    return data;",
+              "  }",
+              ""
+          ])
+          if old_get not in s: raise SystemExit('getMessage anchor missing or already changed unexpectedly')
+          service.write_text(s.replace(old_get,new_get,1))
+          component=Path('angular-app/src/app/features/email/email.component.ts')
+          c=component.read_text()
+          old_reader="this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));this.selected.set(current);"
+          new_reader="this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(current);"
+          if old_reader not in c: raise SystemExit('reader selection anchor missing')
+          c=c.replace(old_reader,new_reader,1)
+          old_ai="this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));this.selected.set(updated);"
+          new_ai="this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(updated);"
+          if old_ai not in c: raise SystemExit('AI selection anchor missing')
+          component.write_text(c.replace(old_ai,new_ai,1))
           PY
       - name: Verify performance invariants
         run: |
