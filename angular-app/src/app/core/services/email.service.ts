@@ -41,6 +41,7 @@ export class EmailService {
   readonly status = signal<Record<GmailMailboxKey, boolean>>({ info: false, support: false });
   readonly loading = signal(false);
   readonly error = signal('');
+  private readonly messageLoads = new Map<string, Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }>>();
 
   constructor(private readonly supabase: SupabaseService) {}
 
@@ -84,11 +85,20 @@ export class EmailService {
     return (data?.messages || []) as GmailMessageRow[];
   }
 
-  async getMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {
+  getMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {
+    const key = `${mailbox}:${messageId}`;
+    const pending = this.messageLoads.get(key);
+    if (pending) return pending;
+    const request = this.loadMessage(mailbox, messageId).finally(() => this.messageLoads.delete(key));
+    this.messageLoads.set(key, request);
+    return request;
+  }
+
+  private async loadMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {
     const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'get', mailbox, messageId } });
     if (error) throw error;
     if (data?.unread) {
-      await this.modify(mailbox, messageId, 'markRead');
+      void this.modify(mailbox, messageId, 'markRead').catch(e => console.warn('Gmail markRead failed', e));
       return { ...data, unread: false };
     }
     return data;

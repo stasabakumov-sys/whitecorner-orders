@@ -244,7 +244,7 @@ export class EmailComponent{
     this.cancelReply();this.selected.set(mail);
     let current=mail;
     try{
-      if(!mail.body){const full=await this.email.getMessage(mail.mailbox,mail.id);current={...mail,body:full.body||mail.preview,received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??false,starred:full.starred??mail.starred};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));this.selected.set(current);}
+      if(!mail.body){const full=await this.email.getMessage(mail.mailbox,mail.id);current={...mail,body:full.body||mail.preview,received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??false,starred:full.starred??mail.starred};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(current);}
       if(current.status==='Inbox'&&current.ai_state==='Not analysed')void this.analyseMail(current);
     }catch(e){this.mailError.set(String((e as Error)?.message||e));}
   }
@@ -254,7 +254,7 @@ export class EmailComponent{
       const result=await this.emailAi.analyse({mailbox:mail.mailbox,correspondent:mail.correspondent,email:mail.email,subject:mail.subject,body:mail.body||mail.preview},candidates);
       const state:AiState=result.review_required?'Review':(result.needs_reply?'Draft ready':'Auto handled');
       const updated:MailRow={...mail,ai_state:state,intent:result.intent as MailIntent,linked_order:result.linked_order,confidence:result.confidence,needs_reply:result.needs_reply,draft_reply:result.draft_reply,ai_summary:result.summary,review_reason:result.review_reason||null};
-      this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));this.selected.set(updated);
+      this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(updated);
     }catch(e){console.warn('Email AI analysis failed',e);}
   }
   private orderCandidates(mail:MailRow){
