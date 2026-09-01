@@ -11,7 +11,7 @@ type MailIntent='Order question'|'Customisation'|'Product question'|'Production 
 type PolicyMode='Auto later'|'Draft + review'|'Manual only';
 type MailboxId='all'|'info'|'support';
 
-interface MailRow{id:string;mailbox:'info'|'support';correspondent:string;email:string;initials:string;subject:string;preview:string;body:string;received_at:string;time:string;direction:'Incoming'|'Outgoing';status:'Inbox'|'Sent';unread?:boolean;ai_state?:AiState;linked_order?:string|null;intent?:MailIntent|null;needs_reply?:boolean|null;confidence?:number|null;draft_reply?:string|null;}
+interface MailRow{id:string;mailbox:'info'|'support';correspondent:string;email:string;initials:string;subject:string;preview:string;body:string;received_at:string;time:string;direction:'Incoming'|'Outgoing';status:'Inbox'|'Sent';unread?:boolean;starred?:boolean;ai_state?:AiState;linked_order?:string|null;intent?:MailIntent|null;needs_reply?:boolean|null;confidence?:number|null;draft_reply?:string|null;}
 interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
 
 @Component({
@@ -218,7 +218,7 @@ export class EmailComponent{
   private async showMail(mail:MailRow){
     this.cancelReply();this.selected.set(mail);
     if(mail.body)return;
-    try{const full=await this.email.getMessage(mail.mailbox,mail.id);const updated={...mail,body:full.body||mail.preview,received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at)};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));this.selected.set(updated);}
+    try{const full=await this.email.getMessage(mail.mailbox,mail.id);const updated={...mail,body:full.body||mail.preview,received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??false,starred:full.starred??mail.starred};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));this.selected.set(updated);}
     catch(e){this.mailError.set(String((e as Error)?.message||e));}
   }
   @HostListener('window:popstate',['$event'])
