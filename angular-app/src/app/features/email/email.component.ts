@@ -175,8 +175,10 @@ export class EmailComponent{
   readonly sendStatus=signal('');
   private readerHistoryPushed=false;
   readonly mailboxInboxCounts=signal<{info:number;support:number}>({info:0,support:0});
+  private readonly loadedViews=new Set<string>();
+  private readonly viewLoads=new Map<string,Promise<void>>();
 
-  constructor(private readonly email:EmailService,private readonly emailAi:EmailAiService,private readonly orders:OrdersService){void this.refreshMailboxCounts();void this.loadMail();}
+  constructor(private readonly email:EmailService,private readonly emailAi:EmailAiService,private readonly orders:OrdersService){void this.initializeMail();}
 
   readonly decisionFlow=['Read thread','Identify customer','Match order','Classify intent','Collect facts','Assess risk','Draft / escalate'];
   readonly dataSources=[{title:'Orders',description:'Customer, items, options, notes, payment and delivery method.'},{title:'Production',description:'Current production units and live production status.'},{title:'Fulfilment',description:'Pickup readiness, shipping preparation and booked shipping.'},{title:'Pickup calendar',description:'Available pickup windows and closed dates once connected.'},{title:'Shipping data',description:'Packages, dimensions, weights and later tracking.'},{title:'Business rules',description:'Lead times, claims, cancellations, payments and approved answers.'}];
@@ -184,30 +186,44 @@ export class EmailComponent{
   readonly guardrails=['Claims / damage','Refunds / cancellations','Paid-order changes','Custom pricing or feasibility','Financial consequences','Legal / policy disputes','Low-confidence order match','Conflicting information'];
   readonly visibleRows=computed(()=>{const view=this.activeView(),box=this.activeMailbox(),q=this.query().trim().toLowerCase();return this.rows().filter(row=>this.belongsToView(row,view)&&(box==='all'||row.mailbox===box)&&(!q||`${row.correspondent} ${row.email} ${row.subject} ${row.preview} ${row.linked_order||''}`.toLowerCase().includes(q)));});
   belongsToView(row:MailRow,view:MailView){if(view==='Sent')return row.status==='Sent';if(view==='Needs reply')return row.status==='Inbox'&&row.needs_reply===true;return row.status==='Inbox';}
-  setMailbox(box:MailboxId){this.activeMailbox.set(box);void this.loadMail();}
-  setView(view:MailView){this.activeView.set(view);void this.loadMail();}
+  private viewKey(mailbox:'info'|'support',view:'Inbox'|'Sent'){return`${mailbox}:${view}`;}
+  setMailbox(box:MailboxId){if(this.activeMailbox()===box)return;this.activeMailbox.set(box);this.selected.set(null);void this.loadMail();}
+  setView(view:MailView){if(this.activeView()===view)return;this.activeView.set(view);this.selected.set(null);void this.loadMail();}
   ensureSelection(){queueMicrotask(()=>{const visible=this.visibleRows();if(!visible.some(row=>row.id===this.selected()?.id))this.selected.set(visible[0]??null);});}
-  private async refreshMailboxCounts(){
-    try{
-      const [info,support]=await Promise.all([this.email.list('info','Inbox'),this.email.list('support','Inbox')]);
-      this.mailboxInboxCounts.set({info:info.length,support:support.length});
-      this.countsReady.set(true);
-    }catch(e){this.mailError.set(String((e as Error)?.message||e));}
-  }
-  private async loadMail(){
-    const view=this.activeView();
-    if(view==='Needs reply'){this.rows.set([]);this.selected.set(null);return;}
+  private async initializeMail(){
     this.mailLoading.set(true);this.mailError.set('');
     try{
-      const box=this.activeMailbox();
-      const keys:('info'|'support')[]=box==='all'?['info','support']:[box];
-      const batches=await Promise.all(keys.map(key=>this.email.list(key,view)));
-      const rows=batches.flat().map(row=>this.toMailRow(row)).sort((a,b)=>this.dateValue(b.received_at)-this.dateValue(a.received_at));
-      this.rows.set(rows);
-      this.mailReady.set(true);
-      if(view==='Inbox'){const c=this.mailboxInboxCounts();if(box==='info')this.mailboxInboxCounts.set({...c,info:rows.length});else if(box==='support')this.mailboxInboxCounts.set({...c,support:rows.length});else this.mailboxInboxCounts.set({info:rows.filter(r=>r.mailbox==='info').length,support:rows.filter(r=>r.mailbox==='support').length});}
-      this.selected.set(null);
-    }catch(e){if(!this.mailReady())this.rows.set([]);this.selected.set(null);this.mailError.set(String((e as Error)?.message||e));}
+      await Promise.all([this.fetchView('info','Inbox'),this.fetchView('support','Inbox')]);
+      this.updateInboxCounts();
+      this.countsReady.set(true);this.mailReady.set(true);
+      void Promise.allSettled([this.fetchView('info','Sent'),this.fetchView('support','Sent')]);
+    }catch(e){this.mailError.set(String((e as Error)?.message||e));this.mailReady.set(true);}
+    finally{this.mailLoading.set(false);}
+  }
+  private fetchView(mailbox:'info'|'support',view:'Inbox'|'Sent'):Promise<void>{
+    const key=this.viewKey(mailbox,view);
+    if(this.loadedViews.has(key))return Promise.resolve();
+    const pending=this.viewLoads.get(key);if(pending)return pending;
+    const request=this.email.list(mailbox,view).then(messages=>{this.absorbBatch(mailbox,view,messages);this.loadedViews.add(key);if(view==='Inbox')this.updateInboxCounts();}).finally(()=>this.viewLoads.delete(key));
+    this.viewLoads.set(key,request);return request;
+  }
+  private absorbBatch(mailbox:'info'|'support',view:'Inbox'|'Sent',messages:GmailMessageRow[]){
+    const current=this.rows();const existing=new Map(current.map(row=>[`${row.mailbox}:${row.id}`,row]));
+    const incoming=messages.map(message=>{const base=this.toMailRow(message);const old=existing.get(`${mailbox}:${message.id}`);return old?{...base,body:old.body,ai_state:old.ai_state,linked_order:old.linked_order,intent:old.intent,needs_reply:old.needs_reply,confidence:old.confidence,draft_reply:old.draft_reply,ai_summary:old.ai_summary,review_reason:old.review_reason}:base;});
+    const status=view==='Sent'?'Sent':'Inbox';
+    const kept=current.filter(row=>!(row.mailbox===mailbox&&row.status===status));
+    this.rows.set([...kept,...incoming].sort((a,b)=>this.dateValue(b.received_at)-this.dateValue(a.received_at)));
+  }
+  private updateInboxCounts(){const rows=this.rows();this.mailboxInboxCounts.set({info:rows.filter(row=>row.mailbox==='info'&&row.status==='Inbox').length,support:rows.filter(row=>row.mailbox==='support'&&row.status==='Inbox').length});}
+  private async loadMail(){
+    const view=this.activeView();
+    if(view==='Needs reply'){this.mailReady.set(true);return;}
+    const box=this.activeMailbox();const keys:('info'|'support')[]=box==='all'?['info','support']:[box];
+    const missing=keys.some(key=>!this.loadedViews.has(this.viewKey(key,view)));
+    if(!missing)return;
+    this.mailLoading.set(true);this.mailError.set('');
+    try{await Promise.all(keys.map(key=>this.fetchView(key,view)));this.mailReady.set(true);if(view==='Inbox')this.countsReady.set(true);}
+    catch(e){this.mailError.set(String((e as Error)?.message||e));}
     finally{this.mailLoading.set(false);}
   }
   private toMailRow(row:GmailMessageRow):MailRow{
