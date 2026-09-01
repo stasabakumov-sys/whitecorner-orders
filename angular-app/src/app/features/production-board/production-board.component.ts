@@ -1,5 +1,6 @@
 import { NgFor, NgIf } from '@angular/common';
 import { Component, computed, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { TagModule } from 'primeng/tag';
@@ -28,11 +29,15 @@ export class ProductionBoardComponent {
       .sort((a,b) => new Date(a.order.wix_created_at ?? 0).getTime() - new Date(b.order.wix_created_at ?? 0).getTime() || Number(a.order.order_number) - Number(b.order.order_number));
   });
 
-  constructor(readonly orders: OrdersService, readonly production: ProductionService) {
+  constructor(readonly orders: OrdersService, readonly production: ProductionService, private readonly router: Router) {
     if (!orders.orders().length) void orders.load();
   }
 
   units(status: ProductionStatus): ProductionUnitView[] { return this.visibleUnits().filter((unit) => unit.status === status); }
   selectFilter(filter: FilterKind): void { this.filter.set(filter); }
   open(unit: ProductionUnitView): void { this.selected.set(unit); }
+  openOrder(unit: ProductionUnitView, event: Event): void {
+    event.stopPropagation();
+    void this.router.navigate(['/orders'], { queryParams: { order: unit.order.order_number } });
+  }
 }
