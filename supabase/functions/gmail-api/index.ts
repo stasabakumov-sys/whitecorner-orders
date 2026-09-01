@@ -85,17 +85,17 @@ Deno.serve(async (req) => {
     const mailboxKey = String(body.mailbox || "");
 
     if (action === "status" && !mailboxKey) {
-      const { data, error } = await admin.from("wc_mailboxes").select("mailbox_key,email,connected_at,last_sync_at").order("mailbox_key");
+      const { data, error } = await admin.from("wc_mailboxes").select("mailbox_key,email,connected_at,last_sync_at,granted_scopes").order("mailbox_key");
       if (error) throw error;
       return new Response(JSON.stringify({ mailboxes: data || [] }), { headers: jsonHeaders });
     }
 
     const expectedEmail = ALLOWED_MAILBOXES[mailboxKey];
     if (!expectedEmail) return new Response(JSON.stringify({ error: "Unknown mailbox" }), { status: 400, headers: jsonHeaders });
-    const { data: mailbox, error: mailboxError } = await admin.from("wc_mailboxes").select("mailbox_key,email,refresh_token,connected_at,last_sync_at").eq("mailbox_key", mailboxKey).maybeSingle();
+    const { data: mailbox, error: mailboxError } = await admin.from("wc_mailboxes").select("mailbox_key,email,refresh_token,connected_at,last_sync_at,granted_scopes").eq("mailbox_key", mailboxKey).maybeSingle();
     if (mailboxError) throw mailboxError;
     if (!mailbox?.refresh_token) return new Response(JSON.stringify({ connected: false, mailbox: mailboxKey, email: expectedEmail }), { status: action === "status" ? 200 : 409, headers: jsonHeaders });
-    if (action === "status") return new Response(JSON.stringify({ connected: true, mailbox: mailboxKey, email: mailbox.email, connectedAt: mailbox.connected_at, lastSyncAt: mailbox.last_sync_at }), { headers: jsonHeaders });
+    if (action === "status") return new Response(JSON.stringify({ connected: true, mailbox: mailboxKey, email: mailbox.email, connectedAt: mailbox.connected_at, lastSyncAt: mailbox.last_sync_at, scopes: mailbox.granted_scopes || [] }), { headers: jsonHeaders });
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -125,6 +125,7 @@ Deno.serve(async (req) => {
         const outgoing = view === "Sent";
         const personRaw = outgoing ? to : from;
         const name = displayName(personRaw);
+        const labels = Array.isArray(msg.labelIds) ? msg.labelIds : [];
         return {
           id: msg.id,
           threadId: msg.threadId,
@@ -138,7 +139,8 @@ Deno.serve(async (req) => {
           time: date,
           direction: outgoing ? "Outgoing" : "Incoming",
           status: outgoing ? "Sent" : "Inbox",
-          unread: Array.isArray(msg.labelIds) && msg.labelIds.includes("UNREAD"),
+          unread: labels.includes("UNREAD"),
+          starred: labels.includes("STARRED"),
           needs_reply: false,
         };
       }));
@@ -162,7 +164,41 @@ Deno.serve(async (req) => {
         date: headerValue(headers, "Date"),
         body: extractBody(msg.payload),
         snippet: msg.snippet || "",
+        unread: Array.isArray(msg.labelIds) && msg.labelIds.includes("UNREAD"),
+        starred: Array.isArray(msg.labelIds) && msg.labelIds.includes("STARRED"),
       }), { headers: jsonHeaders });
+    }
+
+    if (["markRead", "markUnread", "archive", "star", "unstar"].includes(action)) {
+      const messageId = String(body.messageId || "");
+      if (!messageId) return new Response(JSON.stringify({ error: "messageId required" }), { status: 400, headers: jsonHeaders });
+      const addLabelIds: string[] = [];
+      const removeLabelIds: string[] = [];
+      if (action === "markRead") removeLabelIds.push("UNREAD");
+      if (action === "markUnread") addLabelIds.push("UNREAD");
+      if (action === "archive") removeLabelIds.push("INBOX");
+      if (action === "star") addLabelIds.push("STARRED");
+      if (action === "unstar") removeLabelIds.push("STARRED");
+      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/modify`, {
+        method: "POST",
+        headers: { ...gmailHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ addLabelIds, removeLabelIds }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(`Gmail ${action} failed: ${JSON.stringify(result)}`);
+      return new Response(JSON.stringify({ ok: true, message: result }), { headers: jsonHeaders });
+    }
+
+    if (action === "trash") {
+      const messageId = String(body.messageId || "");
+      if (!messageId) return new Response(JSON.stringify({ error: "messageId required" }), { status: 400, headers: jsonHeaders });
+      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/trash`, {
+        method: "POST",
+        headers: gmailHeaders,
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(`Gmail trash failed: ${JSON.stringify(result)}`);
+      return new Response(JSON.stringify({ ok: true, message: result }), { headers: jsonHeaders });
     }
 
     if (action === "send") {
