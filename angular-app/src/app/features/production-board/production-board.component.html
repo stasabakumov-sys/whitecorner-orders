@@ -8,40 +8,51 @@
 </section>
 
 <div class="error" *ngIf="orders.error()">{{ orders.error() }}</div>
-<div class="board" #boardEl (scroll)="bottomScroll.scrollLeft = boardEl.scrollLeft">
-  <section class="column" *ngFor="let status of production.statuses; let i = index" [attr.data-stage]="i">
-    <header>
-      <div class="stage-title"><span class="stage-dot"></span><b>{{ status }}</b></div>
-      <span class="stage-count">{{ units(status).length }}</span>
-    </header>
+@if (!boardReady()) {
+  <div class="board board-placeholder" aria-label="Loading production board">
+    @for (status of production.statuses; track status; let i = $index) {
+      <section class="column" [attr.data-stage]="i">
+        <header><div class="stage-title"><span class="stage-dot"></span><b>{{ status }}</b></div><span class="stage-count">—</span></header>
+        <div class="placeholder-card"></div><div class="placeholder-card short"></div>
+      </section>
+    }
+  </div>
+} @else {
+  <div class="board" #boardEl (scroll)="bottomScroll.scrollLeft = boardEl.scrollLeft">
+    <section class="column" *ngFor="let status of production.statuses; let i = index; trackBy: trackStatus" [attr.data-stage]="i">
+      <header>
+        <div class="stage-title"><span class="stage-dot"></span><b>{{ status }}</b></div>
+        <span class="stage-count">{{ units(status).length }}</span>
+      </header>
 
-    <p-card class="card" *ngFor="let unit of units(status)" (click)="open(unit)" tabindex="0" role="button" (keydown.enter)="open(unit)">
-      <div class="card-top">
-        <button class="order-link" type="button" (click)="openOrder(unit,$event)">{{ unit.code }}</button>
-        <img *ngIf="production.imageUrl(unit.mainItem) as src" [src]="src" alt="" />
-      </div>
+      <p-card class="card" *ngFor="let unit of units(status); trackBy: trackUnit" (click)="open(unit)" tabindex="0" role="button" (keydown.enter)="open(unit)">
+        <div class="card-top">
+          <button class="order-link" type="button" (click)="openOrder(unit,$event)">{{ unit.code }}</button>
+          <img *ngIf="production.imageUrl(unit.mainItem) as src" [src]="src" alt="" loading="lazy" (load)="revealImage($event)" (error)="revealImage($event)" />
+        </div>
 
-      <div class="customer">{{ unit.order.customer_name || '—' }}</div>
-      <small *ngIf="unit.order.company">{{ unit.order.company }}</small>
+        <div class="customer">{{ unit.order.customer_name || '—' }}</div>
+        <small *ngIf="unit.order.company">{{ unit.order.company }}</small>
 
-      <div class="product">{{ unit.mainItem.product_name }}</div>
+        <div class="product">{{ unit.mainItem.product_name }}</div>
 
-      <div class="option-chips" *ngIf="production.optionLabels(unit.mainItem).length">
-        <span *ngFor="let option of production.optionLabels(unit.mainItem).slice(0,2)">{{ option }}</span>
-      </div>
+        <div class="option-chips" *ngIf="production.optionLabels(unit.mainItem).length">
+          <span *ngFor="let option of production.optionLabels(unit.mainItem).slice(0,2)">{{ option }}</span>
+        </div>
 
-      <div class="card-footer">
-        <span class="method" [class.pickup]="(unit.order.delivery_type || '').toLowerCase().includes('pickup') || (unit.order.delivery_title || '').toLowerCase().includes('pick')">
-          <i [class]="((unit.order.delivery_type || '').toLowerCase().includes('pickup') || (unit.order.delivery_title || '').toLowerCase().includes('pick')) ? 'pi pi-map-marker' : 'pi pi-truck'"></i>
-          {{ ((unit.order.delivery_type || '').toLowerCase().includes('pickup') || (unit.order.delivery_title || '').toLowerCase().includes('pick')) ? 'Pickup' : 'Delivery' }}
-        </span>
-      </div>
-    </p-card>
-  </section>
-</div>
+        <div class="card-footer">
+          <span class="method" [class.pickup]="(unit.order.delivery_type || '').toLowerCase().includes('pickup') || (unit.order.delivery_title || '').toLowerCase().includes('pick')">
+            <i [class]="((unit.order.delivery_type || '').toLowerCase().includes('pickup') || (unit.order.delivery_title || '').toLowerCase().includes('pick')) ? 'pi pi-map-marker' : 'pi pi-truck'"></i>
+            {{ ((unit.order.delivery_type || '').toLowerCase().includes('pickup') || (unit.order.delivery_title || '').toLowerCase().includes('pick')) ? 'Pickup' : 'Delivery' }}
+          </span>
+        </div>
+      </p-card>
+    </section>
+  </div>
 
-<div class="boardscroll" #bottomScroll (scroll)="boardEl.scrollLeft = bottomScroll.scrollLeft" aria-label="Production board horizontal scroll">
-  <div class="boardscroll-inner"></div>
-</div>
+  <div class="boardscroll" #bottomScroll (scroll)="boardEl.scrollLeft = bottomScroll.scrollLeft" aria-label="Production board horizontal scroll">
+    <div class="boardscroll-inner"></div>
+  </div>
+}
 
 <app-production-unit-drawer *ngIf="selected() as unit" [view]="unit" (closed)="selected.set(null)" />

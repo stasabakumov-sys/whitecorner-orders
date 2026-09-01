@@ -1,5 +1,5 @@
 import { NgFor, NgIf } from '@angular/common';
-import { Component, computed, signal } from '@angular/core';
+import { Component, afterNextRender, computed, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
@@ -21,6 +21,7 @@ type FilterKind = 'all' | ProductKind;
 export class ProductionBoardComponent {
   readonly filter = signal<FilterKind>('all');
   readonly selected = signal<ProductionUnitView | null>(null);
+  readonly firstPaintComplete = signal(false);
   readonly allUnits = computed(() => this.production.unitsForOrders(this.orders.orders()));
   readonly visibleUnits = computed(() => {
     const filter = this.filter();
@@ -28,12 +29,22 @@ export class ProductionBoardComponent {
       .filter((unit) => filter === 'all' || unit.kind === filter)
       .sort((a,b) => new Date(a.order.wix_created_at ?? 0).getTime() - new Date(b.order.wix_created_at ?? 0).getTime() || Number(a.order.order_number) - Number(b.order.order_number));
   });
+  readonly groupedUnits = computed(() => {
+    const groups = new Map<ProductionStatus, ProductionUnitView[]>(this.production.statuses.map((status) => [status, []]));
+    for (const unit of this.visibleUnits()) groups.get(unit.status)?.push(unit);
+    return groups;
+  });
+  readonly boardReady = computed(() => this.firstPaintComplete() && !this.orders.loading());
 
   constructor(readonly orders: OrdersService, readonly production: ProductionService, private readonly router: Router) {
     if (!orders.orders().length) void orders.load();
+    afterNextRender(() => this.firstPaintComplete.set(true));
   }
 
-  units(status: ProductionStatus): ProductionUnitView[] { return this.visibleUnits().filter((unit) => unit.status === status); }
+  units(status: ProductionStatus): ProductionUnitView[] { return this.groupedUnits().get(status) ?? []; }
+  trackStatus(_index: number, status: ProductionStatus): ProductionStatus { return status; }
+  trackUnit(_index: number, unit: ProductionUnitView): string { return unit.unit.id; }
+  revealImage(event: Event): void { (event.currentTarget as HTMLImageElement).classList.add('loaded'); }
   selectFilter(filter: FilterKind): void { this.filter.set(filter); }
   open(unit: ProductionUnitView): void { this.selected.set(unit); }
   openOrder(unit: ProductionUnitView, event: Event): void {
