@@ -3,6 +3,7 @@ import { SupabaseService } from './supabase.service';
 
 export type GmailMailboxKey = 'info' | 'support';
 export type GmailView = 'Inbox' | 'Needs reply' | 'Sent';
+export type GmailModifyAction = 'markRead' | 'markUnread' | 'archive' | 'trash' | 'star' | 'unstar';
 
 export interface GmailMailboxStatus {
   mailbox_key?: GmailMailboxKey;
@@ -13,6 +14,8 @@ export interface GmailMailboxStatus {
   connectedAt?: string | null;
   last_sync_at?: string | null;
   lastSyncAt?: string | null;
+  scopes?: string[];
+  granted_scopes?: string[];
 }
 
 export interface GmailMessageRow {
@@ -29,6 +32,7 @@ export interface GmailMessageRow {
   direction: 'Incoming' | 'Outgoing';
   status: 'Inbox' | 'Sent';
   unread?: boolean;
+  starred?: boolean;
   needs_reply?: boolean;
 }
 
@@ -80,10 +84,15 @@ export class EmailService {
     return (data?.messages || []) as GmailMessageRow[];
   }
 
-  async getMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string }> {
+  async getMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {
     const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'get', mailbox, messageId } });
     if (error) throw error;
     return data;
+  }
+
+  async modify(mailbox: GmailMailboxKey, messageId: string, action: GmailModifyAction): Promise<void> {
+    const { error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action, mailbox, messageId } });
+    if (error) throw error;
   }
 
   async send(mailbox: GmailMailboxKey, to: string, subject: string, text: string): Promise<void> {
