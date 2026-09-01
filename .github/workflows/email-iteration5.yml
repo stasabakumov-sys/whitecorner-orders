@@ -1,0 +1,63 @@
+name: Email iteration 5
+on:
+  push:
+    paths:
+      - '.github/workflows/email-iteration5.yml'
+permissions:
+  contents: write
+jobs:
+  improve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Add real Gmail reader actions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('angular-app/src/app/features/email/email.component.ts')
+          s=p.read_text()
+
+          old='''          <div class="reader-toolbar">\n            <button class="back-button" title="Back to inbox" (click)="closeMail()"><i class="pi pi-arrow-left"></i></button>\n            <div class="reader-toolbar-spacer"></div>\n            <button class="reader-icon" title="Reply" (click)="startReply(mail)"><i class="pi pi-reply"></i></button>\n            <button class="reader-icon" title="Forward" (click)="startForward(mail)"><i class="pi pi-forward"></i></button>\n          </div>'''
+          new='''          <div class="reader-toolbar">\n            <button class="back-button" title="Back to inbox" (click)="closeMail()" [disabled]="messageActionBusy()"><i class="pi pi-arrow-left"></i></button>\n            @if(mail.status==='Inbox'){<button class="reader-icon" title="Archive" (click)="modifyMessage(mail,'archive')" [disabled]="messageActionBusy()"><i class="pi pi-inbox"></i></button>}\n            <button class="reader-icon" title="{{mail.unread?'Mark as read':'Mark as unread'}}" (click)="modifyMessage(mail,mail.unread?'markRead':'markUnread')" [disabled]="messageActionBusy()"><i class="pi" [class.pi-envelope-open]="mail.unread" [class.pi-envelope]="!mail.unread"></i></button>\n            <button class="reader-icon star-action" [class.active]="mail.starred" title="{{mail.starred?'Remove star':'Add star'}}" (click)="modifyMessage(mail,mail.starred?'unstar':'star')" [disabled]="messageActionBusy()"><i class="pi" [class.pi-star-fill]="mail.starred" [class.pi-star]="!mail.starred"></i></button>\n            <button class="reader-icon danger-action" title="Move to trash" (click)="modifyMessage(mail,'trash')" [disabled]="messageActionBusy()"><i class="pi pi-trash"></i></button>\n            @if(messageActionStatus()){<span class="reader-action-status" [class.error]="messageActionStatus().startsWith('Error')">{{messageActionStatus()}}</span>}\n            <div class="reader-toolbar-spacer"></div>\n            <span class="reader-toolbar-divider"></span>\n            <button class="reader-icon" title="Reply" (click)="startReply(mail)" [disabled]="messageActionBusy()"><i class="pi pi-reply"></i></button>\n            <button class="reader-icon" title="Forward" (click)="startForward(mail)" [disabled]="messageActionBusy()"><i class="pi pi-forward"></i></button>\n          </div>'''
+          if old not in s: raise SystemExit('reader toolbar anchor missing')
+          s=s.replace(old,new,1)
+
+          old='''  readonly sending=signal(false);\n  readonly sendStatus=signal('');\n  private readerHistoryPushed=false;'''
+          new='''  readonly sending=signal(false);\n  readonly sendStatus=signal('');\n  readonly messageAction=signal('');\n  readonly messageActionStatus=signal('');\n  private readerHistoryPushed=false;'''
+          if old not in s: raise SystemExit('state anchor missing')
+          s=s.replace(old,new,1)
+
+          anchor='''  startReply(mail:MailRow){\n    this.replyMode.set('reply');this.forwardTo.set('');this.sendStatus.set('');this.replyText.set(mail.draft_reply||'');\n  }'''
+          methods='''  messageActionBusy(){return this.messageAction()!=='';}\n  private patchMail(mail:MailRow,patch:Partial<MailRow>){\n    const updated={...mail,...patch};\n    this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?{...row,...patch}:row));\n    if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set({...this.selected()!,...patch});\n    return updated;\n  }\n  async modifyMessage(mail:MailRow,action:'markRead'|'markUnread'|'archive'|'trash'|'star'|'unstar'){\n    if(this.messageActionBusy())return;\n    this.messageAction.set(action);this.messageActionStatus.set('');\n    const previous={unread:mail.unread,starred:mail.starred};\n    let optimistic:Partial<MailRow>|null=null;\n    if(action==='markRead')optimistic={unread:false};\n    if(action==='markUnread')optimistic={unread:true};\n    if(action==='star')optimistic={starred:true};\n    if(action==='unstar')optimistic={starred:false};\n    if(optimistic)this.patchMail(mail,optimistic);\n    try{\n      await this.email.modify(mail.mailbox,mail.id,action);\n      if(action==='archive'||action==='trash'){\n        this.rows.update(rows=>rows.filter(row=>!(row.id===mail.id&&row.mailbox===mail.mailbox)));\n        this.updateInboxCounts();\n        this.cancelReply();this.selected.set(null);\n        if(this.readerHistoryPushed){this.readerHistoryPushed=false;history.back();}\n      }else{\n        this.messageActionStatus.set(action==='star'?'Starred':action==='unstar'?'Star removed':action==='markUnread'?'Marked unread':'Marked read');\n        setTimeout(()=>{if(!this.messageActionBusy())this.messageActionStatus.set('');},1200);\n      }\n    }catch(e){\n      if(optimistic)this.patchMail(mail,previous);\n      this.messageActionStatus.set(`Error: ${String((e as Error)?.message||e)}`);\n    }finally{this.messageAction.set('');}\n  }\n  startReply(mail:MailRow){\n    this.replyMode.set('reply');this.forwardTo.set('');this.sendStatus.set('');this.replyText.set(mail.draft_reply||'');\n  }'''
+          if anchor not in s: raise SystemExit('method anchor missing')
+          s=s.replace(anchor,methods,1)
+
+          old_css='''.back-button,.reader-icon{width:36px;height:36px;border:0;background:transparent;border-radius:50%;display:grid;place-items:center;color:#475467;cursor:pointer}.back-button:hover,.reader-icon:hover{background:#f2f4f7}.back-button i{font-size:16px}.reader-toolbar-spacer{flex:1}'''
+          new_css='''.back-button,.reader-icon{width:36px;height:36px;border:0;background:transparent;border-radius:50%;display:grid;place-items:center;color:#475467;cursor:pointer}.back-button:hover:not(:disabled),.reader-icon:hover:not(:disabled){background:#f2f4f7}.back-button:disabled,.reader-icon:disabled{opacity:.42;cursor:default}.back-button i{font-size:16px}.reader-icon.star-action.active{color:#d39a00}.reader-icon.danger-action:hover:not(:disabled){background:#fff1f1;color:#b42318}.reader-action-status{font-size:10px;color:#667085;margin-left:4px;white-space:nowrap}.reader-action-status.error{color:#b42318}.reader-toolbar-spacer{flex:1}.reader-toolbar-divider{width:1px;height:22px;background:#e4e7ec;margin:0 2px}'''
+          if old_css not in s: raise SystemExit('toolbar css anchor missing')
+          s=s.replace(old_css,new_css,1)
+
+          p.write_text(s)
+          PY
+      - name: Static assertions
+        run: |
+          grep -q "modifyMessage(mail,'archive')" angular-app/src/app/features/email/email.component.ts
+          grep -q "modifyMessage(mail,mail.starred?'unstar':'star')" angular-app/src/app/features/email/email.component.ts
+          grep -q "modifyMessage(mail,'trash')" angular-app/src/app/features/email/email.component.ts
+          grep -q "messageActionBusy" angular-app/src/app/features/email/email.component.ts
+          grep -q "await this.email.modify" angular-app/src/app/features/email/email.component.ts
+      - name: Build Angular app
+        run: |
+          cd angular-app
+          npm ci --legacy-peer-deps
+          npm run build -- --base-href /whitecorner-orders/angular2/
+      - name: Commit tested change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add angular-app/src/app/features/email/email.component.ts
+          git commit -m "Add real Gmail actions to Email reader"
+          git push
