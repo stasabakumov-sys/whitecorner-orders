@@ -13,14 +13,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install PrimeNG 22 and Aura theme
+      - name: Install MIT PrimeNG 21 and Aura theme
         run: |
           cd angular-app
-          npm install primeng@22.1.0 @primeuix/themes @angular/animations@^22.1.0 --save
+          npm install primeng@21.1.9 @primeuix/themes@2.0.3 @angular/animations@^22.1.0 --save --legacy-peer-deps
       - name: Commit dependency files
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add angular-app/package.json angular-app/package-lock.json
-          git commit -m "Install PrimeNG 22 UI dependencies" || exit 0
+          git commit -m "Use MIT PrimeNG 21 UI dependencies" || exit 0
           git push
