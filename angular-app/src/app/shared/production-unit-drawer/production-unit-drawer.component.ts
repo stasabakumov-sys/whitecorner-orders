@@ -1,6 +1,10 @@
 import { CurrencyPipe, DatePipe, NgFor, NgIf } from '@angular/common';
 import { Component, EventEmitter, Input, Output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ButtonModule } from 'primeng/button';
+import { DrawerModule } from 'primeng/drawer';
+import { SelectModule } from 'primeng/select';
+import { TagModule } from 'primeng/tag';
 import { ProductionStatus, ProductionUnitView } from '../../core/models/production.models';
 import { ProductionService } from '../../core/services/production.service';
 import { OrderActivityComponent } from '../order-activity/order-activity.component';
@@ -8,7 +12,7 @@ import { OrderActivityComponent } from '../order-activity/order-activity.compone
 @Component({
   selector: 'app-production-unit-drawer',
   standalone: true,
-  imports: [CurrencyPipe, DatePipe, NgFor, NgIf, FormsModule, OrderActivityComponent],
+  imports: [CurrencyPipe, DatePipe, NgFor, NgIf, FormsModule, ButtonModule, DrawerModule, SelectModule, TagModule, OrderActivityComponent],
   templateUrl: './production-unit-drawer.component.html',
   styleUrl: './production-unit-drawer.component.css',
 })
