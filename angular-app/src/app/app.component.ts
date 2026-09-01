@@ -1,8 +1,9 @@
 import { Component, effect, signal } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from './core/services/auth.service';
 import { OrdersService } from './core/services/orders.service';
 import { ActivityService } from './core/services/activity.service';
+import { EmailService } from './core/services/email.service';
 import { LoginComponent } from './shared/login/login.component';
 
 @Component({
@@ -30,7 +31,24 @@ import { LoginComponent } from './shared/login/login.component';
       </aside>
       <main>
         <header>White Corner Hub <small>Angular 22 preview</small></header>
-        <div class="content"><router-outlet /></div>
+        <div class="content">
+          @if (router.url.startsWith('/email')) {
+            <div class="gmail-connect-bar">
+              <div class="gmail-title"><span class="gmail-dot" [class.ok]="email.connectedCount()===2"></span><div><b>Gmail connection</b><small>{{email.connectedCount()}} of 2 mailboxes connected</small></div></div>
+              <div class="gmail-account" [class.connected]="email.isConnected('info')">
+                <span>info@whitecorner.com.au</span>
+                @if (email.isConnected('info')) {<strong>Connected</strong>} @else {<button type="button" (click)="email.connect('info')" [disabled]="email.loading()">Connect</button>}
+              </div>
+              <div class="gmail-account" [class.connected]="email.isConnected('support')">
+                <span>support@whitecorner.com.au</span>
+                @if (email.isConnected('support')) {<strong>Connected</strong>} @else {<button type="button" (click)="email.connect('support')" [disabled]="email.loading()">Connect</button>}
+              </div>
+              <button class="refresh-mail" type="button" (click)="email.refreshStatus()">↻</button>
+              @if (email.error()) {<div class="gmail-error">{{email.error()}}</div>}
+            </div>
+          }
+          <router-outlet />
+        </div>
       </main>
     }
   `,
@@ -40,8 +58,10 @@ import { LoginComponent } from './shared/login/login.component';
     aside a{color:#dfe4ec;text-decoration:none;padding:9px 11px;border-radius:8px;display:flex;gap:10px;margin:2px 0;align-items:center;font-size:14px}aside a.active{background:#2b3039;color:#fff}
     aside button{position:absolute;bottom:20px;left:18px;right:18px;background:transparent;color:#fff;border:1px solid #454b57;border-radius:8px;padding:8px}
     main{margin-left:205px;min-height:100vh;background:#f4f6f8}header{height:56px;background:#fff;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;padding:0 22px;font-size:18px;font-weight:600}header small{margin-left:auto;color:#758198}.content{padding:18px 22px 38px}
+    .gmail-connect-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid #dfe3e8;border-radius:10px;padding:9px 10px;margin-bottom:10px}.gmail-title{display:flex;align-items:center;gap:8px;margin-right:auto}.gmail-title>div{display:flex;flex-direction:column}.gmail-title b{font-size:11px;color:#344054}.gmail-title small{font-size:9px;color:#98a2b3;margin-top:1px}.gmail-dot{width:8px;height:8px;border-radius:50%;background:#f59e0b}.gmail-dot.ok{background:#12b76a}.gmail-account{display:flex;align-items:center;gap:7px;border:1px solid #e4e7ec;border-radius:8px;padding:5px 7px;font-size:10px;color:#475467;background:#fafbfc}.gmail-account.connected{background:#f6fef9;border-color:#d1fadf}.gmail-account strong{font-size:9px;color:#067647}.gmail-account button,.refresh-mail{position:static!important;left:auto!important;right:auto!important;bottom:auto!important;width:auto!important;border:0!important;border-radius:6px!important;background:#172033!important;color:#fff!important;padding:5px 8px!important;font-size:9px!important;cursor:pointer}.gmail-account button:disabled{opacity:.55;cursor:default}.refresh-mail{background:#eef2f6!important;color:#475467!important;padding:5px 7px!important}.gmail-error{width:100%;font-size:10px;color:#b42318;background:#fef3f2;border-radius:6px;padding:6px 8px}
     :host ::ng-deep app-fulfilment .head{align-items:flex-start!important;flex-direction:column!important;gap:12px!important}
     :host ::ng-deep app-fulfilment .tabs{margin-left:0!important}
+    @media(max-width:760px){.gmail-title{width:100%}.gmail-account{flex:1 1 100%}}
   `],
 })
 export class AppComponent {
@@ -52,6 +72,8 @@ export class AppComponent {
     readonly auth: AuthService,
     private readonly orders: OrdersService,
     private readonly activity: ActivityService,
+    readonly email: EmailService,
+    readonly router: Router,
   ) {
     void auth.initialize();
     effect(() => {
@@ -66,6 +88,7 @@ export class AppComponent {
       void Promise.allSettled([
         this.orders.load(),
         this.activity.load(),
+        this.email.refreshStatus(),
       ]).finally(() => {
         this.workspaceReady.set(true);
         this.preloading = false;
