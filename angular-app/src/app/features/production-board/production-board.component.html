@@ -13,7 +13,7 @@
     <header><b>{{ status }}</b><p-tag [value]="'' + units(status).length" severity="secondary" /></header>
     <p-card class="card" *ngFor="let unit of units(status)" (click)="open(unit)" tabindex="0" role="button" (keydown.enter)="open(unit)">
       <img *ngIf="production.imageUrl(unit.mainItem) as src" [src]="src" alt="" />
-      <div class="code">{{ unit.code }}</div>
+      <button class="order-link" type="button" (click)="openOrder(unit,$event)">{{ unit.code }}</button>
       <div class="customer">{{ unit.order.customer_name || '—' }}</div>
       <small>{{ unit.order.company }}</small>
       <div class="product">{{ unit.mainItem.product_name }}</div>
