@@ -1,0 +1,47 @@
+name: Number Email AI policy
+
+on:
+  push:
+    paths:
+      - '.github/workflows/number-email-agent.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add numbering
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('angular-app/src/app/features/email/email.component.ts')
+          s = p.read_text()
+          replacements = {
+            '<span>Read full thread</span>': '<span>1. Read full thread</span>',
+            '<span>Identify customer</span>': '<span>2. Identify customer</span>',
+            '<span>Match order</span>': '<span>3. Match order</span>',
+            '<span>Classify intent</span>': '<span>4. Classify intent</span>',
+            '<span>Collect facts</span>': '<span>5. Collect facts</span>',
+            '<span>Assess risk</span>': '<span>6. Assess risk</span>',
+            '<span>Draft / escalate</span>': '<span>7. Draft / escalate</span>',
+            '<thead><tr><th>Category</th><th>Initial mode</th><th>Rule</th></tr></thead>': '<thead><tr><th>#</th><th>Category</th><th>Initial mode</th><th>Rule</th></tr></thead>',
+            '@for(policy of intentPolicies; track policy.intent){': '@for(policy of intentPolicies; track policy.intent; let i = $index){',
+            '<tr>\n                      <td><b>{{policy.intent}}</b></td>': '<tr>\n                      <td class="rule-number">{{i + 1}}</td>\n                      <td><b>{{policy.intent}}</b></td>',
+            '.policy-table td{padding:10px;border-top:1px solid #edf0f3;font-size:12px;vertical-align:top}': '.policy-table td{padding:10px;border-top:1px solid #edf0f3;font-size:12px;vertical-align:top}.rule-number{width:34px;color:#98a2b3;font-weight:700;text-align:center}'
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'Missing expected fragment: {old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Commit update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add angular-app/src/app/features/email/email.component.ts
+          git commit -m "Number AI agent decision flow and rules"
+          git push
