@@ -1,0 +1,60 @@
+name: Fix Email initial loading
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-email-initial-loading.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Patch Email initial loading state
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('angular-app/src/app/features/email/email.component.ts')
+          s=p.read_text()
+
+          s=s.replace("<button class=\"mailbox-option\" [class.active]=\"activeMailbox()==='all'\" (click)=\"setMailbox('all')\"><span class=\"mailbox-dot all\"></span><span>All mail</span><small>{{mailboxCount('all')}}</small></button>", "<button class=\"mailbox-option\" [class.active]=\"activeMailbox()==='all'\" (click)=\"setMailbox('all')\"><span class=\"mailbox-dot all\"></span><span>All mail</span><small>{{countsReady()?mailboxCount('all'):'—'}}</small></button>")
+          s=s.replace("<button class=\"mailbox-option\" [class.active]=\"activeMailbox()==='info'\" (click)=\"setMailbox('info')\"><span class=\"mailbox-dot info\"></span><span>info@whitecorner.com.au</span><small>{{mailboxCount('info')}}</small></button>", "<button class=\"mailbox-option\" [class.active]=\"activeMailbox()==='info'\" (click)=\"setMailbox('info')\"><span class=\"mailbox-dot info\"></span><span>info@whitecorner.com.au</span><small>{{countsReady()?mailboxCount('info'):'—'}}</small></button>")
+          s=s.replace("<button class=\"mailbox-option\" [class.active]=\"activeMailbox()==='support'\" (click)=\"setMailbox('support')\"><span class=\"mailbox-dot support\"></span><span>support@whitecorner.com.au</span><small>{{mailboxCount('support')}}</small></button>", "<button class=\"mailbox-option\" [class.active]=\"activeMailbox()==='support'\" (click)=\"setMailbox('support')\"><span class=\"mailbox-dot support\"></span><span>support@whitecorner.com.au</span><small>{{countsReady()?mailboxCount('support'):'—'}}</small></button>")
+          s=s.replace("@for(view of views;track view){<button class=\"folder-option\" [class.active]=\"activeView()===view\" (click)=\"setView(view)\"><i [class]=\"folderIcon(view)\"></i><span>{{view}}</span><small>{{countFor(view)}}</small></button>}", "@for(view of views;track view){<button class=\"folder-option\" [class.active]=\"activeView()===view\" (click)=\"setView(view)\"><i [class]=\"folderIcon(view)\"></i><span>{{view}}</span><small>{{mailReady()?countFor(view):'—'}}</small></button>}")
+          s=s.replace("<div class=\"list-toolbar\"><div class=\"list-title\"><b>{{activeView()}}</b><span>{{activeMailboxLabel()}} · {{visibleRows().length}} messages</span></div></div>", "<div class=\"list-toolbar\"><div class=\"list-title\"><b>{{activeView()}}</b><span>@if(mailReady()){{{activeMailboxLabel()}} · {{visibleRows().length}} messages}@else{Loading mail…}</span></div></div>")
+          old='''          <div class="mail-list-scroll">\n            @for(mail of visibleRows();track mail.id){<button class="mail-card" [class.selected]="selected()?.id===mail.id" [class.unread]="mail.unread" (click)="openMail(mail)"><div class="avatar">{{mail.initials}}</div><div class="mail-copy"><div class="mail-from"><b>{{mail.correspondent}}</b><span>{{mail.time}}</span></div><div class="mail-subject">{{mail.subject}}</div><div class="mail-preview">{{mail.preview}}</div><div class="mail-meta"><span class="account-chip">{{mailboxShort(mail.mailbox)}}</span>@if(mail.linked_order){<span class="order-chip">#{{mail.linked_order}}</span>}@if(mail.needs_reply){<span class="reply-chip">Needs reply</span>}</div></div></button>} @empty {<div class="empty-list"><i class="pi pi-inbox"></i><b>No messages in this view</b><span>Choose another mailbox or folder.</span></div>}\n          </div>'''
+          new='''          <div class="mail-list-scroll">\n            @if(!mailReady()){<div class="mail-loading"><i class="pi pi-spin pi-spinner"></i><span>Loading mail…</span></div>} @else {\n              @for(mail of visibleRows();track mail.id){<button class="mail-card" [class.selected]="selected()?.id===mail.id" [class.unread]="mail.unread" (click)="openMail(mail)"><div class="avatar">{{mail.initials}}</div><div class="mail-copy"><div class="mail-from"><b>{{mail.correspondent}}</b><span>{{mail.time}}</span></div><div class="mail-subject">{{mail.subject}}</div><div class="mail-preview">{{mail.preview}}</div><div class="mail-meta"><span class="account-chip">{{mailboxShort(mail.mailbox)}}</span>@if(mail.linked_order){<span class="order-chip">#{{mail.linked_order}}</span>}@if(mail.needs_reply){<span class="reply-chip">Needs reply</span>}</div></div></button>} @empty {<div class="empty-list"><i class="pi pi-inbox"></i><b>No messages in this view</b><span>Choose another mailbox or folder.</span></div>}\n            }\n          </div>'''
+          if old not in s: raise SystemExit('mail list anchor not found')
+          s=s.replace(old,new)
+
+          s=s.replace("  readonly mailLoading=signal(false);", "  readonly mailLoading=signal(false);\n  readonly mailReady=signal(false);\n  readonly countsReady=signal(false);")
+          s=s.replace("      this.mailboxInboxCounts.set({info:info.length,support:support.length});", "      this.mailboxInboxCounts.set({info:info.length,support:support.length});\n      this.countsReady.set(true);")
+          s=s.replace("      this.rows.set(rows);", "      this.rows.set(rows);\n      this.mailReady.set(true);", 1)
+          s=s.replace("    }catch(e){this.rows.set([]);this.selected.set(null);this.mailError.set(String((e as Error)?.message||e));}", "    }catch(e){if(!this.mailReady())this.rows.set([]);this.selected.set(null);this.mailError.set(String((e as Error)?.message||e));}")
+
+          marker='.empty-list{min-height:300px;'
+          css='.mail-loading{height:100%;min-height:220px;display:flex;align-items:center;justify-content:center;gap:8px;color:#98a2b3;font-size:11px}.mail-loading i{font-size:14px}'
+          s=s.replace(marker,css+marker)
+          p.write_text(s)
+          PY
+      - name: Build Angular app
+        run: |
+          cd angular-app
+          npm ci --legacy-peer-deps
+          npm run build -- --base-href /whitecorner-orders/angular2/
+      - name: Publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(find angular-app/dist -type f -name index.html -path '*/browser/*' -printf '%h\n' | head -1)
+          rm -rf angular2
+          mkdir angular2
+          cp -R "$OUT"/* angular2/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add angular-app/src/app/features/email/email.component.ts angular2
+          git commit -m "Stabilize Email initial loading state" || exit 0
+          git push
