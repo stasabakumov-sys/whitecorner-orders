@@ -8,293 +8,58 @@ import { TagModule } from 'primeng/tag';
 type EmailTab = 'Mail' | 'AI Agent';
 type MailView = 'Inbox' | 'Needs reply' | 'Sent';
 type AiState = 'Not analysed' | 'Review' | 'Draft ready' | 'Auto handled';
-type MailIntent =
-  | 'Order question'
-  | 'Customisation'
-  | 'Product question'
-  | 'Production / lead time'
-  | 'Pickup'
-  | 'Delivery / shipping'
-  | 'Payment / invoice'
-  | 'Order change'
-  | 'Claim / damage'
-  | 'Cancellation / refund'
-  | 'General enquiry';
-
+type MailIntent = 'Order question'|'Customisation'|'Product question'|'Production / lead time'|'Pickup'|'Delivery / shipping'|'Payment / invoice'|'Order change'|'Claim / damage'|'Cancellation / refund'|'General enquiry';
 type PolicyMode = 'Auto later' | 'Draft + review' | 'Manual only';
 
-interface MailRow {
-  id: string;
-  correspondent: string;
-  subject: string;
-  preview: string;
-  received_at: string;
-  direction: 'Incoming' | 'Outgoing';
-  status: MailView;
-  ai_state?: AiState;
-  linked_order?: string | null;
-  intent?: MailIntent | null;
-  needs_reply?: boolean | null;
-  confidence?: number | null;
-  recommended_action?: string | null;
-  draft_reply?: string | null;
-  automation_allowed?: boolean;
-  risk_reason?: string | null;
-}
-
-interface IntentPolicy {
-  intent: MailIntent;
-  mode: PolicyMode;
-  rule: string;
-}
+interface MailRow { id:string; correspondent:string; subject:string; preview:string; received_at:string; direction:'Incoming'|'Outgoing'; status:MailView; ai_state?:AiState; linked_order?:string|null; intent?:MailIntent|null; needs_reply?:boolean|null; confidence?:number|null; recommended_action?:string|null; draft_reply?:string|null; automation_allowed?:boolean; risk_reason?:string|null; }
+interface IntentPolicy { intent:MailIntent; mode:PolicyMode; rule:string; }
 
 @Component({
-  selector: 'app-email',
-  standalone: true,
-  imports: [ButtonModule, DrawerModule, InputTextModule, TableModule, TagModule],
-  template: `
+  selector:'app-email',
+  standalone:true,
+  imports:[ButtonModule,DrawerModule,InputTextModule,TableModule,TagModule],
+  template:`
     <section class="mail-shell">
       <div class="head">
-        <div>
-          <div class="title-row">
-            <h2>Email</h2>
-            <p-tag value="Mailbox not connected" severity="warn" />
-          </div>
-          <p>Customer email with AI-assisted analysis and replies.</p>
-        </div>
-        @if(section()==='Mail'){
-          <p-button label="Compose" icon="pi pi-pencil" [disabled]="true" />
-        }
+        <div><div class="title-row"><h2>Email</h2><p-tag value="Mailbox not connected" severity="warn" /></div><p>Customer email with AI-assisted analysis and replies.</p></div>
+        @if(section()==='Mail'){<p-button label="Compose" icon="pi pi-pencil" [disabled]="true" />}
       </div>
-
       <div class="section-tabs">
         <p-button label="Mail" icon="pi pi-envelope" [outlined]="section()!=='Mail'" (onClick)="section.set('Mail')" />
         <p-button label="AI Agent" icon="pi pi-sparkles" [outlined]="section()!=='AI Agent'" (onClick)="section.set('AI Agent')" />
       </div>
-
       @if(section()==='Mail'){
-        <div class="controls">
-          <div class="views">
-            @for (view of views; track view) {
-              <p-button
-                [label]="view + ' ' + countFor(view)"
-                [outlined]="activeView() !== view"
-                [severity]="activeView() === view ? 'primary' : 'secondary'"
-                (onClick)="activeView.set(view)"
-              />
-            }
-          </div>
-          <input pInputText placeholder="Search email…" [value]="query()" (input)="query.set($any($event.target).value)" />
-        </div>
-
+        <div class="controls"><div class="views">@for(view of views; track view){<p-button [label]="view + ' ' + countFor(view)" [outlined]="activeView()!==view" [severity]="activeView()===view?'primary':'secondary'" (onClick)="activeView.set(view)" />}</div><input pInputText placeholder="Search email…" [value]="query()" (input)="query.set($any($event.target).value)" /></div>
         <p-table [value]="visibleRows()" styleClass="p-datatable-sm" [tableStyle]="{'min-width':'980px'}">
-          <ng-template pTemplate="header">
-            <tr><th>From / To</th><th>Subject</th><th>Message</th><th>Order</th><th>Date</th><th>AI</th></tr>
-          </ng-template>
-          <ng-template pTemplate="body" let-mail>
-            <tr class="mailrow" (click)="selected.set(mail)">
-              <td><b>{{ mail.correspondent }}</b><small>{{ mail.direction }}</small></td>
-              <td><b>{{ mail.subject }}</b></td>
-              <td class="preview">{{ mail.preview }}</td>
-              <td>{{ mail.linked_order || '—' }}</td>
-              <td>{{ mail.received_at }}</td>
-              <td><p-tag [value]="mail.ai_state || 'Not analysed'" [severity]="aiSeverity(mail.ai_state)" /></td>
-            </tr>
-          </ng-template>
-          <ng-template pTemplate="emptymessage">
-            <tr><td colspan="6"><div class="empty"><div class="empty-icon">✉</div><b>No email connected yet</b><span>When the info mailbox is connected, messages will appear here automatically.</span><small>Inbox / Needs reply / Sent stay as working views; AI will populate the analysis behind each thread.</small></div></td></tr>
-          </ng-template>
+          <ng-template pTemplate="header"><tr><th>From / To</th><th>Subject</th><th>Message</th><th>Order</th><th>Date</th><th>AI</th></tr></ng-template>
+          <ng-template pTemplate="body" let-mail><tr class="mailrow" (click)="selected.set(mail)"><td><b>{{mail.correspondent}}</b><small>{{mail.direction}}</small></td><td><b>{{mail.subject}}</b></td><td class="preview">{{mail.preview}}</td><td>{{mail.linked_order||'—'}}</td><td>{{mail.received_at}}</td><td><p-tag [value]="mail.ai_state||'Not analysed'" [severity]="aiSeverity(mail.ai_state)" /></td></tr></ng-template>
+          <ng-template pTemplate="emptymessage"><tr><td colspan="6"><div class="empty"><div class="empty-icon">✉</div><b>No email connected yet</b><span>When the info mailbox is connected, messages will appear here automatically.</span><small>Inbox / Needs reply / Sent stay as working views.</small></div></td></tr></ng-template>
         </p-table>
       } @else {
         <div class="agent-page">
-          <div class="agent-summary">
-            <div class="agent-icon">AI</div>
-            <div>
-              <div class="agent-title"><b>AI Email Agent policy</b><p-tag value="Review before send" severity="info" /></div>
-              <p>This tab describes how the agent should analyse email and decide what it is allowed to do. It is the policy we will connect to the real AI later.</p>
-            </div>
-          </div>
-
-          <section class="policy-section">
-            <div class="policy-title">Decision flow</div>
-            <div class="agent-flow">
-              <span>1. Read full thread</span><i>→</i>
-              <span>2. Identify customer</span><i>→</i>
-              <span>3. Match order</span><i>→</i>
-              <span>4. Classify intent</span><i>→</i>
-              <span>5. Collect facts</span><i>→</i>
-              <span>6. Assess risk</span><i>→</i>
-              <span>7. Draft / escalate</span>
-            </div>
-          </section>
-
-          <section class="policy-section">
-            <div class="policy-title">Data the agent may use</div>
-            <div class="source-grid">
-              @for(source of dataSources; track source.title){
-                <div><b>{{source.title}}</b><span>{{source.description}}</span></div>
-              }
-            </div>
-          </section>
-
-          <section class="policy-section">
-            <div class="policy-title">Intent rules</div>
-            <div class="policy-table-wrap">
-              <table class="policy-table">
-                <thead><tr><th>#</th><th>Category</th><th>Initial mode</th><th>Rule</th></tr></thead>
-                <tbody>
-                  @for(policy of intentPolicies; track policy.intent; let i = $index){
-                    <tr>
-                      <td class="rule-number">{{i + 1}}</td>
-                      <td><b>{{policy.intent}}</b></td>
-                      <td><p-tag [value]="policy.mode" [severity]="policySeverity(policy.mode)" /></td>
-                      <td>{{policy.rule}}</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="policy-section two-col">
-            <div>
-              <div class="policy-title">Confidence rules</div>
-              <div class="rule-list">
-                <div><b>High confidence</b><span>Order/customer and facts are clearly matched. AI may prepare a complete draft.</span></div>
-                <div><b>Medium confidence</b><span>Prepare a draft but clearly flag what needs checking.</span></div>
-                <div><b>Low confidence</b><span>Do not guess. Send to Needs reply with a manual-review reason.</span></div>
-              </div>
-            </div>
-            <div>
-              <div class="policy-title">Never auto-send</div>
-              <div class="guardrails">
-                @for(rule of guardrails; track rule){<span>{{rule}}</span>}
-              </div>
-            </div>
-          </section>
-
-          <section class="policy-section">
-            <div class="policy-title">Reply rules</div>
-            <div class="rule-list">
-              @for(rule of replyRules; track rule.title){
-                <div><b>{{rule.title}}</b><span>{{rule.description}}</span></div>
-              }
-            </div>
-          </section>
-
-          <div class="policy-note">
-            <b>Current operating mode:</b> AI may analyse and prepare drafts, but every outgoing message must be reviewed and sent by a user. Automatic sending will be enabled later only for individually approved categories.
-          </div>
+          <div class="agent-summary"><div class="agent-icon">AI</div><div><div class="agent-title"><b>AI Email Agent policy</b><p-tag value="Review before send" severity="info" /></div><p>This tab describes how the agent analyses email and what it is allowed to do.</p></div></div>
+          <section class="policy-section"><div class="policy-title">Decision flow</div><div class="flow-list">@for(step of decisionFlow; track $index){<div class="flow-step"><span class="step-no">{{$index+1}}</span><b>{{step}}</b></div>}</div></section>
+          <section class="policy-section"><div class="policy-title">Data the agent may use</div><div class="source-grid">@for(source of dataSources; track source.title){<div><b>{{source.title}}</b><span>{{source.description}}</span></div>}</div></section>
+          <section class="policy-section"><div class="policy-title">Intent rules</div><div class="policy-table-wrap"><table class="policy-table"><thead><tr><th>#</th><th>Category</th><th>Initial mode</th><th>Rule</th></tr></thead><tbody>@for(policy of intentPolicies; track policy.intent; let i=$index){<tr><td class="num">{{i+1}}</td><td><b>{{policy.intent}}</b></td><td><p-tag [value]="policy.mode" [severity]="policySeverity(policy.mode)" /></td><td>{{policy.rule}}</td></tr>}</tbody></table></div></section>
+          <section class="policy-section two-col"><div><div class="policy-title">Confidence rules</div><div class="rule-list"><div><b>1. High confidence</b><span>Order/customer and facts are clearly matched. AI may prepare a complete draft.</span></div><div><b>2. Medium confidence</b><span>Prepare a draft but clearly flag what needs checking.</span></div><div><b>3. Low confidence</b><span>Do not guess. Send to Needs reply with a manual-review reason.</span></div></div></div><div><div class="policy-title">Never auto-send</div><div class="guardrails">@for(rule of guardrails; track rule; let i=$index){<span>{{i+1}}. {{rule}}</span>}</div></div></section>
+          <section class="policy-section"><div class="policy-title">Reply rules</div><div class="rule-list">@for(rule of replyRules; track rule.title; let i=$index){<div><b>{{i+1}}. {{rule.title}}</b><span>{{rule.description}}</span></div>}</div></section>
+          <div class="policy-note"><b>Current operating mode:</b> AI may analyse and prepare drafts, but every outgoing message must be reviewed and sent by a user.</div>
         </div>
       }
     </section>
-
-    <p-drawer [visible]="!!selected()" (visibleChange)="$event || selected.set(null)" position="right" [modal]="true" [style]="{width:'min(860px,96vw)'}" styleClass="mail-drawer">
-      @if(selected(); as mail){
-        <ng-template pTemplate="header"><div class="drawer-title"><b>{{ mail.subject }}</b><span>{{ mail.correspondent }}</span></div></ng-template>
-        <div class="drawerbody">
-          <section>
-            <div class="policy-title">Thread</div>
-            <div class="message-card"><div class="message-meta"><b>{{ mail.direction }}</b><span>{{ mail.received_at }}</span></div><p>{{ mail.preview || 'Message content will appear here when the mailbox is connected.' }}</p></div>
-          </section>
-          <section>
-            <div class="policy-title">AI analysis</div>
-            <div class="analysis-grid">
-              <div><small>State</small><p-tag [value]="mail.ai_state || 'Not analysed'" [severity]="aiSeverity(mail.ai_state)" /></div>
-              <div><small>Linked order</small><b>{{ mail.linked_order || 'Not matched' }}</b></div>
-              <div><small>Category</small><b>{{ mail.intent || 'Not analysed' }}</b></div>
-              <div><small>Needs reply</small><b>{{ mail.needs_reply == null ? 'Not analysed' : (mail.needs_reply ? 'Yes' : 'No') }}</b></div>
-              <div><small>Confidence</small><b>{{ mail.confidence == null ? '—' : confidenceLabel(mail.confidence) }}</b></div>
-              <div><small>Automation</small><b>{{ mail.automation_allowed ? 'Allowed' : 'Manual review' }}</b></div>
-            </div>
-            <div class="recommendation"><small>Recommended action</small><p>{{ mail.recommended_action || 'AI recommendation will appear here after analysis.' }}</p></div>
-            @if(mail.risk_reason){<div class="risk"><b>Manual review required:</b> {{ mail.risk_reason }}</div>}
-          </section>
-          <section>
-            <div class="policy-title">Draft reply</div>
-            <textarea pInputText rows="10" [value]="mail.draft_reply || ''" placeholder="AI draft will appear here…" disabled></textarea>
-            <div class="draft-actions"><p-button label="Regenerate" icon="pi pi-refresh" [outlined]="true" [disabled]="true" /><p-button label="Send" icon="pi pi-send" [disabled]="true" /></div>
-            <small class="hint">Sending remains disabled until mailbox integration is connected.</small>
-          </section>
-        </div>
-      }
-    </p-drawer>
+    <p-drawer [visible]="!!selected()" (visibleChange)="$event || selected.set(null)" position="right" [modal]="true" [style]="{width:'min(860px,96vw)'}">@if(selected(); as mail){<ng-template pTemplate="header"><div class="drawer-title"><b>{{mail.subject}}</b><span>{{mail.correspondent}}</span></div></ng-template><div class="drawerbody"><section><div class="policy-title">Thread</div><div class="message-card"><div class="message-meta"><b>{{mail.direction}}</b><span>{{mail.received_at}}</span></div><p>{{mail.preview||'Message content will appear here when the mailbox is connected.'}}</p></div></section><section><div class="policy-title">AI analysis</div><div class="analysis-grid"><div><small>State</small><p-tag [value]="mail.ai_state||'Not analysed'" [severity]="aiSeverity(mail.ai_state)" /></div><div><small>Linked order</small><b>{{mail.linked_order||'Not matched'}}</b></div><div><small>Category</small><b>{{mail.intent||'Not analysed'}}</b></div><div><small>Needs reply</small><b>{{mail.needs_reply==null?'Not analysed':(mail.needs_reply?'Yes':'No')}}</b></div><div><small>Confidence</small><b>{{mail.confidence==null?'—':confidenceLabel(mail.confidence)}}</b></div><div><small>Automation</small><b>{{mail.automation_allowed?'Allowed':'Manual review'}}</b></div></div></section><section><div class="policy-title">Draft reply</div><textarea pInputText rows="10" [value]="mail.draft_reply||''" placeholder="AI draft will appear here…" disabled></textarea></section></div>}</p-drawer>
   `,
-  styles: [`
-    .mail-shell{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}.head{padding:18px 20px 12px;display:flex;gap:18px;align-items:flex-start}.head>div:first-child{min-width:0}.head>p-button{margin-left:auto}.title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.title-row h2{margin:0}.head p{margin:5px 0 0;color:#758198;font-size:12px}.section-tabs{display:flex;gap:6px;padding:0 18px 12px;border-bottom:1px solid #e4e7ec}
-    .controls{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #edf0f3}.views{display:flex;gap:6px;flex-wrap:wrap}.controls input{margin-left:auto;width:min(340px,100%)}:host ::ng-deep .p-datatable-thead>tr>th{font-size:11px;text-transform:uppercase;color:#758198;background:#fafbfc}.mailrow{cursor:pointer}.preview{max-width:430px;color:#667085}td small{display:block;margin-top:3px;color:#98a2b3}.empty{display:flex;min-height:260px;align-items:center;justify-content:center;flex-direction:column;text-align:center;gap:8px;color:#667085}.empty b{color:#172033;font-size:16px}.empty span{max-width:570px}.empty small{margin-top:5px;color:#98a2b3}.empty-icon{width:48px;height:48px;border-radius:50%;background:#f1f4f7;display:grid;place-items:center;font-size:22px;color:#475467}
-    .agent-page{padding:18px}.agent-summary{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;border:1px solid #d8e3f2;background:#f8fbff;border-radius:12px;padding:15px}.agent-icon{width:44px;height:44px;border-radius:10px;background:#172033;color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px}.agent-title{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.agent-summary p{margin:6px 0 0;color:#667085;font-size:12px;line-height:1.5}.policy-section{margin-top:22px}.policy-title{font-size:11px;text-transform:uppercase;color:#758198;font-weight:700;margin-bottom:9px}.agent-flow{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.agent-flow span{font-size:11px;background:#fff;border:1px solid #dce4ee;border-radius:999px;padding:6px 9px;color:#475467}.agent-flow i{font-style:normal;color:#98a2b3}.source-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.source-grid>div,.rule-list>div{border:1px solid #e4e7ec;border-radius:9px;padding:11px;background:#fbfcfd;display:flex;flex-direction:column;gap:5px}.source-grid span,.rule-list span{font-size:12px;color:#667085;line-height:1.4}.policy-table-wrap{overflow:auto;border:1px solid #e4e7ec;border-radius:9px}.policy-table{width:100%;border-collapse:collapse;min-width:800px}.policy-table th{background:#fafbfc;text-align:left;text-transform:uppercase;font-size:10px;color:#758198;padding:10px}.policy-table td{padding:10px;border-top:1px solid #edf0f3;font-size:12px;vertical-align:top}.rule-number{width:34px;color:#98a2b3;font-weight:700;text-align:center}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.rule-list{display:grid;gap:7px}.guardrails{display:flex;gap:6px;flex-wrap:wrap;border:1px solid #e4e7ec;border-radius:9px;padding:12px;background:#fbfcfd}.guardrails span{font-size:11px;background:#fff4ed;color:#9a3412;border-radius:999px;padding:5px 8px}.policy-note{margin-top:22px;border:1px solid #d8e3f2;background:#f8fbff;border-radius:9px;padding:12px;font-size:12px;color:#475467;line-height:1.5}
-    .drawer-title{display:flex;flex-direction:column;gap:3px}.drawer-title span{font-size:12px;color:#758198}.drawerbody{padding:4px 2px}.drawerbody section{margin-bottom:24px}.message-card,.recommendation{border:1px solid #e4e7ec;border-radius:9px;padding:12px;background:#fbfcfd}.message-card p,.recommendation p{white-space:pre-wrap;line-height:1.5}.message-meta{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#758198}.analysis-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.analysis-grid>div{border:1px solid #e4e7ec;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:5px}.analysis-grid small,.recommendation small{font-size:10px;text-transform:uppercase;color:#758198;font-weight:700}.risk{margin-top:8px;background:#fff1f1;color:#8c2f2f;border-radius:8px;padding:10px;font-size:12px}.drawerbody textarea{width:100%;resize:vertical;border:1px solid #d4d9e2;border-radius:8px;padding:10px;font:inherit}.draft-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:9px}.hint{display:block;margin-top:6px;color:#98a2b3;text-align:right}
-    @media(max-width:900px){.source-grid{grid-template-columns:1fr 1fr}.two-col{grid-template-columns:1fr}.head,.controls{flex-direction:column}.head>p-button,.controls input{margin-left:0}.controls input{width:100%}.analysis-grid{grid-template-columns:1fr 1fr}}@media(max-width:560px){.source-grid,.analysis-grid{grid-template-columns:1fr}}
+  styles:[`
+    .mail-shell{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}.head{padding:18px 20px 12px;display:flex;gap:18px;align-items:flex-start}.head>div:first-child{min-width:0}.head>p-button{margin-left:auto}.title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.title-row h2{margin:0}.head p{margin:5px 0 0;color:#758198;font-size:12px}.section-tabs{display:flex;gap:6px;padding:0 18px 12px;border-bottom:1px solid #e4e7ec}.controls{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #edf0f3}.views{display:flex;gap:6px;flex-wrap:wrap}.controls input{margin-left:auto;width:min(340px,100%)}.mailrow{cursor:pointer}.preview{max-width:430px;color:#667085}td small{display:block;margin-top:3px;color:#98a2b3}.empty{display:flex;min-height:260px;align-items:center;justify-content:center;flex-direction:column;text-align:center;gap:8px;color:#667085}.empty b{color:#172033}.empty-icon{width:48px;height:48px;border-radius:50%;background:#f1f4f7;display:grid;place-items:center;font-size:22px}.agent-page{padding:18px}.agent-summary{display:grid;grid-template-columns:auto 1fr;gap:14px;border:1px solid #d8e3f2;background:#f8fbff;border-radius:12px;padding:15px}.agent-icon{width:44px;height:44px;border-radius:10px;background:#172033;color:#fff;display:grid;place-items:center;font-weight:800}.agent-title{display:flex;align-items:center;gap:9px}.agent-summary p{margin:6px 0 0;color:#667085;font-size:12px}.policy-section{margin-top:22px}.policy-title{font-size:11px;text-transform:uppercase;color:#758198;font-weight:700;margin-bottom:9px}.flow-list{display:flex;gap:8px;flex-wrap:wrap}.flow-step{display:flex;align-items:center;gap:7px;border:1px solid #dce4ee;background:#fff;border-radius:999px;padding:5px 10px 5px 5px}.step-no{width:24px;height:24px;border-radius:50%;background:#172033;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:700}.flow-step b{font-size:11px}.source-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.source-grid>div,.rule-list>div{border:1px solid #e4e7ec;border-radius:9px;padding:11px;background:#fbfcfd;display:flex;flex-direction:column;gap:5px}.source-grid span,.rule-list span{font-size:12px;color:#667085;line-height:1.4}.policy-table-wrap{overflow:auto;border:1px solid #e4e7ec;border-radius:9px}.policy-table{width:100%;border-collapse:collapse;min-width:820px}.policy-table th{background:#fafbfc;text-align:left;text-transform:uppercase;font-size:10px;color:#758198;padding:10px}.policy-table td{padding:10px;border-top:1px solid #edf0f3;font-size:12px;vertical-align:top}.policy-table .num{width:34px;font-weight:700;color:#667085}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.rule-list{display:grid;gap:7px}.guardrails{display:flex;gap:6px;flex-wrap:wrap;border:1px solid #e4e7ec;border-radius:9px;padding:12px;background:#fbfcfd}.guardrails span{font-size:11px;background:#fff4ed;color:#9a3412;border-radius:999px;padding:5px 8px}.policy-note{margin-top:22px;border:1px solid #d8e3f2;background:#f8fbff;border-radius:9px;padding:12px;font-size:12px;color:#475467}.drawer-title{display:flex;flex-direction:column}.drawerbody section{margin-bottom:24px}.message-card{border:1px solid #e4e7ec;border-radius:9px;padding:12px;background:#fbfcfd}.message-meta{display:flex;justify-content:space-between}.analysis-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.analysis-grid>div{border:1px solid #e4e7ec;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:5px}.drawerbody textarea{width:100%;resize:vertical;border:1px solid #d4d9e2;border-radius:8px;padding:10px;font:inherit}@media(max-width:900px){.source-grid{grid-template-columns:1fr 1fr}.two-col{grid-template-columns:1fr}.head,.controls{flex-direction:column}.controls input{margin-left:0;width:100%}.analysis-grid{grid-template-columns:1fr 1fr}}@media(max-width:560px){.source-grid,.analysis-grid{grid-template-columns:1fr}}
   `]
 })
 export class EmailComponent {
-  readonly section = signal<EmailTab>('Mail');
-  readonly views: MailView[] = ['Inbox','Needs reply','Sent'];
-  readonly activeView = signal<MailView>('Inbox');
-  readonly query = signal('');
-  readonly rows = signal<MailRow[]>([]);
-  readonly selected = signal<MailRow|null>(null);
-
-  readonly dataSources = [
-    {title:'Orders',description:'Order number, customer, items, options, notes, payment and delivery method.'},
-    {title:'Production',description:'Current production units and real production status from the Production Board.'},
-    {title:'Fulfilment',description:'Pickup readiness, shipping preparation, booked shipping and later tracking.'},
-    {title:'Pickup calendar',description:'Available pickup windows and closed dates once the calendar is connected.'},
-    {title:'Shipping data',description:'Packages, dimensions, weights and later courier/tracking information.'},
-    {title:'Business rules',description:'Lead times, claims, cancellations, payment rules and approved standard answers.'},
-  ];
-
-  readonly intentPolicies: IntentPolicy[] = [
-    {intent:'Order question',mode:'Draft + review',rule:'Answer using the actual linked order. Never invent status, dates or inclusions.'},
-    {intent:'Customisation',mode:'Manual only',rule:'AI may summarise the request and draft a response, but custom design, feasibility and price must be reviewed.'},
-    {intent:'Product question',mode:'Auto later',rule:'Factual catalogue questions may become automatic after approved product knowledge is connected.'},
-    {intent:'Production / lead time',mode:'Auto later',rule:'Use current lead-time rules and actual order status. Do not promise an unconfirmed completion date.'},
-    {intent:'Pickup',mode:'Auto later',rule:'Once calendar integration exists, factual pickup availability may be answered automatically.'},
-    {intent:'Delivery / shipping',mode:'Draft + review',rule:'Use shipment/order data. Tracking can become automatic later; quotes or unusual freight remain reviewed.'},
-    {intent:'Payment / invoice',mode:'Draft + review',rule:'Provide factual payment/invoice information only. Anything changing money or payment terms requires review.'},
-    {intent:'Order change',mode:'Manual only',rule:'Any requested change to an existing order may affect production, timing or price and must be approved by a user.'},
-    {intent:'Claim / damage',mode:'Manual only',rule:'Never auto-send. Surface claim timing, evidence and order details for human review.'},
-    {intent:'Cancellation / refund',mode:'Manual only',rule:'Never auto-send. Refund and cancellation consequences must be reviewed before any commitment.'},
-    {intent:'General enquiry',mode:'Draft + review',rule:'Prepare a concise draft. Auto handling may be enabled later for clearly defined low-risk FAQs.'},
-  ];
-
-  readonly guardrails = [
-    'Claims / damage',
-    'Refunds / cancellations',
-    'Paid-order changes',
-    'Custom pricing or feasibility',
-    'Financial consequences',
-    'Legal / policy disputes',
-    'Low-confidence order match',
-    'Conflicting information',
-  ];
-
-  readonly replyRules = [
-    {title:'Use facts from Hub',description:'Order, production, fulfilment and policy data override assumptions. If data is missing, say it needs checking.'},
-    {title:'Do not make promises',description:'Never promise dates, discounts, refunds, custom work or freight outcomes unless the underlying data explicitly supports it.'},
-    {title:'Read the thread',description:'Analyse the whole conversation, not only the latest message, so the reply does not repeat or contradict earlier information.'},
-    {title:'Keep White Corner tone',description:'Professional, warm, concise and practical. Answer the customer’s actual question before adding extra information.'},
-    {title:'Escalate uncertainty',description:'When the customer, order, intent or answer is uncertain, move the thread to Needs reply and explain what needs human review.'},
-  ];
-
-  readonly visibleRows = computed(() => {
-    const view = this.activeView();
-    const q = this.query().trim().toLowerCase();
-    return this.rows().filter(row => row.status === view && (!q || `${row.correspondent} ${row.subject} ${row.preview} ${row.linked_order || ''}`.toLowerCase().includes(q)));
-  });
-
-  countFor(view: MailView): number { return this.rows().filter(row => row.status === view).length; }
-  confidenceLabel(value:number):string { return `${Math.round(value * 100)}%`; }
-  aiSeverity(state?: AiState): 'success'|'info'|'warn'|'secondary' {
-    if (state === 'Auto handled') return 'success';
-    if (state === 'Draft ready') return 'info';
-    if (state === 'Review') return 'warn';
-    return 'secondary';
-  }
-  policySeverity(mode:PolicyMode): 'success'|'info'|'warn' {
-    if(mode==='Auto later') return 'success';
-    if(mode==='Draft + review') return 'info';
-    return 'warn';
-  }
+  readonly section=signal<EmailTab>('Mail'); readonly views:MailView[]=['Inbox','Needs reply','Sent']; readonly activeView=signal<MailView>('Inbox'); readonly query=signal(''); readonly rows=signal<MailRow[]>([]); readonly selected=signal<MailRow|null>(null);
+  readonly decisionFlow=['Read full thread','Identify customer','Match order','Classify intent','Collect facts','Assess risk','Draft / escalate'];
+  readonly dataSources=[{title:'Orders',description:'Order number, customer, items, options, notes, payment and delivery method.'},{title:'Production',description:'Current production units and real production status.'},{title:'Fulfilment',description:'Pickup readiness, shipping preparation and booked shipping.'},{title:'Pickup calendar',description:'Available pickup windows and closed dates once connected.'},{title:'Shipping data',description:'Packages, dimensions, weights and later tracking.'},{title:'Business rules',description:'Lead times, claims, cancellations, payments and approved answers.'}];
+  readonly intentPolicies:IntentPolicy[]=[{intent:'Order question',mode:'Draft + review',rule:'Answer using the actual linked order. Never invent status, dates or inclusions.'},{intent:'Customisation',mode:'Manual only',rule:'AI may summarise and draft, but custom design, feasibility and price require review.'},{intent:'Product question',mode:'Auto later',rule:'Factual catalogue questions may become automatic after approved product knowledge is connected.'},{intent:'Production / lead time',mode:'Auto later',rule:'Use current lead-time rules and actual order status. Do not promise unconfirmed completion dates.'},{intent:'Pickup',mode:'Auto later',rule:'Once calendar integration exists, factual pickup availability may be answered automatically.'},{intent:'Delivery / shipping',mode:'Draft + review',rule:'Use shipment/order data. Tracking can become automatic later; unusual freight remains reviewed.'},{intent:'Payment / invoice',mode:'Draft + review',rule:'Provide factual payment/invoice information only. Changes to money or payment terms require review.'},{intent:'Order change',mode:'Manual only',rule:'Any requested change may affect production, timing or price and must be approved.'},{intent:'Claim / damage',mode:'Manual only',rule:'Never auto-send. Surface timing, evidence and order details for human review.'},{intent:'Cancellation / refund',mode:'Manual only',rule:'Never auto-send. Consequences must be reviewed before any commitment.'},{intent:'General enquiry',mode:'Draft + review',rule:'Prepare a concise draft. Auto handling may be enabled later for approved low-risk FAQs.'}];
+  readonly guardrails=['Claims / damage','Refunds / cancellations','Paid-order changes','Custom pricing or feasibility','Financial consequences','Legal / policy disputes','Low-confidence order match','Conflicting information'];
+  readonly replyRules=[{title:'Use facts from Hub',description:'Order, production, fulfilment and policy data override assumptions.'},{title:'Do not make promises',description:'Never promise dates, discounts, refunds, custom work or freight outcomes unless data supports it.'},{title:'Read the thread',description:'Analyse the whole conversation, not only the latest message.'},{title:'Keep White Corner tone',description:'Professional, warm, concise and practical.'},{title:'Escalate uncertainty',description:'When customer, order, intent or answer is uncertain, move the thread to Needs reply.'}];
+  readonly visibleRows=computed(()=>{const view=this.activeView();const q=this.query().trim().toLowerCase();return this.rows().filter(row=>row.status===view&&(!q||`${row.correspondent} ${row.subject} ${row.preview} ${row.linked_order||''}`.toLowerCase().includes(q)));});
+  countFor(view:MailView){return this.rows().filter(row=>row.status===view).length;} confidenceLabel(value:number){return `${Math.round(value*100)}%`;} aiSeverity(state?:AiState):'success'|'info'|'warn'|'secondary'{if(state==='Auto handled')return'success';if(state==='Draft ready')return'info';if(state==='Review')return'warn';return'secondary';} policySeverity(mode:PolicyMode):'success'|'info'|'warn'{if(mode==='Auto later')return'success';if(mode==='Draft + review')return'info';return'warn';}
 }
