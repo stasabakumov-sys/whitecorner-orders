@@ -1,9 +1,18 @@
 <p-drawer [visible]="true" position="right" [modal]="true" [dismissible]="true" [style]="{width:'min(1040px,96vw)'}" (onHide)="closed.emit()">
   <ng-template #header>
     <div class="drawerhead">
-      <div><button type="button" class="order-number-link" (click)="openOrder()">{{ view.code }}</button><div>{{ view.order.customer_name }}</div><small>{{ view.order.company }}</small></div>
+      <div class="order-head-main">
+        <div class="order-title-row">
+          <button type="button" class="order-number-link" (click)="openOrder()">Order #{{ view.order.order_number }}</button>
+          <p-tag [value]="view.order.payment_status || '—'" [severity]="(view.order.payment_status || '').toUpperCase() === 'PAID' ? 'success' : 'warn'" />
+          <p-tag [value]="view.order.fulfillment_status || 'UNFULFILLED'" [severity]="(view.order.fulfillment_status || '').toUpperCase() === 'FULFILLED' ? 'success' : 'danger'" />
+        </div>
+        <div class="placed">Placed on {{ view.order.wix_created_at | date:'dd MMM yyyy, h:mm a' }}</div>
+        <div class="customer-name">{{ view.order.customer_name || '—' }}</div>
+        <small>{{ view.order.company }}</small>
+      </div>
       <div class="status">
-        <span>Change status</span>
+        <span>Production status</span>
         <p-select [options]="production.statuses" [disabled]="saving()" [ngModel]="view.status" (ngModelChange)="statusChanged($event)" appendTo="body" />
       </div>
     </div>
@@ -15,12 +24,9 @@
     <section>
       <div class="section-title">Order overview</div>
       <div class="overview">
-        <div><b>Payment</b><p-tag [value]="view.order.payment_status || '—'" severity="success" /></div>
-        <div><b>Fulfilment</b><span>{{ view.order.delivery_type || 'Shipping' }}</span></div>
         <div><b>Order total</b><span>{{ view.order.total || 0 | currency:(view.order.currency || 'AUD') }}</span></div>
-        <div><b>Date</b><span>{{ view.order.wix_created_at | date:'dd MMM yyyy' }}</span></div>
-        <div><b>Production status</b><p-tag [value]="view.status" severity="info" /></div>
         <div><b>Unit total</b><span>{{ view.unitTotal | currency:(view.order.currency || 'AUD') }}</span></div>
+        <div><b>Fulfilment method</b><span>{{ view.order.delivery_title || view.order.delivery_type || 'Shipping' }}</span></div>
       </div>
     </section>
 
