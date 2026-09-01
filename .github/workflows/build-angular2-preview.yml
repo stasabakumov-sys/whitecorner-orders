@@ -17,7 +17,7 @@ jobs:
       - name: Build Angular app
         run: |
           cd angular-app
-          npm ci
+          npm ci --legacy-peer-deps
           npm run build -- --base-href /whitecorner-orders/angular2/
       - name: Publish clean preview path
         shell: bash
