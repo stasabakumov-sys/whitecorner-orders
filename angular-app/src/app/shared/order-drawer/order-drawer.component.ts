@@ -27,13 +27,10 @@ import { OrderActivityComponent } from '../order-activity/order-activity.compone
       <div class="body">
         <section>
           <div class="section-title">Order overview</div>
-          <div class="overview">
-            <div><b>Total</b><span>{{order.total||0|currency:(order.currency||'AUD')}}</span></div>
+          <div class="overview compact-overview">
             <div><b>Items</b><span>{{physicalItemCount()}}</span></div>
             <div><b>Production status</b><span>{{productionStatus()}}</span></div>
             <div><b>Fulfilment method</b><span>{{order.delivery_type||'Shipping'}}</span></div>
-            <div><b>Order date</b><span>{{order.wix_created_at|date:'dd MMM yyyy'}}</span></div>
-            <div><b>Wix fulfilment</b><span>{{fulfilmentLabel()}}</span></div>
           </div>
         </section>
 
