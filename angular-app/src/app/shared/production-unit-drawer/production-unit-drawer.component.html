@@ -26,7 +26,6 @@
       <div class="overview">
         <div><b>Order total</b><span>{{ view.order.total || 0 | currency:(view.order.currency || 'AUD') }}</span></div>
         <div><b>Unit total</b><span>{{ view.unitTotal | currency:(view.order.currency || 'AUD') }}</span></div>
-        <div><b>Fulfilment method</b><span>{{ view.order.delivery_title || view.order.delivery_type || 'Shipping' }}</span></div>
       </div>
     </section>
 
