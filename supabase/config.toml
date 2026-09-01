@@ -1,0 +1,7 @@
+project_id = "zgvnrpspwluapaxnycrg"
+
+[functions.gmail-oauth]
+verify_jwt = false
+
+[functions.gmail-api]
+verify_jwt = true
