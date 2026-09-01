@@ -118,13 +118,13 @@ interface IntentPolicy {
           <section class="policy-section">
             <div class="policy-title">Decision flow</div>
             <div class="agent-flow">
-              <span>Read full thread</span><i>→</i>
-              <span>Identify customer</span><i>→</i>
-              <span>Match order</span><i>→</i>
-              <span>Classify intent</span><i>→</i>
-              <span>Collect facts</span><i>→</i>
-              <span>Assess risk</span><i>→</i>
-              <span>Draft / escalate</span>
+              <span>1. Read full thread</span><i>→</i>
+              <span>2. Identify customer</span><i>→</i>
+              <span>3. Match order</span><i>→</i>
+              <span>4. Classify intent</span><i>→</i>
+              <span>5. Collect facts</span><i>→</i>
+              <span>6. Assess risk</span><i>→</i>
+              <span>7. Draft / escalate</span>
             </div>
           </section>
 
@@ -141,10 +141,11 @@ interface IntentPolicy {
             <div class="policy-title">Intent rules</div>
             <div class="policy-table-wrap">
               <table class="policy-table">
-                <thead><tr><th>Category</th><th>Initial mode</th><th>Rule</th></tr></thead>
+                <thead><tr><th>#</th><th>Category</th><th>Initial mode</th><th>Rule</th></tr></thead>
                 <tbody>
-                  @for(policy of intentPolicies; track policy.intent){
+                  @for(policy of intentPolicies; track policy.intent; let i = $index){
                     <tr>
+                      <td class="rule-number">{{i + 1}}</td>
                       <td><b>{{policy.intent}}</b></td>
                       <td><p-tag [value]="policy.mode" [severity]="policySeverity(policy.mode)" /></td>
                       <td>{{policy.rule}}</td>
@@ -222,7 +223,7 @@ interface IntentPolicy {
   styles: [`
     .mail-shell{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}.head{padding:18px 20px 12px;display:flex;gap:18px;align-items:flex-start}.head>div:first-child{min-width:0}.head>p-button{margin-left:auto}.title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.title-row h2{margin:0}.head p{margin:5px 0 0;color:#758198;font-size:12px}.section-tabs{display:flex;gap:6px;padding:0 18px 12px;border-bottom:1px solid #e4e7ec}
     .controls{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #edf0f3}.views{display:flex;gap:6px;flex-wrap:wrap}.controls input{margin-left:auto;width:min(340px,100%)}:host ::ng-deep .p-datatable-thead>tr>th{font-size:11px;text-transform:uppercase;color:#758198;background:#fafbfc}.mailrow{cursor:pointer}.preview{max-width:430px;color:#667085}td small{display:block;margin-top:3px;color:#98a2b3}.empty{display:flex;min-height:260px;align-items:center;justify-content:center;flex-direction:column;text-align:center;gap:8px;color:#667085}.empty b{color:#172033;font-size:16px}.empty span{max-width:570px}.empty small{margin-top:5px;color:#98a2b3}.empty-icon{width:48px;height:48px;border-radius:50%;background:#f1f4f7;display:grid;place-items:center;font-size:22px;color:#475467}
-    .agent-page{padding:18px}.agent-summary{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;border:1px solid #d8e3f2;background:#f8fbff;border-radius:12px;padding:15px}.agent-icon{width:44px;height:44px;border-radius:10px;background:#172033;color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px}.agent-title{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.agent-summary p{margin:6px 0 0;color:#667085;font-size:12px;line-height:1.5}.policy-section{margin-top:22px}.policy-title{font-size:11px;text-transform:uppercase;color:#758198;font-weight:700;margin-bottom:9px}.agent-flow{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.agent-flow span{font-size:11px;background:#fff;border:1px solid #dce4ee;border-radius:999px;padding:6px 9px;color:#475467}.agent-flow i{font-style:normal;color:#98a2b3}.source-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.source-grid>div,.rule-list>div{border:1px solid #e4e7ec;border-radius:9px;padding:11px;background:#fbfcfd;display:flex;flex-direction:column;gap:5px}.source-grid span,.rule-list span{font-size:12px;color:#667085;line-height:1.4}.policy-table-wrap{overflow:auto;border:1px solid #e4e7ec;border-radius:9px}.policy-table{width:100%;border-collapse:collapse;min-width:800px}.policy-table th{background:#fafbfc;text-align:left;text-transform:uppercase;font-size:10px;color:#758198;padding:10px}.policy-table td{padding:10px;border-top:1px solid #edf0f3;font-size:12px;vertical-align:top}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.rule-list{display:grid;gap:7px}.guardrails{display:flex;gap:6px;flex-wrap:wrap;border:1px solid #e4e7ec;border-radius:9px;padding:12px;background:#fbfcfd}.guardrails span{font-size:11px;background:#fff4ed;color:#9a3412;border-radius:999px;padding:5px 8px}.policy-note{margin-top:22px;border:1px solid #d8e3f2;background:#f8fbff;border-radius:9px;padding:12px;font-size:12px;color:#475467;line-height:1.5}
+    .agent-page{padding:18px}.agent-summary{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;border:1px solid #d8e3f2;background:#f8fbff;border-radius:12px;padding:15px}.agent-icon{width:44px;height:44px;border-radius:10px;background:#172033;color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px}.agent-title{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.agent-summary p{margin:6px 0 0;color:#667085;font-size:12px;line-height:1.5}.policy-section{margin-top:22px}.policy-title{font-size:11px;text-transform:uppercase;color:#758198;font-weight:700;margin-bottom:9px}.agent-flow{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.agent-flow span{font-size:11px;background:#fff;border:1px solid #dce4ee;border-radius:999px;padding:6px 9px;color:#475467}.agent-flow i{font-style:normal;color:#98a2b3}.source-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.source-grid>div,.rule-list>div{border:1px solid #e4e7ec;border-radius:9px;padding:11px;background:#fbfcfd;display:flex;flex-direction:column;gap:5px}.source-grid span,.rule-list span{font-size:12px;color:#667085;line-height:1.4}.policy-table-wrap{overflow:auto;border:1px solid #e4e7ec;border-radius:9px}.policy-table{width:100%;border-collapse:collapse;min-width:800px}.policy-table th{background:#fafbfc;text-align:left;text-transform:uppercase;font-size:10px;color:#758198;padding:10px}.policy-table td{padding:10px;border-top:1px solid #edf0f3;font-size:12px;vertical-align:top}.rule-number{width:34px;color:#98a2b3;font-weight:700;text-align:center}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}.rule-list{display:grid;gap:7px}.guardrails{display:flex;gap:6px;flex-wrap:wrap;border:1px solid #e4e7ec;border-radius:9px;padding:12px;background:#fbfcfd}.guardrails span{font-size:11px;background:#fff4ed;color:#9a3412;border-radius:999px;padding:5px 8px}.policy-note{margin-top:22px;border:1px solid #d8e3f2;background:#f8fbff;border-radius:9px;padding:12px;font-size:12px;color:#475467;line-height:1.5}
     .drawer-title{display:flex;flex-direction:column;gap:3px}.drawer-title span{font-size:12px;color:#758198}.drawerbody{padding:4px 2px}.drawerbody section{margin-bottom:24px}.message-card,.recommendation{border:1px solid #e4e7ec;border-radius:9px;padding:12px;background:#fbfcfd}.message-card p,.recommendation p{white-space:pre-wrap;line-height:1.5}.message-meta{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#758198}.analysis-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.analysis-grid>div{border:1px solid #e4e7ec;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:5px}.analysis-grid small,.recommendation small{font-size:10px;text-transform:uppercase;color:#758198;font-weight:700}.risk{margin-top:8px;background:#fff1f1;color:#8c2f2f;border-radius:8px;padding:10px;font-size:12px}.drawerbody textarea{width:100%;resize:vertical;border:1px solid #d4d9e2;border-radius:8px;padding:10px;font:inherit}.draft-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:9px}.hint{display:block;margin-top:6px;color:#98a2b3;text-align:right}
     @media(max-width:900px){.source-grid{grid-template-columns:1fr 1fr}.two-col{grid-template-columns:1fr}.head,.controls{flex-direction:column}.head>p-button,.controls input{margin-left:0}.controls input{width:100%}.analysis-grid{grid-template-columns:1fr 1fr}}@media(max-width:560px){.source-grid,.analysis-grid{grid-template-columns:1fr}}
   `]
