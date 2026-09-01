@@ -30,4 +30,30 @@ export class ProductionUnitDrawerComponent {
     catch (e) { this.error.set(String((e as Error)?.message ?? e)); }
     finally { this.saving.set(false); }
   }
+
+  deliveryAddress(): string {
+    const a = this.view.order.delivery_address;
+    if (!a || typeof a !== 'object') return '';
+    const keys = ['addressLine','addressLine1','streetAddress','city','suburb','subdivision','state','postalCode','postcode'];
+    const values: string[] = [];
+    for (const key of keys) {
+      const value = a[key];
+      if (typeof value === 'string' && value.trim() && !values.includes(value.trim())) values.push(value.trim());
+    }
+    return values.join(', ');
+  }
+
+  deliveryAmount(): number {
+    const order = this.view.order;
+    const direct = Number(order.shipping ?? 0);
+    if (direct > 0) return direct;
+    if ((order.delivery_type || 'Shipping') !== 'Shipping') return 0;
+    const productSum = (order.wc_order_items ?? [])
+      .filter(item => !/^delivery$/i.test(item.product_name ?? ''))
+      .reduce((sum, item) => sum + Number(item.unit_price ?? 0) * Number(item.quantity ?? 1), 0);
+    const residual = Number(order.total ?? 0) - productSum - Number(order.additional_fees ?? 0) + Math.abs(Number(order.discount ?? 0));
+    return residual > 0.005 ? residual : 0;
+  }
+
+  abs(value: number): number { return Math.abs(value); }
 }
