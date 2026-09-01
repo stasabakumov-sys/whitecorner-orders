@@ -1,7 +1,7 @@
 <p-drawer [visible]="true" position="right" [modal]="true" [dismissible]="true" [style]="{width:'min(1040px,96vw)'}" (onHide)="closed.emit()">
   <ng-template #header>
     <div class="drawerhead">
-      <div><b>{{ view.code }}</b><div>{{ view.order.customer_name }}</div><small>{{ view.order.company }}</small></div>
+      <div><button type="button" class="order-number-link" (click)="openOrder()">{{ view.code }}</button><div>{{ view.order.customer_name }}</div><small>{{ view.order.company }}</small></div>
       <div class="status">
         <span>Change status</span>
         <p-select [options]="production.statuses" [disabled]="saving()" [ngModel]="view.status" (ngModelChange)="statusChanged($event)" appendTo="body" />
