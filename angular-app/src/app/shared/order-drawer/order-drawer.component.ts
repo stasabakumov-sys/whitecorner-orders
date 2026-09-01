@@ -4,6 +4,7 @@ import { ButtonModule } from 'primeng/button';
 import { DrawerModule } from 'primeng/drawer';
 import { TagModule } from 'primeng/tag';
 import { OrderItemRow, OrderRow } from '../../core/models/order.models';
+import { orderItemOptionLabels } from '../../core/utils/order-item-display';
 import { OrderActivityComponent } from '../order-activity/order-activity.component';
 
 @Component({
@@ -17,7 +18,7 @@ import { OrderActivityComponent } from '../order-activity/order-activity.compone
       </ng-template>
       <div class="body">
         <section>
-          <div class="section-title">Overview</div>
+          <div class="section-title">Order overview</div>
           <div class="overview">
             <div><b>Payment</b><p-tag [value]="order.payment_status||'—'" severity="success"></p-tag></div>
             <div><b>Fulfilment</b><p-tag [value]="order.delivery_type||'Shipping'" severity="info"></p-tag></div>
@@ -26,7 +27,16 @@ import { OrderActivityComponent } from '../order-activity/order-activity.compone
             <div><b>Items</b><span>{{physicalItemCount()}}</span></div>
             <div><b>Status</b><span>{{productionStatus()}}</span></div>
           </div>
-          @if(deliveryAddress()){<div class="detail"><b>Delivery:</b> {{deliveryAddress()}}</div>}
+        </section>
+
+        <section>
+          <div class="section-title">Customer & delivery</div>
+          <div class="customer-grid">
+            <div><small>Email</small><b>{{order.buyer_email||'—'}}</b></div>
+            <div><small>Phone</small><b>{{order.phone||'—'}}</b></div>
+            <div><small>Method</small><b>{{order.delivery_title||order.delivery_type||'Shipping'}}</b></div>
+          </div>
+          @if(deliveryAddress()){<div class="detail"><b>Delivery address:</b> {{deliveryAddress()}}</div>}
           @if(order.buyer_note){<div class="detail"><b>Buyer note:</b> {{order.buyer_note}}</div>}
         </section>
 
@@ -47,7 +57,7 @@ import { OrderActivityComponent } from '../order-activity/order-activity.compone
             @for(item of addonItems();track item.id){
               <div class="item">
                 <div class="media">@if(mediaUrl(item)){<img [src]="mediaUrl(item)" alt="">}@else{<div class="placeholder"></div>}</div>
-                <div class="item-main"><b>{{item.product_name}}</b><p-tag value="Add-on" severity="secondary"></p-tag><div><span class="pill">qty: {{item.quantity||1}}</span></div></div>
+                <div class="item-main"><b>{{item.product_name}}</b><p-tag value="Add-on" severity="secondary"></p-tag><div><span class="pill">qty: {{item.quantity||1}}</span>@for(option of optionLabels(item);track option){<span class="pill">{{option}}</span>}</div></div>
                 <div class="money"><span>{{item.unit_price||0|currency:(order.currency||'AUD')}} each</span><small>qty {{item.quantity||1}}</small><b>{{itemTotal(item)|currency:(order.currency||'AUD')}}</b></div>
               </div>
             }
@@ -67,7 +77,7 @@ import { OrderActivityComponent } from '../order-activity/order-activity.compone
     </p-drawer>
   `,
   styles:[`
-    .drawer-title b{font-size:17px}.drawer-title small{display:block;color:#758198;margin-top:3px}.body{padding:4px 2px}.body section{margin-bottom:22px}.section-title{font-size:11px;text-transform:uppercase;color:#758198;font-weight:700;margin-bottom:8px}.overview{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.overview>div{border:1px solid #e4e7ec;border-radius:8px;padding:10px;background:#fbfcfd;display:flex;flex-direction:column;gap:5px}.detail{margin-top:10px;color:#758198;font-size:12px}.item{display:grid;grid-template-columns:76px 1fr auto;gap:12px;align-items:start;border:1px solid #e4e7ec;border-radius:9px;padding:10px;margin-bottom:9px}.media img,.placeholder{width:76px;height:76px;border-radius:7px;border:1px solid #e4e7ec;object-fit:cover;background:#f6f8fa}.item-main p-tag{margin-left:7px}.pill{display:inline-block;background:#f1f4f7;border-radius:5px;padding:4px 6px;font-size:11px;margin:5px 5px 0 0}.money{text-align:right;display:flex;flex-direction:column;gap:3px}.money small{color:#758198}.totals-wrap{display:flex;justify-content:flex-end}.totals{width:min(420px,100%);border-top:1px solid #e4e7ec;padding-top:8px}.totals>div{display:flex;justify-content:space-between;padding:5px 0}.totals .final{font-weight:800;font-size:16px;border-top:1px solid #e4e7ec;margin-top:5px;padding-top:10px}@media(max-width:800px){.overview{grid-template-columns:1fr 1fr}.item{grid-template-columns:60px 1fr}.media img,.placeholder{width:60px;height:60px}.money{grid-column:2;text-align:left}}
+    .drawer-title b{font-size:17px}.drawer-title small{display:block;color:#758198;margin-top:3px}.body{padding:4px 2px}.body section{margin-bottom:22px}.section-title{font-size:11px;text-transform:uppercase;color:#758198;font-weight:700;margin-bottom:8px}.overview,.customer-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.overview>div,.customer-grid>div{border:1px solid #e4e7ec;border-radius:8px;padding:10px;background:#fbfcfd;display:flex;flex-direction:column;gap:5px}.customer-grid small{font-size:10px;text-transform:uppercase;color:#758198;font-weight:700}.detail{margin-top:10px;color:#758198;font-size:12px}.item{display:grid;grid-template-columns:76px 1fr auto;gap:12px;align-items:start;border:1px solid #e4e7ec;border-radius:9px;padding:10px;margin-bottom:9px}.media img,.placeholder{width:76px;height:76px;border-radius:7px;border:1px solid #e4e7ec;object-fit:cover;background:#f6f8fa}.item-main p-tag{margin-left:7px}.pill{display:inline-block;background:#f1f4f7;border-radius:5px;padding:4px 6px;font-size:11px;margin:5px 5px 0 0}.money{text-align:right;display:flex;flex-direction:column;gap:3px}.money small{color:#758198}.totals-wrap{display:flex;justify-content:flex-end}.totals{width:min(420px,100%);border-top:1px solid #e4e7ec;padding-top:8px}.totals>div{display:flex;justify-content:space-between;padding:5px 0}.totals .final{font-weight:800;font-size:16px;border-top:1px solid #e4e7ec;margin-top:5px;padding-top:10px}@media(max-width:800px){.overview,.customer-grid{grid-template-columns:1fr 1fr}.item{grid-template-columns:60px 1fr}.media img,.placeholder{width:60px;height:60px}.money{grid-column:2;text-align:left}}
   `]
 })
 export class OrderDrawerComponent{
@@ -84,6 +94,6 @@ export class OrderDrawerComponent{
   deliveryAddress(){const a=this.order.delivery_address;if(!a||typeof a!=='object')return'';const keys=['addressLine','addressLine1','streetAddress','city','suburb','subdivision','state','postalCode','postcode'];const values:string[]=[];for(const key of keys){const value=a[key];if(typeof value==='string'&&value.trim()&&!values.includes(value.trim()))values.push(value.trim());}return values.join(', ');}
   deliveryAmount(){const direct=Number(this.order.shipping??0);if(direct>0)return direct;if((this.order.delivery_type||'Shipping')!=='Shipping')return 0;const productSum=this.allItems().reduce((sum,item)=>sum+this.itemTotal(item),0);const residual=Number(this.order.total??0)-productSum-Number(this.order.additional_fees??0)+Math.abs(Number(this.order.discount??0));return residual>0.005?residual:0;}
   mediaUrl(item:OrderItemRow){const image=item.image??{};const raw=item.raw_item??{};const candidates=[image['url'],image['imageUrl'],(image['imageInfo'] as Record<string,unknown>|undefined)?.['url'],(raw['media'] as Record<string,unknown>|undefined)?.['url'],(raw['image'] as Record<string,unknown>|undefined)?.['url'],((raw['image'] as Record<string,unknown>|undefined)?.['imageInfo'] as Record<string,unknown>|undefined)?.['url']];return String(candidates.find(v=>typeof v==='string'&&v)??'');}
-  optionLabels(item:OrderItemRow){const out:string[]=[];for(const source of[item.wix_options,item.custom_text_fields]){if(!source||typeof source!=='object')continue;for(const[key,raw]of Object.entries(source)){let value:unknown=raw;if(raw&&typeof raw==='object'){const obj=raw as Record<string,unknown>;value=obj['value']??obj['name']??obj['description']??'';}if(value!==''&&value!=null)out.push(`${key}: ${String(value)}`);}}return[...new Set(out)].slice(0,12);}
+  optionLabels(item:OrderItemRow){return orderItemOptionLabels(item,12);}
   abs(value:number){return Math.abs(value);}
 }
