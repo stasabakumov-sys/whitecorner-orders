@@ -1,5 +1,7 @@
 import { OrderItemRow } from '../models/order.models';
 
+const TECHNICAL_KEYS = /^(?:id|_id|appId|catalogItemId|variantId|productId|lineItemId|subscriptionOptionId)$/i;
+
 function scalar(value: unknown): string {
   if (value == null) return '';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
@@ -15,6 +17,7 @@ function scalar(value: unknown): string {
 function addObject(out: string[], source: unknown): void {
   if (!source || typeof source !== 'object' || Array.isArray(source)) return;
   for (const [key, raw] of Object.entries(source as Record<string, unknown>)) {
+    if (TECHNICAL_KEYS.test(key)) continue;
     const value = scalar(raw);
     if (value) out.push(`${key}: ${value}`);
   }
@@ -48,21 +51,18 @@ function addWixOptionsContainer(out: string[], source: unknown): void {
       usedWrapper = true;
     }
   }
-  // Some Wix line items (especially older/catalog variants) store selected
-  // option-name/value pairs directly inside catalogReference.options rather
-  // than inside an additional .options wrapper.
+  // For non-managed Wix variants the option-name/value pairs may live directly here.
+  // Managed variants may expose only variantId; technical IDs are intentionally hidden.
   if (!usedWrapper) addObject(out, obj);
 }
 
 export function orderItemOptionLabels(item: OrderItemRow, limit = 12): string[] {
   const out: string[] = [];
 
-  // Canonical normalized fields first.
   addObject(out, item.wix_options);
   addObject(out, item.custom_text_fields);
   addDescriptionLines(out, item.description_lines);
 
-  // Wix catalogReference has appeared in more than one shape over time.
   const catalog = item.catalog_reference;
   if (catalog && typeof catalog === 'object') {
     const c = catalog as Record<string, unknown>;
