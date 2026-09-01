@@ -23,6 +23,7 @@ import { LoginComponent } from './shared/login/login.component';
         <a routerLink="/orders" routerLinkActive="active"><span>▤</span>Orders</a>
         <a routerLink="/production" routerLinkActive="active"><span>▦</span>Production Board</a>
         <a routerLink="/fulfilment" routerLinkActive="active"><span>✓</span>Fulfilment</a>
+        <a routerLink="/email" routerLinkActive="active"><span>✉</span>Email</a>
         <a routerLink="/address-review" routerLinkActive="active"><span>◎</span>Address Review</a>
         <a routerLink="/shipping-data" routerLinkActive="active"><span>⇄</span>Shipping Data</a>
         <button (click)="auth.signOut()">Sign out</button>
