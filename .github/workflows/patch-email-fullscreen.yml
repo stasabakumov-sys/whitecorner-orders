@@ -1,4 +1,4 @@
-name: Patch Email fullscreen reader
+name: Finalize Email fullscreen reader
 on:
   push:
     paths:
@@ -6,44 +6,39 @@ on:
 permissions:
   contents: write
 jobs:
-  patch:
+  finalize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Make email reader full screen
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fix fullscreen reader layout
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p=Path('angular-app/src/app/features/email/email.component.ts')
           s=p.read_text()
-
-          old='''        <section class="reading-pane">\n          @if(selected();as mail){\n            <div class="reading-head"><div><div class="subject-row"><h3>{{mail.subject}}</h3>@if(mail.needs_reply){<p-tag value="Needs reply" severity="warn"/>}</div><div class="thread-meta">{{mailboxAddress(mail.mailbox)}} · {{mail.received_at}}</div></div><div class="reading-actions"><button title="Reply"><i class="pi pi-reply"></i></button><button title="More"><i class="pi pi-ellipsis-h"></i></button></div></div>\n            <div class="message-thread"><div class="sender-row"><div class="avatar large">{{mail.initials}}</div><div><b>{{mail.correspondent}}</b><span>{{mail.email}}</span></div><time>{{mail.time}}</time></div><div class="message-body">{{mail.body}}</div></div>\n            <div class="context-bar"><div><small>AI</small><p-tag [value]="mail.ai_state||'Not analysed'" [severity]="aiSeverity(mail.ai_state)"/></div><div><small>Category</small><b>{{mail.intent||'Not analysed'}}</b></div><div><small>Order</small><b>{{mail.linked_order?'#'+mail.linked_order:'—'}}</b></div><div><small>Confidence</small><b>{{mail.confidence==null?'—':confidenceLabel(mail.confidence)}}</b></div></div>\n            <div class="reply-box"><div class="reply-label"><i class="pi pi-reply"></i><b>Reply</b><span>from {{mailboxAddress(mail.mailbox)}}</span></div><textarea [value]="mail.draft_reply||''" placeholder="Write a reply…" disabled></textarea><div class="reply-actions"><span>Reply/send will be enabled after live mail verification.</span><p-button label="Send" icon="pi pi-send" [disabled]="true"/></div></div>\n          } @else {<div class="empty-reading"><div class="empty-mail-icon"><i class="pi pi-envelope"></i></div><b>Select an email</b><span>Choose a message from the list to read the conversation.</span></div>}\n        </section>'''
-
-          new='''        <section class="reading-placeholder"><div class="empty-reading"><div class="empty-mail-icon"><i class="pi pi-envelope"></i></div><b>Select an email</b><span>Open a message to read it full screen.</span></div></section>\n      </div>\n\n      @if(selected();as mail){\n        <section class="mail-reader">\n          <div class="reader-toolbar">\n            <button class="back-button" title="Back to inbox" (click)="closeMail()"><i class="pi pi-arrow-left"></i></button>\n            <div class="reader-toolbar-spacer"></div>\n            <button class="reader-icon" title="Reply"><i class="pi pi-reply"></i></button>\n            <button class="reader-icon" title="More"><i class="pi pi-ellipsis-v"></i></button>\n          </div>\n          <div class="reader-scroll">\n            <div class="reader-content">\n              <div class="reader-subject"><h2>{{mail.subject}}</h2>@if(mail.needs_reply){<p-tag value="Needs reply" severity="warn"/>}</div>\n              <div class="reader-mailbox">{{mailboxAddress(mail.mailbox)}} · {{mail.received_at}}</div>\n              <div class="reader-sender">\n                <div class="avatar reader-avatar">{{mail.initials}}</div>\n                <div class="reader-sender-copy"><b>{{mail.correspondent}}</b><span>{{mail.email}}</span></div>\n                <time>{{mail.time}}</time>\n              </div>\n              <article class="reader-body">{{mail.body || mail.preview}}</article>\n              <div class="reader-ai">\n                <div><small>AI</small><p-tag [value]="mail.ai_state||'Not analysed'" [severity]="aiSeverity(mail.ai_state)"/></div>\n                <div><small>Category</small><b>{{mail.intent||'Not analysed'}}</b></div>\n                <div><small>Order</small><b>{{mail.linked_order?'#'+mail.linked_order:'—'}}</b></div>\n                <div><small>Confidence</small><b>{{mail.confidence==null?'—':confidenceLabel(mail.confidence)}}</b></div>\n              </div>\n              <div class="reader-reply">\n                <div class="reply-label"><i class="pi pi-reply"></i><b>Reply</b><span>from {{mailboxAddress(mail.mailbox)}}</span></div>\n                <textarea [value]="mail.draft_reply||''" placeholder="Reply…" disabled></textarea>\n                <div class="reply-actions"><span>Reply/send will be enabled after live mail verification.</span><p-button label="Send" icon="pi pi-send" [disabled]="true"/></div>\n              </div>\n            </div>\n          </div>\n        </section>\n      }'''
-
-          if old not in s:
-              raise SystemExit('reader template anchor not found')
-          s=s.replace(old,new)
-
-          s=s.replace('.mail-app{height:calc(100vh - 168px);min-height:600px;display:grid;grid-template-columns:176px 420px minmax(0,1fr);', '.mail-app{height:calc(100vh - 168px);min-height:600px;display:grid;grid-template-columns:176px minmax(420px,1fr) 320px;')
-          s=s.replace('.reading-pane{min-width:0;overflow:auto;background:#fff}', '.reading-placeholder{min-width:0;background:#fff;border-left:1px solid #e4e7ec}')
-
-          marker='  .agent-page{background:#fff;'
-          fullscreen_css='''  .mail-reader{position:fixed;z-index:1200;top:56px;left:205px;right:0;bottom:0;background:#fff;display:flex;flex-direction:column}.reader-toolbar{height:54px;flex:0 0 54px;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;padding:0 22px;gap:7px;background:#fff}.back-button,.reader-icon{width:36px;height:36px;border:0;background:transparent;border-radius:50%;display:grid;place-items:center;color:#475467;cursor:pointer}.back-button:hover,.reader-icon:hover{background:#f2f4f7}.back-button i{font-size:16px}.reader-toolbar-spacer{flex:1}.reader-scroll{overflow:auto;min-height:0;flex:1}.reader-content{max-width:980px;margin:0 auto;padding:30px 42px 60px}.reader-subject{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.reader-subject h2{font-size:26px;font-weight:500;color:#202124;margin:0}.reader-mailbox{font-size:11px;color:#98a2b3;margin-top:7px}.reader-sender{display:flex;align-items:center;gap:12px;margin-top:30px}.reader-avatar{width:42px;height:42px;font-size:12px}.reader-sender-copy{display:flex;flex-direction:column;gap:3px}.reader-sender-copy b{font-size:13px;color:#202124}.reader-sender-copy span{font-size:11px;color:#667085}.reader-sender time{margin-left:auto;color:#98a2b3;font-size:10px}.reader-body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.65;color:#202124;margin-top:30px;min-height:180px}.reader-ai{margin-top:34px;padding:12px 14px;border:1px solid #e4e7ec;border-radius:10px;background:#fbfcfd;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.reader-ai>div{display:flex;flex-direction:column;gap:4px;min-width:0}.reader-ai small{text-transform:uppercase;font-size:8px;color:#98a2b3;font-weight:700}.reader-ai b{font-size:10px;color:#475467}.reader-reply{margin-top:22px;border:1px solid #dfe3e8;border-radius:10px;overflow:hidden}.reader-reply textarea{display:block;width:100%;min-height:130px;border:0;resize:vertical;padding:14px;font:inherit;font-size:12px;outline:none;box-sizing:border-box}.reader-reply .reply-actions{padding:9px 12px}@media(max-width:880px){.mail-reader{left:0;top:0}.reader-content{padding:24px 20px}.reader-ai{grid-template-columns:1fr 1fr}}\n'''
-          if marker not in s:
-              raise SystemExit('css anchor not found')
-          s=s.replace(marker, fullscreen_css+marker)
-
-          s=s.replace("      if(rows[0])await this.openMail(rows[0]);", "      this.selected.set(null);")
-          if '  closeMail(){this.selected.set(null);}' not in s:
-              s=s.replace('  async openMail(mail:MailRow){', '  closeMail(){this.selected.set(null);}\n  async openMail(mail:MailRow){')
-
+          s=s.replace('      }\n      </div>\n    } @else {','      }\n    } @else {',1)
+          s=s.replace('grid-template-columns:176px minmax(420px,1fr) 320px;','grid-template-columns:176px minmax(0,1fr);')
+          s=s.replace('.reading-placeholder{min-width:0;background:#fff;border-left:1px solid #e4e7ec}', '.reading-placeholder{display:none}')
           p.write_text(s)
           PY
-      - name: Commit fullscreen reader
+      - name: Build Angular app
         run: |
+          cd angular-app
+          npm ci --legacy-peer-deps
+          npm run build -- --base-href /whitecorner-orders/angular2/
+      - name: Publish source and preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=$(find angular-app/dist -type f -name index.html -path '*/browser/*' -printf '%h\n' | head -1)
+          rm -rf angular2
+          mkdir angular2
+          cp -R "$OUT"/* angular2/
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add angular-app/src/app/features/email/email.component.ts
-          git commit -m "Open email messages in fullscreen reader"
+          git add angular-app/src/app/features/email/email.component.ts angular2
+          git commit -m "Finalize fullscreen Gmail-style email reader" || exit 0
           git push
