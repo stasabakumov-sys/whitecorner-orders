@@ -5,6 +5,7 @@ import { providePrimeNG } from 'primeng/config';
 import Aura from '@primeuix/themes/aura';
 import { routes } from './app.routes';
 
+// PrimeNG 21 + Aura (MIT) for White Corner Hub UI.
 export const appConfig: ApplicationConfig = {
   providers: [
     provideZonelessChangeDetection(),
