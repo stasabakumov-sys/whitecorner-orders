@@ -15,8 +15,7 @@ const ALLOWED_MAILBOXES: Record<string, string> = {
 const SCOPES = [
   "openid",
   "https://www.googleapis.com/auth/userinfo.email",
-  "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/gmail.modify",
 ];
 
 function base64url(bytes: Uint8Array) {
