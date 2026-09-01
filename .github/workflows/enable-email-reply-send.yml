@@ -20,7 +20,6 @@ jobs:
           p=Path('angular-app/src/app/features/email/email.component.ts')
           s=p.read_text()
 
-          # Toolbar buttons: real reply + forward, no fake more action
           s=s.replace('''            <button class="reader-icon" title="Reply"><i class="pi pi-reply"></i></button>\n            <button class="reader-icon" title="More"><i class="pi pi-ellipsis-v"></i></button>''','''            <button class="reader-icon" title="Reply" (click)="startReply(mail)"><i class="pi pi-reply"></i></button>\n            <button class="reader-icon" title="Forward" (click)="startForward(mail)"><i class="pi pi-forward"></i></button>''')
 
           old='''              <div class="reader-reply">\n                <div class="reply-label"><i class="pi pi-reply"></i><b>Reply</b><span>from {{mailboxAddress(mail.mailbox)}}</span></div>\n                <textarea [value]="mail.draft_reply||''" placeholder="Reply…" disabled></textarea>\n                <div class="reply-actions"><span>Reply/send will be enabled after live mail verification.</span><p-button label="Send" icon="pi pi-send" [disabled]="true"/></div>\n              </div>'''
@@ -28,25 +27,19 @@ jobs:
           if old not in s: raise SystemExit('reply block anchor missing')
           s=s.replace(old,new)
 
-          # CSS
           marker='  .agent-page{background:#fff;'
           css='''  .gmail-actions{display:flex;gap:9px;margin-top:24px;flex-wrap:wrap}.gmail-actions button{display:flex;align-items:center;gap:8px;height:38px;padding:0 16px;border:1px solid #c9cdd3;border-radius:19px;background:#fff;color:#3c4043;font:inherit;font-size:12px;cursor:pointer}.gmail-actions button:hover:not(:disabled){background:#f7f8fa}.gmail-actions .disabled-action{opacity:.45;cursor:not-allowed}.reader-reply.active{margin-top:22px}.reader-reply.active textarea{display:block;width:100%;min-height:150px;border:0;resize:vertical;padding:14px;font:inherit;font-size:12px;outline:none;box-sizing:border-box}.close-compose{margin-left:auto;border:0;background:transparent;font-size:18px;line-height:1;color:#667085;cursor:pointer}.forward-to{display:flex;align-items:center;gap:10px;border-bottom:1px solid #edf0f3;padding:8px 12px}.forward-to span{font-size:10px;color:#667085}.forward-to input{flex:1;height:30px;font-size:11px;border:0;box-shadow:none}.send-error{color:#b42318!important}\n'''
           if marker not in s: raise SystemExit('css marker missing')
           s=s.replace(marker,css+marker)
 
-          # State after mailError
           s=s.replace("  readonly mailError=signal('');", "  readonly mailError=signal('');\n  readonly replyMode=signal<'none'|'reply'|'forward'>('none');\n  readonly replyText=signal('');\n  readonly forwardTo=signal('');\n  readonly sending=signal(false);\n  readonly sendStatus=signal('');")
-
-          # Reset compose when opening/closing
           s=s.replace("  closeMail(){this.selected.set(null);}", "  closeMail(){this.cancelReply();this.selected.set(null);}")
           s=s.replace("  async openMail(mail:MailRow){\n    this.selected.set(mail);", "  async openMail(mail:MailRow){\n    this.cancelReply();\n    this.selected.set(mail);")
 
-          # Methods before dateValue
           anchor='  private dateValue(value:string)'
           methods='''  startReply(mail:MailRow){\n    this.replyMode.set('reply');this.forwardTo.set('');this.sendStatus.set('');this.replyText.set('');\n  }\n  startForward(mail:MailRow){\n    this.replyMode.set('forward');this.forwardTo.set('');this.sendStatus.set('');\n    const body=mail.body||mail.preview||'';\n    this.replyText.set(`\\n\\n---------- Forwarded message ----------\\nFrom: ${mail.correspondent} <${mail.email}>\\nDate: ${mail.received_at}\\nSubject: ${mail.subject}\\n\\n${body}`);\n  }\n  cancelReply(){this.replyMode.set('none');this.replyText.set('');this.forwardTo.set('');this.sendStatus.set('');this.sending.set(false);}\n  canSend(mail:MailRow){const text=this.replyText().trim();if(!text)return false;return this.replyMode()==='forward'?this.forwardTo().trim().includes('@'):!!mail.email;}\n  async sendCurrent(mail:MailRow){\n    if(!this.canSend(mail)||this.sending())return;\n    this.sending.set(true);this.sendStatus.set('Sending…');\n    try{\n      const forward=this.replyMode()==='forward';\n      const to=forward?this.forwardTo().trim():mail.email;\n      const subject=forward?(mail.subject.toLowerCase().startsWith('fwd:')?mail.subject:`Fwd: ${mail.subject}`):(mail.subject.toLowerCase().startsWith('re:')?mail.subject:`Re: ${mail.subject}`);\n      await this.email.send(mail.mailbox,to,subject,this.replyText());\n      this.sendStatus.set('Sent');\n      this.replyText.set('');this.forwardTo.set('');\n      setTimeout(()=>{this.replyMode.set('none');this.sendStatus.set('');},900);\n    }catch(e){this.sendStatus.set(`Error: ${String((e as Error)?.message||e)}`);}\n    finally{this.sending.set(false);}\n  }\n'''
           if anchor not in s: raise SystemExit('method anchor missing')
           s=s.replace(anchor,methods+anchor)
-
           p.write_text(s)
           PY
       - name: Build Angular app
@@ -67,3 +60,4 @@ jobs:
           git add angular-app/src/app/features/email/email.component.ts angular2
           git commit -m "Enable Gmail reply forward and send" || exit 0
           git push
+# retry after component style budget increase
