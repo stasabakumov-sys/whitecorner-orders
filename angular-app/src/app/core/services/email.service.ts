@@ -87,6 +87,10 @@ export class EmailService {
   async getMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {
     const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'get', mailbox, messageId } });
     if (error) throw error;
+    if (data?.unread) {
+      await this.modify(mailbox, messageId, 'markRead');
+      return { ...data, unread: false };
+    }
     return data;
   }
 
