@@ -36,10 +36,10 @@ import { LoginComponent } from './shared/login/login.component';
   `,
   styles: [`
     .boot{position:fixed;inset:0;display:grid;place-items:center;background:#f4f6f8}.boot>div{display:flex;flex-direction:column;gap:8px;text-align:center}.boot span{color:#758198;font-size:12px}
-    aside{position:fixed;inset:0 auto 0 0;width:240px;background:#17191f;color:#fff;padding:18px 10px}.brand{padding:2px 12px 22px;font-size:18px}.brand small{display:block;color:#9097a5;font-size:11px}
-    aside a{color:#dfe4ec;text-decoration:none;padding:10px 12px;border-radius:8px;display:flex;gap:12px;margin:2px 0;align-items:center}aside a.active{background:#2b3039;color:#fff}
-    aside button{position:absolute;bottom:20px;left:22px;right:22px;background:transparent;color:#fff;border:1px solid #454b57;border-radius:8px;padding:8px}
-    main{margin-left:240px;min-height:100vh;background:#f4f6f8}header{height:56px;background:#fff;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;padding:0 24px;font-size:18px;font-weight:600}header small{margin-left:auto;color:#758198}.content{padding:18px 24px 38px}
+    aside{position:fixed;inset:0 auto 0 0;width:205px;background:#17191f;color:#fff;padding:18px 9px}.brand{padding:2px 11px 22px;font-size:18px}.brand small{display:block;color:#9097a5;font-size:11px}
+    aside a{color:#dfe4ec;text-decoration:none;padding:9px 11px;border-radius:8px;display:flex;gap:10px;margin:2px 0;align-items:center;font-size:14px}aside a.active{background:#2b3039;color:#fff}
+    aside button{position:absolute;bottom:20px;left:18px;right:18px;background:transparent;color:#fff;border:1px solid #454b57;border-radius:8px;padding:8px}
+    main{margin-left:205px;min-height:100vh;background:#f4f6f8}header{height:56px;background:#fff;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;padding:0 22px;font-size:18px;font-weight:600}header small{margin-left:auto;color:#758198}.content{padding:18px 22px 38px}
     :host ::ng-deep app-fulfilment .head{align-items:flex-start!important;flex-direction:column!important;gap:12px!important}
     :host ::ng-deep app-fulfilment .tabs{margin-left:0!important}
   `],
