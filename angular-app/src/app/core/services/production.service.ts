@@ -5,6 +5,7 @@ import { SupabaseService } from './supabase.service';
 import { ActivityService } from './activity.service';
 import { OrderActivityRow, OrderItemRow, OrderRow, ProductionUnitRow } from '../models/order.models';
 import { ProductKind, ProductionStatus, ProductionUnitView, UnitAddonView } from '../models/production.models';
+import { orderItemOptionLabels } from '../utils/order-item-display';
 
 const STATUSES: ProductionStatus[] = ['New','CNC','Assembly','Painting','Packing','Ready'];
 const ADDON_WORDS = ['additional tabletop','custom cutout','custom cutouts','side shelves','integrated ice storage shelf','umbrella hole','support panel','customisation','customization','back panel with','benchtop upgrade'];
@@ -89,19 +90,7 @@ export class ProductionService {
   }
 
   optionLabels(item: OrderItemRow): string[] {
-    const out: string[] = [];
-    for (const source of [item.wix_options, item.custom_text_fields]) {
-      if (!source || typeof source !== 'object') continue;
-      for (const [key, value] of Object.entries(source)) {
-        let label = '';
-        if (value != null && typeof value === 'object') {
-          const obj = value as Record<string, unknown>;
-          label = String(obj['value'] ?? obj['name'] ?? obj['description'] ?? '');
-        } else if (value != null) label = String(value);
-        if (label) out.push(`${key}: ${label}`);
-      }
-    }
-    return [...new Set(out)].slice(0, 10);
+    return orderItemOptionLabels(item, 12);
   }
 
   private makeUnit(order: OrderRow, main: OrderItemRow, unit: ProductionUnitRow, index: number, trackedCount: number, addons: OrderItemRow[]): ProductionUnitView {
