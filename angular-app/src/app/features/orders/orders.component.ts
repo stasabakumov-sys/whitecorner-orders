@@ -1,5 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, computed, OnInit, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
@@ -37,7 +38,14 @@ import { OrderDrawerComponent } from '../../shared/order-drawer/order-drawer.com
 export class OrdersComponent implements OnInit{
   search=signal('');selected=signal<OrderRow|null>(null);syncing=signal(false);
   filtered=computed(()=>{const q=this.search().toLowerCase();return this.orders.orders().filter(o=>!q||JSON.stringify(o).toLowerCase().includes(q));});
-  constructor(readonly orders:OrdersService){}
-  ngOnInit(){if(!this.orders.orders().length)void this.orders.load();}
+  constructor(readonly orders:OrdersService,private readonly route:ActivatedRoute){}
+  async ngOnInit(){
+    if(!this.orders.orders().length) await this.orders.load();
+    const requested=this.route.snapshot.queryParamMap.get('order');
+    if(requested){
+      const order=this.orders.orders().find(o=>String(o.order_number)===String(requested));
+      if(order)this.selected.set(order);
+    }
+  }
   async sync(){this.syncing.set(true);try{await this.orders.syncWix();}catch(e){this.orders.error.set('Wix sync failed: '+String((e as Error)?.message??e));}finally{this.syncing.set(false);}}
 }
