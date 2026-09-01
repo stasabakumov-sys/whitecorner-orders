@@ -5,6 +5,7 @@ import { ProductionBoardComponent } from './features/production-board/production
 import { FulfilmentComponent } from './features/fulfilment/fulfilment.component';
 import { AddressReviewComponent } from './features/address-review/address-review.component';
 import { ShippingDataComponent } from './features/shipping-data/shipping-data.component';
+import { EmailComponent } from './features/email/email.component';
 
 export const routes:Routes=[
   {path:'',pathMatch:'full',redirectTo:'home'},
@@ -13,6 +14,7 @@ export const routes:Routes=[
   {path:'production',component:ProductionBoardComponent},
   {path:'fulfilment',pathMatch:'full',redirectTo:'fulfilment/delivery'},
   {path:'fulfilment/:tab',component:FulfilmentComponent},
+  {path:'email',component:EmailComponent},
   {path:'address-review',component:AddressReviewComponent},
   {path:'shipping-data',component:ShippingDataComponent},
   {path:'**',redirectTo:'home'}
