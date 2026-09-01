@@ -37,14 +37,37 @@ function addDescriptionLines(out: string[], lines: unknown): void {
   }
 }
 
+function addWixOptionsContainer(out: string[], source: unknown): void {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return;
+  const obj = source as Record<string, unknown>;
+  const wrapperKeys = ['options','customTextFields','custom_text_fields','selectedOptions','selected_options','choices','lineItemOptions'];
+  let usedWrapper = false;
+  for (const key of wrapperKeys) {
+    if (obj[key] != null) {
+      addObject(out, obj[key]);
+      usedWrapper = true;
+    }
+  }
+  // Some Wix line items (especially older/catalog variants) store selected
+  // option-name/value pairs directly inside catalogReference.options rather
+  // than inside an additional .options wrapper.
+  if (!usedWrapper) addObject(out, obj);
+}
+
 export function orderItemOptionLabels(item: OrderItemRow, limit = 12): string[] {
   const out: string[] = [];
 
-  // Wix has used different line-item shapes over time. Keep one canonical
-  // extraction path for the whole Hub, ordered from normalized fields to raw fallbacks.
+  // Canonical normalized fields first.
   addObject(out, item.wix_options);
   addObject(out, item.custom_text_fields);
   addDescriptionLines(out, item.description_lines);
+
+  // Wix catalogReference has appeared in more than one shape over time.
+  const catalog = item.catalog_reference;
+  if (catalog && typeof catalog === 'object') {
+    const c = catalog as Record<string, unknown>;
+    addWixOptionsContainer(out, c['options']);
+  }
 
   const raw = item.raw_item ?? {};
   if (raw && typeof raw === 'object') {
@@ -53,6 +76,12 @@ export function orderItemOptionLabels(item: OrderItemRow, limit = 12): string[] 
       addObject(out, r[key]);
     }
     for (const key of ['descriptionLines','description_lines']) addDescriptionLines(out, r[key]);
+
+    const rawCatalog = r['catalogReference'];
+    if (rawCatalog && typeof rawCatalog === 'object') {
+      const rc = rawCatalog as Record<string, unknown>;
+      addWixOptionsContainer(out, rc['options']);
+    }
   }
 
   return [...new Set(out.map(x => x.trim()).filter(Boolean))].slice(0, limit);
