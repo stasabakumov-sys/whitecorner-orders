@@ -45,6 +45,8 @@ export interface GmailAttachment {
 }
 
 export interface GmailMessageDetail {
+  id?: string;
+  threadId?: string;
   body: string;
   html?: string;
   subject: string;
@@ -55,6 +57,12 @@ export interface GmailMessageDetail {
   starred?: boolean;
   imagesBlocked?: boolean;
   attachments?: GmailAttachment[];
+}
+
+export interface GmailSendContext {
+  mode?: 'compose' | 'reply' | 'forward';
+  sourceMessageId?: string;
+  threadId?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -178,13 +186,13 @@ export class EmailService {
     }
   }
 
-  async send(mailbox: GmailMailboxKey, to: string, subject: string, text: string, files: File[] = []): Promise<void> {
+  async send(mailbox: GmailMailboxKey, to: string, subject: string, text: string, files: File[] = [], context: GmailSendContext = {}): Promise<void> {
     if (files.length) {
       const { data: capabilities, error: capabilityError } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'capabilities', mailbox } });
       if (capabilityError || capabilities?.attachments !== true) throw new Error('File attachments are not active on the Gmail server yet. The message was not sent.');
     }
     const attachments = await Promise.all(files.map(async file => ({ filename: file.name, mimeType: file.type || 'application/octet-stream', data: await this.fileBase64(file) })));
-    const { error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'send', mailbox, to, subject, text, attachments } });
+    const { error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'send', mailbox, to, subject, text, attachments, ...context } });
     if (error) throw error;
     this.listCache.delete(this.listKey(mailbox, 'Sent'));
   }

@@ -105,6 +105,12 @@ function encodeRawMail(value: string) {
 }
 function wrapBase64(value: string) { return value.match(/.{1,76}/g)?.join("\r\n") || ""; }
 function quotedHeader(value: string) { return value.replace(/[\r\n"]/g, "_"); }
+function headerText(value: string) { return value.replace(/[\r\n]+/g, " ").trim(); }
+function escapeHtml(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function textAsHtml(value: string) { return escapeHtml(value).replace(/\r?\n/g, "<br>"); }
+function quotedPlain(value: string) { return value.split(/\r?\n/).map(line => `> ${line}`).join("\r\n"); }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -142,7 +148,7 @@ Deno.serve(async (req) => {
     if (mailboxError) throw mailboxError;
     if (!mailbox?.refresh_token) return new Response(JSON.stringify({ connected: false, mailbox: mailboxKey, email: expectedEmail }), { status: action === "status" ? 200 : 409, headers: jsonHeaders });
     if (action === "status") return new Response(JSON.stringify({ connected: true, mailbox: mailboxKey, email: mailbox.email, connectedAt: mailbox.connected_at, lastSyncAt: mailbox.last_sync_at, scopes: mailbox.granted_scopes || [] }), { headers: jsonHeaders });
-    if (action === "capabilities") return new Response(JSON.stringify({ version: 2, html: true, inlineImages: true, attachments: true }), { headers: jsonHeaders });
+    if (action === "capabilities") return new Response(JSON.stringify({ version: 3, html: true, inlineImages: true, attachments: true, threadedReplies: true, forwardedAttachments: true }), { headers: jsonHeaders });
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -266,27 +272,89 @@ Deno.serve(async (req) => {
       const to = String(body.to || "").trim();
       const subject = String(body.subject || "").trim();
       const text = String(body.text || "");
-      const attachments = Array.isArray(body.attachments) ? body.attachments.slice(0, 10) : [];
-      if (!to || !subject || !text) return new Response(JSON.stringify({ error: "to, subject and text are required" }), { status: 400, headers: jsonHeaders });
+      const mode = String(body.mode || "compose");
+      const sourceMessageId = String(body.sourceMessageId || "");
+      let recipient = to;
+      let attachments = Array.isArray(body.attachments) ? body.attachments.slice(0, 10) : [];
+      if (!to || !subject || (mode !== "forward" && !text)) return new Response(JSON.stringify({ error: "recipient, subject and message text are required" }), { status: 400, headers: jsonHeaders });
+      if (!["compose", "reply", "forward"].includes(mode)) return new Response(JSON.stringify({ error: "Unknown send mode" }), { status: 400, headers: jsonHeaders });
+
+      let outgoingText = text;
+      let outgoingHtml = `<div>${textAsHtml(text)}</div>`;
+      let targetThreadId = "";
+      const replyHeaders: string[] = [];
+      if (mode === "reply" || mode === "forward") {
+        if (!sourceMessageId) return new Response(JSON.stringify({ error: "sourceMessageId required for reply or forward" }), { status: 400, headers: jsonHeaders });
+        const sourceRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(sourceMessageId)}?format=full`, { headers: gmailHeaders });
+        const source = await sourceRes.json();
+        if (!sourceRes.ok) throw new Error(`Gmail source message failed: ${JSON.stringify(source)}`);
+        const sourceHeaders = source.payload?.headers || [];
+        const sourceFrom = headerValue(sourceHeaders, "From");
+        const sourceReplyTo = headerValue(sourceHeaders, "Reply-To");
+        const sourceTo = headerValue(sourceHeaders, "To");
+        const sourceDate = headerValue(sourceHeaders, "Date");
+        const sourceSubject = headerValue(sourceHeaders, "Subject") || subject;
+        const sourceInternetId = headerValue(sourceHeaders, "Message-ID") || headerValue(sourceHeaders, "Message-Id");
+        const sourceReferences = headerValue(sourceHeaders, "References");
+        const sourceContent = await extractMessageContent(source.payload, sourceMessageId, gmailHeaders, true);
+        const sourcePlain = sourceContent.body || stripHtml(sourceContent.html || "");
+        const sourceHtml = sourceContent.html || `<div>${textAsHtml(sourcePlain)}</div>`;
+
+        if (mode === "reply") {
+          if (sourceReplyTo) recipient = displayEmail(sourceReplyTo);
+          const attribution = `On ${sourceDate || "the previous message"}, ${sourceFrom || "the sender"} wrote:`;
+          outgoingText = `${text.trim()}\r\n\r\n${attribution}\r\n${quotedPlain(sourcePlain)}`;
+          outgoingHtml = `<div>${textAsHtml(text.trim())}</div><br><div class="gmail_quote"><div>${escapeHtml(attribution)}</div><blockquote style="margin:8px 0 0 10px;padding-left:10px;border-left:1px solid #ccc">${sourceHtml}</blockquote></div>`;
+          targetThreadId = String(source.threadId || body.threadId || "");
+          if (sourceInternetId) {
+            replyHeaders.push(`In-Reply-To: ${headerText(sourceInternetId)}`);
+            replyHeaders.push(`References: ${headerText(`${sourceReferences} ${sourceInternetId}`)}`);
+          }
+        } else {
+          const forwardHeader = `---------- Forwarded message ----------\r\nFrom: ${sourceFrom}\r\nDate: ${sourceDate}\r\nSubject: ${sourceSubject}\r\nTo: ${sourceTo}`;
+          outgoingText = `${text.trim()}${text.trim() ? "\r\n\r\n" : ""}${forwardHeader}\r\n\r\n${sourcePlain}`;
+          outgoingHtml = `${text.trim() ? `<div>${textAsHtml(text.trim())}</div><br>` : ""}<div class="gmail_quote"><div>---------- Forwarded message ----------</div><div><b>From:</b> ${escapeHtml(sourceFrom)}</div><div><b>Date:</b> ${escapeHtml(sourceDate)}</div><div><b>Subject:</b> ${escapeHtml(sourceSubject)}</div><div><b>To:</b> ${escapeHtml(sourceTo)}</div><br>${sourceHtml}</div>`;
+          const forwarded = [];
+          for (const part of allParts(source.payload)) {
+            const filename = String(part?.filename || "");
+            if (!filename || !(part?.body?.data || part?.body?.attachmentId) || forwarded.length >= 10) continue;
+            const data = await partData(part, sourceMessageId, gmailHeaders);
+            if (!data) continue;
+            const contentId = headerValue(part?.headers || [], "Content-ID").replace(/[<>\r\n]/g, "");
+            forwarded.push({ filename, mimeType: String(part?.mimeType || "application/octet-stream"), data: data.replaceAll("-", "+").replaceAll("_", "/"), inline: Boolean(contentId), contentId });
+          }
+          attachments = [...forwarded, ...attachments].slice(0, 10);
+        }
+      }
+
+      const safeTo = headerText(recipient);
+      const safeSubject = headerText(subject);
+      const alternativeBoundary = `wc_alt_${crypto.randomUUID().replaceAll("-", "")}`;
+      const baseHeaders = [`From: ${expectedEmail}`, `To: ${safeTo}`, `Subject: ${safeSubject}`, ...replyHeaders, "MIME-Version: 1.0"];
+      const alternativeParts = [`--${alternativeBoundary}`, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", outgoingText, `--${alternativeBoundary}`, "Content-Type: text/html; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", outgoingHtml, `--${alternativeBoundary}--`, ""];
       let raw = "";
       if (attachments.length) {
-        const boundary = `wc_${crypto.randomUUID().replaceAll("-", "")}`;
-        const chunks = [`From: ${expectedEmail}`, `To: ${to}`, `Subject: ${subject}`, "MIME-Version: 1.0", `Content-Type: multipart/mixed; boundary="${boundary}"`, "", `--${boundary}`, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", text];
+        const mixedBoundary = `wc_mixed_${crypto.randomUUID().replaceAll("-", "")}`;
+        const chunks = [...baseHeaders, `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`, "", `--${mixedBoundary}`, `Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`, "", ...alternativeParts];
         for (const attachment of attachments) {
           const filename = quotedHeader(String(attachment?.filename || "attachment"));
           const mimeType = String(attachment?.mimeType || "application/octet-stream").replace(/[^a-z0-9.+\-\/]/gi, "") || "application/octet-stream";
           const data = String(attachment?.data || "").replace(/[^a-zA-Z0-9+/=]/g, "");
           if (!data) continue;
-          chunks.push(`--${boundary}`, `Content-Type: ${mimeType}; name="${filename}"`, "Content-Transfer-Encoding: base64", `Content-Disposition: attachment; filename="${filename}"`, "", wrapBase64(data));
+          const inline = attachment?.inline === true;
+          const contentId = String(attachment?.contentId || "").replace(/[<>\r\n]/g, "");
+          chunks.push(`--${mixedBoundary}`, `Content-Type: ${mimeType}; name="${filename}"`, "Content-Transfer-Encoding: base64", `Content-Disposition: ${inline ? "inline" : "attachment"}; filename="${filename}"`);
+          if (inline && contentId) chunks.push(`Content-ID: <${contentId}>`);
+          chunks.push("", wrapBase64(data));
         }
-        chunks.push(`--${boundary}--`, "");raw = chunks.join("\r\n");
+        chunks.push(`--${mixedBoundary}--`, "");raw = chunks.join("\r\n");
       } else {
-        raw = [`From: ${expectedEmail}`, `To: ${to}`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", text].join("\r\n");
+        raw = [...baseHeaders, `Content-Type: multipart/alternative; boundary="${alternativeBoundary}"`, "", ...alternativeParts].join("\r\n");
       }
       const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
         method: "POST",
         headers: { ...gmailHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ raw: encodeRawMail(raw) }),
+        body: JSON.stringify({ raw: encodeRawMail(raw), ...(targetThreadId ? { threadId: targetThreadId } : {}) }),
       });
       const sent = await sendRes.json();
       if (!sendRes.ok) throw new Error(`Gmail send failed: ${JSON.stringify(sent)}`);
