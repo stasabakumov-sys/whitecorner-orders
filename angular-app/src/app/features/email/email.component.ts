@@ -206,6 +206,7 @@ export class EmailComponent{
   readonly messageActionStatus=signal('');
   readonly bodyLoading=signal('');
   private readerHistoryPushed=false;
+  private selectionVersion=0;
   readonly mailboxInboxCounts=signal<{info:number;support:number}>({info:0,support:0});
   private readonly loadedViews=new Set<string>();
   private readonly viewLoads=new Map<string,Promise<void>>();
@@ -284,7 +285,7 @@ export class EmailComponent{
   }
   closeMail(){
     const shouldPopHistory=this.readerHistoryPushed&&history.state?.wcMailReader===true;
-    this.readerHistoryPushed=false;this.cancelReply();this.selected.set(null);
+    this.selectionVersion++;this.bodyLoading.set('');this.readerHistoryPushed=false;this.cancelReply();this.selected.set(null);
     if(shouldPopHistory)history.back();
   }
   async openMail(mail:MailRow){
@@ -295,13 +296,18 @@ export class EmailComponent{
     await this.showMail(mail);
   }
   private async showMail(mail:MailRow){
-    this.cancelReply();this.selected.set(mail);
+    const version=++this.selectionVersion;const loadingKey=`${mail.mailbox}:${mail.id}`;
+    this.cancelReply();this.bodyLoading.set(mail.body?'':loadingKey);this.selected.set(mail);
     let current=mail;
     try{
-      if(!mail.body){const loadingKey=`${mail.mailbox}:${mail.id}`;this.bodyLoading.set(loadingKey);try{const full=await this.email.getMessage(mail.mailbox,mail.id);current={...mail,body:this.normalizeMessageBody(full.body,mail.preview),received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??false,starred:full.starred??mail.starred};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(current);}finally{if(this.bodyLoading()===loadingKey)this.bodyLoading.set('');}}
+      if(!mail.body){const full=await this.email.getMessage(mail.mailbox,mail.id);current={...mail,body:this.normalizeMessageBody(full.body,mail.preview),received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??mail.unread,starred:full.starred??mail.starred};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));}
+      if(version!==this.selectionVersion||this.selected()?.id!==mail.id||this.selected()?.mailbox!==mail.mailbox)return;
+      this.bodyLoading.set('');this.selected.set(current);
       if(current.status==='Inbox'&&current.unread){current=this.patchMail(current,{unread:false});try{await this.email.modify(current.mailbox,current.id,'markRead');}catch(e){current=this.patchMail(current,{unread:true});throw e;}}
+      if(version!==this.selectionVersion||this.selected()?.id!==mail.id||this.selected()?.mailbox!==mail.mailbox)return;
       if(current.status==='Inbox'&&current.ai_state==='Not analysed')void this.analyseMail(current);
-    }catch(e){this.mailError.set(String((e as Error)?.message||e));}
+    }catch(e){if(version===this.selectionVersion)this.mailError.set(String((e as Error)?.message||e));}
+    finally{if(version===this.selectionVersion&&this.bodyLoading()===loadingKey)this.bodyLoading.set('');}
   }
   private async analyseMail(mail:MailRow){
     try{
@@ -409,9 +415,9 @@ export class EmailComponent{
   private dateValue(value:string){const n=Date.parse(value);return Number.isFinite(n)?n:0;}
   private normalizeMessageBody(value:string|undefined,fallback:string){
     const source=(value||'').replace(/&(#\d+|#x[0-9a-f]+|nbsp|amp|lt|gt|quot|apos|rsquo|lsquo|rdquo|ldquo|ndash|mdash|hellip);/gi,entity=>this.decodeMailEntity(entity)).replace(/\u00a0/g,' ').replace(/\r/g,'');
-    const lines=source.split('\n').map(line=>line.replace(/[ \t]+/g,' ').trim()).filter(Boolean);
+    const lines=source.split('\n').map(line=>line.replace(/[\u2000-\u200f\u2028-\u202f\u205f\u3000]/g,' ').replace(/[ \t]+/g,' ').trim()).filter(Boolean);
     const numericLines=lines.filter(line=>/^\d{1,2}$/.test(line)).length;
-    const cleaned=(numericLines>=4?lines.filter(line=>!/^\d{1,2}$/.test(line)):lines).join('\n\n').trim();
+    const cleaned=(numericLines>=4?lines.filter(line=>!/^\d{1,2}$/.test(line)):lines).join('\n').trim();
     const letters=(cleaned.match(/[a-z]/gi)||[]).length;
     return cleaned&&letters>=Math.min(12,Math.max(3,cleaned.length/10))?cleaned:(fallback||cleaned||'Message content is unavailable.');
   }
