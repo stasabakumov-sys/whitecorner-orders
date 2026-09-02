@@ -105,7 +105,7 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
                       <div class="thread-message-content">
                         @if(message.html_body){<div class="reader-body reader-html" [innerHTML]="message.html_body"></div>}@else{<div class="reader-body">{{message.body||message.preview}}</div>}
                         @if(mediaLoading()===message.mailbox+':'+message.id){<div class="email-media-loading"><i class="pi pi-spin pi-spinner"></i><span>Loading images…</span></div>}
-                        @if(message.images_blocked){<div class="email-media-notice"><span>Images load after the message text.</span><button (click)="displayThreadImages(message);$event.stopPropagation()" [disabled]="mediaLoading()!==''">Load images</button></div>}
+                        @if(message.images_blocked&&imageLoadFailed(message.id)){<div class="email-media-notice"><span>Images could not be loaded automatically.</span><button (click)="displayThreadImages(message);$event.stopPropagation()" [disabled]="mediaLoading()!==''">Try again</button></div>}
                         @if(imageAttachments(message).length){<div class="email-image-previews">@for(attachment of imageAttachments(message);track attachment.attachmentId){@if(attachmentPreview(message,attachment);as preview){<button type="button" (click)="downloadAttachment(message,attachment)" [title]="'Download '+attachment.filename"><img [src]="preview" [alt]="attachment.filename"><span>{{attachment.filename}}</span></button>}@else{<div class="image-preview-loading">Loading image…</div>}}</div>}
                         @if(message.attachments?.length){<div class="email-attachments"><b>Attachments</b><div>@for(attachment of message.attachments;track attachment.attachmentId){<button (click)="downloadAttachment(message,attachment)"><span>{{attachment.filename}}</span><small>{{attachmentSize(attachment.size)}}</small></button>}</div></div>}
                       </div>
@@ -235,6 +235,7 @@ export class EmailComponent implements OnDestroy{
   readonly messageActionStatus=signal('');
   readonly bodyLoading=signal('');
   readonly mediaLoading=signal('');
+  readonly imageLoadFailures=signal<Set<string>>(new Set());
   readonly attachmentPreviews=signal<Record<string,string>>({});
   private readerHistoryPushed=false;
   private selectionVersion=0;
@@ -324,7 +325,7 @@ export class EmailComponent implements OnDestroy{
   }
   closeMail(){
     const shouldPopHistory=this.readerHistoryPushed&&history.state?.wcMailReader===true;
-    this.selectionVersion++;this.bodyLoading.set('');this.mediaLoading.set('');this.readerHistoryPushed=false;this.cancelReply();this.clearAttachmentPreviews();this.threadMessages.set([]);this.expandedThreadMessages.set(new Set());this.selected.set(null);
+    this.selectionVersion++;this.bodyLoading.set('');this.mediaLoading.set('');this.imageLoadFailures.set(new Set());this.readerHistoryPushed=false;this.cancelReply();this.clearAttachmentPreviews();this.threadMessages.set([]);this.expandedThreadMessages.set(new Set());this.selected.set(null);
     if(shouldPopHistory)history.back();
   }
   async openMail(mail:MailRow){
@@ -355,8 +356,7 @@ export class EmailComponent implements OnDestroy{
       }else if(!current.body){const full=await this.email.getMessage(mail.mailbox,mail.id,false);current=this.mergeMessageDetail(mail,full);this.threadMessages.set([current]);this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));}
       if(version!==this.selectionVersion||this.selected()?.id!==mail.id||this.selected()?.mailbox!==mail.mailbox)return;
       this.bodyLoading.set('');this.selected.set(current);
-      for(const message of this.threadMessages().filter(message=>this.threadExpanded(message.id)))void this.loadImagePreviews(message,version);
-      const latest=this.threadMessages().at(-1);if(latest?.images_blocked)void this.loadThreadMessageMedia(latest,version);
+      for(const message of this.threadMessages().filter(message=>this.threadExpanded(message.id))){void this.loadImagePreviews(message,version);if(message.images_blocked)void this.loadThreadMessageMedia(message,version);}
       if(current.status==='Inbox'&&current.unread){current=this.patchMail(current,{unread:false});void this.email.modify(current.mailbox,current.id,'markRead').catch(e=>{if(version===this.selectionVersion)this.patchMail(current,{unread:true});console.warn('Mark read failed',e);});}
       if(current.status==='Inbox'&&current.ai_state==='Not analysed')void this.analyseMail(current);
     }catch(e){if(version===this.selectionVersion)this.mailError.set(String((e as Error)?.message||e));}
@@ -370,6 +370,7 @@ export class EmailComponent implements OnDestroy{
   private extractName(value:string){return(value.match(/^\s*"?([^"<]+?)"?\s*</)?.[1]||this.extractAddress(value).split('@')[0]||value).trim();}
   private initialsFor(value:string){return value.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]?.toUpperCase()||'').join('')||'?';}
   threadExpanded(id:string){return this.expandedThreadMessages().has(id);}
+  imageLoadFailed(id:string){return this.imageLoadFailures().has(id);}
   toggleThreadMessage(message:ThreadMail){const next=new Set(this.expandedThreadMessages());if(next.has(message.id))next.delete(message.id);else next.add(message.id);this.expandedThreadMessages.set(next);if(next.has(message.id)){const version=this.selectionVersion;void this.loadImagePreviews(message,version);if(message.images_blocked)void this.loadThreadMessageMedia(message,version);}}
   replyTarget(fallback:MailRow){return this.threadMessages().at(-1)||fallback;}
   private mergeMessageDetail(mail:MailRow,full:GmailMessageDetail):MailRow{
@@ -387,14 +388,14 @@ export class EmailComponent implements OnDestroy{
     finally{if(version===this.selectionVersion&&this.mediaLoading()===key)this.mediaLoading.set('');}
   }
   private async loadThreadMessageMedia(mail:ThreadMail,version:number){
-    const key=`${mail.mailbox}:${mail.id}`;if(this.mediaLoading()===key)return;this.mediaLoading.set(key);
+    const key=`${mail.mailbox}:${mail.id}`;if(this.mediaLoading()===key)return;this.mediaLoading.set(key);this.imageLoadFailures.update(values=>{const next=new Set(values);next.delete(mail.id);return next;});
     try{
       const full=await this.email.getMessage(mail.mailbox,mail.id,true);
       if(version!==this.selectionVersion||!this.selected())return;
       const updated=this.toThreadMail(mail,full as GmailThreadMessage);
       this.threadMessages.update(messages=>messages.map(message=>message.id===mail.id?updated:message));
       void this.loadImagePreviews(updated,version);
-    }catch(e){if(version===this.selectionVersion)this.mailError.set(`Images: ${String((e as Error)?.message||e)}`);}
+    }catch(e){if(version===this.selectionVersion){this.imageLoadFailures.update(values=>new Set(values).add(mail.id));console.warn('Automatic image loading failed',e);}}
     finally{if(version===this.selectionVersion&&this.mediaLoading()===key)this.mediaLoading.set('');}
   }
   private async analyseMail(mail:MailRow){
