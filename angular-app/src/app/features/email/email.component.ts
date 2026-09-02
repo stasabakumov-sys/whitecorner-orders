@@ -89,7 +89,7 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
                 <div class="reader-sender-copy"><b>{{mail.correspondent}}</b><span>{{mail.email}}</span></div>
                 <time>{{mail.time}}</time>
               </div>
-              <article class="reader-body">{{mail.body || mail.preview}}</article>
+              @if(bodyLoading()===mail.mailbox+':'+mail.id){<div class="reader-body" style="color:#98a2b3">Loading full message…</div>}@else{<article class="reader-body">{{mail.body || mail.preview}}</article>}
               <div class="reader-ai">
                 <div><small>AI</small><p-tag [value]="mail.ai_state||'Not analysed'" [severity]="aiSeverity(mail.ai_state)"/></div>
                 <div><small>Category</small><b>{{mail.intent||'Not analysed'}}</b></div>
@@ -204,6 +204,7 @@ export class EmailComponent{
   readonly composeStatus=signal('');
   readonly messageAction=signal('');
   readonly messageActionStatus=signal('');
+  readonly bodyLoading=signal('');
   private readerHistoryPushed=false;
   readonly mailboxInboxCounts=signal<{info:number;support:number}>({info:0,support:0});
   private readonly loadedViews=new Set<string>();
@@ -297,7 +298,7 @@ export class EmailComponent{
     this.cancelReply();this.selected.set(mail);
     let current=mail;
     try{
-      if(!mail.body){const full=await this.email.getMessage(mail.mailbox,mail.id);current={...mail,body:full.body||mail.preview,received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??false,starred:full.starred??mail.starred};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(current);}
+      if(!mail.body){const loadingKey=`${mail.mailbox}:${mail.id}`;this.bodyLoading.set(loadingKey);try{const full=await this.email.getMessage(mail.mailbox,mail.id);current={...mail,body:this.normalizeMessageBody(full.body,mail.preview),received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??false,starred:full.starred??mail.starred};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(current);}finally{if(this.bodyLoading()===loadingKey)this.bodyLoading.set('');}}
       if(current.status==='Inbox'&&current.unread){current=this.patchMail(current,{unread:false});try{await this.email.modify(current.mailbox,current.id,'markRead');}catch(e){current=this.patchMail(current,{unread:true});throw e;}}
       if(current.status==='Inbox'&&current.ai_state==='Not analysed')void this.analyseMail(current);
     }catch(e){this.mailError.set(String((e as Error)?.message||e));}
@@ -406,6 +407,18 @@ export class EmailComponent{
     finally{this.sending.set(false);}
   }
   private dateValue(value:string){const n=Date.parse(value);return Number.isFinite(n)?n:0;}
+  private normalizeMessageBody(value:string|undefined,fallback:string){
+    const source=(value||'').replace(/&(#\d+|#x[0-9a-f]+|nbsp|amp|lt|gt|quot|apos|rsquo|lsquo|rdquo|ldquo|ndash|mdash|hellip);/gi,entity=>this.decodeMailEntity(entity)).replace(/\u00a0/g,' ').replace(/\r/g,'');
+    const lines=source.split('\n').map(line=>line.replace(/[ \t]+/g,' ').trim()).filter(Boolean);
+    const numericLines=lines.filter(line=>/^\d{1,2}$/.test(line)).length;
+    const cleaned=(numericLines>=4?lines.filter(line=>!/^\d{1,2}$/.test(line)):lines).join('\n\n').trim();
+    const letters=(cleaned.match(/[a-z]/gi)||[]).length;
+    return cleaned&&letters>=Math.min(12,Math.max(3,cleaned.length/10))?cleaned:(fallback||cleaned||'Message content is unavailable.');
+  }
+  private decodeMailEntity(entity:string){
+    const value=entity.slice(1,-1).toLowerCase();if(value.startsWith('#x'))return String.fromCodePoint(parseInt(value.slice(2),16));if(value.startsWith('#'))return String.fromCodePoint(parseInt(value.slice(1),10));
+    return({nbsp:' ',amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",rsquo:'’',lsquo:'‘',rdquo:'”',ldquo:'“',ndash:'–',mdash:'—',hellip:'…'} as Record<string,string>)[value]||entity;
+  }
   private formatMailTime(value:string){const d=new Date(value);if(Number.isNaN(d.getTime()))return value;const now=new Date();if(d.toDateString()===now.toDateString())return d.toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit'});return d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});}
   countFor(view:MailView){const box=this.activeMailbox();return this.rows().filter(row=>this.belongsToView(row,view)&&(box==='all'||row.mailbox===box)).length;}
   mailboxCount(box:MailboxId){const c=this.mailboxInboxCounts();if(box==='info')return c.info;if(box==='support')return c.support;return c.info+c.support;}
