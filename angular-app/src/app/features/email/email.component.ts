@@ -466,7 +466,9 @@ export class EmailComponent implements OnDestroy{
     finally{if(version===this.selectionVersion)this.bodyLoading.set('');}
   }
   async displayThreadImages(mail:ThreadMail){await this.loadThreadMessageMedia(mail,this.selectionVersion);}
-  imageAttachments(mail:MailRow){return(mail.attachments||[]).filter(attachment=>attachment.mimeType.startsWith('image/')&&!attachment.inline).slice(0,6);}
+  imageAttachments(mail:MailRow){return(mail.attachments||[]).filter(attachment=>this.isImageAttachment(attachment)&&!attachment.inline).slice(0,6);}
+  private isImageAttachment(attachment:GmailAttachment){return attachment.mimeType.toLowerCase().startsWith('image/')||/\.(?:png|jpe?g|gif|webp|bmp|avif|heic|heif)$/i.test(attachment.filename);}
+  private inferredImageType(attachment:GmailAttachment){if(attachment.mimeType.toLowerCase().startsWith('image/'))return attachment.mimeType;const extension=attachment.filename.toLowerCase().split('.').pop();return({png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',bmp:'image/bmp',avif:'image/avif',heic:'image/heic',heif:'image/heif'} as Record<string,string>)[extension||'']||'application/octet-stream';}
   attachmentPreview(mail:MailRow,attachment:GmailAttachment){return this.attachmentPreviews()[this.attachmentKey(mail,attachment)]||'';}
   private attachmentKey(mail:MailRow,attachment:GmailAttachment){return`${mail.mailbox}:${mail.id}:${attachment.attachmentId}`;}
   private async loadImagePreviews(mail:MailRow,version:number){
@@ -475,7 +477,8 @@ export class EmailComponent implements OnDestroy{
       try{
         const blob=await this.email.downloadAttachment(mail.mailbox,mail.id,attachment);
         if(version!==this.selectionVersion||this.selected()?.mailbox!==mail.mailbox||(!this.threadMessages().some(message=>message.id===mail.id)&&this.selected()?.id!==mail.id))return;
-        const url=URL.createObjectURL(blob);this.attachmentPreviews.update(previews=>({...previews,[key]:url}));
+        const previewBlob=blob.type.startsWith('image/')?blob:new Blob([blob],{type:this.inferredImageType(attachment)});
+        const url=URL.createObjectURL(previewBlob);this.attachmentPreviews.update(previews=>({...previews,[key]:url}));
       }catch(e){console.warn('Image attachment preview failed',e);}
     }));
   }
