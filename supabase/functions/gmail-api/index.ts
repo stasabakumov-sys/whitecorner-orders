@@ -142,6 +142,7 @@ Deno.serve(async (req) => {
     if (mailboxError) throw mailboxError;
     if (!mailbox?.refresh_token) return new Response(JSON.stringify({ connected: false, mailbox: mailboxKey, email: expectedEmail }), { status: action === "status" ? 200 : 409, headers: jsonHeaders });
     if (action === "status") return new Response(JSON.stringify({ connected: true, mailbox: mailboxKey, email: mailbox.email, connectedAt: mailbox.connected_at, lastSyncAt: mailbox.last_sync_at, scopes: mailbox.granted_scopes || [] }), { headers: jsonHeaders });
+    if (action === "capabilities") return new Response(JSON.stringify({ version: 2, html: true, inlineImages: true, attachments: true }), { headers: jsonHeaders });
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",

@@ -179,6 +179,10 @@ export class EmailService {
   }
 
   async send(mailbox: GmailMailboxKey, to: string, subject: string, text: string, files: File[] = []): Promise<void> {
+    if (files.length) {
+      const { data: capabilities, error: capabilityError } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'capabilities', mailbox } });
+      if (capabilityError || capabilities?.attachments !== true) throw new Error('File attachments are not active on the Gmail server yet. The message was not sent.');
+    }
     const attachments = await Promise.all(files.map(async file => ({ filename: file.name, mimeType: file.type || 'application/octet-stream', data: await this.fileBase64(file) })));
     const { error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'send', mailbox, to, subject, text, attachments } });
     if (error) throw error;
