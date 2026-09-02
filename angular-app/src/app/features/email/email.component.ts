@@ -41,7 +41,7 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
         </aside>
 
         <section class="message-list">
-          <div class="list-toolbar"><div class="list-title"><b>{{activeView()}}</b><span>@if(mailReady()){{{activeMailboxLabel()}} · {{visibleRows().length}} messages@if(mailLoading()){ · Loading more…}}@else{Loading mail…}</span></div></div>
+          <div class="list-toolbar"><div class="list-title"><b>{{activeView()}}</b><span>@if(mailReady()){{{activeMailboxLabel()}} · {{visibleRows().length}} messages@if(mailLoading()){ · Syncing…}}@else{Loading mail…}</span></div><button class="reader-icon" style="margin-left:auto" title="Check for new mail" aria-label="Check for new mail" (click)="refreshMail()" [disabled]="mailLoading()"><i class="pi pi-refresh" [class.pi-spin]="mailLoading()"></i></button></div>
           <div class="mail-list-scroll">
             @if(!mailReady()){<div class="mail-loading"><i class="pi pi-spin pi-spinner"></i><span>Loading mail…</span></div>} @else {
               @for(mail of visibleRows();track mail.id){<button class="mail-card" [class.selected]="selected()?.id===mail.id" [class.unread]="mail.unread" (click)="openMail(mail)"><span class="unread-marker" aria-hidden="true"></span><span class="mail-star" [class.active]="mail.starred"><i class="pi" [class.pi-star-fill]="mail.starred" [class.pi-star]="!mail.starred"></i></span><b class="mail-sender">{{mail.correspondent}}</b><span class="mail-line"><strong>{{mail.subject}}</strong><span class="mail-snippet"> — {{mail.preview}}</span></span><span class="mail-row-meta"><span class="account-chip">{{mailboxShort(mail.mailbox)}}</span>@if(mail.linked_order){<span class="order-chip">#{{mail.linked_order}}</span>}@if(mail.needs_reply){<span class="reply-chip">Needs reply</span>}</span><time>{{mail.time}}</time></button>} @empty {@if(mailLoading()){<div class="mail-loading compact"><i class="pi pi-spin pi-spinner"></i><span>Loading messages…</span></div>}@else{<div class="empty-list"><i class="pi pi-inbox"></i><b>No messages in this view</b><span>Choose another mailbox or folder.</span></div>}}
@@ -70,7 +70,7 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
       @if(selected();as mail){
         <section class="mail-reader">
           <div class="reader-toolbar">
-            <button class="back-button" title="Back to inbox" (click)="closeMail()" [disabled]="messageActionBusy()"><i class="pi pi-arrow-left"></i></button>
+            <button class="back-button" title="Back to email list" aria-label="Back to email list" (click)="closeMail()"><i class="pi pi-arrow-left"></i></button>
             @if(mail.status==='Inbox'){<button class="reader-icon" title="Archive" (click)="modifyMessage(mail,'archive')" [disabled]="messageActionBusy()"><i class="pi pi-inbox"></i></button>}
             <button class="reader-icon" title="{{mail.unread?'Mark as read':'Mark as unread'}}" (click)="modifyMessage(mail,mail.unread?'markRead':'markUnread')" [disabled]="messageActionBusy()"><i class="pi" [class.pi-envelope-open]="mail.unread" [class.pi-envelope]="!mail.unread"></i></button>
             <button class="reader-icon star-action" [class.active]="mail.starred" title="{{mail.starred?'Remove star':'Add star'}}" (click)="modifyMessage(mail,mail.starred?'unstar':'star')" [disabled]="messageActionBusy()"><i class="pi" [class.pi-star-fill]="mail.starred" [class.pi-star]="!mail.starred"></i></button>
@@ -209,7 +209,7 @@ export class EmailComponent{
   private readonly loadedViews=new Set<string>();
   private readonly viewLoads=new Map<string,Promise<void>>();
 
-  constructor(private readonly email:EmailService,private readonly emailAi:EmailAiService,private readonly orders:OrdersService){void this.initializeMail();}
+  constructor(private readonly email:EmailService,private readonly emailAi:EmailAiService,private readonly orders:OrdersService){this.hydrateMailCache();void this.initializeMail();}
 
   readonly decisionFlow=['Read thread','Identify customer','Match order','Classify intent','Collect facts','Assess risk','Draft / escalate'];
   readonly dataSources=[{title:'Orders',description:'Customer, items, options, notes, payment and delivery method.'},{title:'Production',description:'Current production units and live production status.'},{title:'Fulfilment',description:'Pickup readiness, shipping preparation and booked shipping.'},{title:'Pickup calendar',description:'Available pickup windows and closed dates once connected.'},{title:'Shipping data',description:'Packages, dimensions, weights and later tracking.'},{title:'Business rules',description:'Lead times, claims, cancellations, payments and approved answers.'}];
@@ -220,22 +220,33 @@ export class EmailComponent{
   private viewKey(mailbox:'info'|'support',view:'Inbox'|'Sent'){return`${mailbox}:${view}`;}
   setMailbox(box:MailboxId){if(this.activeMailbox()===box)return;this.activeMailbox.set(box);this.selected.set(null);void this.loadMail();}
   setView(view:MailView){if(this.activeView()===view)return;this.activeView.set(view);this.selected.set(null);void this.loadMail();}
-  ensureSelection(){queueMicrotask(()=>{const visible=this.visibleRows();if(!visible.some(row=>row.id===this.selected()?.id))this.selected.set(visible[0]??null);});}
+  ensureSelection(){queueMicrotask(()=>{const selected=this.selected();if(selected&&!this.visibleRows().some(row=>row.id===selected.id&&row.mailbox===selected.mailbox))this.closeMail();});}
+  private hydrateMailCache(){
+    let hydrated=false;
+    for(const mailbox of ['info','support'] as const){
+      for(const view of ['Inbox','Sent'] as const){
+        const messages=this.email.peekList(mailbox,view);
+        if(messages===null)continue;
+        this.absorbBatch(mailbox,view,messages);this.loadedViews.add(this.viewKey(mailbox,view));hydrated=true;
+      }
+    }
+    if(hydrated){this.updateInboxCounts();this.countsReady.set(true);this.mailReady.set(true);}
+  }
   private async initializeMail(){
     this.mailLoading.set(true);this.mailError.set('');
     try{
-      await Promise.all([this.fetchView('info','Inbox'),this.fetchView('support','Inbox')]);
+      await Promise.all([this.fetchView('info','Inbox',true),this.fetchView('support','Inbox',true)]);
       this.updateInboxCounts();
       this.countsReady.set(true);this.mailReady.set(true);
-      void Promise.allSettled([this.fetchView('info','Sent'),this.fetchView('support','Sent')]);
+      void Promise.allSettled([this.fetchView('info','Sent',this.email.isListStale('info','Sent')),this.fetchView('support','Sent',this.email.isListStale('support','Sent'))]);
     }catch(e){this.mailError.set(String((e as Error)?.message||e));this.mailReady.set(true);}
     finally{this.mailLoading.set(false);}
   }
-  private fetchView(mailbox:'info'|'support',view:'Inbox'|'Sent'):Promise<void>{
+  private fetchView(mailbox:'info'|'support',view:'Inbox'|'Sent',refresh=false):Promise<void>{
     const key=this.viewKey(mailbox,view);
-    if(this.loadedViews.has(key))return Promise.resolve();
+    if(this.loadedViews.has(key)&&!refresh)return Promise.resolve();
     const pending=this.viewLoads.get(key);if(pending)return pending;
-    const request=this.email.list(mailbox,view).then(messages=>{this.absorbBatch(mailbox,view,messages);this.loadedViews.add(key);if(!this.mailReady())this.mailReady.set(true);if(view==='Inbox')this.updateInboxCounts();}).finally(()=>this.viewLoads.delete(key));
+    const request=this.email.list(mailbox,view,refresh).then(messages=>{this.absorbBatch(mailbox,view,messages);this.loadedViews.add(key);if(!this.mailReady())this.mailReady.set(true);if(view==='Inbox')this.updateInboxCounts();}).finally(()=>this.viewLoads.delete(key));
     this.viewLoads.set(key,request);return request;
   }
   private absorbBatch(mailbox:'info'|'support',view:'Inbox'|'Sent',messages:GmailMessageRow[]){
@@ -251,9 +262,18 @@ export class EmailComponent{
     if(view==='Needs reply'){this.mailReady.set(true);return;}
     const box=this.activeMailbox();const keys:('info'|'support')[]=box==='all'?['info','support']:[box];
     const missing=keys.some(key=>!this.loadedViews.has(this.viewKey(key,view)));
-    if(!missing)return;
+    if(!missing){if(keys.some(key=>this.email.isListStale(key,view)))void this.refreshMail();return;}
     this.mailLoading.set(true);this.mailError.set('');
     try{await Promise.all(keys.map(key=>this.fetchView(key,view)));this.mailReady.set(true);if(view==='Inbox')this.countsReady.set(true);}
+    catch(e){this.mailError.set(String((e as Error)?.message||e));}
+    finally{this.mailLoading.set(false);}
+  }
+  async refreshMail(){
+    if(this.mailLoading())return;
+    const active=this.activeView();const view:Exclude<MailView,'Needs reply'>=active==='Needs reply'?'Inbox':active;
+    const box=this.activeMailbox();const keys:('info'|'support')[]=box==='all'?['info','support']:[box];
+    this.mailLoading.set(true);this.mailError.set('');
+    try{await Promise.all(keys.map(key=>this.fetchView(key,view,true)));this.mailReady.set(true);if(view==='Inbox'){this.updateInboxCounts();this.countsReady.set(true);}}
     catch(e){this.mailError.set(String((e as Error)?.message||e));}
     finally{this.mailLoading.set(false);}
   }
@@ -261,8 +281,9 @@ export class EmailComponent{
     return {...row,body:'',ai_state:'Not analysed',linked_order:null,intent:null,needs_reply:false,confidence:null,draft_reply:'',time:this.formatMailTime(row.received_at)};
   }
   closeMail(){
-    if(this.readerHistoryPushed){history.back();return;}
-    this.cancelReply();this.selected.set(null);
+    const shouldPopHistory=this.readerHistoryPushed&&history.state?.wcMailReader===true;
+    this.readerHistoryPushed=false;this.cancelReply();this.selected.set(null);
+    if(shouldPopHistory)history.back();
   }
   async openMail(mail:MailRow){
     if(!this.selected()){
@@ -323,8 +344,7 @@ export class EmailComponent{
       if(action==='archive'||action==='trash'){
         this.rows.update(rows=>rows.filter(row=>!(row.id===mail.id&&row.mailbox===mail.mailbox)));
         this.updateInboxCounts();
-        this.cancelReply();this.selected.set(null);
-        if(this.readerHistoryPushed){this.readerHistoryPushed=false;history.back();}
+        this.closeMail();
       }else{
         this.messageActionStatus.set(action==='star'?'Starred':action==='unstar'?'Star removed':action==='markUnread'?'Marked unread':'Marked read');
         setTimeout(()=>{if(!this.messageActionBusy())this.messageActionStatus.set('');},1200);
