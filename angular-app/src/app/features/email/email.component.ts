@@ -473,7 +473,7 @@ export class EmailComponent implements OnDestroy{
       const key=this.attachmentKey(mail,attachment);if(this.attachmentPreviews()[key])return;
       try{
         const blob=await this.email.downloadAttachment(mail.mailbox,mail.id,attachment);
-        if(version!==this.selectionVersion||this.selected()?.id!==mail.id||this.selected()?.mailbox!==mail.mailbox)return;
+        if(version!==this.selectionVersion||this.selected()?.mailbox!==mail.mailbox||(!this.threadMessages().some(message=>message.id===mail.id)&&this.selected()?.id!==mail.id))return;
         const url=URL.createObjectURL(blob);this.attachmentPreviews.update(previews=>({...previews,[key]:url}));
       }catch(e){console.warn('Image attachment preview failed',e);}
     }));
