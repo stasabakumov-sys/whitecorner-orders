@@ -30,6 +30,29 @@ function stripHtml(html: string) {
     .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
     .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
+function stripQuotedHtml(value: string) {
+  const markers = [
+    /<(?:div|blockquote)\b[^>]*(?:class\s*=\s*["'][^"']*(?:gmail_quote|yahoo_quoted|protonmail_quote)[^"']*["']|id\s*=\s*["']?divRplyFwdMsg)/i,
+    /<div\b[^>]*class\s*=\s*["'][^"']*gmail_attr[^"']*["']/i,
+    /(?:<br\s*\/?>\s*)*-{5,}\s*(?:Original|Forwarded) message\s*-{5,}/i,
+  ];
+  let cut = value.length;
+  for (const marker of markers) {
+    const index = value.search(marker);
+    if (index >= 0) cut = Math.min(cut, index);
+  }
+  return value.slice(0, cut).replace(/(?:<br\s*\/?>|&nbsp;|\s)+$/gi, "").trim();
+}
+function stripQuotedPlain(value: string) {
+  const lines = value.replace(/\r/g, "").split("\n");
+  let cut = lines.length;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index].trim();
+    if (/^On .{3,} wrote:$/i.test(line) || /^-{3,}\s*(?:Original|Forwarded) message\s*-{3,}$/i.test(line)) { cut = index; break; }
+    if (/^From:\s*.+/i.test(line) && /^Sent:\s*.+/i.test((lines[index + 1] || "").trim())) { cut = index; break; }
+  }
+  return lines.slice(0, cut).filter(line => !/^\s*>/.test(line)).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 function allParts(payload: any): any[] {
   if (!payload) return [];
   return [payload, ...(payload.parts || []).flatMap((part: any) => allParts(part))];
@@ -73,8 +96,8 @@ async function extractMessageContent(payload: any, messageId: string, gmailHeade
   const htmlParts = parts.filter(part => part.mimeType === "text/html" && (part.body?.data || part.body?.attachmentId));
   const plainCandidates = await Promise.all(plainParts.map(async part => decodeBase64Url(await partData(part, messageId, gmailHeaders))));
   const htmlCandidates = await Promise.all(htmlParts.map(async part => decodeBase64Url(await partData(part, messageId, gmailHeaders))));
-  const plain = plainCandidates.sort((a, b) => b.length - a.length)[0] || "";
-  let html = htmlCandidates.sort((a, b) => b.length - a.length)[0] || "";
+  const plain = stripQuotedPlain(plainCandidates.sort((a, b) => b.length - a.length)[0] || "");
+  let html = stripQuotedHtml(htmlCandidates.sort((a, b) => b.length - a.length)[0] || "");
   const attachments: Array<{ attachmentId: string; filename: string; mimeType: string; size: number; inline: boolean }> = [];
   const inlineParts: Array<{ part: any; contentId: string; mimeType: string }> = [];
   for (const part of parts) {
@@ -156,7 +179,7 @@ Deno.serve(async (req) => {
     if (mailboxError) throw mailboxError;
     if (!mailbox?.refresh_token) return new Response(JSON.stringify({ connected: false, mailbox: mailboxKey, email: expectedEmail }), { status: action === "status" ? 200 : 409, headers: jsonHeaders });
     if (action === "status") return new Response(JSON.stringify({ connected: true, mailbox: mailboxKey, email: mailbox.email, connectedAt: mailbox.connected_at, lastSyncAt: mailbox.last_sync_at, scopes: mailbox.granted_scopes || [] }), { headers: jsonHeaders });
-    if (action === "capabilities") return new Response(JSON.stringify({ version: 4, html: true, stagedMedia: true, inlineImages: true, attachments: true, pagination: true, archiveAndTrash: true, threadedReplies: true, replyAll: true, forwardedAttachments: true }), { headers: jsonHeaders });
+    if (action === "capabilities") return new Response(JSON.stringify({ version: 5, html: true, stagedMedia: true, inlineImages: true, attachments: true, pagination: true, archiveAndTrash: true, threadedReplies: true, threadView: true, quoteDeduplication: true, replyAll: true, forwardedAttachments: true }), { headers: jsonHeaders });
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -236,6 +259,38 @@ Deno.serve(async (req) => {
         unread: Array.isArray(msg.labelIds) && msg.labelIds.includes("UNREAD"),
         starred: Array.isArray(msg.labelIds) && msg.labelIds.includes("STARRED"),
       }), { headers: jsonHeaders });
+    }
+
+    if (action === "thread") {
+      const threadId = String(body.threadId || "");
+      if (!threadId) return new Response(JSON.stringify({ error: "threadId required" }), { status: 400, headers: jsonHeaders });
+      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(threadId)}?format=full`, { headers: gmailHeaders });
+      const thread = await res.json();
+      if (!res.ok) throw new Error(`Gmail thread failed: ${JSON.stringify(thread)}`);
+      const messages = await Promise.all((thread.messages || []).map(async (msg: any) => {
+        const headers = msg.payload?.headers || [];
+        const content = await extractMessageContent(msg.payload, msg.id, gmailHeaders, false);
+        const from = headerValue(headers, "From");
+        return {
+          id: msg.id,
+          threadId: msg.threadId,
+          from,
+          to: headerValue(headers, "To"),
+          cc: headerValue(headers, "Cc"),
+          subject: headerValue(headers, "Subject") || "(no subject)",
+          date: headerValue(headers, "Date"),
+          body: content.body,
+          html: content.html,
+          imagesBlocked: content.imagesBlocked,
+          attachments: content.attachments,
+          snippet: msg.snippet || "",
+          unread: Array.isArray(msg.labelIds) && msg.labelIds.includes("UNREAD"),
+          starred: Array.isArray(msg.labelIds) && msg.labelIds.includes("STARRED"),
+          outgoing: emailAddresses(from).includes(expectedEmail.toLowerCase()),
+        };
+      }));
+      messages.sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
+      return new Response(JSON.stringify({ id: thread.id, historyId: thread.historyId, messages }), { headers: jsonHeaders });
     }
 
     if (action === "attachment") {

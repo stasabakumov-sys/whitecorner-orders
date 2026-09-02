@@ -59,6 +59,8 @@ export interface GmailMessageDetail {
   imagesBlocked?: boolean;
   attachments?: GmailAttachment[];
 }
+export interface GmailThreadMessage extends GmailMessageDetail { id: string; outgoing?: boolean; snippet?: string; }
+export interface GmailThreadDetail { id: string; messages: GmailThreadMessage[]; }
 
 export interface GmailSendContext {
   mode?: 'compose' | 'reply' | 'replyAll' | 'forward';
@@ -73,6 +75,8 @@ export class EmailService {
   readonly error = signal('');
   private readonly messageLoads = new Map<string, Promise<GmailMessageDetail>>();
   private readonly messageCache = new Map<string, GmailMessageDetail>();
+  private readonly threadLoads = new Map<string, Promise<GmailThreadDetail>>();
+  private readonly threadCache = new Map<string, { detail: GmailThreadDetail; loadedAt: number }>();
   private readonly messageMutations = new Map<string, Promise<void>>();
   private readonly listCache = new Map<string, { messages: GmailMessageRow[]; loadedAt: number; nextPageToken?: string }>();
 
@@ -198,6 +202,30 @@ export class EmailService {
     const detail = data as GmailMessageDetail;
     this.messageCache.set(`${mailbox}:${messageId}:${loadExternalImages ? 'images' : 'safe'}`, detail);
     return { ...detail, attachments: detail.attachments?.map(item => ({ ...item })) };
+  }
+
+  peekThread(mailbox: GmailMailboxKey, threadId: string): GmailThreadDetail | null {
+    const cached = this.threadCache.get(`${mailbox}:${threadId}`)?.detail;
+    return cached ? { ...cached, messages: cached.messages.map(message => ({ ...message, attachments: message.attachments?.map(item => ({ ...item })) })) } : null;
+  }
+
+  getThread(mailbox: GmailMailboxKey, threadId: string, refresh = false): Promise<GmailThreadDetail> {
+    const key = `${mailbox}:${threadId}`;
+    const cached = this.threadCache.get(key);
+    if (cached && !refresh && Date.now() - cached.loadedAt < 30_000) return Promise.resolve({ ...cached.detail, messages: cached.detail.messages.map(message => ({ ...message, attachments: message.attachments?.map(item => ({ ...item })) })) });
+    const pending = this.threadLoads.get(key);
+    if (pending) return pending;
+    const request = this.loadThread(mailbox, threadId).finally(() => this.threadLoads.delete(key));
+    this.threadLoads.set(key, request);
+    return request;
+  }
+
+  private async loadThread(mailbox: GmailMailboxKey, threadId: string): Promise<GmailThreadDetail> {
+    const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'thread', mailbox, threadId } });
+    if (error) throw error;
+    const detail = data as GmailThreadDetail;
+    this.threadCache.set(`${mailbox}:${threadId}`, { detail, loadedAt: Date.now() });
+    return { ...detail, messages: (detail.messages || []).map(message => ({ ...message, attachments: message.attachments?.map(item => ({ ...item })) })) };
   }
 
   async downloadAttachment(mailbox: GmailMailboxKey, messageId: string, attachment: GmailAttachment): Promise<Blob> {
