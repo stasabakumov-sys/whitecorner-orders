@@ -54,8 +54,8 @@ import { LoginComponent } from './shared/login/login.component';
   `,
   styles: [`
     .boot{position:fixed;inset:0;display:grid;place-items:center;background:#f4f6f8}.boot>div{display:flex;flex-direction:column;gap:8px;text-align:center}.boot span{color:#758198;font-size:12px}
-    aside{position:fixed;inset:0 auto 0 0;width:205px;background:#17191f;color:#fff;padding:18px 9px}.brand{padding:2px 11px 22px;font-size:18px}.brand small{display:block;color:#9097a5;font-size:11px}
-    aside a{color:#dfe4ec;text-decoration:none;padding:9px 11px;border-radius:8px;display:flex;gap:10px;margin:2px 0;align-items:center;font-size:14px}aside a.active{background:#2b3039;color:#fff}
+    aside{position:fixed;inset:0 auto 0 0;width:205px;background:#17191f;color:#fff;padding:16px 9px}.brand{padding:2px 11px 18px;font-size:16px}.brand small{display:block;color:#9097a5;font-size:10px}
+    aside a{color:#dfe4ec;text-decoration:none;padding:8px 11px;border-radius:8px;display:flex;gap:9px;margin:2px 0;align-items:center;font-size:12px}aside a.active{background:#2b3039;color:#fff}
     aside button{position:absolute;bottom:20px;left:18px;right:18px;background:transparent;color:#fff;border:1px solid #454b57;border-radius:8px;padding:8px}
     main{margin-left:205px;height:100vh;overflow:hidden;background:#f4f6f8}.content{height:100vh;overflow:auto;padding:12px 16px 24px}.content.email-content{overflow:hidden;padding:6px 10px 8px;display:flex;flex-direction:column}:host ::ng-deep .content.email-content app-email{display:block;flex:1 1 auto;min-height:0;height:100%;overflow:hidden}
     .content.finance-content{overflow:hidden;padding:0}:host ::ng-deep .content.finance-content app-finance{display:block;height:100%;min-height:0}
