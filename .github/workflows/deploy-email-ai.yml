@@ -20,6 +20,12 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      - name: Verify OpenAI secret
+        run: |
+          supabase secrets list --project-ref zgvnrpspwluapaxnycrg \
+            | grep -q 'OPENAI_API_KEY'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       - name: Deploy email-ai
         run: supabase functions deploy email-ai --project-ref zgvnrpspwluapaxnycrg
         env:
