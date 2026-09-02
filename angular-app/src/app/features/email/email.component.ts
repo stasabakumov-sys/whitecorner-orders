@@ -7,7 +7,7 @@ import { EmailAiService } from '../../core/services/email-ai.service';
 import { OrdersService } from '../../core/services/orders.service';
 
 type EmailTab='Mail'|'AI Agent';
-type MailView='Inbox'|'Needs reply'|'Sent';
+type MailView='Inbox'|'Unread'|'Needs reply'|'Starred'|'Sent';
 type AiState='Not analysed'|'Review'|'Draft ready'|'Auto handled';
 type MailIntent='Order question'|'Customisation'|'Product question'|'Production / lead time'|'Pickup'|'Delivery / shipping'|'Payment / invoice'|'Order change'|'Claim / damage'|'Cancellation / refund'|'General enquiry';
 type PolicyMode='Auto later'|'Draft + review'|'Manual only';
@@ -36,7 +36,7 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
           <button class="mailbox-option" [class.active]="activeMailbox()==='info'" (click)="setMailbox('info')"><span class="mailbox-dot info"></span><span>info@whitecorner.com.au</span><small>{{countsReady()?mailboxCount('info'):'—'}}</small></button>
           <button class="mailbox-option" [class.active]="activeMailbox()==='support'" (click)="setMailbox('support')"><span class="mailbox-dot support"></span><span>support@whitecorner.com.au</span><small>{{countsReady()?mailboxCount('support'):'—'}}</small></button>
           <div class="nav-label folders-label">Folders</div>
-          @for(view of views;track view){<button class="folder-option" [class.active]="activeView()===view" (click)="setView(view)"><i [class]="folderIcon(view)"></i><span>{{view}}</span><small>{{mailReady()?countFor(view):'—'}}</small></button>}
+          @for(view of views;track view){<button class="folder-option" [class.active]="activeView()===view" (click)="setView(view)"><span class="folder-glyph" aria-hidden="true">{{folderGlyph(view)}}</span><span>{{view}}</span><small>{{mailReady()?countFor(view):'—'}}</small></button>}
           <div class="mail-status live"><span></span><div><b>Gmail connected</b><small>Live Inbox / Sent</small></div></div>
         </aside>
 
@@ -183,7 +183,7 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
   `]
 })
 export class EmailComponent{
-  readonly section=signal<EmailTab>('Mail');readonly views:MailView[]=['Inbox','Needs reply','Sent'];readonly activeView=signal<MailView>('Inbox');readonly activeMailbox=signal<MailboxId>('all');readonly query=signal('');
+  readonly section=signal<EmailTab>('Mail');readonly views:MailView[]=['Inbox','Unread','Needs reply','Starred','Sent'];readonly activeView=signal<MailView>('Inbox');readonly activeMailbox=signal<MailboxId>('all');readonly query=signal('');
   readonly rows=signal<MailRow[]>([]);
   readonly selected=signal<MailRow|null>(null);
   readonly mailLoading=signal(false);
@@ -216,7 +216,8 @@ export class EmailComponent{
   readonly intentPolicies:IntentPolicy[]=[{intent:'Order question',mode:'Draft + review',rule:'Use the actual linked order. Never invent status, dates or inclusions.'},{intent:'Customisation',mode:'Manual only',rule:'Custom design, feasibility and pricing require review.'},{intent:'Product question',mode:'Auto later',rule:'Factual catalogue questions may become automatic after approved product knowledge is connected.'},{intent:'Production / lead time',mode:'Auto later',rule:'Use current lead-time rules and actual order status; never promise an unconfirmed date.'},{intent:'Pickup',mode:'Auto later',rule:'Once calendar integration exists, factual pickup availability may be answered automatically.'},{intent:'Delivery / shipping',mode:'Draft + review',rule:'Use shipment and order data. Unusual freight remains reviewed.'},{intent:'Payment / invoice',mode:'Draft + review',rule:'Provide factual payment information only; money or term changes require review.'},{intent:'Order change',mode:'Manual only',rule:'Any requested change may affect production, timing or price and must be approved.'},{intent:'Claim / damage',mode:'Manual only',rule:'Never auto-send. Surface timing, evidence and order details for human review.'},{intent:'Cancellation / refund',mode:'Manual only',rule:'Never auto-send. Consequences must be reviewed before any commitment.'},{intent:'General enquiry',mode:'Draft + review',rule:'Prepare a concise draft; low-risk FAQs may become automatic later.'}];
   readonly guardrails=['Claims / damage','Refunds / cancellations','Paid-order changes','Custom pricing or feasibility','Financial consequences','Legal / policy disputes','Low-confidence order match','Conflicting information'];
   readonly visibleRows=computed(()=>{const view=this.activeView(),box=this.activeMailbox(),q=this.query().trim().toLowerCase();return this.rows().filter(row=>this.belongsToView(row,view)&&(box==='all'||row.mailbox===box)&&(!q||`${row.correspondent} ${row.email} ${row.subject} ${row.preview} ${row.linked_order||''}`.toLowerCase().includes(q)));});
-  belongsToView(row:MailRow,view:MailView){if(view==='Sent')return row.status==='Sent';if(view==='Needs reply')return row.status==='Inbox'&&row.needs_reply===true;return row.status==='Inbox';}
+  belongsToView(row:MailRow,view:MailView){if(view==='Sent')return row.status==='Sent';if(view==='Unread')return row.status==='Inbox'&&row.unread===true;if(view==='Needs reply')return row.status==='Inbox'&&row.needs_reply===true;if(view==='Starred')return row.starred===true;return row.status==='Inbox';}
+  private sourceViews(view:MailView):('Inbox'|'Sent')[]{return view==='Starred'?['Inbox','Sent']:view==='Sent'?['Sent']:['Inbox'];}
   private viewKey(mailbox:'info'|'support',view:'Inbox'|'Sent'){return`${mailbox}:${view}`;}
   setMailbox(box:MailboxId){if(this.activeMailbox()===box)return;this.activeMailbox.set(box);this.selected.set(null);void this.loadMail();}
   setView(view:MailView){if(this.activeView()===view)return;this.activeView.set(view);this.selected.set(null);void this.loadMail();}
@@ -259,21 +260,21 @@ export class EmailComponent{
   private updateInboxCounts(){const rows=this.rows();this.mailboxInboxCounts.set({info:rows.filter(row=>row.mailbox==='info'&&row.status==='Inbox').length,support:rows.filter(row=>row.mailbox==='support'&&row.status==='Inbox').length});}
   private async loadMail(){
     const view=this.activeView();
-    if(view==='Needs reply'){this.mailReady.set(true);return;}
     const box=this.activeMailbox();const keys:('info'|'support')[]=box==='all'?['info','support']:[box];
-    const missing=keys.some(key=>!this.loadedViews.has(this.viewKey(key,view)));
-    if(!missing){if(keys.some(key=>this.email.isListStale(key,view)))void this.refreshMail();return;}
+    const sources=this.sourceViews(view);
+    const missing=keys.some(key=>sources.some(source=>!this.loadedViews.has(this.viewKey(key,source))));
+    if(!missing){if(keys.some(key=>sources.some(source=>this.email.isListStale(key,source))))void this.refreshMail();return;}
     this.mailLoading.set(true);this.mailError.set('');
-    try{await Promise.all(keys.map(key=>this.fetchView(key,view)));this.mailReady.set(true);if(view==='Inbox')this.countsReady.set(true);}
+    try{await Promise.all(keys.flatMap(key=>sources.map(source=>this.fetchView(key,source))));this.mailReady.set(true);if(sources.includes('Inbox'))this.countsReady.set(true);}
     catch(e){this.mailError.set(String((e as Error)?.message||e));}
     finally{this.mailLoading.set(false);}
   }
   async refreshMail(){
     if(this.mailLoading())return;
-    const active=this.activeView();const view:Exclude<MailView,'Needs reply'>=active==='Needs reply'?'Inbox':active;
+    const sources=this.sourceViews(this.activeView());
     const box=this.activeMailbox();const keys:('info'|'support')[]=box==='all'?['info','support']:[box];
     this.mailLoading.set(true);this.mailError.set('');
-    try{await Promise.all(keys.map(key=>this.fetchView(key,view,true)));this.mailReady.set(true);if(view==='Inbox'){this.updateInboxCounts();this.countsReady.set(true);}}
+    try{await Promise.all(keys.flatMap(key=>sources.map(source=>this.fetchView(key,source,true))));this.mailReady.set(true);if(sources.includes('Inbox')){this.updateInboxCounts();this.countsReady.set(true);}}
     catch(e){this.mailError.set(String((e as Error)?.message||e));}
     finally{this.mailLoading.set(false);}
   }
@@ -411,7 +412,7 @@ export class EmailComponent{
   mailboxAddress(box:'info'|'support'){return box==='info'?'info@whitecorner.com.au':'support@whitecorner.com.au';}
   mailboxShort(box:'info'|'support'){return box==='info'?'info@':'support@';}
   activeMailboxLabel(){const box=this.activeMailbox();return box==='all'?'All mail':this.mailboxAddress(box);}
-  folderIcon(view:MailView){if(view==='Inbox')return'pi pi-inbox';if(view==='Needs reply')return'pi pi-comment';return'pi pi-send';}
+  folderGlyph(view:MailView){if(view==='Inbox')return'▣';if(view==='Unread')return'●';if(view==='Needs reply')return'↩';if(view==='Starred')return'★';return'➤';}
   confidenceLabel(value:number){return`${Math.round(value*100)}%`;}
   aiSeverity(state?:AiState):'success'|'info'|'warn'|'secondary'{if(state==='Auto handled')return'success';if(state==='Draft ready')return'info';if(state==='Review')return'warn';return'secondary';}
   policySeverity(mode:PolicyMode):'success'|'info'|'warn'{if(mode==='Auto later')return'success';if(mode==='Draft + review')return'info';return'warn';}
