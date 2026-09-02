@@ -8,7 +8,7 @@ import { OrdersService } from '../../core/services/orders.service';
 
 type EmailTab='Mail'|'AI Agent';
 type MailView='Inbox'|'Unread'|'Needs reply'|'Starred'|'Sent'|'Archive'|'Trash';
-type AiState='Not analysed'|'Review'|'Draft ready'|'Auto handled';
+type AiState='Not analysed'|'Review'|'Draft ready'|'No reply needed';
 type MailIntent='Order question'|'Customisation'|'Product question'|'Production / lead time'|'Pickup'|'Delivery / shipping'|'Payment / invoice'|'Order change'|'Claim / damage'|'Cancellation / refund'|'General enquiry';
 type PolicyMode='Auto later'|'Draft + review'|'Manual only';
 type MailboxId='all'|'info'|'support';
@@ -114,11 +114,12 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
                 }
               </div>
               <div class="reader-ai">
-                <div><small>AI</small><p-tag [value]="mail.ai_state||'Not analysed'" [severity]="aiSeverity(mail.ai_state)"/></div>
+                <div><small>AI</small>@if(aiAnalysisLoading()===mail.mailbox+':'+mail.id){<b>Analysing…</b>}@else{<p-tag [value]="mail.ai_state||'Not analysed'" [severity]="aiSeverity(mail.ai_state)"/>}</div>
                 <div><small>Category</small><b>{{mail.intent||'Not analysed'}}</b></div>
                 <div><small>Order</small><b>{{mail.linked_order?'#'+mail.linked_order:'—'}}</b></div>
                 <div><small>Confidence</small><b>{{mail.confidence==null?'—':confidenceLabel(mail.confidence)}}</b></div>
               </div>
+              @if(aiAnalysisError()){<div class="ai-analysis-error"><span>{{aiAnalysisError()}}</span><button type="button" (click)="analyseMail(mail)">Try again</button></div>}
               @if(mail.ai_summary){<div class="ai-summary"><div><i class="pi pi-sparkles"></i><b>AI Summary</b></div><p>{{mail.ai_summary}}</p>@if(mail.review_reason){<span><i class="pi pi-exclamation-triangle"></i>{{mail.review_reason}}</span>}</div>}
               @if(replyMode()==='none'){
                 <div class="gmail-actions">
@@ -146,7 +147,7 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
       <div class="agent-page">
         <div class="agent-hero">
           <div class="hero-left"><div class="agent-icon">AI</div><div><div class="agent-title"><h3>Email Agent</h3><p-tag value="Draft + review" severity="info"/></div><p>Reads incoming email, finds the right business context and prepares a reply for review.</p></div></div>
-          <div class="hero-status"><span class="state-dot"></span><div><small>Runtime</small><b>Not connected yet</b></div></div>
+          <div class="hero-status"><span class="state-dot" [class.ready]="aiRuntime()==='ready'" [class.error]="aiRuntime()==='error'"></span><div><small>Runtime</small><b>{{aiRuntimeLabel()}}</b>@if(aiRuntimeModel()){<span>{{aiRuntimeModel()}}</span>}</div></div>
         </div>
 
         <section class="setup-section">
@@ -154,8 +155,8 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
           <div class="setup-grid">
             <div class="setup-row ready"><i class="pi pi-check"></i><div><b>Hub business data</b><span>Orders, production and fulfilment are available.</span></div><strong>Ready</strong></div>
             <div class="setup-row ready"><i class="pi pi-check"></i><div><b>Knowledge & policy</b><span>Business rules and response guardrails are prepared.</span></div><strong>Ready</strong></div>
-            <div class="setup-row pending"><i class="pi pi-clock"></i><div><b>Mailbox connection</b><span>info@ and support@ still need Gmail OAuth.</span></div><strong>Pending</strong></div>
-            <div class="setup-row pending"><i class="pi pi-clock"></i><div><b>AI runtime</b><span>Analysis and draft generation are not connected yet.</span></div><strong>Pending</strong></div>
+            <div class="setup-row" [class.ready]="email.connectedCount()===2" [class.pending]="email.connectedCount()!==2"><i [class]="email.connectedCount()===2?'pi pi-check':'pi pi-clock'"></i><div><b>Mailbox connection</b><span>{{email.connectedCount()}} of 2 Gmail mailboxes connected.</span></div><strong>{{email.connectedCount()===2?'Ready':'Pending'}}</strong></div>
+            <div class="setup-row" [class.ready]="aiRuntime()==='ready'" [class.pending]="aiRuntime()!=='ready'"><i [class]="aiRuntime()==='ready'?'pi pi-check':aiRuntime()==='checking'?'pi pi-spin pi-spinner':'pi pi-clock'"></i><div><b>AI runtime</b><span>{{aiRuntimeDescription()}}</span></div><strong>{{aiRuntime()==='ready'?'Ready':aiRuntime()==='checking'?'Checking':'Setup'}}</strong></div>
           </div>
         </section>
 
@@ -202,6 +203,7 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
   .ai-summary{margin-top:12px;padding:12px 14px;border:1px solid #dce5f2;border-radius:10px;background:#f8fbff}.ai-summary>div{display:flex;align-items:center;gap:7px;color:#344054}.ai-summary>div i{color:#175cd3}.ai-summary b{font-size:11px}.ai-summary p{margin:7px 0 0;font-size:11px;line-height:1.45;color:#475467}.ai-summary span{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:10px;color:#b54708}.gmail-actions{display:flex;align-items:center;gap:6px;margin-top:16px;flex-wrap:wrap}.gmail-actions button{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border:1px solid #c4c7c5;border-radius:16px;background:#fff;color:#3c4043;font:inherit;font-size:11px;font-weight:500;line-height:1;cursor:pointer}.gmail-actions button i{font-size:11px}.gmail-actions button:hover:not(:disabled){background:#f6f8fc;border-color:#aeb2b7}.gmail-actions button:focus-visible{outline:2px solid #a8c7fa;outline-offset:2px}.gmail-actions .disabled-action{opacity:.45;cursor:not-allowed}.reader-reply.active{margin-top:22px}.reader-reply.active textarea{display:block;width:100%;min-height:150px;border:0;resize:vertical;padding:14px;font:inherit;font-size:12px;outline:none;box-sizing:border-box}.close-compose{margin-left:auto;border:0;background:transparent;font-size:18px;line-height:1;color:#667085;cursor:pointer}.forward-to{display:flex;align-items:center;gap:10px;border-bottom:1px solid #edf0f3;padding:8px 12px}.forward-to span{font-size:10px;color:#667085}.forward-to input{flex:1;height:30px;font-size:11px;border:0;box-shadow:none}.send-error{color:#b42318!important}
   .conversation-included{display:flex;align-items:center;gap:9px;margin:0 12px 10px;padding:8px 10px;border:1px solid #e4e7ec;border-radius:8px;background:#f8fafc;color:#667085}.conversation-included>i{font-size:12px}.conversation-included>div{display:flex;flex-direction:column;gap:2px}.conversation-included b{font-size:10px;color:#475467}.conversation-included span{font-size:9px}.email-media-loading{display:flex;align-items:center;gap:6px;margin-top:9px;color:#98a2b3;font-size:9px}.email-media-loading i{font-size:10px}.reader-error{display:flex;align-items:center;gap:7px;margin-bottom:14px;padding:8px 10px;border:1px solid #fecdca;border-radius:8px;background:#fff5f4;color:#b42318;font-size:10px}.reader-error span{flex:1}.reader-error button{border:0;background:transparent;color:inherit;font-size:16px;cursor:pointer}
   .agent-page{background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:18px}.agent-hero{display:flex;align-items:center;gap:18px;border:1px solid #dce5f2;background:#f8fbff;border-radius:12px;padding:16px 18px}.hero-left{display:flex;align-items:center;gap:13px;min-width:0}.agent-icon{width:44px;height:44px;border-radius:10px;background:#172033;color:#fff;display:grid;place-items:center;font-weight:800;flex:0 0 auto}.agent-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.agent-title h3{margin:0;font-size:18px;color:#101828}.agent-hero p{margin:5px 0 0;color:#667085;font-size:12px;line-height:1.4}.hero-status{margin-left:auto;display:flex;align-items:center;gap:9px;border-left:1px solid #dce5f2;padding-left:18px}.state-dot{width:9px;height:9px;border-radius:50%;background:#f59e0b}.hero-status div{display:flex;flex-direction:column}.hero-status small{font-size:9px;text-transform:uppercase;color:#98a2b3;font-weight:700}.hero-status b{font-size:11px;color:#475467;margin-top:2px}.setup-section,.policy-section{margin-top:20px}.section-head{display:flex;align-items:flex-end;gap:14px;margin-bottom:9px}.section-head p{margin:3px 0 0;color:#98a2b3;font-size:10px}.policy-title{font-size:10px;text-transform:uppercase;color:#758198;font-weight:700}.setup-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.setup-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:9px;align-items:center;border:1px solid #e4e7ec;border-radius:9px;padding:10px 11px}.setup-row>i{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;font-size:10px}.setup-row.ready>i{background:#ecfdf3;color:#067647}.setup-row.pending>i{background:#fff4e5;color:#b54708}.setup-row div{display:flex;flex-direction:column}.setup-row b{font-size:11px;color:#344054}.setup-row span{font-size:9px;color:#758198;margin-top:2px}.setup-row strong{font-size:9px;font-weight:700}.setup-row.ready strong{color:#067647}.setup-row.pending strong{color:#b54708}.mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.mode-card{border:1px solid #e4e7ec;border-radius:10px;padding:12px;display:grid;grid-template-columns:26px minmax(0,1fr);gap:9px;position:relative}.mode-card>span{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;font-size:9px;font-weight:700}.mode-card b{font-size:11px;color:#344054}.mode-card p{font-size:9px;color:#758198;margin:3px 0 0;line-height:1.35}.mode-card small{grid-column:2;font-size:9px;font-weight:700}.mode-card.manual>span{background:#fff4e5;color:#b54708}.mode-card.review>span{background:#eff8ff;color:#175cd3}.mode-card.later>span{background:#ecfdf3;color:#067647}.mode-card.manual small{color:#b54708}.mode-card.review small{color:#175cd3}.mode-card.later small{color:#067647}.workflow-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.workflow-step{border:1px solid #e4e7ec;border-radius:9px;padding:9px 8px;background:#fbfcfd;display:flex;align-items:center;gap:6px}.workflow-step span{width:21px;height:21px;border-radius:50%;background:#172033;color:#fff;display:grid;place-items:center;font-size:9px;font-weight:700;flex:0 0 auto}.workflow-step b{font-size:9px;color:#475467;line-height:1.25}.capability-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.capability-card{border:1px solid #e4e7ec;border-radius:10px;padding:13px 14px}.capability-card.good{background:#f8fcfa;border-color:#d8eee3}.capability-card.protect{background:#fffaf5;border-color:#f3e2cc}.cap-title{display:flex;align-items:center;gap:8px;margin-bottom:10px}.cap-title b{font-size:12px;color:#344054}.cap-list{display:flex;gap:6px;flex-wrap:wrap}.cap-list span{font-size:10px;border:1px solid rgba(0,0,0,.06);background:#fff;border-radius:999px;padding:4px 7px;color:#475467}.intent-list{border:1px solid #e4e7ec;border-radius:9px;overflow:hidden}.intent-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:9px;align-items:center;padding:9px 11px;border-bottom:1px solid #edf0f3}.intent-row:last-child{border-bottom:0}.intent-no{width:22px;height:22px;border-radius:6px;background:#f2f4f7;color:#667085;display:grid;place-items:center;font-size:9px;font-weight:700}.intent-name{display:flex;flex-direction:column}.intent-name b{font-size:11px;color:#344054}.intent-name span{font-size:9px;color:#758198;margin-top:2px;line-height:1.35}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.rule-list,.source-list{display:grid;gap:6px}.rule-list>div,.source-list>div{border:1px solid #e4e7ec;border-radius:8px;padding:9px 10px;background:#fbfcfd}.rule-list>div{display:flex;flex-direction:column;gap:3px}.rule-list b,.source-list b{font-size:10px;color:#344054}.rule-list span,.source-list span{font-size:9px;color:#758198;line-height:1.35}.source-list>div{display:grid;grid-template-columns:18px 1fr;gap:7px}.source-list i{font-size:10px;color:#98a2b3;margin-top:2px}.source-list div div{display:flex;flex-direction:column;gap:2px}.policy-note{margin-top:20px;border:1px solid #dce5f2;background:#f8fbff;border-radius:9px;padding:11px 12px;display:flex;align-items:flex-start;gap:9px;color:#475467}.policy-note div{display:flex;flex-direction:column;gap:3px}.policy-note b{font-size:11px}.policy-note span{font-size:10px;line-height:1.4}
+  .state-dot.ready{background:#12b76a}.state-dot.error{background:#d92d20}.hero-status div span{font-size:9px;color:#98a2b3}.ai-analysis-error{display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 10px;border:1px solid #fecdca;border-radius:8px;background:#fff5f4;color:#b42318;font-size:10px}.ai-analysis-error span{flex:1}.ai-analysis-error button{border:1px solid #f04438;border-radius:12px;background:#fff;color:#b42318;padding:3px 8px;font:inherit;font-size:9px;cursor:pointer}
   @media(max-width:1120px){.mail-app{grid-template-columns:165px 365px minmax(0,1fr)}.context-bar{grid-template-columns:1fr 1fr}.search input{width:150px}.workflow-grid{grid-template-columns:repeat(4,1fr)}.setup-grid,.mode-grid{grid-template-columns:1fr 1fr}}
   @media(max-width:880px){.mail-app{grid-template-columns:165px minmax(300px,1fr)}.reading-pane{display:none}.capability-grid,.two-col{grid-template-columns:1fr}.agent-hero{align-items:flex-start}.hero-status{border-left:0;padding-left:0}.workflow-grid{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:620px){.page-head{flex-direction:column}.top-actions{margin-left:0}.mail-app{grid-template-columns:1fr;height:auto;min-height:650px}.mail-nav{display:none}.message-list{border-right:0}.agent-hero{flex-direction:column}.hero-status{margin-left:0}.setup-grid,.mode-grid,.workflow-grid{grid-template-columns:1fr}}
@@ -237,13 +239,18 @@ export class EmailComponent implements OnDestroy{
   readonly mediaLoading=signal('');
   readonly imageLoadFailures=signal<Set<string>>(new Set());
   readonly attachmentPreviews=signal<Record<string,string>>({});
+  readonly aiRuntime=signal<'checking'|'ready'|'setup'|'error'>('checking');
+  readonly aiRuntimeModel=signal('');
+  readonly aiRuntimeReason=signal('');
+  readonly aiAnalysisLoading=signal('');
+  readonly aiAnalysisError=signal('');
   private readerHistoryPushed=false;
   private selectionVersion=0;
   readonly mailboxInboxCounts=signal<{info:number;support:number}>({info:0,support:0});
   private readonly loadedViews=new Set<string>();
   private readonly viewLoads=new Map<string,Promise<void>>();
 
-  constructor(private readonly email:EmailService,private readonly emailAi:EmailAiService,private readonly orders:OrdersService){this.hydrateMailCache();void this.initializeMail();}
+  constructor(readonly email:EmailService,private readonly emailAi:EmailAiService,private readonly orders:OrdersService){this.hydrateMailCache();void this.initializeMail();void this.refreshAiRuntime();}
 
   readonly decisionFlow=['Read thread','Identify customer','Match order','Classify intent','Collect facts','Assess risk','Draft / escalate'];
   readonly dataSources=[{title:'Orders',description:'Customer, items, options, notes, payment and delivery method.'},{title:'Production',description:'Current production units and live production status.'},{title:'Fulfilment',description:'Pickup readiness, shipping preparation and booked shipping.'},{title:'Pickup calendar',description:'Available pickup windows and closed dates once connected.'},{title:'Shipping data',description:'Packages, dimensions, weights and later tracking.'},{title:'Business rules',description:'Lead times, claims, cancellations, payments and approved answers.'}];
@@ -337,7 +344,7 @@ export class EmailComponent implements OnDestroy{
   }
   private async showMail(mail:MailRow){
     const version=++this.selectionVersion;const loadingKey=`${mail.mailbox}:${mail.id}`;
-    this.cancelReply();
+    this.cancelReply();this.aiAnalysisError.set('');
     const cached=!mail.body?this.email.peekMessage(mail.mailbox,mail.id):null;
     let current=cached?this.mergeMessageDetail(mail,cached):mail;
     const cachedThread=mail.threadId?this.email.peekThread(mail.mailbox,mail.threadId):null;
@@ -399,14 +406,29 @@ export class EmailComponent implements OnDestroy{
     }catch(e){if(version===this.selectionVersion){this.imageLoadFailures.update(values=>new Set(values).add(mail.id));console.warn('Automatic image loading failed',e);}}
     finally{if(version===this.selectionVersion&&this.mediaLoading()===key)this.mediaLoading.set('');}
   }
-  private async analyseMail(mail:MailRow){
+  async refreshAiRuntime(){
+    if(this.aiRuntime()==='checking'&&this.aiRuntimeReason())return;
+    this.aiRuntime.set('checking');this.aiRuntimeReason.set('');this.aiRuntimeModel.set('');
+    try{
+      const status=await this.emailAi.runtimeStatus();
+      this.aiRuntime.set(status.connected?'ready':'setup');this.aiRuntimeModel.set(status.model||'');this.aiRuntimeReason.set(status.reason||'');
+    }catch(e){this.aiRuntime.set('error');this.aiRuntimeReason.set(String((e as Error)?.message||e));}
+  }
+  aiRuntimeLabel(){if(this.aiRuntime()==='checking')return'Checking…';if(this.aiRuntime()==='ready')return'Ready';if(this.aiRuntime()==='setup')return'Setup required';return'Connection error';}
+  aiRuntimeDescription(){if(this.aiRuntime()==='checking')return'Checking the protected AI service.';if(this.aiRuntime()==='ready')return'Analysis and draft generation are connected.';return this.aiRuntimeReason()||'AI runtime is not available.';}
+  async analyseMail(mail:MailRow){
+    const key=`${mail.mailbox}:${mail.id}`;
+    if(this.aiAnalysisLoading())return;
+    this.aiAnalysisLoading.set(key);this.aiAnalysisError.set('');
     try{
       const candidates=this.orderCandidates(mail);
-      const result=await this.emailAi.analyse({mailbox:mail.mailbox,correspondent:mail.correspondent,email:mail.email,subject:mail.subject,body:mail.body||mail.preview},candidates);
-      const state:AiState=result.review_required?'Review':(result.needs_reply?'Draft ready':'Auto handled');
+      const thread=this.threadMessages().slice(-20).map(message=>({from:message.email,name:message.correspondent,direction:message.direction,date:message.received_at,body:message.body||message.preview}));
+      const result=await this.emailAi.analyse({id:mail.id,mailbox:mail.mailbox,correspondent:mail.correspondent,email:mail.email,subject:mail.subject,body:mail.body||mail.preview,thread},candidates);
+      const state:AiState=result.review_required?'Review':(result.needs_reply?'Draft ready':'No reply needed');
       const updated:MailRow={...mail,ai_state:state,intent:result.intent as MailIntent,linked_order:result.linked_order,confidence:result.confidence,needs_reply:result.needs_reply,draft_reply:result.draft_reply,ai_summary:result.summary,review_reason:result.review_reason||null};
       this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(updated);
-    }catch(e){console.warn('Email AI analysis failed',e);}
+    }catch(e){const message=String((e as Error)?.message||e);this.aiAnalysisError.set(`AI analysis failed: ${message}`);console.warn('Email AI analysis failed',e);}
+    finally{if(this.aiAnalysisLoading()===key)this.aiAnalysisLoading.set('');}
   }
   private orderCandidates(mail:MailRow){
     const email=mail.email.toLowerCase();const name=mail.correspondent.toLowerCase();const subject=(mail.subject+' '+mail.body+' '+mail.preview).toLowerCase();
@@ -574,7 +596,7 @@ export class EmailComponent implements OnDestroy{
   activeMailboxLabel(){const box=this.activeMailbox();return box==='all'?'All mail':this.mailboxAddress(box);}
   folderGlyph(view:MailView){if(view==='Inbox')return'▣';if(view==='Unread')return'●';if(view==='Needs reply')return'↩';if(view==='Starred')return'★';if(view==='Archive')return'▤';if(view==='Trash')return'⌫';return'➤';}
   confidenceLabel(value:number){return`${Math.round(value*100)}%`;}
-  aiSeverity(state?:AiState):'success'|'info'|'warn'|'secondary'{if(state==='Auto handled')return'success';if(state==='Draft ready')return'info';if(state==='Review')return'warn';return'secondary';}
+  aiSeverity(state?:AiState):'success'|'info'|'warn'|'secondary'{if(state==='No reply needed')return'success';if(state==='Draft ready')return'info';if(state==='Review')return'warn';return'secondary';}
   policySeverity(mode:PolicyMode):'success'|'info'|'warn'{if(mode==='Auto later')return'success';if(mode==='Draft + review')return'info';return'warn';}
   modeCount(mode:PolicyMode){return this.intentPolicies.filter(policy=>policy.mode===mode).length;}
 }

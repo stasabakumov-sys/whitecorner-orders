@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.gmail-api]
 verify_jwt = true
+
+[functions.email-ai]
+verify_jwt = true
