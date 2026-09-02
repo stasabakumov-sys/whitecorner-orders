@@ -297,6 +297,7 @@ export class EmailComponent{
     let current=mail;
     try{
       if(!mail.body){const full=await this.email.getMessage(mail.mailbox,mail.id);current={...mail,body:full.body||mail.preview,received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??false,starred:full.starred??mail.starred};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(current);}
+      if(current.status==='Inbox'&&current.unread){current=this.patchMail(current,{unread:false});try{await this.email.modify(current.mailbox,current.id,'markRead');}catch(e){current=this.patchMail(current,{unread:true});throw e;}}
       if(current.status==='Inbox'&&current.ai_state==='Not analysed')void this.analyseMail(current);
     }catch(e){this.mailError.set(String((e as Error)?.message||e));}
   }

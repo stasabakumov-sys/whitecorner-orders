@@ -42,6 +42,7 @@ export class EmailService {
   readonly loading = signal(false);
   readonly error = signal('');
   private readonly messageLoads = new Map<string, Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }>>();
+  private readonly messageMutations = new Map<string, Promise<void>>();
   private readonly listCache = new Map<string, { messages: GmailMessageRow[]; loadedAt: number }>();
 
   constructor(private readonly supabase: SupabaseService) {}
@@ -125,19 +126,29 @@ export class EmailService {
   }
 
   async modify(mailbox: GmailMailboxKey, messageId: string, action: GmailModifyAction): Promise<void> {
-    const { error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action, mailbox, messageId } });
-    if (error) throw error;
-    for (const [key, cached] of this.listCache) {
-      if (!key.startsWith(`${mailbox}:`)) continue;
-      if (action === 'archive' || action === 'trash') {
-        cached.messages = cached.messages.filter(message => message.id !== messageId);
-      } else {
-        cached.messages = cached.messages.map(message => message.id === messageId ? {
-          ...message,
-          unread: action === 'markRead' ? false : action === 'markUnread' ? true : message.unread,
-          starred: action === 'star' ? true : action === 'unstar' ? false : message.starred
-        } : message);
+    const mutationKey = `${mailbox}:${messageId}`;
+    const previous = this.messageMutations.get(mutationKey) || Promise.resolve();
+    const request = previous.catch(() => undefined).then(async () => {
+      const { error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action, mailbox, messageId } });
+      if (error) throw error;
+      for (const [key, cached] of this.listCache) {
+        if (!key.startsWith(`${mailbox}:`)) continue;
+        if (action === 'archive' || action === 'trash') {
+          cached.messages = cached.messages.filter(message => message.id !== messageId);
+        } else {
+          cached.messages = cached.messages.map(message => message.id === messageId ? {
+            ...message,
+            unread: action === 'markRead' ? false : action === 'markUnread' ? true : message.unread,
+            starred: action === 'star' ? true : action === 'unstar' ? false : message.starred
+          } : message);
+        }
       }
+    });
+    this.messageMutations.set(mutationKey, request);
+    try {
+      await request;
+    } finally {
+      if (this.messageMutations.get(mutationKey) === request) this.messageMutations.delete(mutationKey);
     }
   }
 
