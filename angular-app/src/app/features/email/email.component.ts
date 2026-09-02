@@ -107,7 +107,7 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
                         @if(mediaLoading()===message.mailbox+':'+message.id){<div class="email-media-loading"><i class="pi pi-spin pi-spinner"></i><span>Loading images…</span></div>}
                         @if(message.images_blocked&&imageLoadFailed(message.id)){<div class="email-media-notice"><span>Images could not be loaded automatically.</span><button (click)="displayThreadImages(message);$event.stopPropagation()" [disabled]="mediaLoading()!==''">Try again</button></div>}
                         @if(imageAttachments(message).length){<div class="email-image-previews">@for(attachment of imageAttachments(message);track attachment.attachmentId){@if(attachmentPreview(message,attachment);as preview){<button type="button" (click)="downloadAttachment(message,attachment)" [title]="'Download '+attachment.filename"><img [src]="preview" [alt]="attachment.filename"><span>{{attachment.filename}}</span></button>}@else{<div class="image-preview-loading">Loading image…</div>}}</div>}
-                        @if(message.attachments?.length){<div class="email-attachments"><b>Attachments</b><div>@for(attachment of message.attachments;track attachment.attachmentId){<button (click)="downloadAttachment(message,attachment)"><span>{{attachment.filename}}</span><small>{{attachmentSize(attachment.size)}}</small></button>}</div></div>}
+                        @if(fileAttachments(message).length){<div class="email-attachments"><b>Attachments</b><div>@for(attachment of fileAttachments(message);track attachment.attachmentId){<button (click)="downloadAttachment(message,attachment)"><span>{{attachment.filename}}</span><small>{{attachmentSize(attachment.size)}}</small></button>}</div></div>}
                       </div>
                     }
                   </article>
@@ -467,6 +467,7 @@ export class EmailComponent implements OnDestroy{
   }
   async displayThreadImages(mail:ThreadMail){await this.loadThreadMessageMedia(mail,this.selectionVersion);}
   imageAttachments(mail:MailRow){return(mail.attachments||[]).filter(attachment=>this.isImageAttachment(attachment)&&attachment.embedded!==true).slice(0,6);}
+  fileAttachments(mail:MailRow){const previewIds=new Set(this.imageAttachments(mail).map(attachment=>attachment.attachmentId));return(mail.attachments||[]).filter(attachment=>attachment.embedded!==true&&!previewIds.has(attachment.attachmentId));}
   private isImageAttachment(attachment:GmailAttachment){return attachment.mimeType.toLowerCase().startsWith('image/')||/\.(?:png|jpe?g|gif|webp|bmp|avif|heic|heif)$/i.test(attachment.filename);}
   private inferredImageType(attachment:GmailAttachment){if(attachment.mimeType.toLowerCase().startsWith('image/'))return attachment.mimeType;const extension=attachment.filename.toLowerCase().split('.').pop();return({png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',bmp:'image/bmp',avif:'image/avif',heic:'image/heic',heif:'image/heif'} as Record<string,string>)[extension||'']||'application/octet-stream';}
   attachmentPreview(mail:MailRow,attachment:GmailAttachment){return this.attachmentPreviews()[this.attachmentKey(mail,attachment)]||'';}
