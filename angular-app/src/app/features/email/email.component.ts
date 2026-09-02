@@ -363,7 +363,7 @@ export class EmailComponent implements OnDestroy{
     finally{if(version===this.selectionVersion&&this.bodyLoading()===loadingKey)this.bodyLoading.set('');}
   }
   private toThreadMail(root:MailRow,message:GmailThreadMessage):ThreadMail{
-    const outgoing=message.outgoing??((root as ThreadMail).outgoing??root.direction==='Outgoing');const address=outgoing?message.to:message.from;const email=this.extractAddress(address);const correspondent=this.extractName(address);
+    const outgoing=message.outgoing??((root as ThreadMail).outgoing??root.direction==='Outgoing');const address=message.from||root.email;const email=this.extractAddress(address);const correspondent=this.extractName(address);
     return {...root,id:message.id,threadId:message.threadId||root.threadId,correspondent,email,initials:this.initialsFor(correspondent),subject:message.subject||root.subject,preview:message.snippet||message.body||'',body:this.normalizeMessageBody(message.body,message.snippet||root.preview),html_body:message.html||'',images_blocked:message.imagesBlocked===true,attachments:message.attachments||[],received_at:message.date||root.received_at,time:this.formatMailTime(message.date||root.received_at),direction:outgoing?'Outgoing':'Incoming',unread:message.unread,starred:message.starred,outgoing};
   }
   private extractAddress(value:string){return(value.match(/<([^>]+)>/)?.[1]||value).trim();}
