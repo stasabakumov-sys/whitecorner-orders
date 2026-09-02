@@ -57,9 +57,24 @@ function allParts(payload: any): any[] {
   if (!payload) return [];
   return [payload, ...(payload.parts || []).flatMap((part: any) => allParts(part))];
 }
+function normalizeEmailLayout(value: string) {
+  return value.replace(/<(table|tbody|thead|tfoot|tr|td|th|div|p|section|article)\b([^>]*)>/gi, (_match, rawTag, rawAttributes) => {
+    const tag = String(rawTag).toLowerCase();
+    let attributes = String(rawAttributes)
+      .replace(/\s+(?:width|min-width|max-width|height|min-height|max-height)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/\s+style\s*=\s*(["'])([\s\S]*?)\1/gi, (_styleMatch, quote, declarations) => {
+        const cleaned = String(declarations)
+          .replace(/(?:^|;)\s*(?:width|min-width|max-width|height|min-height|max-height)\s*:[^;]*/gi, "")
+          .replace(/(?:^|;)\s*(?:padding|margin)-(?:top|bottom)\s*:[^;]*/gi, "")
+          .replace(/^\s*;+|;+\s*$/g, "").trim();
+        return cleaned ? ` style=${quote}${cleaned}${quote}` : "";
+      });
+    return `<${tag}${attributes}>`;
+  });
+}
 function sanitizeEmailHtml(value: string, allowExternalImages: boolean) {
   let imagesBlocked = false;
-  let html = value
+  let html = normalizeEmailLayout(value)
     .replace(/<(script|iframe|object|embed|form|input|button|meta|link|base|svg)[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
     .replace(/<(script|iframe|object|embed|form|input|button|meta|link|base|svg)[^>]*\/?>/gi, "")
     .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
