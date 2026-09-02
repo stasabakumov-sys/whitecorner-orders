@@ -2,8 +2,8 @@ import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 
 export type GmailMailboxKey = 'info' | 'support';
-export type GmailView = 'Inbox' | 'Needs reply' | 'Sent';
-export type GmailModifyAction = 'markRead' | 'markUnread' | 'archive' | 'trash' | 'star' | 'unstar';
+export type GmailView = 'Inbox' | 'Needs reply' | 'Sent' | 'Archive' | 'Trash';
+export type GmailModifyAction = 'markRead' | 'markUnread' | 'archive' | 'moveToInbox' | 'trash' | 'untrash' | 'star' | 'unstar';
 
 export interface GmailMailboxStatus {
   mailbox_key?: GmailMailboxKey;
@@ -30,7 +30,7 @@ export interface GmailMessageRow {
   received_at: string;
   time: string;
   direction: 'Incoming' | 'Outgoing';
-  status: 'Inbox' | 'Sent';
+  status: 'Inbox' | 'Sent' | 'Archive' | 'Trash';
   unread?: boolean;
   starred?: boolean;
   needs_reply?: boolean;
@@ -52,6 +52,7 @@ export interface GmailMessageDetail {
   subject: string;
   from: string;
   to: string;
+  cc?: string;
   date: string;
   unread?: boolean;
   starred?: boolean;
@@ -60,7 +61,7 @@ export interface GmailMessageDetail {
 }
 
 export interface GmailSendContext {
-  mode?: 'compose' | 'reply' | 'forward';
+  mode?: 'compose' | 'reply' | 'replyAll' | 'forward';
   sourceMessageId?: string;
   threadId?: string;
 }
@@ -71,10 +72,26 @@ export class EmailService {
   readonly loading = signal(false);
   readonly error = signal('');
   private readonly messageLoads = new Map<string, Promise<GmailMessageDetail>>();
+  private readonly messageCache = new Map<string, GmailMessageDetail>();
   private readonly messageMutations = new Map<string, Promise<void>>();
-  private readonly listCache = new Map<string, { messages: GmailMessageRow[]; loadedAt: number }>();
+  private readonly listCache = new Map<string, { messages: GmailMessageRow[]; loadedAt: number; nextPageToken?: string }>();
 
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(private readonly supabase: SupabaseService) { this.restoreListCache(); }
+
+  private restoreListCache(): void {
+    try {
+      const stored = sessionStorage.getItem('wc-email-list-cache-v1');
+      if (!stored) return;
+      const entries = JSON.parse(stored) as Array<[string, { messages: GmailMessageRow[]; loadedAt: number; nextPageToken?: string }]>;
+      for (const [key, value] of entries) {
+        if (Array.isArray(value?.messages) && Number.isFinite(value?.loadedAt)) this.listCache.set(key, value);
+      }
+    } catch { /* Ignore unavailable or invalid browser storage. */ }
+  }
+
+  private persistListCache(): void {
+    try { sessionStorage.setItem('wc-email-list-cache-v1', JSON.stringify([...this.listCache])); } catch { /* Cache is optional. */ }
+  }
 
   async refreshStatus(): Promise<void> {
     this.error.set('');
@@ -123,6 +140,15 @@ export class EmailService {
     return !cached || Date.now() - cached.loadedAt > maxAgeMs;
   }
 
+  invalidateList(mailbox: GmailMailboxKey, view: GmailView): void {
+    this.listCache.delete(this.listKey(mailbox, view));
+    this.persistListCache();
+  }
+
+  hasMore(mailbox: GmailMailboxKey, view: GmailView): boolean {
+    return Boolean(this.listCache.get(this.listKey(mailbox, view))?.nextPageToken);
+  }
+
   async list(mailbox: GmailMailboxKey, view: GmailView, refresh = false): Promise<GmailMessageRow[]> {
     const apiView = view === 'Needs reply' ? 'Inbox' : view;
     const key = this.listKey(mailbox, apiView);
@@ -131,8 +157,30 @@ export class EmailService {
     const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'list', mailbox, view: apiView } });
     if (error) throw error;
     const messages = ((data?.messages || []) as GmailMessageRow[]).map(message => ({ ...message }));
-    this.listCache.set(key, { messages, loadedAt: Date.now() });
+    this.listCache.set(key, { messages, loadedAt: Date.now(), nextPageToken: String(data?.nextPageToken || '') || undefined });
+    this.persistListCache();
     return messages.map(message => ({ ...message }));
+  }
+
+  async loadMore(mailbox: GmailMailboxKey, view: GmailView): Promise<GmailMessageRow[]> {
+    const key = this.listKey(mailbox, view);
+    const cached = this.listCache.get(key);
+    if (!cached?.nextPageToken) return cached?.messages.map(message => ({ ...message })) || [];
+    const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'list', mailbox, view, pageToken: cached.nextPageToken } });
+    if (error) throw error;
+    const incoming = ((data?.messages || []) as GmailMessageRow[]).map(message => ({ ...message }));
+    const merged = new Map(cached.messages.map(message => [message.id, message]));
+    for (const message of incoming) merged.set(message.id, message);
+    cached.messages = [...merged.values()];cached.loadedAt = Date.now();cached.nextPageToken = String(data?.nextPageToken || '') || undefined;
+    this.persistListCache();
+    return cached.messages.map(message => ({ ...message }));
+  }
+
+  peekMessage(mailbox: GmailMailboxKey, messageId: string, preferImages = true): GmailMessageDetail | null {
+    const preferred = this.messageCache.get(`${mailbox}:${messageId}:${preferImages ? 'images' : 'safe'}`);
+    const fallback = this.messageCache.get(`${mailbox}:${messageId}:safe`) || this.messageCache.get(`${mailbox}:${messageId}:images`);
+    const cached = preferred || fallback;
+    return cached ? { ...cached, attachments: cached.attachments?.map(item => ({ ...item })) } : null;
   }
 
   getMessage(mailbox: GmailMailboxKey, messageId: string, loadExternalImages = false): Promise<GmailMessageDetail> {
@@ -147,7 +195,9 @@ export class EmailService {
   private async loadMessage(mailbox: GmailMailboxKey, messageId: string, loadExternalImages: boolean): Promise<GmailMessageDetail> {
     const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'get', mailbox, messageId, loadExternalImages } });
     if (error) throw error;
-    return data;
+    const detail = data as GmailMessageDetail;
+    this.messageCache.set(`${mailbox}:${messageId}:${loadExternalImages ? 'images' : 'safe'}`, detail);
+    return { ...detail, attachments: detail.attachments?.map(item => ({ ...item })) };
   }
 
   async downloadAttachment(mailbox: GmailMailboxKey, messageId: string, attachment: GmailAttachment): Promise<Blob> {
@@ -167,7 +217,7 @@ export class EmailService {
       if (error) throw error;
       for (const [key, cached] of this.listCache) {
         if (!key.startsWith(`${mailbox}:`)) continue;
-        if (action === 'archive' || action === 'trash') {
+        if (action === 'archive' || action === 'moveToInbox' || action === 'trash' || action === 'untrash') {
           cached.messages = cached.messages.filter(message => message.id !== messageId);
         } else {
           cached.messages = cached.messages.map(message => message.id === messageId ? {
@@ -177,6 +227,10 @@ export class EmailService {
           } : message);
         }
       }
+      if (action === 'archive') this.listCache.delete(this.listKey(mailbox, 'Archive'));
+      if (action === 'trash') this.listCache.delete(this.listKey(mailbox, 'Trash'));
+      if (action === 'moveToInbox' || action === 'untrash') this.listCache.delete(this.listKey(mailbox, 'Inbox'));
+      this.persistListCache();
     });
     this.messageMutations.set(mutationKey, request);
     try {
@@ -195,6 +249,7 @@ export class EmailService {
     const { error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'send', mailbox, to, subject, text, attachments, ...context } });
     if (error) throw error;
     this.listCache.delete(this.listKey(mailbox, 'Sent'));
+    this.persistListCache();
   }
 
   private async fileBase64(file: File): Promise<string> {

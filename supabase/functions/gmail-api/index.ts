@@ -43,6 +43,11 @@ function sanitizeEmailHtml(value: string, allowExternalImages: boolean) {
     .replace(/(href|src)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi, '$1="#"')
     .replace(/@import\s+(url\s*\()?\s*(["']?)https?:[\s\S]*?;?/gi, "");
   if (!allowExternalImages) {
+    html = html.replace(/<img\b[^>]*\bsrc\s*=\s*(["'])cid:[^"']+\1[^>]*>/gi, tag => {
+      imagesBlocked = true;
+      const alt = tag.match(/\balt\s*=\s*(["'])(.*?)\1/i)?.[2] || "Inline image";
+      return `<span class="wc-blocked-image">[${alt.replace(/[<>]/g, "")}]</span>`;
+    });
     html = html.replace(/url\s*\(\s*(["']?)https?:[\s\S]*?\1\s*\)/gi, "none");
     html = html.replace(/\s+(srcset|background)\s*=\s*(["'])[^"']*\2/gi, "");
     html = html.replace(/<img\b[^>]*\bsrc\s*=\s*(["'])https?:\/\/[^"']+\1[^>]*>/gi, tag => {
@@ -71,18 +76,18 @@ async function extractMessageContent(payload: any, messageId: string, gmailHeade
   const plain = plainCandidates.sort((a, b) => b.length - a.length)[0] || "";
   let html = htmlCandidates.sort((a, b) => b.length - a.length)[0] || "";
   const attachments: Array<{ attachmentId: string; filename: string; mimeType: string; size: number; inline: boolean }> = [];
+  const inlineParts: Array<{ part: any; contentId: string; mimeType: string }> = [];
   for (const part of parts) {
     const attachmentId = String(part?.body?.attachmentId || "");
     const filename = String(part?.filename || "");
     const mimeType = String(part?.mimeType || "application/octet-stream");
     const contentId = headerValue(part?.headers || [], "Content-ID").replace(/[<>]/g, "");
     const inline = Boolean(contentId) && mimeType.startsWith("image/");
-    if (inline && html) {
-      const data = await partData(part, messageId, gmailHeaders);
-      if (data) html = html.replace(new RegExp(`cid:${contentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi"), `data:${mimeType};base64,${data.replaceAll("-", "+").replaceAll("_", "/")}`);
-    }
+    if (inline && html && allowExternalImages) inlineParts.push({ part, contentId, mimeType });
     if (attachmentId && (filename || !inline)) attachments.push({ attachmentId, filename: filename || "attachment", mimeType, size: Number(part?.body?.size || 0), inline });
   }
+  const inlineData = await Promise.all(inlineParts.map(async item => ({ ...item, data: await partData(item.part, messageId, gmailHeaders) })));
+  for (const item of inlineData) if (item.data) html = html.replace(new RegExp(`cid:${item.contentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi"), `data:${item.mimeType};base64,${item.data.replaceAll("-", "+").replaceAll("_", "/")}`);
   const sanitized = html ? sanitizeEmailHtml(html, allowExternalImages) : { html: "", imagesBlocked: false };
   return { body: plain || stripHtml(html), html: sanitized.html, imagesBlocked: sanitized.imagesBlocked, attachments };
 }
@@ -93,6 +98,9 @@ function displayName(address: string) {
 function displayEmail(address: string) {
   const match = address.match(/<([^>]+)>/);
   return (match?.[1] || address).trim();
+}
+function emailAddresses(value: string) {
+  return [...value.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)].map(match => match[0].toLowerCase());
 }
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]?.toUpperCase() || "").join("") || "?";
@@ -148,7 +156,7 @@ Deno.serve(async (req) => {
     if (mailboxError) throw mailboxError;
     if (!mailbox?.refresh_token) return new Response(JSON.stringify({ connected: false, mailbox: mailboxKey, email: expectedEmail }), { status: action === "status" ? 200 : 409, headers: jsonHeaders });
     if (action === "status") return new Response(JSON.stringify({ connected: true, mailbox: mailboxKey, email: mailbox.email, connectedAt: mailbox.connected_at, lastSyncAt: mailbox.last_sync_at, scopes: mailbox.granted_scopes || [] }), { headers: jsonHeaders });
-    if (action === "capabilities") return new Response(JSON.stringify({ version: 3, html: true, inlineImages: true, attachments: true, threadedReplies: true, forwardedAttachments: true }), { headers: jsonHeaders });
+    if (action === "capabilities") return new Response(JSON.stringify({ version: 4, html: true, stagedMedia: true, inlineImages: true, attachments: true, pagination: true, archiveAndTrash: true, threadedReplies: true, replyAll: true, forwardedAttachments: true }), { headers: jsonHeaders });
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -161,8 +169,11 @@ Deno.serve(async (req) => {
 
     if (action === "list") {
       const view = String(body.view || "Inbox");
-      const query = view === "Sent" ? "in:sent" : "in:inbox";
-      const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=30&q=${encodeURIComponent(query)}`, { headers: gmailHeaders });
+      const query = view === "Sent" ? "in:sent" : view === "Archive" ? "-in:inbox -in:sent -in:drafts -in:spam -in:trash" : view === "Trash" ? "in:trash" : "in:inbox";
+      const pageToken = String(body.pageToken || "");
+      const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+      listUrl.searchParams.set("maxResults", "30");listUrl.searchParams.set("q", query);if (pageToken) listUrl.searchParams.set("pageToken", pageToken);
+      const listRes = await fetch(listUrl, { headers: gmailHeaders });
       const list = await listRes.json();
       if (!listRes.ok) throw new Error(`Gmail list failed: ${JSON.stringify(list)}`);
       const ids = (list.messages || []).slice(0, 30);
@@ -175,7 +186,7 @@ Deno.serve(async (req) => {
         const to = headerValue(headers, "To");
         const subject = headerValue(headers, "Subject") || "(no subject)";
         const date = headerValue(headers, "Date");
-        const outgoing = view === "Sent";
+        const outgoing = view === "Sent" || displayEmail(from).toLowerCase() === expectedEmail.toLowerCase();
         const personRaw = outgoing ? to : from;
         const name = displayName(personRaw);
         const labels = Array.isArray(msg.labelIds) ? msg.labelIds : [];
@@ -191,14 +202,14 @@ Deno.serve(async (req) => {
           received_at: date,
           time: date,
           direction: outgoing ? "Outgoing" : "Incoming",
-          status: outgoing ? "Sent" : "Inbox",
+          status: view === "Trash" ? "Trash" : view === "Archive" ? "Archive" : outgoing ? "Sent" : "Inbox",
           unread: labels.includes("UNREAD"),
           starred: labels.includes("STARRED"),
           needs_reply: false,
         };
       }));
       await admin.from("wc_mailboxes").update({ last_sync_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("mailbox_key", mailboxKey);
-      return new Response(JSON.stringify({ connected: true, mailbox: mailboxKey, email: expectedEmail, messages: rows.filter(Boolean) }), { headers: jsonHeaders });
+      return new Response(JSON.stringify({ connected: true, mailbox: mailboxKey, email: expectedEmail, messages: rows.filter(Boolean), nextPageToken: list.nextPageToken || "" }), { headers: jsonHeaders });
     }
 
     if (action === "get") {
@@ -214,6 +225,7 @@ Deno.serve(async (req) => {
         threadId: msg.threadId,
         from: headerValue(headers, "From"),
         to: headerValue(headers, "To"),
+        cc: headerValue(headers, "Cc"),
         subject: headerValue(headers, "Subject") || "(no subject)",
         date: headerValue(headers, "Date"),
         body: content.body,
@@ -236,7 +248,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ data: result.data || "", size: result.size || 0 }), { headers: jsonHeaders });
     }
 
-    if (["markRead", "markUnread", "archive", "star", "unstar"].includes(action)) {
+    if (["markRead", "markUnread", "archive", "moveToInbox", "star", "unstar"].includes(action)) {
       const messageId = String(body.messageId || "");
       if (!messageId) return new Response(JSON.stringify({ error: "messageId required" }), { status: 400, headers: jsonHeaders });
       const addLabelIds: string[] = [];
@@ -244,6 +256,7 @@ Deno.serve(async (req) => {
       if (action === "markRead") removeLabelIds.push("UNREAD");
       if (action === "markUnread") addLabelIds.push("UNREAD");
       if (action === "archive") removeLabelIds.push("INBOX");
+      if (action === "moveToInbox") addLabelIds.push("INBOX");
       if (action === "star") addLabelIds.push("STARRED");
       if (action === "unstar") removeLabelIds.push("STARRED");
       const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/modify`, {
@@ -256,15 +269,15 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, message: result }), { headers: jsonHeaders });
     }
 
-    if (action === "trash") {
+    if (action === "trash" || action === "untrash") {
       const messageId = String(body.messageId || "");
       if (!messageId) return new Response(JSON.stringify({ error: "messageId required" }), { status: 400, headers: jsonHeaders });
-      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/trash`, {
+      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/${action}`, {
         method: "POST",
         headers: gmailHeaders,
       });
       const result = await res.json();
-      if (!res.ok) throw new Error(`Gmail trash failed: ${JSON.stringify(result)}`);
+      if (!res.ok) throw new Error(`Gmail ${action} failed: ${JSON.stringify(result)}`);
       return new Response(JSON.stringify({ ok: true, message: result }), { headers: jsonHeaders });
     }
 
@@ -277,14 +290,15 @@ Deno.serve(async (req) => {
       let recipient = to;
       let attachments = Array.isArray(body.attachments) ? body.attachments.slice(0, 10) : [];
       if (!to || !subject || (mode !== "forward" && !text)) return new Response(JSON.stringify({ error: "recipient, subject and message text are required" }), { status: 400, headers: jsonHeaders });
-      if (!["compose", "reply", "forward"].includes(mode)) return new Response(JSON.stringify({ error: "Unknown send mode" }), { status: 400, headers: jsonHeaders });
+      if (!["compose", "reply", "replyAll", "forward"].includes(mode)) return new Response(JSON.stringify({ error: "Unknown send mode" }), { status: 400, headers: jsonHeaders });
 
       let outgoingText = text;
       let outgoingHtml = `<div>${textAsHtml(text)}</div>`;
       let targetThreadId = "";
       const replyHeaders: string[] = [];
-      if (mode === "reply" || mode === "forward") {
-        if (!sourceMessageId) return new Response(JSON.stringify({ error: "sourceMessageId required for reply or forward" }), { status: 400, headers: jsonHeaders });
+      let ccRecipients: string[] = [];
+      if (mode === "reply" || mode === "replyAll" || mode === "forward") {
+        if (!sourceMessageId) return new Response(JSON.stringify({ error: "sourceMessageId required for reply, reply all or forward" }), { status: 400, headers: jsonHeaders });
         const sourceRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(sourceMessageId)}?format=full`, { headers: gmailHeaders });
         const source = await sourceRes.json();
         if (!sourceRes.ok) throw new Error(`Gmail source message failed: ${JSON.stringify(source)}`);
@@ -292,6 +306,7 @@ Deno.serve(async (req) => {
         const sourceFrom = headerValue(sourceHeaders, "From");
         const sourceReplyTo = headerValue(sourceHeaders, "Reply-To");
         const sourceTo = headerValue(sourceHeaders, "To");
+        const sourceCc = headerValue(sourceHeaders, "Cc");
         const sourceDate = headerValue(sourceHeaders, "Date");
         const sourceSubject = headerValue(sourceHeaders, "Subject") || subject;
         const sourceInternetId = headerValue(sourceHeaders, "Message-ID") || headerValue(sourceHeaders, "Message-Id");
@@ -300,8 +315,15 @@ Deno.serve(async (req) => {
         const sourcePlain = sourceContent.body || stripHtml(sourceContent.html || "");
         const sourceHtml = sourceContent.html || `<div>${textAsHtml(sourcePlain)}</div>`;
 
-        if (mode === "reply") {
-          if (sourceReplyTo) recipient = displayEmail(sourceReplyTo);
+        if (mode === "reply" || mode === "replyAll") {
+          const sourceWasSent = emailAddresses(sourceFrom).includes(expectedEmail.toLowerCase());
+          const primarySource = sourceWasSent ? sourceTo : (sourceReplyTo || sourceFrom);
+          const primary = emailAddresses(primarySource)[0] || displayEmail(primarySource);
+          if (primary) recipient = primary;
+          if (mode === "replyAll") {
+            const excluded = new Set([expectedEmail.toLowerCase(), recipient.toLowerCase()]);
+            ccRecipients = [...new Set([...emailAddresses(sourceTo), ...emailAddresses(sourceCc)].filter(address => !excluded.has(address)))];
+          }
           const attribution = `On ${sourceDate || "the previous message"}, ${sourceFrom || "the sender"} wrote:`;
           outgoingText = `${text.trim()}\r\n\r\n${attribution}\r\n${quotedPlain(sourcePlain)}`;
           outgoingHtml = `<div>${textAsHtml(text.trim())}</div><br><div class="gmail_quote"><div>${escapeHtml(attribution)}</div><blockquote style="margin:8px 0 0 10px;padding-left:10px;border-left:1px solid #ccc">${sourceHtml}</blockquote></div>`;
@@ -330,7 +352,7 @@ Deno.serve(async (req) => {
       const safeTo = headerText(recipient);
       const safeSubject = headerText(subject);
       const alternativeBoundary = `wc_alt_${crypto.randomUUID().replaceAll("-", "")}`;
-      const baseHeaders = [`From: ${expectedEmail}`, `To: ${safeTo}`, `Subject: ${safeSubject}`, ...replyHeaders, "MIME-Version: 1.0"];
+      const baseHeaders = [`From: ${expectedEmail}`, `To: ${safeTo}`, ...(ccRecipients.length ? [`Cc: ${ccRecipients.join(", ")}`] : []), `Subject: ${safeSubject}`, ...replyHeaders, "MIME-Version: 1.0"];
       const alternativeParts = [`--${alternativeBoundary}`, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", outgoingText, `--${alternativeBoundary}`, "Content-Type: text/html; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", outgoingHtml, `--${alternativeBoundary}--`, ""];
       let raw = "";
       if (attachments.length) {
