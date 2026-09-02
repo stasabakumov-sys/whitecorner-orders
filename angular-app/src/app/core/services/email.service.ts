@@ -36,12 +36,33 @@ export interface GmailMessageRow {
   needs_reply?: boolean;
 }
 
+export interface GmailAttachment {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  inline?: boolean;
+}
+
+export interface GmailMessageDetail {
+  body: string;
+  html?: string;
+  subject: string;
+  from: string;
+  to: string;
+  date: string;
+  unread?: boolean;
+  starred?: boolean;
+  imagesBlocked?: boolean;
+  attachments?: GmailAttachment[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class EmailService {
   readonly status = signal<Record<GmailMailboxKey, boolean>>({ info: false, support: false });
   readonly loading = signal(false);
   readonly error = signal('');
-  private readonly messageLoads = new Map<string, Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }>>();
+  private readonly messageLoads = new Map<string, Promise<GmailMessageDetail>>();
   private readonly messageMutations = new Map<string, Promise<void>>();
   private readonly listCache = new Map<string, { messages: GmailMessageRow[]; loadedAt: number }>();
 
@@ -106,19 +127,28 @@ export class EmailService {
     return messages.map(message => ({ ...message }));
   }
 
-  getMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {
-    const key = `${mailbox}:${messageId}`;
+  getMessage(mailbox: GmailMailboxKey, messageId: string, loadExternalImages = false): Promise<GmailMessageDetail> {
+    const key = `${mailbox}:${messageId}:${loadExternalImages ? 'images' : 'safe'}`;
     const pending = this.messageLoads.get(key);
     if (pending) return pending;
-    const request = this.loadMessage(mailbox, messageId).finally(() => this.messageLoads.delete(key));
+    const request = this.loadMessage(mailbox, messageId, loadExternalImages).finally(() => this.messageLoads.delete(key));
     this.messageLoads.set(key, request);
     return request;
   }
 
-  private async loadMessage(mailbox: GmailMailboxKey, messageId: string): Promise<{ body: string; subject: string; from: string; to: string; date: string; unread?: boolean; starred?: boolean }> {
-    const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'get', mailbox, messageId } });
+  private async loadMessage(mailbox: GmailMailboxKey, messageId: string, loadExternalImages: boolean): Promise<GmailMessageDetail> {
+    const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'get', mailbox, messageId, loadExternalImages } });
     if (error) throw error;
     return data;
+  }
+
+  async downloadAttachment(mailbox: GmailMailboxKey, messageId: string, attachment: GmailAttachment): Promise<Blob> {
+    const { data, error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'attachment', mailbox, messageId, attachmentId: attachment.attachmentId } });
+    if (error) throw error;
+    const base64 = String(data?.data || '').replaceAll('-', '+').replaceAll('_', '/');
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+    return new Blob([bytes], { type: attachment.mimeType || 'application/octet-stream' });
   }
 
   async modify(mailbox: GmailMailboxKey, messageId: string, action: GmailModifyAction): Promise<void> {
@@ -148,9 +178,17 @@ export class EmailService {
     }
   }
 
-  async send(mailbox: GmailMailboxKey, to: string, subject: string, text: string): Promise<void> {
-    const { error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'send', mailbox, to, subject, text } });
+  async send(mailbox: GmailMailboxKey, to: string, subject: string, text: string, files: File[] = []): Promise<void> {
+    const attachments = await Promise.all(files.map(async file => ({ filename: file.name, mimeType: file.type || 'application/octet-stream', data: await this.fileBase64(file) })));
+    const { error } = await this.supabase.client.functions.invoke('gmail-api', { body: { action: 'send', mailbox, to, subject, text, attachments } });
     if (error) throw error;
     this.listCache.delete(this.listKey(mailbox, 'Sent'));
+  }
+
+  private async fileBase64(file: File): Promise<string> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    return btoa(binary);
   }
 }

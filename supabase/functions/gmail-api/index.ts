@@ -30,17 +30,61 @@ function stripHtml(html: string) {
     .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
     .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
-function extractBody(payload: any): string {
-  if (!payload) return "";
-  if (payload.mimeType === "text/plain" && payload.body?.data) return decodeBase64Url(payload.body.data);
-  const parts = payload.parts || [];
-  for (const part of parts) {
-    const text = extractBody(part);
-    if (text) return text;
+function allParts(payload: any): any[] {
+  if (!payload) return [];
+  return [payload, ...(payload.parts || []).flatMap((part: any) => allParts(part))];
+}
+function sanitizeEmailHtml(value: string, allowExternalImages: boolean) {
+  let imagesBlocked = false;
+  let html = value
+    .replace(/<(script|iframe|object|embed|form|input|button|meta|link|base|svg)[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
+    .replace(/<(script|iframe|object|embed|form|input|button|meta|link|base|svg)[^>]*\/?>/gi, "")
+    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/(href|src)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi, '$1="#"')
+    .replace(/@import\s+(url\s*\()?\s*(["']?)https?:[\s\S]*?;?/gi, "")
+    .replace(/url\s*\(\s*(["']?)https?:[\s\S]*?\1\s*\)/gi, "none");
+  if (!allowExternalImages) {
+    html = html.replace(/\s+(srcset|background)\s*=\s*(["'])[^"']*\2/gi, "");
+    html = html.replace(/<img\b[^>]*\bsrc\s*=\s*(["'])https?:\/\/[^"']+\1[^>]*>/gi, tag => {
+      imagesBlocked = true;
+      const alt = tag.match(/\balt\s*=\s*(["'])(.*?)\1/i)?.[2] || "Remote image";
+      return `<span class="wc-blocked-image">[${alt.replace(/[<>]/g, "")}]</span>`;
+    });
   }
-  if (payload.mimeType === "text/html" && payload.body?.data) return stripHtml(decodeBase64Url(payload.body.data));
-  if (payload.body?.data) return decodeBase64Url(payload.body.data);
-  return "";
+  return { html, imagesBlocked };
+}
+async function partData(part: any, messageId: string, gmailHeaders: Record<string, string>) {
+  if (part?.body?.data) return String(part.body.data);
+  const attachmentId = String(part?.body?.attachmentId || "");
+  if (!attachmentId) return "";
+  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`, { headers: gmailHeaders });
+  const result = await res.json();
+  if (!res.ok) throw new Error(`Gmail attachment failed: ${JSON.stringify(result)}`);
+  return String(result.data || "");
+}
+async function extractMessageContent(payload: any, messageId: string, gmailHeaders: Record<string, string>, allowExternalImages: boolean) {
+  const parts = allParts(payload);
+  const plainParts = parts.filter(part => part.mimeType === "text/plain" && (part.body?.data || part.body?.attachmentId));
+  const htmlParts = parts.filter(part => part.mimeType === "text/html" && (part.body?.data || part.body?.attachmentId));
+  const plainCandidates = await Promise.all(plainParts.map(async part => decodeBase64Url(await partData(part, messageId, gmailHeaders))));
+  const htmlCandidates = await Promise.all(htmlParts.map(async part => decodeBase64Url(await partData(part, messageId, gmailHeaders))));
+  const plain = plainCandidates.sort((a, b) => b.length - a.length)[0] || "";
+  let html = htmlCandidates.sort((a, b) => b.length - a.length)[0] || "";
+  const attachments: Array<{ attachmentId: string; filename: string; mimeType: string; size: number; inline: boolean }> = [];
+  for (const part of parts) {
+    const attachmentId = String(part?.body?.attachmentId || "");
+    const filename = String(part?.filename || "");
+    const mimeType = String(part?.mimeType || "application/octet-stream");
+    const contentId = headerValue(part?.headers || [], "Content-ID").replace(/[<>]/g, "");
+    const inline = Boolean(contentId) && mimeType.startsWith("image/");
+    if (inline && html) {
+      const data = await partData(part, messageId, gmailHeaders);
+      if (data) html = html.replace(new RegExp(`cid:${contentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi"), `data:${mimeType};base64,${data.replaceAll("-", "+").replaceAll("_", "/")}`);
+    }
+    if (attachmentId && (filename || !inline)) attachments.push({ attachmentId, filename: filename || "attachment", mimeType, size: Number(part?.body?.size || 0), inline });
+  }
+  const sanitized = html ? sanitizeEmailHtml(html, allowExternalImages) : { html: "", imagesBlocked: false };
+  return { body: plain || stripHtml(html), html: sanitized.html, imagesBlocked: sanitized.imagesBlocked, attachments };
 }
 function displayName(address: string) {
   const match = address.match(/^\s*"?([^"<]+?)"?\s*<[^>]+>/);
@@ -59,6 +103,8 @@ function encodeRawMail(value: string) {
   for (const b of bytes) binary += String.fromCharCode(b);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
 }
+function wrapBase64(value: string) { return value.match(/.{1,76}/g)?.join("\r\n") || ""; }
+function quotedHeader(value: string) { return value.replace(/[\r\n"]/g, "_"); }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -155,6 +201,7 @@ Deno.serve(async (req) => {
       const msg = await res.json();
       if (!res.ok) throw new Error(`Gmail get failed: ${JSON.stringify(msg)}`);
       const headers = msg.payload?.headers || [];
+      const content = await extractMessageContent(msg.payload, messageId, gmailHeaders, body.loadExternalImages === true);
       return new Response(JSON.stringify({
         id: msg.id,
         threadId: msg.threadId,
@@ -162,11 +209,24 @@ Deno.serve(async (req) => {
         to: headerValue(headers, "To"),
         subject: headerValue(headers, "Subject") || "(no subject)",
         date: headerValue(headers, "Date"),
-        body: extractBody(msg.payload),
+        body: content.body,
+        html: content.html,
+        imagesBlocked: content.imagesBlocked,
+        attachments: content.attachments,
         snippet: msg.snippet || "",
         unread: Array.isArray(msg.labelIds) && msg.labelIds.includes("UNREAD"),
         starred: Array.isArray(msg.labelIds) && msg.labelIds.includes("STARRED"),
       }), { headers: jsonHeaders });
+    }
+
+    if (action === "attachment") {
+      const messageId = String(body.messageId || "");
+      const attachmentId = String(body.attachmentId || "");
+      if (!messageId || !attachmentId) return new Response(JSON.stringify({ error: "messageId and attachmentId required" }), { status: 400, headers: jsonHeaders });
+      const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`, { headers: gmailHeaders });
+      const result = await res.json();
+      if (!res.ok) throw new Error(`Gmail attachment failed: ${JSON.stringify(result)}`);
+      return new Response(JSON.stringify({ data: result.data || "", size: result.size || 0 }), { headers: jsonHeaders });
     }
 
     if (["markRead", "markUnread", "archive", "star", "unstar"].includes(action)) {
@@ -205,8 +265,23 @@ Deno.serve(async (req) => {
       const to = String(body.to || "").trim();
       const subject = String(body.subject || "").trim();
       const text = String(body.text || "");
+      const attachments = Array.isArray(body.attachments) ? body.attachments.slice(0, 10) : [];
       if (!to || !subject || !text) return new Response(JSON.stringify({ error: "to, subject and text are required" }), { status: 400, headers: jsonHeaders });
-      const raw = [`From: ${expectedEmail}`, `To: ${to}`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", text].join("\r\n");
+      let raw = "";
+      if (attachments.length) {
+        const boundary = `wc_${crypto.randomUUID().replaceAll("-", "")}`;
+        const chunks = [`From: ${expectedEmail}`, `To: ${to}`, `Subject: ${subject}`, "MIME-Version: 1.0", `Content-Type: multipart/mixed; boundary="${boundary}"`, "", `--${boundary}`, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: 8bit", "", text];
+        for (const attachment of attachments) {
+          const filename = quotedHeader(String(attachment?.filename || "attachment"));
+          const mimeType = String(attachment?.mimeType || "application/octet-stream").replace(/[^a-z0-9.+\-\/]/gi, "") || "application/octet-stream";
+          const data = String(attachment?.data || "").replace(/[^a-zA-Z0-9+/=]/g, "");
+          if (!data) continue;
+          chunks.push(`--${boundary}`, `Content-Type: ${mimeType}; name="${filename}"`, "Content-Transfer-Encoding: base64", `Content-Disposition: attachment; filename="${filename}"`, "", wrapBase64(data));
+        }
+        chunks.push(`--${boundary}--`, "");raw = chunks.join("\r\n");
+      } else {
+        raw = [`From: ${expectedEmail}`, `To: ${to}`, `Subject: ${subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "", text].join("\r\n");
+      }
       const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
         method: "POST",
         headers: { ...gmailHeaders, "Content-Type": "application/json" },

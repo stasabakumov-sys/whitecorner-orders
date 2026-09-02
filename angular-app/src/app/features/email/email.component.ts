@@ -2,7 +2,7 @@ import { Component, HostListener, computed, signal } from '@angular/core';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TagModule } from 'primeng/tag';
-import { EmailService, GmailMessageRow } from '../../core/services/email.service';
+import { EmailService, GmailAttachment, GmailMessageRow } from '../../core/services/email.service';
 import { EmailAiService } from '../../core/services/email-ai.service';
 import { OrdersService } from '../../core/services/orders.service';
 
@@ -13,7 +13,7 @@ type MailIntent='Order question'|'Customisation'|'Product question'|'Production 
 type PolicyMode='Auto later'|'Draft + review'|'Manual only';
 type MailboxId='all'|'info'|'support';
 
-interface MailRow{id:string;mailbox:'info'|'support';correspondent:string;email:string;initials:string;subject:string;preview:string;body:string;received_at:string;time:string;direction:'Incoming'|'Outgoing';status:'Inbox'|'Sent';unread?:boolean;starred?:boolean;ai_state?:AiState;linked_order?:string|null;intent?:MailIntent|null;needs_reply?:boolean|null;confidence?:number|null;draft_reply?:string|null;ai_summary?:string|null;review_reason?:string|null;}
+interface MailRow{id:string;mailbox:'info'|'support';correspondent:string;email:string;initials:string;subject:string;preview:string;body:string;html_body?:string;images_blocked?:boolean;attachments?:GmailAttachment[];received_at:string;time:string;direction:'Incoming'|'Outgoing';status:'Inbox'|'Sent';unread?:boolean;starred?:boolean;ai_state?:AiState;linked_order?:string|null;intent?:MailIntent|null;needs_reply?:boolean|null;confidence?:number|null;draft_reply?:string|null;ai_summary?:string|null;review_reason?:string|null;}
 interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
 
 @Component({
@@ -59,8 +59,9 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
           <div class="compose-field"><span>To</span><input pInputText type="email" autocomplete="off" [value]="composeTo()" (input)="composeTo.set($any($event.target).value)" placeholder="recipient@example.com"/></div>
           <div class="compose-field subject"><span>Subject</span><input pInputText [value]="composeSubject()" (input)="composeSubject.set($any($event.target).value)" placeholder="Subject"/></div>
           <textarea [value]="composeText()" (input)="composeText.set($any($event.target).value)" placeholder="Write a message…" [disabled]="composeSending()"></textarea>
+          <div class="compose-field"><span>Files</span><input type="file" multiple (change)="selectComposeFiles($event)" [disabled]="composeSending()"/></div>
           <div class="compose-actions">
-            @if(composeStatus()){<span [class.send-error]="composeStatus().startsWith('Error')">{{composeStatus()}}</span>}@else{<span>Sent through Gmail</span>}
+            @if(composeStatus()){<span [class.send-error]="composeStatus().startsWith('Error')">{{composeStatus()}}</span>}@else if(composeAttachments().length){<span>{{composeAttachments().length}} file(s) · {{composeAttachmentSize()}}</span>}@else{<span>Sent through Gmail</span>}
             <button class="discard-compose" title="Discard" (click)="cancelCompose()" [disabled]="composeSending()"><i class="pi pi-trash"></i></button>
             <p-button label="Send" icon="pi pi-send" (onClick)="sendCompose()" [disabled]="composeSending() || !canSendCompose()"/>
           </div>
@@ -89,7 +90,9 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
                 <div class="reader-sender-copy"><b>{{mail.correspondent}}</b><span>{{mail.email}}</span></div>
                 <time>{{mail.time}}</time>
               </div>
-              @if(bodyLoading()===mail.mailbox+':'+mail.id){<div class="reader-body" style="color:#98a2b3">Loading full message…</div>}@else{<article class="reader-body">{{mail.body || mail.preview}}</article>}
+              @if(bodyLoading()===mail.mailbox+':'+mail.id){<div class="reader-body" style="color:#98a2b3">Loading full message…</div>}@else if(mail.html_body){<article class="reader-body reader-html" [innerHTML]="mail.html_body"></article>}@else{<article class="reader-body">{{mail.body || mail.preview}}</article>}
+              @if(mail.images_blocked){<div class="email-media-notice"><span>External images are blocked for privacy.</span><button (click)="displayExternalImages(mail)" [disabled]="bodyLoading()!==''">Display images</button></div>}
+              @if(mail.attachments?.length){<div class="email-attachments"><b>Attachments</b><div>@for(attachment of mail.attachments;track attachment.attachmentId){<button (click)="downloadAttachment(mail,attachment)"><span>{{attachment.filename}}</span><small>{{attachmentSize(attachment.size)}}</small></button>}</div></div>}
               <div class="reader-ai">
                 <div><small>AI</small><p-tag [value]="mail.ai_state||'Not analysed'" [severity]="aiSeverity(mail.ai_state)"/></div>
                 <div><small>Category</small><b>{{mail.intent||'Not analysed'}}</b></div>
@@ -200,6 +203,7 @@ export class EmailComponent{
   readonly composeTo=signal('');
   readonly composeSubject=signal('');
   readonly composeText=signal('');
+  readonly composeAttachments=signal<File[]>([]);
   readonly composeSending=signal(false);
   readonly composeStatus=signal('');
   readonly messageAction=signal('');
@@ -254,7 +258,7 @@ export class EmailComponent{
   }
   private absorbBatch(mailbox:'info'|'support',view:'Inbox'|'Sent',messages:GmailMessageRow[]){
     const current=this.rows();const existing=new Map(current.map(row=>[`${row.mailbox}:${row.id}`,row]));
-    const incoming=messages.map(message=>{const base=this.toMailRow(message);const old=existing.get(`${mailbox}:${message.id}`);return old?{...base,body:old.body,ai_state:old.ai_state,linked_order:old.linked_order,intent:old.intent,needs_reply:old.needs_reply,confidence:old.confidence,draft_reply:old.draft_reply,ai_summary:old.ai_summary,review_reason:old.review_reason}:base;});
+    const incoming=messages.map(message=>{const base=this.toMailRow(message);const old=existing.get(`${mailbox}:${message.id}`);return old?{...base,body:old.body,html_body:old.html_body,images_blocked:old.images_blocked,attachments:old.attachments,ai_state:old.ai_state,linked_order:old.linked_order,intent:old.intent,needs_reply:old.needs_reply,confidence:old.confidence,draft_reply:old.draft_reply,ai_summary:old.ai_summary,review_reason:old.review_reason}:base;});
     const status=view==='Sent'?'Sent':'Inbox';
     const kept=current.filter(row=>!(row.mailbox===mailbox&&row.status===status));
     this.rows.set([...kept,...incoming].sort((a,b)=>this.dateValue(b.received_at)-this.dateValue(a.received_at)));
@@ -300,7 +304,7 @@ export class EmailComponent{
     this.cancelReply();this.bodyLoading.set(mail.body?'':loadingKey);this.selected.set(mail);
     let current=mail;
     try{
-      if(!mail.body){const full=await this.email.getMessage(mail.mailbox,mail.id);current={...mail,body:this.normalizeMessageBody(full.body,mail.preview),received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??mail.unread,starred:full.starred??mail.starred};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));}
+      if(!mail.body){const full=await this.email.getMessage(mail.mailbox,mail.id);current={...mail,body:this.normalizeMessageBody(full.body,mail.preview),html_body:full.html||'',images_blocked:full.imagesBlocked===true,attachments:full.attachments||[],received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??mail.unread,starred:full.starred??mail.starred};this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?current:row));}
       if(version!==this.selectionVersion||this.selected()?.id!==mail.id||this.selected()?.mailbox!==mail.mailbox)return;
       this.bodyLoading.set('');this.selected.set(current);
       if(current.status==='Inbox'&&current.unread){current=this.patchMail(current,{unread:false});try{await this.email.modify(current.mailbox,current.id,'markRead');}catch(e){current=this.patchMail(current,{unread:true});throw e;}}
@@ -363,14 +367,36 @@ export class EmailComponent{
       this.messageActionStatus.set(`Error: ${String((e as Error)?.message||e)}`);
     }finally{this.messageAction.set('');}
   }
+  async displayExternalImages(mail:MailRow){
+    const version=++this.selectionVersion;const key=`${mail.mailbox}:${mail.id}`;this.bodyLoading.set(key);this.mailError.set('');
+    try{
+      const full=await this.email.getMessage(mail.mailbox,mail.id,true);
+      const patch:Partial<MailRow>={body:this.normalizeMessageBody(full.body,mail.preview),html_body:full.html||'',images_blocked:false,attachments:full.attachments||mail.attachments||[]};
+      this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?{...row,...patch}:row));
+      if(version===this.selectionVersion&&this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set({...this.selected()!,...patch});
+    }catch(e){if(version===this.selectionVersion)this.mailError.set(String((e as Error)?.message||e));}
+    finally{if(version===this.selectionVersion)this.bodyLoading.set('');}
+  }
+  async downloadAttachment(mail:MailRow,attachment:GmailAttachment){
+    this.messageActionStatus.set(`Downloading ${attachment.filename}…`);
+    try{const blob=await this.email.downloadAttachment(mail.mailbox,mail.id,attachment);const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=attachment.filename||'attachment';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);this.messageActionStatus.set('Downloaded');}
+    catch(e){this.messageActionStatus.set(`Error: ${String((e as Error)?.message||e)}`);}
+  }
+  selectComposeFiles(event:Event){
+    const files=Array.from((event.target as HTMLInputElement).files||[]).slice(0,10);const total=files.reduce((sum,file)=>sum+file.size,0);
+    if(total>15*1024*1024){this.composeAttachments.set([]);this.composeStatus.set('Error: attachments must be under 15 MB total');(event.target as HTMLInputElement).value='';return;}
+    this.composeStatus.set('');this.composeAttachments.set(files);
+  }
+  composeAttachmentSize(){return this.attachmentSize(this.composeAttachments().reduce((sum,file)=>sum+file.size,0));}
+  attachmentSize(size:number){if(size<1024)return`${size} B`;if(size<1024*1024)return`${Math.round(size/1024)} KB`;return`${(size/1024/1024).toFixed(1)} MB`;}
   startCompose(){
     const box=this.activeMailbox();
     this.composeMailbox.set(box==='support'?'support':'info');
-    this.composeTo.set('');this.composeSubject.set('');this.composeText.set('');this.composeStatus.set('');this.composeOpen.set(true);
+    this.composeTo.set('');this.composeSubject.set('');this.composeText.set('');this.composeAttachments.set([]);this.composeStatus.set('');this.composeOpen.set(true);
   }
   cancelCompose(){
     if(this.composeSending())return;
-    this.composeOpen.set(false);this.composeTo.set('');this.composeSubject.set('');this.composeText.set('');this.composeStatus.set('');
+    this.composeOpen.set(false);this.composeTo.set('');this.composeSubject.set('');this.composeText.set('');this.composeAttachments.set([]);this.composeStatus.set('');
   }
   canSendCompose(){return this.composeTo().trim().includes('@')&&!!this.composeSubject().trim()&&!!this.composeText().trim();}
   async sendCompose(){
@@ -378,11 +404,11 @@ export class EmailComponent{
     const mailbox=this.composeMailbox();
     this.composeSending.set(true);this.composeStatus.set('Sending…');
     try{
-      await this.email.send(mailbox,this.composeTo().trim(),this.composeSubject().trim(),this.composeText());
+      await this.email.send(mailbox,this.composeTo().trim(),this.composeSubject().trim(),this.composeText(),this.composeAttachments());
       this.composeStatus.set('Sent');
       this.loadedViews.delete(this.viewKey(mailbox,'Sent'));
       void this.fetchView(mailbox,'Sent').catch(e=>console.warn('Sent refresh failed',e));
-      setTimeout(()=>{this.composeOpen.set(false);this.composeTo.set('');this.composeSubject.set('');this.composeText.set('');this.composeStatus.set('');},700);
+      setTimeout(()=>{this.composeOpen.set(false);this.composeTo.set('');this.composeSubject.set('');this.composeText.set('');this.composeAttachments.set([]);this.composeStatus.set('');},700);
     }catch(e){this.composeStatus.set(`Error: ${String((e as Error)?.message||e)}`);}
     finally{this.composeSending.set(false);}
   }
