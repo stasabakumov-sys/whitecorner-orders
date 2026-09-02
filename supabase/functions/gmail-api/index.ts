@@ -114,7 +114,7 @@ async function extractMessageContent(payload: any, messageId: string, gmailHeade
   const htmlCandidates = await Promise.all(htmlParts.map(async part => decodeBase64Url(await partData(part, messageId, gmailHeaders))));
   const plain = stripQuotedPlain(plainCandidates.sort((a, b) => b.length - a.length)[0] || "");
   let html = stripQuotedHtml(htmlCandidates.sort((a, b) => b.length - a.length)[0] || "");
-  const attachments: Array<{ attachmentId: string; filename: string; mimeType: string; size: number; inline: boolean }> = [];
+  const attachments: Array<{ attachmentId: string; filename: string; mimeType: string; size: number; inline: boolean; embedded: boolean }> = [];
   const inlineParts: Array<{ part: any; contentId: string; mimeType: string }> = [];
   for (const part of parts) {
     const attachmentId = String(part?.body?.attachmentId || "");
@@ -122,8 +122,9 @@ async function extractMessageContent(payload: any, messageId: string, gmailHeade
     const mimeType = String(part?.mimeType || "application/octet-stream");
     const contentId = headerValue(part?.headers || [], "Content-ID").replace(/[<>]/g, "");
     const inline = Boolean(contentId) && mimeType.startsWith("image/");
-    if (inline && html && allowExternalImages) inlineParts.push({ part, contentId, mimeType });
-    if (attachmentId && (filename || !inline)) attachments.push({ attachmentId, filename: filename || "attachment", mimeType, size: Number(part?.body?.size || 0), inline });
+    const embedded = inline && new RegExp(`cid:${contentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(html);
+    if (embedded && allowExternalImages) inlineParts.push({ part, contentId, mimeType });
+    if (attachmentId && (filename || !inline)) attachments.push({ attachmentId, filename: filename || "attachment", mimeType, size: Number(part?.body?.size || 0), inline, embedded });
   }
   const inlineData = await Promise.all(inlineParts.map(async item => ({ ...item, data: await partData(item.part, messageId, gmailHeaders) })));
   for (const item of inlineData) if (item.data) html = html.replace(new RegExp(`cid:${item.contentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi"), `data:${item.mimeType};base64,${item.data.replaceAll("-", "+").replaceAll("_", "/")}`);

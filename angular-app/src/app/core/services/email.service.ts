@@ -42,6 +42,7 @@ export interface GmailAttachment {
   mimeType: string;
   size: number;
   inline?: boolean;
+  embedded?: boolean;
 }
 
 export interface GmailMessageDetail {
