@@ -64,7 +64,8 @@ function sanitizeEmailHtml(value: string, allowExternalImages: boolean) {
     .replace(/<(script|iframe|object|embed|form|input|button|meta|link|base|svg)[^>]*\/?>/gi, "")
     .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
     .replace(/(href|src)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi, '$1="#"')
-    .replace(/@import\s+(url\s*\()?\s*(["']?)https?:[\s\S]*?;?/gi, "");
+    .replace(/@import\s+(url\s*\()?\s*(["']?)https?:[\s\S]*?;?/gi, "")
+    .replace(/(?:\s*<br\s*\/?>){3,}/gi, "<br><br>");
   if (!allowExternalImages) {
     html = html.replace(/<img\b[^>]*\bsrc\s*=\s*(["'])cid:[^"']+\1[^>]*>/gi, tag => {
       imagesBlocked = true;
