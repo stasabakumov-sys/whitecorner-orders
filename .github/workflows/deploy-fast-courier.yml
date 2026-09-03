@@ -17,27 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Diagnose Fast Courier API hosts
-        shell: bash
-        run: |
-          set +e
-          for host in enterprise-api.fastcourier.com.au; do
-            echo "HOST=$host"
-            strict_status=$(curl --silent --show-error --connect-timeout 8 --max-time 20               --output /tmp/fc-body --dump-header /tmp/fc-headers               --write-out '%{http_code}'               --request POST --header 'Accept: application/json'               --header 'Content-Type: application/json' --data '{}'               "https://$host/api/quotes")
-            strict_exit=$?
-            echo "STRICT_EXIT=$strict_exit STATUS=$strict_status"
-            grep -iE '^(allow|location|server):' /tmp/fc-headers 2>/dev/null || true
-            head -c 300 /tmp/fc-body 2>/dev/null || true
-            echo
-            if [ "$strict_exit" -ne 0 ]; then
-              insecure_status=$(curl --insecure --silent --show-error --connect-timeout 8 --max-time 20                 --output /tmp/fc-body-insecure --dump-header /tmp/fc-headers-insecure                 --write-out '%{http_code}'                 --request POST --header 'Accept: application/json'                 --header 'Content-Type: application/json' --data '{}'                 "https://$host/api/quotes")
-              echo "INSECURE_STATUS=$insecure_status"
-              grep -iE '^(allow|location|server):' /tmp/fc-headers-insecure 2>/dev/null || true
-              head -c 300 /tmp/fc-body-insecure 2>/dev/null || true
-              echo
-            fi
-            timeout 12 openssl s_client -connect "$host:443" -servername "$host" </dev/null 2>/dev/null               | openssl x509 -noout -subject -issuer -ext subjectAltName 2>/dev/null || true
-          done
       - uses: supabase/setup-cli@v1
         with:
           version: latest
