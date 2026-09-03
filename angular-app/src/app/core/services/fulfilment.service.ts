@@ -188,6 +188,7 @@ export class FulfilmentService {
   }
 
   private async removeMismatchedProfilePackages(shipment:ShipmentRow){
+    if(['Shipping Booked','In Transit','Delivered'].includes(shipment.status))return;
     const order=this.orders.orders().find(o=>o.id===shipment.order_id); if(!order)return;
     const allowed=new Set(this.orderItems(order).map(i=>this.exactProfile(i)?.id).filter(Boolean));
     const stale=this.packagesFor(shipment.id).filter(p=>p.source_type==='Profile'&&(!p.shipping_product_id||!allowed.has(p.shipping_product_id)));
@@ -196,7 +197,7 @@ export class FulfilmentService {
     const {error}=await this.supabase.client.from('wc_shipment_packages').delete().in('id',ids);
     if(error){this.error.set(error.message);return;}
     this.shipmentPackages.update(rows=>rows.filter(p=>!ids.includes(p.id)));
-    await this.syncShipmentStatus(shipment.id);
+    await this.invalidateShipmentQuote(shipment.id);
   }
 
   async savePackagesAsProductProfile(shipment:ShipmentRow){
