@@ -84,7 +84,7 @@ serve(async (req) => {
     if (validationError) return json({ status: false, message: validationError }, 422);
 
     // Keep the host configurable because Fast Courier can issue account-specific API hosts.
-    const baseUrl = (Deno.env.get('FAST_COURIER_API_BASE_URL') || 'https://enterprise.fastcourier.com.au').replace(/\/$/, '');
+    const baseUrl = (Deno.env.get('FAST_COURIER_API_BASE_URL') || 'https://fcapp-api.fastcourier.com.au').replace(/\/$/, '');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     let response: Response;
