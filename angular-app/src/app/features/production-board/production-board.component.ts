@@ -22,7 +22,7 @@ export class ProductionBoardComponent {
   readonly filter = signal<FilterKind>('all');
   readonly selected = signal<ProductionUnitView | null>(null);
   readonly firstPaintComplete = signal(false);
-  readonly allUnits = computed(() => this.production.unitsForOrders(this.orders.orders()));
+  readonly allUnits = computed(() => this.production.unitsForOrders(this.orders.orders().filter(order=>String(order.fulfillment_status||'').toUpperCase()!=='FULFILLED')));
   readonly visibleUnits = computed(() => {
     const filter = this.filter();
     return this.allUnits()
