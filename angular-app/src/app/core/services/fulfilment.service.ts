@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import { OrderRow } from '../models/order.models';
+import { OrderItemRow, OrderRow } from '../models/order.models';
 import { OrdersService } from './orders.service';
 import { SupabaseService } from './supabase.service';
 import { ProductionService } from './production.service';
@@ -48,7 +48,7 @@ export interface ShipmentPackageRow {
   shipping_product_id?:string|null;
 }
 
-type ShippingProduct={id:string;product_name:string};
+type ShippingProduct={id:string;product_name:string;wix_product_id?:string|null;product_type?:string|null;notes?:string|null};
 type ShippingPackage={shipping_product_id:string;source_type?:string|null;package_no:number;package_name?:string|null;length_mm?:number|null;width_mm?:number|null;height_mm?:number|null;weight_kg?:number|null};
 
 @Injectable({providedIn:'root'})
@@ -59,6 +59,9 @@ export class FulfilmentService {
   readonly error = signal('');
   readonly loading = signal(false);
   readonly quotingShipmentId = signal<string|null>(null);
+  readonly savingProfileShipmentId = signal<string|null>(null);
+  readonly shippingProducts = signal<ShippingProduct[]>([]);
+  private shippingProfiles:ShippingPackage[]=[];
 
   constructor(
     private supabase:SupabaseService,
@@ -82,25 +85,44 @@ export class FulfilmentService {
     return String(v||'').toLowerCase().replace(/[–—]/g,'-').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
   }
 
-  private profileScore(orderName:string, profileName:string){
-    const a=this.normalise(orderName), b=this.normalise(profileName);
-    if(!a||!b)return 0;
-    if(a===b)return 100;
-    if(a.includes(b)||b.includes(a))return 90;
-    const stop=new Set(['the','a','an','with','and','for','of','to','in','on','foldable','non','painted','unpainted','raw','white']);
-    const at=new Set(a.split(' ').filter(x=>x.length>2&&!stop.has(x)));
-    const bt=new Set(b.split(' ').filter(x=>x.length>2&&!stop.has(x)));
-    if(!at.size||!bt.size)return 0;
-    const common=[...at].filter(x=>bt.has(x)).length;
-    const coverage=Math.max(common/at.size,common/bt.size);
-    const union=new Set([...at,...bt]).size;
-    const jaccard=union?common/union:0;
-    return Math.round((coverage*.7+jaccard*.3)*100);
+  private isDeliveryItem(item:OrderItemRow){
+    return /^(delivery|shipping)(\s+(fee|charge))?$/i.test(String(item.product_name||'').trim());
   }
 
-  private bestProfile(name:string, products:ShippingProduct[]){
-    const ranked=products.map(p=>({p,score:this.profileScore(name,p.product_name)})).sort((a,b)=>b.score-a.score);
-    return ranked[0]&&ranked[0].score>=58?ranked[0].p:null;
+  private wixProductId(item:OrderItemRow){
+    const catalog=item.catalog_reference as any;
+    const raw=item.raw_item as any;
+    return String(catalog?.catalogItemId||catalog?.productId||raw?.catalogReference?.catalogItemId||raw?.productId||'').trim();
+  }
+
+  private exactProfile(item:OrderItemRow, products=this.shippingProducts()){
+    const wixId=this.wixProductId(item);
+    if(wixId){
+      const byId=products.find(p=>String(p.wix_product_id||'')===wixId);
+      if(byId)return byId;
+    }
+    const name=this.normalise(String(item.product_name||''));
+    return name ? products.find(p=>!p.wix_product_id&&this.normalise(p.product_name)===name)??null : null;
+  }
+
+  private orderItems(order:OrderRow){return (order.wc_order_items??[]).filter(i=>!this.isDeliveryItem(i));}
+
+  profileTarget(order:OrderRow){
+    return [...this.orderItems(order)].sort((a,b)=>Number(b.unit_price||0)*Number(b.quantity||1)-Number(a.unit_price||0)*Number(a.quantity||1))[0]??null;
+  }
+
+  profileTargetName(order:OrderRow){return this.profileTarget(order)?.product_name||'this product';}
+  hasSavedProfile(order:OrderRow){const item=this.profileTarget(order);return !!item&&!!this.exactProfile(item);}
+
+  private async loadShippingProfiles(){
+    const [prodRes,pkgRes]=await Promise.all([
+      this.supabase.client.from('wc_shipping_products').select('id,product_name,wix_product_id,product_type,notes').eq('active',true),
+      this.supabase.client.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no')
+    ]);
+    if(prodRes.error||pkgRes.error)return false;
+    this.shippingProducts.set((prodRes.data??[]) as ShippingProduct[]);
+    this.shippingProfiles=(pkgRes.data??[]) as ShippingPackage[];
+    return true;
   }
 
   async load(){
@@ -141,24 +163,20 @@ export class FulfilmentService {
       if(error){if(!String(error.message).includes('wc_shipments'))this.error.set(error.message);return;}
       this.shipments.set([...(data??[]) as ShipmentRow[],...this.shipments()]);
     }
-    for(const s of this.shipments())if(!this.shipmentPackages().some(p=>p.shipment_id===s.id))await this.seedPackages(s);
+    if(!await this.loadShippingProfiles())return;
+    for(const s of this.shipments()){
+      await this.removeMismatchedProfilePackages(s);
+      if(!this.shipmentPackages().some(p=>p.shipment_id===s.id))await this.seedPackages(s);
+    }
   }
 
   private async seedPackages(shipment:ShipmentRow){
     const order=this.orders.orders().find(o=>o.id===shipment.order_id); if(!order)return;
-    const [prodRes,pkgRes]=await Promise.all([
-      this.supabase.client.from('wc_shipping_products').select('id,product_name').eq('active',true),
-      this.supabase.client.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no')
-    ]);
-    if(prodRes.error||pkgRes.error)return;
-    const products=(prodRes.data??[]) as ShippingProduct[], profiles=(pkgRes.data??[]) as ShippingPackage[];
     const out:any[]=[]; let no=1;
-    for(const item of order.wc_order_items??[]){
-      const itemName=String(item.product_name||'');
-      if(/^delivery$/i.test(itemName)||/delivery|shipping fee/i.test(itemName))continue;
-      const match=this.bestProfile(itemName,products);
+    for(const item of this.orderItems(order)){
+      const match=this.exactProfile(item);
       if(!match)continue;
-      const base=profiles.filter(p=>p.shipping_product_id===match.id);
+      const base=this.shippingProfiles.filter(p=>p.shipping_product_id===match.id);
       if(!base.length)continue;
       const qty=Math.max(1,Number(item.quantity||1));
       for(let q=0;q<qty;q++)for(const p of base)out.push({shipment_id:shipment.id,package_no:no++,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,source_type:'Profile',shipping_product_id:match.id});
@@ -167,6 +185,50 @@ export class FulfilmentService {
     const {data,error}=await this.supabase.client.from('wc_shipment_packages').insert(out).select();
     if(!error)this.shipmentPackages.update(xs=>[...xs,...((data??[]) as ShipmentPackageRow[])]);
     await this.syncShipmentStatus(shipment.id);
+  }
+
+  private async removeMismatchedProfilePackages(shipment:ShipmentRow){
+    const order=this.orders.orders().find(o=>o.id===shipment.order_id); if(!order)return;
+    const allowed=new Set(this.orderItems(order).map(i=>this.exactProfile(i)?.id).filter(Boolean));
+    const stale=this.packagesFor(shipment.id).filter(p=>p.source_type==='Profile'&&(!p.shipping_product_id||!allowed.has(p.shipping_product_id)));
+    if(!stale.length)return;
+    const ids=stale.map(p=>p.id);
+    const {error}=await this.supabase.client.from('wc_shipment_packages').delete().in('id',ids);
+    if(error){this.error.set(error.message);return;}
+    this.shipmentPackages.update(rows=>rows.filter(p=>!ids.includes(p.id)));
+    await this.syncShipmentStatus(shipment.id);
+  }
+
+  async savePackagesAsProductProfile(shipment:ShipmentRow){
+    if(!this.shipmentComplete(shipment.id)){this.error.set('Complete and save every package before saving the product profile.');return;}
+    const order=this.orders.orders().find(o=>o.id===shipment.order_id);
+    const item=order&&this.profileTarget(order);
+    if(!order||!item){this.error.set('No product was found for this shipment.');return;}
+    if(Number(item.quantity||1)!==1){this.error.set('Save a reusable product profile only from an order with quantity 1.');return;}
+    this.error.set(''); this.savingProfileShipmentId.set(shipment.id);
+    try{
+      let product=this.exactProfile(item);
+      if(!product){
+        const wixId=this.wixProductId(item)||null;
+        const name=String(item.product_name||'Unnamed product').trim();
+        const payload={wix_product_id:wixId,product_name:name,product_type:/cart|mobile bar|serving table/i.test(name)?'Cart':/backdrop|arch|panel|wall|plinth/i.test(name)?'Backdrop':'Other',notes:`Packaging profile created from order #${order.order_number}.`};
+        const {data,error}=await this.supabase.client.from('wc_shipping_products').insert(payload).select('id,product_name,wix_product_id,product_type,notes').single();
+        if(error)throw error;
+        product=data as ShippingProduct;
+        this.shippingProducts.update(rows=>[...rows,product!]);
+      }
+      const current=this.packagesFor(shipment.id);
+      const {error:deleteError}=await this.supabase.client.from('wc_shipping_packages').delete().eq('shipping_product_id',product.id).eq('source_type','Base');
+      if(deleteError)throw deleteError;
+      const templates=current.map((p,index)=>({shipping_product_id:product!.id,source_type:'Base',package_no:index+1,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,quantity:1,active:true,notes:`Saved from order #${order.order_number}.`}));
+      const {data,error}=await this.supabase.client.from('wc_shipping_packages').insert(templates).select('*');
+      if(error)throw error;
+      this.shippingProfiles=this.shippingProfiles.filter(p=>p.shipping_product_id!==product!.id).concat((data??[]) as ShippingPackage[]);
+    }catch(error:any){
+      this.error.set(error?.message||'Could not save the product packaging profile.');
+    }finally{
+      this.savingProfileShipmentId.set(null);
+    }
   }
 
   orderFor(row:FulfilmentRow){return this.orders.orders().find(o=>o.id===row.order_id)??null;}
