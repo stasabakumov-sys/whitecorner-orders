@@ -85,7 +85,7 @@ type BookingDraft = {
               <section class="section">
                 <div class="section-title">Pickup</div>
                 <div class="callout">Ready-for-pickup email: <b>{{ row.pickup_email_status }}</b></div>
-                @if (row.status === 'Awaiting Pickup') { <p-button label="Mark as collected" (onClick)="collect(row)" /> } @else { <div class="done">Collected / Fulfilled ✓</div> }
+                @if (row.status === 'Awaiting Pickup') { <p-button label="Mark as collected" [loading]="collectingRowId() === row.id" [disabled]="!!collectingRowId()" (onClick)="collect(row)" /> } @else { <div class="done">Collected / Fulfilled ✓</div> }
               </section>
             } @else {
               <section class="section">
@@ -316,6 +316,7 @@ export class FulfilmentComponent implements OnInit {
   bookingDialogOpen = signal(false);
   bookingContext = signal<{row:FulfilmentRow;shipment:ShipmentRow;order:OrderRow}|null>(null);
   bookingDraft = signal<BookingDraft>(this.emptyBookingDraft());
+  collectingRowId = signal<string|null>(null);
   private addressTypeRequest = 0;
   pickup = computed(() => this.f.rows().filter((r) => r.route === 'Pickup'));
   delivery = computed(() => this.f.rows().filter((r) => r.route === 'Shipping'));
@@ -432,6 +433,12 @@ export class FulfilmentComponent implements OnInit {
   }
   n(v:string){return v===''?null:Number(v);}
   savePkg(pkg:ShipmentPackageRow,name:string,l:string,w:string,h:string,kg:string){void this.f.savePackage(pkg,{package_name:name.trim()||'Package '+pkg.package_no,length_mm:this.n(l),width_mm:this.n(w),height_mm:this.n(h),weight_kg:this.n(kg)});}
-  async collect(row:FulfilmentRow){await this.f.markCollected(row);}
+  async collect(row:FulfilmentRow){
+    if(this.collectingRowId())return;
+    this.collectingRowId.set(row.id);
+    try{
+      if(await this.f.markCollected(row))this.selected.set(this.f.rows().find(item=>item.id===row.id)??null);
+    }finally{this.collectingRowId.set(null);}
+  }
   onDrawerVisible(visible:boolean){if(!visible){this.selected.set(null);this.contentsPackage.set(null);if(this.f.bookingShipmentId()===null){this.bookingDialogOpen.set(false);this.bookingContext.set(null);}}}
 }
