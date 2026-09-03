@@ -379,9 +379,13 @@ export class FulfilmentService {
 
   async markCollected(row:FulfilmentRow){
     const now=new Date().toISOString();
-    const {error}=await this.supabase.client.from('wc_fulfilment').update({status:'Fulfilled',fulfilled_at:now,updated_at:now}).eq('id',row.id);
-    if(error){this.error.set(error.message);return;}
-    this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,status:'Fulfilled',fulfilled_at:now,updated_at:now}:x));
+    const payload={status:'Fulfilled' as const,fulfilled_at:now,updated_at:now};
+    const {data,error}=await this.supabase.client.from('wc_fulfilment').update(payload).eq('id',row.id).select('id').maybeSingle();
+    if(error){this.error.set(error.message);return false;}
+    if(!data){this.error.set('The pickup record was not updated. Please refresh and try again.');return false;}
+    this.error.set('');
+    this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,...payload}:x));
+    return true;
   }
 
   quotesFor(shipment:ShipmentRow){
