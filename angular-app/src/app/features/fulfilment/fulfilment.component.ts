@@ -89,14 +89,7 @@ type BookingDraft = {
                   <p-button label="Mark as collected" [loading]="collectingRowId() === row.id" [disabled]="!!collectingRowId()" (onClick)="collect(row)" />
                 } @else {
                   <div class="done">Collected / Fulfilled ✓</div>
-                  @if (f.wixFulfilled(row)) {
-                    <div class="wix-sync-ok">Wix: FULFILLED ✓</div>
-                  } @else {
-                    <div class="wix-sync-warning">
-                      <span>Wix still shows this order as unfulfilled.</span>
-                      <p-button label="Send FULFILLED to Wix" severity="secondary" size="small" [loading]="f.syncingWixOrderId() === row.order_id" [disabled]="!!f.syncingWixOrderId()" (onClick)="syncFulfilledToWix(row)" />
-                    </div>
-                  }
+                  <div class="wix-sync-ok">Wix: FULFILLED ✓</div>
                 }
               </section>
             } @else {
@@ -449,16 +442,12 @@ export class FulfilmentComponent implements OnInit {
   savePkg(pkg:ShipmentPackageRow,name:string,l:string,w:string,h:string,kg:string){void this.f.savePackage(pkg,{package_name:name.trim()||'Package '+pkg.package_no,length_mm:this.n(l),width_mm:this.n(w),height_mm:this.n(h),weight_kg:this.n(kg)});}
   async collect(row:FulfilmentRow){
     if(this.collectingRowId())return;
+    const number=this.f.orderFor(row)?.order_number||row.order_id;
+    if(!window.confirm(`Mark order #${number} as collected? Its fulfillment status will also change to FULFILLED in Wix.`))return;
     this.collectingRowId.set(row.id);
     try{
       if(await this.f.markCollected(row))this.selected.set(this.f.rows().find(item=>item.id===row.id)??null);
     }finally{this.collectingRowId.set(null);}
-  }
-  async syncFulfilledToWix(row:FulfilmentRow){
-    const number=this.f.orderFor(row)?.order_number||row.order_id;
-    if(!window.confirm(`Send FULFILLED status for order #${number} to Wix? Wix may email the customer depending on the store notification settings.`))return;
-    await this.f.syncFulfilledToWix(row);
-    this.selected.set(this.f.rows().find(item=>item.id===row.id)??row);
   }
   onDrawerVisible(visible:boolean){if(!visible){this.selected.set(null);this.contentsPackage.set(null);if(this.f.bookingShipmentId()===null){this.bookingDialogOpen.set(false);this.bookingContext.set(null);}}}
 }
