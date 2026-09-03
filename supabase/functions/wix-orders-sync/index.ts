@@ -188,6 +188,19 @@ Deno.serve(async (req) => {
       insertedOrUpdated++;
 
       const orderId = savedOrder.id;
+      const { data: completedFulfilment } = await db
+        .from("wc_fulfilment")
+        .select("status")
+        .eq("order_id", orderId)
+        .eq("status", "Fulfilled")
+        .maybeSingle();
+      if (completedFulfilment) {
+        const { error: preserveErr } = await db
+          .from("wc_orders")
+          .update({ fulfillment_status: "FULFILLED" })
+          .eq("id", orderId);
+        if (preserveErr) throw preserveErr;
+      }
       const orderItems = order.lineItems || [];
       const seenIds: string[] = [];
 
