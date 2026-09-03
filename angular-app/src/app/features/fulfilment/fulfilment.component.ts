@@ -139,11 +139,12 @@ import { FastCourierQuote, FastCourierQuoteRequest } from '../../core/services/f
                   </div>
                   <div class="actions quote-action">
                     <p-button
-                      label="Get courier quotes"
+                      [label]="f.quotingShipmentId() === shipment.id ? 'Comparing prices…' : 'Get courier quotes'"
                       icon="pi pi-search"
                       [loading]="f.quotingShipmentId() === shipment.id"
                       [disabled]="!canQuote(shipment.status) || !f.shipmentComplete(shipment.id)"
                       (onClick)="getQuotes(row,pickupSuburb.value,pickupState.value,pickupPostcode.value,pickupType.value,pickupTailLift.checked,destinationSuburb.value,destinationState.value,destinationPostcode.value,destinationType.value,destinationTailLift.checked)" />
+                    @if (f.quotingShipmentId() === shipment.id) { <span class="muted">Fast Courier is comparing providers. This can take up to 90 seconds.</span> }
                     @if (shipment.quoted_at) { <span class="muted">Saved {{ shipment.quoted_at | date:'dd MMM, h:mm a' }}</span> }
                   </div>
 
