@@ -71,7 +71,6 @@ export class FulfilmentService {
   readonly bookingShipmentId = signal<string|null>(null);
   readonly checkingBookingShipmentId = signal<string|null>(null);
   readonly savingProfileShipmentId = signal<string|null>(null);
-  readonly syncingWixOrderId = signal<string|null>(null);
   readonly shippingProducts = signal<ShippingProduct[]>([]);
   readonly noPackageRules = signal<ShippingRule[]>([]);
   private shippingProfiles:ShippingPackage[]=[];
@@ -392,25 +391,20 @@ export class FulfilmentService {
       this.error.set(orderError?.message||'The order status was not updated. Please try again.');
       return false;
     }
+    try{
+      await this.orders.markFulfilledInWix(row.order_id);
+    }catch(error:any){
+      await Promise.all([
+        this.supabase.client.from('wc_fulfilment').update({status:'Awaiting Pickup',fulfilled_at:null,updated_at:new Date().toISOString()}).eq('id',row.id),
+        this.supabase.client.from('wc_orders').update({fulfillment_status:'NOT_FULFILLED'}).eq('id',row.order_id),
+      ]);
+      this.error.set(`Nothing was changed because Wix could not be updated: ${error?.message||'Unknown Wix error'}`);
+      return false;
+    }
     this.error.set('');
     this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,...payload}:x));
-    this.orders.orders.update(orders=>orders.map(order=>order.id===row.order_id?{...order,fulfillment_status:'FULFILLED'}:order));
     try{await this.activity.addFulfilledNote(row.order_id,now);}catch(error){console.error('Could not add fulfilled order note',error);}
     return true;
-  }
-
-  wixFulfilled(row:FulfilmentRow){
-    const status=String(this.orderFor(row)?.raw_order?.['fulfillmentStatus']||'').toUpperCase();
-    return status==='FULFILLED'||status==='COMPLETED';
-  }
-
-  async syncFulfilledToWix(row:FulfilmentRow){
-    if(row.status!=='Fulfilled'||this.syncingWixOrderId())return false;
-    this.error.set('');
-    this.syncingWixOrderId.set(row.order_id);
-    try{await this.orders.markFulfilledInWix(row.order_id);return true;}
-    catch(error:any){this.error.set(error?.message||'Could not update Wix fulfillment.');return false;}
-    finally{this.syncingWixOrderId.set(null);}
   }
 
   quotesFor(shipment:ShipmentRow){
