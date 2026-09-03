@@ -21,7 +21,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          for host in portal.fastcourier.com.au fcapp-api.fastcourier.com.au enterprise.fastcourier.com.au; do
+          for host in enterprise-api.fastcourier.com.au; do
             echo "HOST=$host"
             strict_status=$(curl --silent --show-error --connect-timeout 8 --max-time 20               --output /tmp/fc-body --dump-header /tmp/fc-headers               --write-out '%{http_code}'               --request POST --header 'Accept: application/json'               --header 'Content-Type: application/json' --data '{}'               "https://$host/api/quotes")
             strict_exit=$?
