@@ -234,6 +234,10 @@ export class FulfilmentService {
     return Array.isArray(shipment.courier_quotes) ? shipment.courier_quotes : [];
   }
 
+  detectAddressType(address:Record<string,unknown>){
+    return this.fastCourier.detectAddressType(address);
+  }
+
   async requestFastCourierQuotes(row:FulfilmentRow, request:FastCourierQuoteRequest){
     const shipment=this.shipmentFor(row);
     if(!shipment||!this.shipmentComplete(shipment.id)){

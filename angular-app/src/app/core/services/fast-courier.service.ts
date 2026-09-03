@@ -60,6 +60,14 @@ export interface FastCourierQuoteResponse {
   data: FastCourierQuote[];
 }
 
+export interface AddressTypeResponse {
+  status: boolean;
+  type: 'commercial' | 'residential' | 'unknown';
+  business: boolean | null;
+  residential: boolean | null;
+  formattedAddress?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class FastCourierService {
   constructor(private supabase: SupabaseService) {}
@@ -71,6 +79,15 @@ export class FastCourierService {
     if (error) throw new Error(await this.functionError(error));
     if (!data?.status) throw new Error(data?.message || 'Fast Courier could not retrieve quotes.');
     return data as FastCourierQuoteResponse;
+  }
+
+  async detectAddressType(address: Record<string, unknown>): Promise<AddressTypeResponse> {
+    const { data, error } = await this.supabase.client.functions.invoke(environment.fastCourierFunction, {
+      body: { action: 'address-type', payload: address },
+    });
+    if (error) throw new Error(await this.functionError(error));
+    if (!data?.status) throw new Error(data?.message || 'Google could not check the address type.');
+    return data as AddressTypeResponse;
   }
 
   private async functionError(error: any) {

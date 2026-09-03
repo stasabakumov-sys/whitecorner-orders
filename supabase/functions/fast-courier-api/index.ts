@@ -28,16 +28,58 @@ function validateQuote(payload: any) {
   return '';
 }
 
+function addressLines(raw: any) {
+  const line = text(raw?.addressLine || raw?.addressLine1 || raw?.streetAddress || raw?.formattedAddress);
+  const suburb = text(raw?.city || raw?.suburb || raw?.locality);
+  const state = text(raw?.subdivision || raw?.state || raw?.administrativeArea).toUpperCase().replace(/^AU[-\s]?/, '');
+  const postcode = text(raw?.postalCode || raw?.postcode || raw?.zipCode);
+  return [line, [suburb, state, postcode].filter(Boolean).join(' '), 'Australia'].filter(Boolean);
+}
+
+async function detectAddressType(payload: any) {
+  const googleKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
+  if (!googleKey) return json({ status: false, message: 'Google address validation is not configured.' }, 503);
+  const lines = addressLines(payload);
+  if (lines.length < 2) return json({ status: false, message: 'A complete delivery address is required.' }, 422);
+
+  const response = await fetch(`https://addressvalidation.googleapis.com/v1:validateAddress?key=${encodeURIComponent(googleKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address: { regionCode: 'AU', addressLines: lines } }),
+  });
+  const raw = await response.text();
+  let result: any;
+  try { result = raw ? JSON.parse(raw) : {}; } catch { result = {}; }
+  if (!response.ok) {
+    console.warn('GOOGLE_ADDRESS_VALIDATION_FAILED', response.status, raw);
+    return json({ status: false, message: 'Google could not validate this address.', upstreamStatus: response.status }, 502);
+  }
+
+  const metadata = result?.result?.metadata || {};
+  const business = typeof metadata.business === 'boolean' ? metadata.business : null;
+  const residential = typeof metadata.residential === 'boolean' ? metadata.residential : null;
+  const type = business === true && residential !== true
+    ? 'commercial'
+    : residential === true ? 'residential' : 'unknown';
+  return json({
+    status: true,
+    type,
+    business,
+    residential,
+    formattedAddress: text(result?.result?.address?.formattedAddress),
+  });
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ status: false, message: 'Method not allowed.' }, 405);
 
   try {
+    const body = await req.json();
+    if (body?.action === 'address-type') return await detectAddressType(body.payload);
+    if (body?.action !== 'quotes') return json({ status: false, message: 'Unsupported Fast Courier action.' }, 400);
     const apiKey = Deno.env.get('FAST_COURIER_API_KEY');
     if (!apiKey) return json({ status: false, message: 'Fast Courier is not configured.' }, 503);
-
-    const body = await req.json();
-    if (body?.action !== 'quotes') return json({ status: false, message: 'Unsupported Fast Courier action.' }, 400);
     const validationError = validateQuote(body.payload);
     if (validationError) return json({ status: false, message: validationError }, 422);
 
