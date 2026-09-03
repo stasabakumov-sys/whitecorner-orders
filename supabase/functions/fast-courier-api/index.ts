@@ -94,7 +94,7 @@ serve(async (req) => {
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
-          Authorization: apiKey,
+          'Secret-Key': apiKey,
         },
         body: JSON.stringify(body.payload),
         signal: controller.signal,
