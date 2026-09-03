@@ -23,7 +23,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          OUT=$(find angular-app/dist -type f -name index.html -path '*/browser/*' -printf '%h\n' | head -1)
+          # Select the Angular application root only. The build also contains
+          # browser/finance/index.html; choosing that nested file publishes the
+          # standalone Finance page over the entire /angular2/ application.
+          OUT=$(find angular-app/dist -type f -path '*/browser/index.html' -printf '%h\n' | head -1)
+          test -n "$OUT"
           rm -rf angular2
           mkdir angular2
           cp -R "$OUT"/* angular2/
