@@ -17,20 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Discover Fast Courier auth scheme
-        shell: bash
-        run: |
-          set +e
-          api_root='https://enterprise-api.fastcourier.com.au'
-          echo 'OPTIONS /api/quotes'
-          curl --silent --show-error --include --request OPTIONS "$api_root/api/quotes" | head -c 2000
-          echo
-          for path in /openapi.json /swagger.json /api-docs /api/documentation /docs /docs/api-docs.json /api/documentation.json /robots.txt; do
-            status=$(curl --silent --show-error --location --connect-timeout 8 --max-time 20 --output /tmp/fc-doc --write-out '%{http_code}' "$api_root$path")
-            echo "PATH=$path STATUS=$status TYPE=$(file --brief --mime-type /tmp/fc-doc)"
-            head -c 240 /tmp/fc-doc
-            echo
-          done
       - uses: supabase/setup-cli@v1
         with:
           version: latest
