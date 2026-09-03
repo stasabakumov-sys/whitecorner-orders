@@ -190,18 +190,15 @@ export class FulfilmentComponent implements OnInit {
   open(row:FulfilmentRow){
     this.selected.set(row);
     const order=this.f.orderFor(row),a:any=order?.delivery_address||{};
-    this.destinationBuildingType.set(this.inferBuildingType(order,a));
+    // A company name does not prove that the delivery premises are commercial:
+    // customers often enter a home address. Default safely until Wix supplies an
+    // explicit checkout answer; the operator can still override it before quoting.
+    this.destinationBuildingType.set('residential');
     this.destination.set({
       suburb:String(a.city||a.suburb||a.locality||'').toUpperCase(),
       state:this.stateCode(String(a.subdivision||a.state||a.region||'')),
       postcode:String(a.postalCode||a.postcode||a.zipCode||''),
     });
-  }
-  inferBuildingType(order:ReturnType<FulfilmentService['orderFor']>,address:Record<string,unknown>){
-    const a:any=address||{};
-    const business=[order?.company,a.company,a.companyName,a.businessName,a.organization,a.organizationName]
-      .some(value=>String(value||'').trim().length>0);
-    return business?'commercial':'residential';
   }
   stateCode(value:string){const raw=value.trim().toUpperCase().replace(/^AU[-\s]/,'');const map:Record<string,string>={QUEENSLAND:'QLD','NEW SOUTH WALES':'NSW',VICTORIA:'VIC',TASMANIA:'TAS','SOUTH AUSTRALIA':'SA','WESTERN AUSTRALIA':'WA','NORTHERN TERRITORY':'NT','AUSTRALIAN CAPITAL TERRITORY':'ACT'};return map[raw]||raw;}
   getQuotes(row:FulfilmentRow,ps:string,pstate:string,pp:string,ptype:string,ptail:boolean,ds:string,dstate:string,dp:string,dtype:string,dtail:boolean){
