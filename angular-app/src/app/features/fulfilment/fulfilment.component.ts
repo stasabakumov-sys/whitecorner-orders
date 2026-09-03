@@ -318,10 +318,11 @@ export class FulfilmentComponent implements OnInit {
   bookingDraft = signal<BookingDraft>(this.emptyBookingDraft());
   collectingRowId = signal<string|null>(null);
   private addressTypeRequest = 0;
-  pickup = computed(() => this.f.rows().filter((r) => r.route === 'Pickup'));
-  delivery = computed(() => this.f.rows().filter((r) => r.route === 'Shipping'));
+  pickup = computed(() => this.sortFulfilment(this.f.rows().filter((r) => r.route === 'Pickup')));
+  delivery = computed(() => this.sortFulfilment(this.f.rows().filter((r) => r.route === 'Shipping')));
   visible = computed(() => this.tab() === 'Pickup' ? this.pickup() : this.delivery());
   constructor(readonly f: FulfilmentService) {}
+  private sortFulfilment(rows:FulfilmentRow[]){return [...rows].sort((a,b)=>Number(a.status==='Fulfilled')-Number(b.status==='Fulfilled')||new Date(b.ready_at).getTime()-new Date(a.ready_at).getTime());}
   ngOnInit() { void this.f.load(); }
   displayStatus(row: FulfilmentRow) { if (row.route === 'Pickup') return row.status === 'Fulfilled' ? 'Fulfilled' : 'Awaiting Pickup'; const shipment = this.f.shipmentFor(row); return row.status === 'Fulfilled' ? 'Fulfilled' : (shipment?.status || row.status); }
   statusSeverity(row: FulfilmentRow): 'success'|'info'|'warn'|'secondary' { const s=this.displayStatus(row); if(s==='Fulfilled'||s==='Delivered')return'success'; if(s==='Ready to Quote'||s==='Quoted'||s==='Quote Selected')return'info'; if(s==='Packaging Review'||s==='Awaiting Pickup')return'warn'; return'secondary'; }
