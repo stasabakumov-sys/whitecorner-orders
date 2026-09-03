@@ -69,6 +69,7 @@ Deno.serve(async (req) => {
     return new Response("ok", { status: 200, headers: corsHeaders });
   }
   try {
+    const requestBody = await req.json().catch(() => ({}));
     const wixApiKey = Deno.env.get("WIX_API_KEY");
     const wixSiteId = Deno.env.get("WIX_SITE_ID");
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -79,6 +80,50 @@ Deno.serve(async (req) => {
     }
 
     const db = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
+    const wixHeaders = {
+      "Content-Type": "application/json",
+      "Authorization": wixApiKey,
+      "wix-site-id": wixSiteId,
+    };
+
+    if (requestBody?.action === "markFulfilled") {
+      const localOrderId = String(requestBody?.orderId || "").trim();
+      if (!localOrderId) return new Response(JSON.stringify({ error: "orderId is required" }), { status: 400, headers: jsonHeaders });
+
+      const [{ data: order, error: orderError }, { data: localFulfilment, error: fulfilmentError }] = await Promise.all([
+        db.from("wc_orders").select("id,wix_order_id,order_number,raw_order").eq("id", localOrderId).maybeSingle(),
+        db.from("wc_fulfilment").select("id,status").eq("order_id", localOrderId).eq("status", "Fulfilled").maybeSingle(),
+      ]);
+      if (orderError) throw orderError;
+      if (fulfilmentError) throw fulfilmentError;
+      if (!order?.wix_order_id) return new Response(JSON.stringify({ error: "Order or Wix order ID was not found" }), { status: 404, headers: jsonHeaders });
+      if (!localFulfilment) return new Response(JSON.stringify({ error: "Order must be collected locally before it can be fulfilled in Wix" }), { status: 409, headers: jsonHeaders });
+
+      const { data: orderItems, error: itemError } = await db.from("wc_order_items").select("wix_line_item_id,product_name,quantity").eq("order_id", localOrderId);
+      if (itemError) throw itemError;
+      const lineItems = (orderItems || [])
+        .filter((item: any) => !/^(delivery|shipping)(\s+(fee|charge))?$/i.test(String(item?.product_name || "").trim()))
+        .filter((item: any) => String(item?.wix_line_item_id || "").trim())
+        .map((item: any) => ({ id: String(item.wix_line_item_id), quantity: Math.max(1, Number(item.quantity || 1)) }));
+      if (!lineItems.length) return new Response(JSON.stringify({ error: "No Wix product line items were found for this order" }), { status: 422, headers: jsonHeaders });
+
+      const wixOrderRes = await fetch(`https://www.wixapis.com/ecom/v1/orders/${encodeURIComponent(order.wix_order_id)}`, { method: "GET", headers: wixHeaders });
+      const wixOrderPayload = await wixOrderRes.json().catch(() => ({}));
+      if (!wixOrderRes.ok) return new Response(JSON.stringify({ error: "Could not read the Wix order", status: wixOrderRes.status, payload: wixOrderPayload }), { status: wixOrderRes.status, headers: jsonHeaders });
+      const currentStatus = String(wixOrderPayload?.order?.fulfillmentStatus || wixOrderPayload?.fulfillmentStatus || "").toUpperCase();
+      if (["FULFILLED", "COMPLETED"].includes(currentStatus)) {
+        await db.from("wc_orders").update({ fulfillment_status: "FULFILLED", raw_order: { ...(order.raw_order || {}), fulfillmentStatus: "FULFILLED" }, wix_synced_at: new Date().toISOString() }).eq("id", localOrderId);
+        return new Response(JSON.stringify({ ok: true, alreadyFulfilled: true, orderNumber: order.order_number, wixOrderId: order.wix_order_id }), { status: 200, headers: jsonHeaders });
+      }
+
+      const fulfilRes = await fetch(`https://www.wixapis.com/ecom/v1/fulfillments/orders/${encodeURIComponent(order.wix_order_id)}/create-fulfillment`, { method: "POST", headers: wixHeaders, body: JSON.stringify({ fulfillment: { lineItems } }) });
+      const fulfilPayload = await fulfilRes.json().catch(() => ({}));
+      if (!fulfilRes.ok) return new Response(JSON.stringify({ error: "Wix fulfillment error", status: fulfilRes.status, payload: fulfilPayload }), { status: fulfilRes.status, headers: jsonHeaders });
+
+      const { error: updateError } = await db.from("wc_orders").update({ fulfillment_status: "FULFILLED", raw_order: { ...(order.raw_order || {}), fulfillmentStatus: "FULFILLED" }, wix_synced_at: new Date().toISOString() }).eq("id", localOrderId);
+      if (updateError) throw updateError;
+      return new Response(JSON.stringify({ ok: true, alreadyFulfilled: false, orderNumber: order.order_number, wixOrderId: order.wix_order_id, fulfillment: fulfilPayload?.fulfillment || fulfilPayload }), { status: 200, headers: jsonHeaders });
+    }
 
     let allOrders: any[] = [];
     let cursor: string | undefined = undefined;
@@ -99,11 +144,7 @@ Deno.serve(async (req) => {
 
       const wixRes = await fetch("https://www.wixapis.com/ecom/v1/orders/search", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": wixApiKey,
-          "wix-site-id": wixSiteId,
-        },
+        headers: wixHeaders,
         body: JSON.stringify({ search }),
       });
 
