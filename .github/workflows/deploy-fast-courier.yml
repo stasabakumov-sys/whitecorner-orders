@@ -17,6 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate Fast Courier Edge source
+        shell: bash
+        run: |
+          if grep -Fq '\\n    const apiKey' supabase/functions/fast-courier-api/index.ts; then
+            echo 'Literal newline escaped the apiKey declaration.'
+            exit 1
+          fi
+          grep -Fq "const apiKey = Deno.env.get('FAST_COURIER_API_KEY');" supabase/functions/fast-courier-api/index.ts
+          grep -Fq "'Secret-Key': apiKey" supabase/functions/fast-courier-api/index.ts
       - uses: supabase/setup-cli@v1
         with:
           version: latest
