@@ -1,4 +1,5 @@
 name: Deploy Email AI function
+# Redeploy this function after the protected OpenAI project key is configured.
 
 on:
   push:
