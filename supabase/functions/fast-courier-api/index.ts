@@ -81,8 +81,6 @@ serve(async (req) => {
     // Fast Courier credentials are loaded from Supabase runtime secrets.
     const apiKey = Deno.env.get('FAST_COURIER_API_KEY');
     if (!apiKey) return json({ status: false, message: 'Fast Courier is not configured.' }, 503);
-    const validationError = validateQuote(body.payload);
-    if (validationError) return json({ status: false, message: validationError }, 422);
 
     // Keep the host configurable because Fast Courier can issue account-specific API hosts.
     const baseUrl = (Deno.env.get('FAST_COURIER_API_BASE_URL') || 'https://enterprise-api.fastcourier.com.au').replace(/\/$/, '');
@@ -96,6 +94,9 @@ serve(async (req) => {
       if (!response.ok) return json({ ...result, status: false, upstreamStatus: response.status }, response.status);
       return json(result);
     }
+
+    const validationError = validateQuote(body.payload);
+    if (validationError) return json({ status: false, message: validationError }, 422);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 90000);
