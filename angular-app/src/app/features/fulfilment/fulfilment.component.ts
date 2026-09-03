@@ -127,7 +127,7 @@ import { FastCourierQuote, FastCourierQuoteRequest } from '../../core/services/f
                       <label>Suburb<input pInputText #destinationSuburb [value]="destination().suburb" /></label>
                       <label>State<input pInputText #destinationState [value]="destination().state" /></label>
                       <label>Postcode<input pInputText #destinationPostcode inputmode="numeric" [value]="destination().postcode" /></label>
-                      <label>Building<select #destinationType><option value="residential">Residential</option><option value="commercial">Commercial</option></select></label>
+                      <label>Building<select #destinationType [value]="destinationBuildingType()"><option value="residential">Residential</option><option value="commercial">Commercial</option></select></label>
                       <label class="check"><input #destinationTailLift type="checkbox" /> Tail lift required</label>
                     </fieldset>
                   </div>
@@ -173,6 +173,7 @@ export class FulfilmentComponent implements OnInit {
   selected = signal<FulfilmentRow | null>(null);
   pickupAddress = signal({suburb:'BURLEIGH HEADS',state:'QLD',postcode:'4220'});
   destination = signal({suburb:'',state:'',postcode:''});
+  destinationBuildingType = signal<'commercial'|'residential'>('residential');
   pickup = computed(() => this.f.rows().filter((r) => r.route === 'Pickup'));
   delivery = computed(() => this.f.rows().filter((r) => r.route === 'Shipping'));
   visible = computed(() => this.tab() === 'Pickup' ? this.pickup() : this.delivery());
@@ -189,13 +190,20 @@ export class FulfilmentComponent implements OnInit {
   open(row:FulfilmentRow){
     this.selected.set(row);
     const order=this.f.orderFor(row),a:any=order?.delivery_address||{};
+    this.destinationBuildingType.set(this.inferBuildingType(order,a));
     this.destination.set({
       suburb:String(a.city||a.suburb||a.locality||'').toUpperCase(),
       state:this.stateCode(String(a.subdivision||a.state||a.region||'')),
       postcode:String(a.postalCode||a.postcode||a.zipCode||''),
     });
   }
-  stateCode(value:string){const v=value.trim().toUpperCase();const map:Record<string,string>={QUEENSLAND:'QLD','NEW SOUTH WALES':'NSW',VICTORIA:'VIC',TASMANIA:'TAS','SOUTH AUSTRALIA':'SA','WESTERN AUSTRALIA':'WA','NORTHERN TERRITORY':'NT','AUSTRALIAN CAPITAL TERRITORY':'ACT'};return map[v]||v;}
+  inferBuildingType(order:ReturnType<FulfilmentService['orderFor']>,address:Record<string,unknown>){
+    const a:any=address||{};
+    const business=[order?.company,a.company,a.companyName,a.businessName,a.organization,a.organizationName]
+      .some(value=>String(value||'').trim().length>0);
+    return business?'commercial':'residential';
+  }
+  stateCode(value:string){const raw=value.trim().toUpperCase().replace(/^AU[-\s]/,'');const map:Record<string,string>={QUEENSLAND:'QLD','NEW SOUTH WALES':'NSW',VICTORIA:'VIC',TASMANIA:'TAS','SOUTH AUSTRALIA':'SA','WESTERN AUSTRALIA':'WA','NORTHERN TERRITORY':'NT','AUSTRALIAN CAPITAL TERRITORY':'ACT'};return map[raw]||raw;}
   getQuotes(row:FulfilmentRow,ps:string,pstate:string,pp:string,ptype:string,ptail:boolean,ds:string,dstate:string,dp:string,dtype:string,dtail:boolean){
     const shipment=this.f.shipmentFor(row);if(!shipment)return;
     const request:FastCourierQuoteRequest={
