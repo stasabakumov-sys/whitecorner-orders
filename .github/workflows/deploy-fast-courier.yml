@@ -17,6 +17,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Identify Fast Courier credential header
+        shell: bash
+        run: |
+          set +e
+          endpoint='https://enterprise-api.fastcourier.com.au/api/package-contents-list'
+          for candidate in authorization_raw authorization_bearer secret_key x_secret_key api_key x_api_key; do
+            case "$candidate" in
+              authorization_raw) header='Authorization: diagnostic-invalid-value' ;;
+              authorization_bearer) header='Authorization: Bearer diagnostic-invalid-value' ;;
+              secret_key) header='Secret-Key: diagnostic-invalid-value' ;;
+              x_secret_key) header='X-Secret-Key: diagnostic-invalid-value' ;;
+              api_key) header='Api-Key: diagnostic-invalid-value' ;;
+              x_api_key) header='X-Api-Key: diagnostic-invalid-value' ;;
+            esac
+            status=$(curl --silent --show-error --connect-timeout 8 --max-time 20               --output /tmp/fc-auth --write-out '%{http_code}'               --header 'Accept: application/json' --header "$header" "$endpoint")
+            echo "CANDIDATE=$candidate STATUS=$status BODY=$(head -c 240 /tmp/fc-auth)"
+          done
       - uses: supabase/setup-cli@v1
         with:
           version: latest
