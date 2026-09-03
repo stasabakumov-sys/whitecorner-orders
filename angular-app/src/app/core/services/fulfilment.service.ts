@@ -57,6 +57,7 @@ export interface PackageContentRow {
 
 type ShippingProduct={id:string;product_name:string;wix_product_id?:string|null;product_type?:string|null;notes?:string|null};
 type ShippingPackage={shipping_product_id:string;source_type?:string|null;package_no:number;package_name?:string|null;length_mm?:number|null;width_mm?:number|null;height_mm?:number|null;weight_kg?:number|null;contents?:PackageContentRow[]|null};
+type ShippingRule={match_name?:string|null;match_value?:string|null;effect_type?:string|null;exact_match_required?:boolean|null;active?:boolean|null};
 
 @Injectable({providedIn:'root'})
 export class FulfilmentService {
@@ -68,6 +69,7 @@ export class FulfilmentService {
   readonly quotingShipmentId = signal<string|null>(null);
   readonly savingProfileShipmentId = signal<string|null>(null);
   readonly shippingProducts = signal<ShippingProduct[]>([]);
+  readonly noPackageRules = signal<ShippingRule[]>([]);
   private shippingProfiles:ShippingPackage[]=[];
 
   constructor(
@@ -114,6 +116,14 @@ export class FulfilmentService {
 
   private orderItems(order:OrderRow){return (order.wc_order_items??[]).filter(i=>!this.isDeliveryItem(i));}
 
+  private noPackageRequired(item:OrderItemRow){
+    const name=this.normalise(String(item.product_name||''));
+    return this.noPackageRules().some(rule=>rule.effect_type==='No effect'&&this.normalise(String(rule.match_name||''))===name);
+  }
+
+  packageItems(order:OrderRow){return this.orderItems(order).filter(item=>!this.noPackageRequired(item));}
+  noPackageItems(order:OrderRow){return this.orderItems(order).filter(item=>this.noPackageRequired(item));}
+
   packageContents(pkg:ShipmentPackageRow){return Array.isArray(pkg.contents)?pkg.contents:[];}
 
   private validContents(value:unknown):PackageContentRow[]{
@@ -127,7 +137,7 @@ export class FulfilmentService {
 
   private restoreProfileContents(value:unknown,order:OrderRow){
     if(!Array.isArray(value))return [];
-    const items=this.orderItems(order);
+    const items=this.packageItems(order);
     return value.map((x:any)=>{
       const wixId=String(x?.wix_product_id||'');
       const name=this.normalise(String(x?.product_name||''));
@@ -137,20 +147,22 @@ export class FulfilmentService {
   }
 
   profileTarget(order:OrderRow){
-    return [...this.orderItems(order)].sort((a,b)=>Number(b.unit_price||0)*Number(b.quantity||1)-Number(a.unit_price||0)*Number(a.quantity||1))[0]??null;
+    return [...this.packageItems(order)].sort((a,b)=>Number(b.unit_price||0)*Number(b.quantity||1)-Number(a.unit_price||0)*Number(a.quantity||1))[0]??null;
   }
 
   profileTargetName(order:OrderRow){return this.profileTarget(order)?.product_name||'this product';}
   hasSavedProfile(order:OrderRow){const item=this.profileTarget(order);return !!item&&!!this.exactProfile(item);}
 
   private async loadShippingProfiles(){
-    const [prodRes,pkgRes]=await Promise.all([
+    const [prodRes,pkgRes,ruleRes]=await Promise.all([
       this.supabase.client.from('wc_shipping_products').select('id,product_name,wix_product_id,product_type,notes').eq('active',true),
-      this.supabase.client.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no')
+      this.supabase.client.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no'),
+      this.supabase.client.from('wc_shipping_rules').select('match_name,match_value,effect_type,exact_match_required,active').eq('active',true).eq('effect_type','No effect')
     ]);
-    if(prodRes.error||pkgRes.error)return false;
+    if(prodRes.error||pkgRes.error||ruleRes.error)return false;
     this.shippingProducts.set((prodRes.data??[]) as ShippingProduct[]);
     this.shippingProfiles=(pkgRes.data??[]) as ShippingPackage[];
+    this.noPackageRules.set((ruleRes.data??[]) as ShippingRule[]);
     return true;
   }
 
@@ -202,7 +214,7 @@ export class FulfilmentService {
   private async seedPackages(shipment:ShipmentRow){
     const order=this.orders.orders().find(o=>o.id===shipment.order_id); if(!order)return;
     const out:any[]=[]; let no=1;
-    for(const item of this.orderItems(order)){
+    for(const item of this.packageItems(order)){
       const match=this.exactProfile(item);
       if(!match)continue;
       const base=this.shippingProfiles.filter(p=>p.shipping_product_id===match.id);
@@ -219,7 +231,7 @@ export class FulfilmentService {
   private async removeMismatchedProfilePackages(shipment:ShipmentRow){
     if(['Shipping Booked','In Transit','Delivered'].includes(shipment.status))return;
     const order=this.orders.orders().find(o=>o.id===shipment.order_id); if(!order)return;
-    const allowed=new Set(this.orderItems(order).map(i=>this.exactProfile(i)?.id).filter(Boolean));
+    const allowed=new Set(this.packageItems(order).map(i=>this.exactProfile(i)?.id).filter(Boolean));
     const stale=this.packagesFor(shipment.id).filter(p=>p.source_type==='Profile'&&(!p.shipping_product_id||!allowed.has(p.shipping_product_id)));
     if(!stale.length)return;
     const ids=stale.map(p=>p.id);
@@ -250,7 +262,7 @@ export class FulfilmentService {
       const current=this.packagesFor(shipment.id);
       const {error:deleteError}=await this.supabase.client.from('wc_shipping_packages').delete().eq('shipping_product_id',product.id).eq('source_type','Base');
       if(deleteError)throw deleteError;
-      const templates=current.map((p,index)=>({shipping_product_id:product!.id,source_type:'Base',package_no:index+1,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,contents:this.packageContents(p).map(c=>{const source=this.orderItems(order).find(i=>i.id===c.order_item_id);return{...c,wix_product_id:(source?this.wixProductId(source):'')||c.wix_product_id||null};}),quantity:1,active:true,notes:`Saved from order #${order.order_number}.`}));
+      const templates=current.map((p,index)=>({shipping_product_id:product!.id,source_type:'Base',package_no:index+1,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,contents:this.packageContents(p).map(c=>{const source=this.packageItems(order).find(i=>i.id===c.order_item_id);return{...c,wix_product_id:(source?this.wixProductId(source):'')||c.wix_product_id||null};}),quantity:1,active:true,notes:`Saved from order #${order.order_number}.`}));
       const {data,error}=await this.supabase.client.from('wc_shipping_packages').insert(templates).select('*');
       if(error)throw error;
       this.shippingProfiles=this.shippingProfiles.filter(p=>p.shipping_product_id!==product!.id).concat((data??[]) as ShippingPackage[]);
@@ -271,7 +283,7 @@ export class FulfilmentService {
     const shipment=this.shipments().find(s=>s.id===shipmentId),order=shipment&&this.orders.orders().find(o=>o.id===shipment.order_id);
     if(!order)return [];
     const assigned=new Set(this.packagesFor(shipmentId).flatMap(p=>this.validContents(p.contents).map(c=>c.order_item_id)));
-    return this.orderItems(order).filter(i=>!assigned.has(i.id));
+    return this.packageItems(order).filter(i=>!assigned.has(i.id));
   }
   shipmentComplete(shipmentId:string){const ps=this.packagesFor(shipmentId);return ps.length>0&&ps.every(p=>this.packageComplete(p))&&this.unassignedOrderItems(shipmentId).length===0;}
 
