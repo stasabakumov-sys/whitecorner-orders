@@ -77,7 +77,7 @@ serve(async (req) => {
   try {
     const body = await req.json();
     if (body?.action === 'address-type') return await detectAddressType(body.payload);
-    if (body?.action !== 'quotes') return json({ status: false, message: 'Unsupported Fast Courier action.' }, 400);
+    if (!['quotes', 'insurance-list'].includes(body?.action)) return json({ status: false, message: 'Unsupported Fast Courier action.' }, 400);
     // Fast Courier credentials are loaded from Supabase runtime secrets.
     const apiKey = Deno.env.get('FAST_COURIER_API_KEY');
     if (!apiKey) return json({ status: false, message: 'Fast Courier is not configured.' }, 503);
@@ -86,6 +86,17 @@ serve(async (req) => {
 
     // Keep the host configurable because Fast Courier can issue account-specific API hosts.
     const baseUrl = (Deno.env.get('FAST_COURIER_API_BASE_URL') || 'https://enterprise-api.fastcourier.com.au').replace(/\/$/, '');
+    if (body.action === 'insurance-list') {
+      const response = await fetch(`${baseUrl}/api/insurance-list`, {
+        headers: { Accept: 'application/json', 'Secret-Key': apiKey },
+      });
+      const raw = await response.text();
+      let result: any;
+      try { result = raw ? JSON.parse(raw) : {}; } catch { result = { status: false, message: raw || 'Invalid response from Fast Courier.' }; }
+      if (!response.ok) return json({ ...result, status: false, upstreamStatus: response.status }, response.status);
+      return json(result);
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 90000);
     let response: Response;
