@@ -171,7 +171,7 @@ export class FastCourierService {
 
   async saveOrderDetails(orderId: string, payload: FastCourierBookingDetails): Promise<void> {
     const data = await this.invoke({ action: 'save-order-details', orderId, payload });
-    if (!data?.status) throw new Error(data?.message || 'Fast Courier could not save the order details.');
+    if (!data?.status) throw new Error(this.responseError(data, 'Fast Courier could not save the order details.'));
   }
 
   async bookOrder(orderId: string): Promise<void> {
@@ -200,9 +200,16 @@ export class FastCourierService {
   private async functionError(error: any) {
     try {
       const body = await error?.context?.json?.();
-      return body?.message || body?.error || error.message;
+      return this.responseError(body, error.message);
     } catch {
       return error?.message || 'Fast Courier request failed.';
     }
+  }
+
+  private responseError(body: any, fallback: string) {
+    const details = body?.errors && typeof body.errors === 'object'
+      ? Object.values(body.errors).flatMap((value: any) => Array.isArray(value) ? value : [value]).map(String).filter(Boolean)
+      : [];
+    return details.length ? details.join(' ') : (body?.message || body?.error || fallback);
   }
 }
