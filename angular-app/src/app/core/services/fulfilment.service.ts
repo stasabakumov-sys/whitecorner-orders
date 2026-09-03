@@ -3,6 +3,7 @@ import { OrderRow } from '../models/order.models';
 import { OrdersService } from './orders.service';
 import { SupabaseService } from './supabase.service';
 import { ProductionService } from './production.service';
+import { FastCourierQuote, FastCourierQuoteRequest, FastCourierService } from './fast-courier.service';
 
 export interface FulfilmentRow {
   id: string;
@@ -21,9 +22,17 @@ export interface ShipmentRow {
   id:string;
   fulfilment_id:string;
   order_id:string;
-  status:'Packaging Review'|'Ready to Book'|'Shipping Booked'|'In Transit'|'Delivered';
+  status:'Packaging Review'|'Ready to Quote'|'Quoted'|'Quote Selected'|'Shipping Booked'|'In Transit'|'Delivered';
   created_at?:string;
   updated_at?:string;
+  courier_provider?:string|null;
+  courier_order_id?:string|null;
+  quote_request?:FastCourierQuoteRequest|null;
+  courier_quotes?:FastCourierQuote[]|null;
+  quoted_at?:string|null;
+  selected_quote_id?:string|null;
+  selected_quote?:FastCourierQuote|null;
+  packages_approved_at?:string|null;
 }
 
 export interface ShipmentPackageRow {
@@ -49,11 +58,13 @@ export class FulfilmentService {
   readonly shipmentPackages = signal<ShipmentPackageRow[]>([]);
   readonly error = signal('');
   readonly loading = signal(false);
+  readonly quotingShipmentId = signal<string|null>(null);
 
   constructor(
     private supabase:SupabaseService,
     private orders:OrdersService,
     private production:ProductionService,
+    private fastCourier:FastCourierService,
   ) {}
 
   private isReady(order:OrderRow){
@@ -168,27 +179,48 @@ export class FulfilmentService {
     const next=Math.max(0,...this.packagesFor(shipment.id).map(p=>p.package_no))+1;
     const {data,error}=await this.supabase.client.from('wc_shipment_packages').insert({shipment_id:shipment.id,package_no:next,package_name:'Package '+next,source_type:'Manual'}).select().single();
     if(error){this.error.set(error.message);return;}
-    this.shipmentPackages.update(xs=>[...xs,data as ShipmentPackageRow]); await this.syncShipmentStatus(shipment.id);
+    this.shipmentPackages.update(xs=>[...xs,data as ShipmentPackageRow]); await this.invalidateShipmentQuote(shipment.id);
   }
 
   async savePackage(pkg:ShipmentPackageRow, values:{package_name:string;length_mm:number|null;width_mm:number|null;height_mm:number|null;weight_kg:number|null}){
+    const unchanged=(['package_name','length_mm','width_mm','height_mm','weight_kg'] as const).every(key=>String(pkg[key]??'')===String(values[key]??''));
+    if(unchanged)return;
     const payload={...values,updated_at:new Date().toISOString()};
     const {error}=await this.supabase.client.from('wc_shipment_packages').update(payload).eq('id',pkg.id);
     if(error){this.error.set(error.message);return;}
-    this.shipmentPackages.update(xs=>xs.map(x=>x.id===pkg.id?{...x,...payload}:x)); await this.syncShipmentStatus(pkg.shipment_id);
+    this.shipmentPackages.update(xs=>xs.map(x=>x.id===pkg.id?{...x,...payload}:x)); await this.invalidateShipmentQuote(pkg.shipment_id);
   }
 
   async removePackage(pkg:ShipmentPackageRow){
     const {error}=await this.supabase.client.from('wc_shipment_packages').delete().eq('id',pkg.id); if(error){this.error.set(error.message);return;}
-    this.shipmentPackages.update(xs=>xs.filter(x=>x.id!==pkg.id)); await this.syncShipmentStatus(pkg.shipment_id);
+    this.shipmentPackages.update(xs=>xs.filter(x=>x.id!==pkg.id)); await this.invalidateShipmentQuote(pkg.shipment_id);
   }
 
   private async syncShipmentStatus(id:string){
     const s=this.shipments().find(x=>x.id===id); if(!s||s.status==='Shipping Booked'||s.status==='In Transit'||s.status==='Delivered')return;
-    const status=this.shipmentComplete(id)?'Ready to Book':'Packaging Review';
+    const status:'Packaging Review'= 'Packaging Review';
     if(s.status===status)return;
     await this.supabase.client.from('wc_shipments').update({status,updated_at:new Date().toISOString()}).eq('id',id);
     this.shipments.update(xs=>xs.map(x=>x.id===id?{...x,status}:x));
+  }
+
+  private async invalidateShipmentQuote(id:string){
+    const s=this.shipments().find(x=>x.id===id);
+    if(!s||s.status==='Shipping Booked'||s.status==='In Transit'||s.status==='Delivered')return;
+    const payload={status:'Packaging Review' as const,packages_approved_at:null,courier_provider:null,courier_order_id:null,quote_request:null,courier_quotes:null,quoted_at:null,selected_quote_id:null,selected_quote:null,updated_at:new Date().toISOString()};
+    const {error}=await this.supabase.client.from('wc_shipments').update(payload).eq('id',id);
+    if(error){this.error.set(error.message);return;}
+    this.shipments.update(xs=>xs.map(x=>x.id===id?{...x,...payload}:x));
+  }
+
+  async approvePackages(shipment:ShipmentRow){
+    if(!this.shipmentComplete(shipment.id)){this.error.set('Complete every package before approving the packing list.');return;}
+    const now=new Date().toISOString();
+    const payload={status:'Ready to Quote' as const,packages_approved_at:now,updated_at:now};
+    const {error}=await this.supabase.client.from('wc_shipments').update(payload).eq('id',shipment.id);
+    if(error){this.error.set(error.message);return;}
+    this.error.set('');
+    this.shipments.update(xs=>xs.map(x=>x.id===shipment.id?{...x,...payload}:x));
   }
 
   async markCollected(row:FulfilmentRow){
@@ -198,15 +230,54 @@ export class FulfilmentService {
     this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,status:'Fulfilled',fulfilled_at:now,updated_at:now}:x));
   }
 
-  async markShippingBooked(row:FulfilmentRow){
-    const shipment=this.shipmentFor(row); if(!shipment||!this.shipmentComplete(shipment.id)){this.error.set('Complete all package dimensions and weight before booking shipping.');return;}
-    const now=new Date().toISOString();
-    const [a,b]=await Promise.all([
-      this.supabase.client.from('wc_fulfilment').update({status:'Shipping Booked',shipping_booked_at:now,updated_at:now}).eq('id',row.id),
-      this.supabase.client.from('wc_shipments').update({status:'Shipping Booked',updated_at:now}).eq('id',shipment.id)
-    ]);
-    if(a.error||b.error){this.error.set(a.error?.message||b.error?.message||'Could not update shipping status');return;}
-    this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,status:'Shipping Booked',shipping_booked_at:now,updated_at:now}:x));
-    this.shipments.update(xs=>xs.map(x=>x.id===shipment.id?{...x,status:'Shipping Booked'}:x));
+  quotesFor(shipment:ShipmentRow){
+    return Array.isArray(shipment.courier_quotes) ? shipment.courier_quotes : [];
+  }
+
+  async requestFastCourierQuotes(row:FulfilmentRow, request:FastCourierQuoteRequest){
+    const shipment=this.shipmentFor(row);
+    if(!shipment||!this.shipmentComplete(shipment.id)){
+      this.error.set('Complete and save every package before requesting courier quotes.');
+      return;
+    }
+    if(!['Ready to Quote','Quoted','Quote Selected'].includes(shipment.status)){
+      this.error.set('Approve the packing list before requesting courier quotes.');
+      return;
+    }
+    this.error.set('');
+    const sameRequest=JSON.stringify(shipment.quote_request??null)===JSON.stringify(request);
+    if(sameRequest&&shipment.courier_order_id&&this.quotesFor(shipment).length)return;
+
+    this.quotingShipmentId.set(shipment.id);
+    try{
+      const result=await this.fastCourier.getQuotes(request);
+      const now=new Date().toISOString();
+      const payload={
+        status:'Quoted' as const,
+        courier_provider:'Fast Courier',
+        courier_order_id:result.orderId,
+        quote_request:request,
+        courier_quotes:result.data,
+        quoted_at:now,
+        selected_quote_id:null,
+        selected_quote:null,
+        updated_at:now,
+      };
+      const {error}=await this.supabase.client.from('wc_shipments').update(payload).eq('id',shipment.id);
+      if(error)throw error;
+      this.shipments.update(xs=>xs.map(x=>x.id===shipment.id?{...x,...payload}:x));
+    }catch(error:any){
+      this.error.set(error?.message||'Fast Courier could not retrieve quotes.');
+    }finally{
+      this.quotingShipmentId.set(null);
+    }
+  }
+
+  async selectFastCourierQuote(shipment:ShipmentRow, quote:FastCourierQuote){
+    this.error.set('');
+    const payload={status:'Quote Selected' as const,selected_quote_id:quote.id,selected_quote:quote,updated_at:new Date().toISOString()};
+    const {error}=await this.supabase.client.from('wc_shipments').update(payload).eq('id',shipment.id);
+    if(error){this.error.set(error.message);return;}
+    this.shipments.update(xs=>xs.map(x=>x.id===shipment.id?{...x,...payload}:x));
   }
 }
