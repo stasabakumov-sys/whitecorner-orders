@@ -238,6 +238,10 @@ export class FulfilmentService {
     return this.fastCourier.detectAddressType(address);
   }
 
+  getInsuranceOptions(){
+    return this.fastCourier.getInsuranceOptions();
+  }
+
   async requestFastCourierQuotes(row:FulfilmentRow, request:FastCourierQuoteRequest){
     const shipment=this.shipmentFor(row);
     if(!shipment||!this.shipmentComplete(shipment.id)){
