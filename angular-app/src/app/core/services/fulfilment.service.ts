@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { OrderItemRow, OrderRow } from '../models/order.models';
 import { OrdersService } from './orders.service';
+import { ActivityService } from './activity.service';
 import { SupabaseService } from './supabase.service';
 import { ProductionService } from './production.service';
 import { FastCourierBookingDetails, FastCourierOrderStatus, FastCourierQuote, FastCourierQuoteRequest, FastCourierService } from './fast-courier.service';
@@ -77,6 +78,7 @@ export class FulfilmentService {
   constructor(
     private supabase:SupabaseService,
     private orders:OrdersService,
+    private activity:ActivityService,
     private production:ProductionService,
     private fastCourier:FastCourierService,
   ) {}
@@ -392,6 +394,7 @@ export class FulfilmentService {
     this.error.set('');
     this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,...payload}:x));
     this.orders.orders.update(orders=>orders.map(order=>order.id===row.order_id?{...order,fulfillment_status:'FULFILLED'}:order));
+    try{await this.activity.addFulfilledNote(row.order_id,now);}catch(error){console.error('Could not add fulfilled order note',error);}
     return true;
   }
 
