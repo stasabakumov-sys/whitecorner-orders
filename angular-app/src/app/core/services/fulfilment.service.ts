@@ -380,11 +380,18 @@ export class FulfilmentService {
   async markCollected(row:FulfilmentRow){
     const now=new Date().toISOString();
     const payload={status:'Fulfilled' as const,fulfilled_at:now,updated_at:now};
-    const {data,error}=await this.supabase.client.from('wc_fulfilment').update(payload).eq('id',row.id).select('id').maybeSingle();
-    if(error){this.error.set(error.message);return false;}
-    if(!data){this.error.set('The pickup record was not updated. Please refresh and try again.');return false;}
+    const {data:fulfilment,error:fulfilmentError}=await this.supabase.client.from('wc_fulfilment').update(payload).eq('id',row.id).eq('route','Pickup').select('id').maybeSingle();
+    if(fulfilmentError){this.error.set(fulfilmentError.message);return false;}
+    if(!fulfilment){this.error.set('The pickup record was not updated. Please refresh and try again.');return false;}
+    const {data:order,error:orderError}=await this.supabase.client.from('wc_orders').update({fulfillment_status:'FULFILLED'}).eq('id',row.order_id).select('id').maybeSingle();
+    if(orderError||!order){
+      await this.supabase.client.from('wc_fulfilment').update({status:'Awaiting Pickup',fulfilled_at:null,updated_at:new Date().toISOString()}).eq('id',row.id);
+      this.error.set(orderError?.message||'The order status was not updated. Please try again.');
+      return false;
+    }
     this.error.set('');
     this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,...payload}:x));
+    this.orders.orders.update(orders=>orders.map(order=>order.id===row.order_id?{...order,fulfillment_status:'FULFILLED'}:order));
     return true;
   }
 
