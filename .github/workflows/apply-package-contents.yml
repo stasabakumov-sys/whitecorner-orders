@@ -1,0 +1,32 @@
+name: Apply package contents schema
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20260903_add_package_contents.sql'
+      - '.github/workflows/apply-package-contents.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply idempotent package contents migration
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: zgvnrpspwluapaxnycrg
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          jq -n --rawfile query supabase/migrations/20260903_add_package_contents.sql \
+            '{query: $query, read_only: false}' > request.json
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --url "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query" \
+            --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            --header 'Content-Type: application/json' \
+            --data-binary @request.json
