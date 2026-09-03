@@ -53,8 +53,6 @@ export interface PackageContentRow {
   order_item_id:string;
   wix_product_id?:string|null;
   product_name:string;
-  component_name:string;
-  quantity:number;
 }
 
 type ShippingProduct={id:string;product_name:string;wix_product_id?:string|null;product_type?:string|null;notes?:string|null};
@@ -124,9 +122,7 @@ export class FulfilmentService {
       order_item_id:String(x?.order_item_id||''),
       wix_product_id:x?.wix_product_id?String(x.wix_product_id):null,
       product_name:String(x?.product_name||''),
-      component_name:String(x?.component_name||'').trim(),
-      quantity:Math.max(0,Number(x?.quantity||0)),
-    })).filter(x=>x.order_item_id&&x.product_name&&x.component_name&&x.quantity>0);
+    })).filter(x=>x.order_item_id&&x.product_name);
   }
 
   private restoreProfileContents(value:unknown,order:OrderRow){
@@ -136,8 +132,8 @@ export class FulfilmentService {
       const wixId=String(x?.wix_product_id||'');
       const name=this.normalise(String(x?.product_name||''));
       const item=(wixId?items.find(i=>this.wixProductId(i)===wixId):null)??items.find(i=>this.normalise(String(i.product_name||''))===name);
-      return {order_item_id:item?.id||'',wix_product_id:item?this.wixProductId(item)||null:wixId||null,product_name:String(item?.product_name||x?.product_name||''),component_name:String(x?.component_name||''),quantity:Number(x?.quantity||0)};
-    }).filter(x=>x.order_item_id&&x.component_name.trim()&&x.quantity>0);
+      return {order_item_id:item?.id||'',wix_product_id:item?this.wixProductId(item)||null:wixId||null,product_name:String(item?.product_name||x?.product_name||'')};
+    }).filter(x=>x.order_item_id&&x.product_name);
   }
 
   profileTarget(order:OrderRow){
@@ -297,7 +293,7 @@ export class FulfilmentService {
 
   async savePackageContents(pkg:ShipmentPackageRow,contents:PackageContentRow[]){
     const clean=this.validContents(contents);
-    if(!clean.length){this.error.set('Add at least one product component to this package.');return false;}
+    if(!clean.length){this.error.set('Select at least one order product for this package.');return false;}
     const payload={contents:clean,updated_at:new Date().toISOString()};
     const {error}=await this.supabase.client.from('wc_shipment_packages').update(payload).eq('id',pkg.id);
     if(error){this.error.set(error.message);return false;}
