@@ -87,7 +87,7 @@ serve(async (req) => {
     // Keep the host configurable because Fast Courier can issue account-specific API hosts.
     const baseUrl = (Deno.env.get('FAST_COURIER_API_BASE_URL') || 'https://enterprise-api.fastcourier.com.au').replace(/\/$/, '');
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), 90000);
     let response: Response;
     try {
       response = await fetch(`${baseUrl}/api/quotes`, {
@@ -111,7 +111,7 @@ serve(async (req) => {
     return json(result);
   } catch (error) {
     const message = error instanceof DOMException && error.name === 'AbortError'
-      ? 'Fast Courier did not respond within 30 seconds.'
+      ? 'Fast Courier did not respond within 90 seconds.'
       : error instanceof Error ? error.message : 'Fast Courier request failed.';
     return json({ status: false, message }, 500);
   }
