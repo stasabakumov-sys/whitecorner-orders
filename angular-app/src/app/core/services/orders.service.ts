@@ -84,4 +84,16 @@ export class OrdersService {
     if (data?.error) throw new Error(data.error);
     await this.load();
   }
+
+  async markFulfilledInWix(orderId: string) {
+    this.error.set('');
+    const { data, error } = await this.supabase.client.functions.invoke(environment.wixSyncFunction, { body: { action: 'markFulfilled', orderId } });
+    if (error) throw error;
+    if (data?.error) {
+      const detail = data?.payload?.message || data?.payload?.error || '';
+      throw new Error(`${data.error}${detail ? `: ${detail}` : ''}`);
+    }
+    this.orders.update(rows => rows.map(order => order.id === orderId ? { ...order, fulfillment_status: 'FULFILLED', raw_order: { ...(order.raw_order ?? {}), fulfillmentStatus: 'FULFILLED' } } : order));
+    return data;
+  }
 }
