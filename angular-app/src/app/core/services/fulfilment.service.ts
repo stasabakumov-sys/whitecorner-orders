@@ -3,7 +3,7 @@ import { OrderItemRow, OrderRow } from '../models/order.models';
 import { OrdersService } from './orders.service';
 import { SupabaseService } from './supabase.service';
 import { ProductionService } from './production.service';
-import { FastCourierQuote, FastCourierQuoteRequest, FastCourierService } from './fast-courier.service';
+import { FastCourierBookingDetails, FastCourierOrderStatus, FastCourierQuote, FastCourierQuoteRequest, FastCourierService } from './fast-courier.service';
 
 export interface FulfilmentRow {
   id: string;
@@ -67,6 +67,8 @@ export class FulfilmentService {
   readonly error = signal('');
   readonly loading = signal(false);
   readonly quotingShipmentId = signal<string|null>(null);
+  readonly bookingShipmentId = signal<string|null>(null);
+  readonly checkingBookingShipmentId = signal<string|null>(null);
   readonly savingProfileShipmentId = signal<string|null>(null);
   readonly shippingProducts = signal<ShippingProduct[]>([]);
   readonly noPackageRules = signal<ShippingRule[]>([]);
@@ -411,5 +413,66 @@ export class FulfilmentService {
     const {error}=await this.supabase.client.from('wc_shipments').update(payload).eq('id',shipment.id);
     if(error){this.error.set(error.message);return;}
     this.shipments.update(xs=>xs.map(x=>x.id===shipment.id?{...x,...payload}:x));
+  }
+
+  bookingStatus(shipment:ShipmentRow):FastCourierOrderStatus|null {
+    const value=(shipment.selected_quote as any)?.booking?.status;
+    return value&&typeof value==='object'?value as FastCourierOrderStatus:null;
+  }
+
+  async bookShipment(row:FulfilmentRow, details:FastCourierBookingDetails){
+    const shipment=this.shipmentFor(row);
+    if(!shipment||shipment.status!=='Quote Selected'||!shipment.courier_order_id||!shipment.selected_quote){
+      this.error.set('Select a courier quote before booking.');return false;
+    }
+    if(this.bookingShipmentId())return false;
+    this.error.set('');this.bookingShipmentId.set(shipment.id);
+    try{
+      await this.fastCourier.saveOrderDetails(shipment.courier_order_id,details);
+      await this.fastCourier.bookOrder(shipment.courier_order_id);
+      const now=new Date().toISOString();
+      const selectedQuote={...(shipment.selected_quote as any),booking:{details,initiatedAt:now,status:null}};
+      const shipmentPayload={status:'Shipping Booked' as const,selected_quote:selectedQuote,updated_at:now};
+      const fulfilmentPayload={status:'Shipping Booked' as const,shipping_booked_at:now,updated_at:now};
+      const [{error:shipmentError},{error:fulfilmentError}]=await Promise.all([
+        this.supabase.client.from('wc_shipments').update(shipmentPayload).eq('id',shipment.id),
+        this.supabase.client.from('wc_fulfilment').update(fulfilmentPayload).eq('id',row.id),
+      ]);
+      if(shipmentError)throw shipmentError;
+      if(fulfilmentError)throw fulfilmentError;
+      this.shipments.update(xs=>xs.map(x=>x.id===shipment.id?{...x,...shipmentPayload}:x));
+      this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,...fulfilmentPayload}:x));
+      void this.refreshBookingStatus(shipment.id,true);
+      return true;
+    }catch(error:any){
+      this.error.set(error?.message||'Fast Courier booking failed.');return false;
+    }finally{this.bookingShipmentId.set(null);}
+  }
+
+  async refreshBookingStatus(shipmentId:string,scheduleMore=false,remainingAttempts=12){
+    const shipment=this.shipments().find(x=>x.id===shipmentId);
+    if(!shipment?.courier_order_id||this.checkingBookingShipmentId())return;
+    this.checkingBookingShipmentId.set(shipmentId);
+    try{
+      const status=await this.fastCourier.getOrderStatus(shipment.courier_order_id);
+      const latest=this.shipments().find(x=>x.id===shipmentId)??shipment;
+      const oldBooking=(latest.selected_quote as any)?.booking??{};
+      const previousStatus=oldBooking.status??{};
+      const mergedStatus={...previousStatus,...status,storedDocuments:{...(previousStatus.storedDocuments??{}),...(status.storedDocuments??{})}};
+      const selectedQuote={...(latest.selected_quote as any),booking:{...oldBooking,status:mergedStatus,lastCheckedAt:new Date().toISOString()}};
+      const payload={selected_quote:selectedQuote,updated_at:new Date().toISOString()};
+      const {error}=await this.supabase.client.from('wc_shipments').update(payload).eq('id',shipmentId);
+      if(error)throw error;
+      this.shipments.update(xs=>xs.map(x=>x.id===shipmentId?{...x,...payload}:x));
+      if(scheduleMore&&remainingAttempts>0&&!mergedStatus.storedDocuments?.label)setTimeout(()=>void this.refreshBookingStatus(shipmentId,true,remainingAttempts-1),5000);
+    }catch(error:any){
+      this.error.set(error?.message||'Could not refresh Fast Courier documents.');
+      if(scheduleMore&&remainingAttempts>0)setTimeout(()=>void this.refreshBookingStatus(shipmentId,true,remainingAttempts-1),8000);
+    }finally{this.checkingBookingShipmentId.set(null);}
+  }
+
+  async openStoredDocument(path:string){
+    try{window.open(await this.fastCourier.getStoredDocumentUrl(path),'_blank','noopener');}
+    catch(error:any){this.error.set(error?.message||'The saved document could not be opened.');}
   }
 }
