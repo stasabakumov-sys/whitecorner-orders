@@ -9,6 +9,13 @@ alter table public.wc_shipments
   add column if not exists packages_approved_at timestamptz;
 
 alter table public.wc_shipments drop constraint if exists wc_shipments_status_check;
+
+-- Existing shipments used the previous workflow status. Send them back through
+-- package review so no legacy shipment is quoted without explicit approval.
+update public.wc_shipments
+set status = 'Packaging Review', updated_at = now()
+where status = 'Ready to Book';
+
 alter table public.wc_shipments add constraint wc_shipments_status_check check (status in (
   'Packaging Review',
   'Ready to Quote',
