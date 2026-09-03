@@ -351,7 +351,7 @@ export class FulfilmentComponent implements OnInit {
   onContentsVisible(visible:boolean){if(!visible)this.contentsPackage.set(null);}
   assignedProductNames(pkg:ShipmentPackageRow){return [...new Set(this.f.packageContents(pkg).map(x=>x.product_name).filter(Boolean))];}
   unassignedNames(shipmentId:string){return this.f.unassignedOrderItems(shipmentId).map(x=>x.product_name||'Unnamed product').join(', ');}
-  address(a:Record<string,unknown>){const x:any=a;return[x.addressLine,x.city,x.subdivision,x.postalCode,x.country].filter(Boolean).join(', ');}
+  address(a:Record<string,unknown>){const x:any=a;return[x.addressLine||x.addressLine1,x.city||x.suburb||x.locality,this.addressPart(x.subdivision||x.state||x.region),x.postalCode||x.postcode||x.zipCode,this.addressPart(x.country)].filter(Boolean).join(', ');}
   open(row:FulfilmentRow){
     this.selected.set(row);
     const order=this.f.orderFor(row),a:any=order?.delivery_address||{};
@@ -404,7 +404,7 @@ export class FulfilmentComponent implements OnInit {
     const request:FastCourierQuoteRequest={
       pickupSuburb:ps.trim().toUpperCase(),pickupState:this.stateCode(pstate),pickupPostcode:Number(pp),pickupBuildingType:ptype as 'commercial'|'residential',isPickupTailLift:ptail,
       destinationSuburb:ds.trim().toUpperCase(),destinationState:this.stateCode(dstate),destinationPostcode:Number(dp),destinationBuildingType:dtype as 'commercial'|'residential',isDropOffTailLift:dtail,isDropOffPOBox:false,
-      items:this.f.packagesFor(shipment.id).map(p=>({type:'box',weight:Number(p.weight_kg),length:Number(p.length_mm)/10,width:Number(p.width_mm)/10,height:Number(p.height_mm)/10,quantity:1,contents:'Other'})),
+      items:this.f.packagesFor(shipment.id).map(p=>({type:'box',weight:Number(p.weight_kg),length:Number(p.length_mm)/10,width:Number(p.width_mm)/10,height:Number(p.height_mm)/10,quantity:1,contents:String(p.package_name||'Other')})),
     };
     void this.f.requestFastCourierQuotes(row,request);
   }
@@ -414,13 +414,25 @@ export class FulfilmentComponent implements OnInit {
   today(){return this.dateValue(new Date());}
   private nextCollectionDate(){const date=new Date();date.setDate(date.getDate()+1);while(date.getDay()===0||date.getDay()===6)date.setDate(date.getDate()+1);return this.dateValue(date);}
   private dateValue(date:Date){const year=date.getFullYear(),month=String(date.getMonth()+1).padStart(2,'0'),day=String(date.getDate()).padStart(2,'0');return `${year}-${month}-${day}`;}
-  private emptyBookingDraft():BookingDraft{return{pickupFirstName:'',pickupLastName:'',pickupCompanyName:'White Corner Group Pty Ltd',pickupEmail:'info@whitecorner.com.au',pickupAddress1:'',pickupAddress2:'',pickupPhone:'',destinationFirstName:'',destinationLastName:'',destinationCompanyName:'',destinationEmail:'',destinationAddress1:'',destinationAddress2:'',destinationPhone:'',collectionDate:'',pickupTimeWindow:'9am to 5pm',parcelContent:'Event display equipment',specialInstructions:'',authorityToLeave:false,noPrinter:false,accepted:false};}
+  private emptyBookingDraft():BookingDraft{return{pickupFirstName:'Stanislav',pickupLastName:'Abakumov',pickupCompanyName:'White Corner Group Pty Ltd',pickupEmail:'info@whitecorner.com.au',pickupAddress1:'Unit 6, 1 Hornet Place',pickupAddress2:'Burleigh Heads QLD 4220',pickupPhone:'+61450787086',destinationFirstName:'',destinationLastName:'',destinationCompanyName:'',destinationEmail:'',destinationAddress1:'',destinationAddress2:'',destinationPhone:'',collectionDate:'',pickupTimeWindow:'9am to 5pm',parcelContent:'',specialInstructions:'',authorityToLeave:false,noPrinter:false,accepted:false};}
   private splitName(value:string|undefined|null){const parts=String(value||'').trim().split(/\s+/).filter(Boolean);return{firstName:parts.length>1?parts.slice(0,-1).join(' '):(parts[0]||''),lastName:parts.length>1?(parts.at(-1)||''):''};}
+  private addressPart(value:any){if(!value)return'';if(typeof value==='string')return value.replace(/^AU-/i,'');return String(value.code||value.shortName||value.name||'').replace(/^AU-/i,'');}
+  private destinationAddress2(address:any,shipment:ShipmentRow){
+    const route=shipment.quote_request;
+    const locality=[address.city||address.suburb||address.locality||route?.destinationSuburb,this.addressPart(address.subdivision||address.state||address.region)||route?.destinationState,address.postalCode||address.postcode||address.zipCode||route?.destinationPostcode].filter(Boolean).join(' ');
+    return [address.addressLine2||address.addressLineSecondary,locality].filter(Boolean).join(', ');
+  }
+  private parcelContents(shipment:ShipmentRow){
+    const packages=this.f.packagesFor(shipment.id);
+    const packageNames=packages.map(pkg=>String(pkg.package_name||'').trim()).filter(name=>name&&!/^package\s*\d+$/i.test(name));
+    const assignedProducts=packages.flatMap(pkg=>this.f.packageContents(pkg).map(item=>String(item.product_name||'').trim())).filter(Boolean);
+    return [...new Set(packageNames.length?packageNames:assignedProducts)].join(', ').slice(0,250)||'Event display equipment';
+  }
   openBooking(row:FulfilmentRow,shipment:ShipmentRow,order:OrderRow){
     if(shipment.status!=='Quote Selected'||!shipment.selected_quote_id)return;
     const address:any=order.delivery_address||{},name=this.splitName(order.customer_name);
     this.bookingContext.set({row,shipment,order});
-    this.bookingDraft.set({...this.emptyBookingDraft(),destinationFirstName:name.firstName,destinationLastName:name.lastName,destinationCompanyName:String(order.company||''),destinationEmail:String(order.buyer_email||''),destinationAddress1:String(address.addressLine||address.addressLine1||address.streetAddress||''),destinationAddress2:String(address.addressLine2||address.addressLineSecondary||''),destinationPhone:String(order.phone||''),collectionDate:this.nextCollectionDate()});
+    this.bookingDraft.set({...this.emptyBookingDraft(),destinationFirstName:name.firstName,destinationLastName:name.lastName,destinationCompanyName:String(order.company||''),destinationEmail:String(order.buyer_email||''),destinationAddress1:String(address.addressLine||address.addressLine1||address.streetAddress||''),destinationAddress2:this.destinationAddress2(address,shipment),destinationPhone:String(order.phone||''),collectionDate:this.nextCollectionDate(),parcelContent:this.parcelContents(shipment)});
     this.bookingDialogOpen.set(true);
   }
   onBookingVisible(visible:boolean){if(!visible&&this.f.bookingShipmentId()===null){this.bookingDialogOpen.set(false);this.bookingContext.set(null);}}
