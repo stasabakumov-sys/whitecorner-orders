@@ -1,18 +1,19 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ButtonModule } from 'primeng/button';
+import { DialogModule } from 'primeng/dialog';
 import { DrawerModule } from 'primeng/drawer';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { OrderItemRow, OrderRow } from '../../core/models/order.models';
-import { FulfilmentRow, FulfilmentService, ShipmentPackageRow } from '../../core/services/fulfilment.service';
+import { FulfilmentRow, FulfilmentService, PackageContentRow, ShipmentPackageRow } from '../../core/services/fulfilment.service';
 import { FastCourierInsuranceSelection, FastCourierQuote, FastCourierQuoteRequest } from '../../core/services/fast-courier.service';
 
 @Component({
   selector: 'app-fulfilment',
   standalone: true,
-  imports: [DatePipe, ButtonModule, DrawerModule, InputTextModule, TableModule, TagModule],
+  imports: [DatePipe, ButtonModule, DialogModule, DrawerModule, InputTextModule, TableModule, TagModule],
   template: `
     <section class="page-card">
       <div class="page-head">
@@ -105,10 +106,14 @@ import { FastCourierInsuranceSelection, FastCourierQuote, FastCourierQuoteReques
                         <label>W mm<input pInputText #pw type="number" [value]="pkg.width_mm ?? ''" /></label>
                         <label>H mm<input pInputText #ph type="number" [value]="pkg.height_mm ?? ''" /></label>
                         <label>kg<input pInputText #pk type="number" step="0.1" [value]="pkg.weight_kg ?? ''" /></label>
+                        <div class="contents-summary"><b>Contents:</b> {{ contentsSummary(pkg) }}</div>
                       </div>
-                      <div class="package-actions"><p-button label="Save" size="small" outlined (onClick)="savePkg(pkg,pn.value,pl.value,pw.value,ph.value,pk.value)" /><p-button label="Remove" size="small" severity="danger" text (onClick)="f.removePackage(pkg)" /></div>
+                      <div class="package-actions"><p-button label="Contents" size="small" severity="secondary" outlined [badge]="String(f.packageContents(pkg).length)" (onClick)="openPackageContents(pkg)" /><p-button label="Save" size="small" outlined (onClick)="savePkg(pkg,pn.value,pl.value,pw.value,ph.value,pk.value)" /><p-button label="Remove" size="small" severity="danger" text (onClick)="f.removePackage(pkg)" /></div>
                     </div>
                   } @empty { <div class="callout warning">No exact packaging profile exists. Add the actual package(s) below — nothing has been guessed or copied from another product.</div> }
+                  @if (f.unassignedOrderItems(shipment.id).length) {
+                    <div class="callout warning"><b>Not assigned to any package:</b> {{ unassignedNames(shipment.id) }}. Open Contents and distribute every product/component between the packages.</div>
+                  }
                   @if (row.status === 'Shipping Preparation') {
                     <div class="actions">
                       <p-button label="Add package" severity="secondary" outlined (onClick)="f.addPackage(shipment)" />
@@ -188,9 +193,27 @@ import { FastCourierInsuranceSelection, FastCourierQuote, FastCourierQuoteReques
         }
       }
     </p-drawer>
+
+    <p-dialog [visible]="contentsPackage() !== null" (visibleChange)="onContentsVisible($event)" [modal]="true" [draggable]="false" [style]="{ width: 'min(820px, 96vw)' }" header="Package contents">
+      @if (contentsPackage(); as pkg) {
+        <div class="contents-intro"><b>{{ pkg.package_name || 'Package '+pkg.package_no }}</b><span>Select an order product and name the physical component inside this box. The same product may be split between several packages.</span></div>
+        <div class="content-grid content-head"><span>Order product</span><span>Component / part</span><span>Qty</span><span></span></div>
+        @for (entry of contentsDraft(); track $index; let i = $index) {
+          <div class="content-grid">
+            <select [value]="entry.order_item_id" (change)="setContentProduct(i,$any($event.target).value)">
+              @for (item of contentOrderItems(); track item.id) { <option [value]="item.id">{{ item.product_name }}</option> }
+            </select>
+            <input pInputText [value]="entry.component_name" placeholder="e.g. tabletop, side panel, wheels" (input)="setContentField(i,'component_name',$any($event.target).value)" />
+            <input pInputText type="number" min="0.01" step="1" [value]="entry.quantity" (input)="setContentField(i,'quantity',$any($event.target).value)" />
+            <p-button icon="pi pi-trash" severity="danger" text ariaLabel="Remove component" (onClick)="removeContentRow(i)" />
+          </div>
+        } @empty { <div class="callout warning">No components assigned to this package yet.</div> }
+        <div class="content-actions"><p-button label="Add component" severity="secondary" outlined (onClick)="addContentRow()" /><span></span><p-button label="Cancel" severity="secondary" text (onClick)="contentsPackage.set(null)" /><p-button label="Save contents" (onClick)="saveContents()" /></div>
+      }
+    </p-dialog>
   `,
   styles: [`
-    .page-card{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}.page-head{padding:18px 20px 14px;border-bottom:1px solid #e4e7ec}.page-head h2{margin:0 0 4px}.page-head p{margin:0;color:#758198;font-size:12px}.route-buttons{display:flex;gap:8px;margin-top:14px}.error{margin:12px 18px;background:#fff1f1;color:#8c2f2f;padding:10px;border-radius:8px}.order-row{cursor:pointer}.order-row td small{display:block;color:#758198;margin-top:3px}.empty{text-align:center;color:#758198;padding:28px}.drawer-title{display:flex;align-items:center;justify-content:space-between;gap:18px;width:100%;padding-right:8px}.drawer-title small{display:block;color:#758198;margin-top:2px}.order-number{font-size:17px}.drawer-body{padding:4px 2px 18px}.section{margin-bottom:24px}.section-title{text-transform:uppercase;font-size:11px;font-weight:800;color:#758198;margin-bottom:9px}.overview{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.info-box{border:1px solid #e4e7ec;border-radius:8px;padding:10px;background:#fbfcfd}.info-box b,.info-box span{display:block}.info-box span{margin-top:4px}.address{margin-top:10px;color:#596579;font-size:12px}.item-card{display:grid;grid-template-columns:70px 1fr auto;gap:12px;align-items:start;border:1px solid #e4e7ec;border-radius:9px;padding:10px;margin-bottom:8px}.item-card img,.image-placeholder{width:70px;height:70px;border:1px solid #e4e7ec;border-radius:7px;object-fit:cover;background:#f6f8fa}.chips{margin-top:5px}.chips span{display:inline-block;background:#f1f4f7;border-radius:5px;padding:4px 6px;font-size:11px;margin:3px 4px 0 0}.price{text-align:right}.callout{padding:11px 12px;background:#f7f9fc;border-radius:8px;font-size:12px;margin-bottom:12px}.warning{background:#fff8ed;color:#8a4b08}.profile-missing{background:#eef8ff;color:#174f78}.profile-missing div{margin:5px 0 9px}.profile-saved{background:#edf9f2;color:#17643d}.done{margin-top:12px;color:#17643d;font-weight:700}.package-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}.muted{color:#758198;font-size:12px}.package-card{border:1px solid #e4e7ec;border-radius:9px;padding:10px;margin-bottom:8px;display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:end}.package-no{width:26px;height:26px;border-radius:50%;background:#f1f4f7;display:grid;place-items:center;font-size:11px;font-weight:700;align-self:center}.package-fields{display:grid;grid-template-columns:minmax(150px,1.6fr) repeat(4,minmax(75px,.7fr));gap:7px}.package-fields label{font-size:10px;color:#758198;text-transform:uppercase;font-weight:700}.package-fields input{display:block;width:100%;margin-top:4px}.package-actions{display:flex;gap:4px}.actions{display:flex;gap:8px;margin-top:10px}.hint{margin-top:6px}.safety{background:#eef8ff;color:#174f78}.insurance{background:#f7f9fc;color:#344054}.insurance b{margin-right:5px}.insurance div{margin-top:5px;font-weight:600}.route-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.route-grid fieldset{border:1px solid #e4e7ec;border-radius:9px;padding:12px;display:grid;grid-template-columns:2fr .8fr 1fr;gap:9px}.route-grid legend{font-weight:700;padding:0 5px}.route-grid label{font-size:10px;text-transform:uppercase;font-weight:700;color:#758198}.route-grid input,.route-grid select{display:block;width:100%;margin-top:4px;height:37px;border:1px solid #d4d9e2;border-radius:7px;padding:7px;background:#fff;color:#101828}.route-grid .check{grid-column:1/-1;display:flex;gap:7px;align-items:center;text-transform:none;font-size:12px}.route-grid .check input{width:auto;height:auto;margin:0}.address-detection{grid-column:1/-1;color:#667085;font-size:11px}.quote-action{align-items:center;margin:12px 0}.quote-list{display:grid;gap:8px}.quote-card{width:100%;display:grid;grid-template-columns:60px 1fr auto 75px;gap:12px;align-items:center;text-align:left;border:1px solid #dce2ea;border-radius:10px;background:#fff;padding:11px;cursor:pointer;color:#101828}.quote-card:disabled{cursor:not-allowed;opacity:.62}.quote-card:hover:not(:disabled){border-color:#91b9ff}.quote-card.selected{border:2px solid #116dff;background:#f6f9ff}.quote-logo{width:56px;height:40px;display:grid;place-items:center;border-radius:7px;background:#f7f8fa;overflow:hidden;font-weight:800}.quote-logo img{max-width:52px;max-height:34px;object-fit:contain}.quote-main b,.quote-main span,.quote-price b,.quote-price span{display:block}.quote-main span,.quote-price span{font-size:11px;color:#758198;margin-top:3px}.quote-price{text-align:right}.quote-choice{font-size:12px;color:#116dff;text-align:right}.quote-notice{grid-column:2/-1;color:#7a4a05;background:#fff8e8;border-radius:6px;padding:7px;font-size:11px}.selected-note{margin-top:10px;background:#edf9f2;color:#17643d}@media(max-width:900px){.overview{grid-template-columns:1fr 1fr}.package-card{grid-template-columns:30px 1fr}.package-actions{grid-column:2}.package-fields{grid-template-columns:1fr 1fr}.route-grid{grid-template-columns:1fr}}@media(max-width:600px){.overview{grid-template-columns:1fr}.item-card{grid-template-columns:58px 1fr}.item-card img,.image-placeholder{width:58px;height:58px}.price{grid-column:2;text-align:left}.package-fields{grid-template-columns:1fr}.route-buttons{flex-wrap:wrap}.route-grid fieldset{grid-template-columns:1fr 1fr}.quote-card{grid-template-columns:48px 1fr auto}.quote-logo{width:46px}.quote-choice{grid-column:2/-1}.quote-notice{grid-column:1/-1}}
+    .page-card{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}.page-head{padding:18px 20px 14px;border-bottom:1px solid #e4e7ec}.page-head h2{margin:0 0 4px}.page-head p{margin:0;color:#758198;font-size:12px}.route-buttons{display:flex;gap:8px;margin-top:14px}.error{margin:12px 18px;background:#fff1f1;color:#8c2f2f;padding:10px;border-radius:8px}.order-row{cursor:pointer}.order-row td small{display:block;color:#758198;margin-top:3px}.empty{text-align:center;color:#758198;padding:28px}.drawer-title{display:flex;align-items:center;justify-content:space-between;gap:18px;width:100%;padding-right:8px}.drawer-title small{display:block;color:#758198;margin-top:2px}.order-number{font-size:17px}.drawer-body{padding:4px 2px 18px}.section{margin-bottom:24px}.section-title{text-transform:uppercase;font-size:11px;font-weight:800;color:#758198;margin-bottom:9px}.overview{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.info-box{border:1px solid #e4e7ec;border-radius:8px;padding:10px;background:#fbfcfd}.info-box b,.info-box span{display:block}.info-box span{margin-top:4px}.address{margin-top:10px;color:#596579;font-size:12px}.item-card{display:grid;grid-template-columns:70px 1fr auto;gap:12px;align-items:start;border:1px solid #e4e7ec;border-radius:9px;padding:10px;margin-bottom:8px}.item-card img,.image-placeholder{width:70px;height:70px;border:1px solid #e4e7ec;border-radius:7px;object-fit:cover;background:#f6f8fa}.chips{margin-top:5px}.chips span{display:inline-block;background:#f1f4f7;border-radius:5px;padding:4px 6px;font-size:11px;margin:3px 4px 0 0}.price{text-align:right}.callout{padding:11px 12px;background:#f7f9fc;border-radius:8px;font-size:12px;margin-bottom:12px}.warning{background:#fff8ed;color:#8a4b08}.profile-missing{background:#eef8ff;color:#174f78}.profile-missing div{margin:5px 0 9px}.profile-saved{background:#edf9f2;color:#17643d}.done{margin-top:12px;color:#17643d;font-weight:700}.package-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}.muted{color:#758198;font-size:12px}.package-card{border:1px solid #e4e7ec;border-radius:9px;padding:10px;margin-bottom:8px;display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:end}.package-no{width:26px;height:26px;border-radius:50%;background:#f1f4f7;display:grid;place-items:center;font-size:11px;font-weight:700;align-self:center}.package-fields{display:grid;grid-template-columns:minmax(150px,1.6fr) repeat(4,minmax(75px,.7fr));gap:7px}.package-fields label{font-size:10px;color:#758198;text-transform:uppercase;font-weight:700}.package-fields input{display:block;width:100%;margin-top:4px}.contents-summary{grid-column:1/-1;color:#667085;font-size:11px;padding-top:2px}.contents-summary b{color:#344054}.package-actions{display:flex;gap:4px;flex-wrap:wrap}.actions{display:flex;gap:8px;margin-top:10px}.hint{margin-top:6px}.contents-intro{display:flex;flex-direction:column;gap:5px;margin-bottom:16px;color:#475467}.contents-intro span{font-size:12px}.content-grid{display:grid;grid-template-columns:minmax(220px,1.5fr) minmax(200px,1.4fr) 80px 42px;gap:8px;align-items:center;margin-bottom:8px}.content-head{font-size:10px;text-transform:uppercase;font-weight:700;color:#758198}.content-grid select,.content-grid input{width:100%;height:39px;border:1px solid #d4d9e2;border-radius:7px;padding:7px;background:#fff}.content-actions{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;margin-top:14px}.safety{background:#eef8ff;color:#174f78}.insurance{background:#f7f9fc;color:#344054}.insurance b{margin-right:5px}.insurance div{margin-top:5px;font-weight:600}.route-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.route-grid fieldset{border:1px solid #e4e7ec;border-radius:9px;padding:12px;display:grid;grid-template-columns:2fr .8fr 1fr;gap:9px}.route-grid legend{font-weight:700;padding:0 5px}.route-grid label{font-size:10px;text-transform:uppercase;font-weight:700;color:#758198}.route-grid input,.route-grid select{display:block;width:100%;margin-top:4px;height:37px;border:1px solid #d4d9e2;border-radius:7px;padding:7px;background:#fff;color:#101828}.route-grid .check{grid-column:1/-1;display:flex;gap:7px;align-items:center;text-transform:none;font-size:12px}.route-grid .check input{width:auto;height:auto;margin:0}.address-detection{grid-column:1/-1;color:#667085;font-size:11px}.quote-action{align-items:center;margin:12px 0}.quote-list{display:grid;gap:8px}.quote-card{width:100%;display:grid;grid-template-columns:60px 1fr auto 75px;gap:12px;align-items:center;text-align:left;border:1px solid #dce2ea;border-radius:10px;background:#fff;padding:11px;cursor:pointer;color:#101828}.quote-card:disabled{cursor:not-allowed;opacity:.62}.quote-card:hover:not(:disabled){border-color:#91b9ff}.quote-card.selected{border:2px solid #116dff;background:#f6f9ff}.quote-logo{width:56px;height:40px;display:grid;place-items:center;border-radius:7px;background:#f7f8fa;overflow:hidden;font-weight:800}.quote-logo img{max-width:52px;max-height:34px;object-fit:contain}.quote-main b,.quote-main span,.quote-price b,.quote-price span{display:block}.quote-main span,.quote-price span{font-size:11px;color:#758198;margin-top:3px}.quote-price{text-align:right}.quote-choice{font-size:12px;color:#116dff;text-align:right}.quote-notice{grid-column:2/-1;color:#7a4a05;background:#fff8e8;border-radius:6px;padding:7px;font-size:11px}.selected-note{margin-top:10px;background:#edf9f2;color:#17643d}@media(max-width:900px){.overview{grid-template-columns:1fr 1fr}.package-card{grid-template-columns:30px 1fr}.package-actions{grid-column:2}.package-fields{grid-template-columns:1fr 1fr}.route-grid{grid-template-columns:1fr}.content-grid{grid-template-columns:1fr 1fr 70px 42px}}@media(max-width:600px){.overview{grid-template-columns:1fr}.item-card{grid-template-columns:58px 1fr}.item-card img,.image-placeholder{width:58px;height:58px}.price{grid-column:2;text-align:left}.package-fields{grid-template-columns:1fr}.route-buttons{flex-wrap:wrap}.route-grid fieldset{grid-template-columns:1fr 1fr}.quote-card{grid-template-columns:48px 1fr auto}.quote-logo{width:46px}.quote-choice{grid-column:2/-1}.quote-notice{grid-column:1/-1}.content-grid{grid-template-columns:1fr}.content-head{display:none}.content-actions{grid-template-columns:1fr 1fr}.content-actions span{display:none}}
   `],
 })
 export class FulfilmentComponent implements OnInit {
@@ -203,6 +226,8 @@ export class FulfilmentComponent implements OnInit {
   addressTypeStatus = signal<'checking'|'commercial'|'residential'|'unknown'>('unknown');
   insuranceStatus = signal<'checking'|'ready'|'error'>('checking');
   insuranceOptions = signal<{label:string;insuranceValue:number;insuranceFee:number}[]>([]);
+  contentsPackage = signal<ShipmentPackageRow|null>(null);
+  contentsDraft = signal<PackageContentRow[]>([]);
   private addressTypeRequest = 0;
   pickup = computed(() => this.f.rows().filter((r) => r.route === 'Pickup'));
   delivery = computed(() => this.f.rows().filter((r) => r.route === 'Shipping'));
@@ -216,6 +241,28 @@ export class FulfilmentComponent implements OnInit {
   orderItems(items: OrderItemRow[]) { return items.filter((i) => !/^(delivery|shipping)(\s+(fee|charge))?$/i.test(String(i.product_name || '').trim())); }
   image(item: OrderItemRow) { const x:any=item.image||{},r:any=item.raw_item||{}; return x.url||x.imageUrl||x.imageInfo?.url||r.media?.url||r.image?.url||r.image?.imageInfo?.url||''; }
   options(item: OrderItemRow) { const out:string[]=[]; for(const obj of [item.wix_options,item.custom_text_fields]) if(obj&&typeof obj==='object') for(const[k,v]of Object.entries(obj)){const z=typeof v==='object'&&v?(v as any).value||(v as any).name||(v as any).description:String(v??'');if(String(z).trim())out.push(`${k}: ${String(z).trim()}`);} return [...new Set(out)].slice(0,10); }
+  contentOrderItems(){const row=this.selected(),order=row&&this.f.orderFor(row);return order?this.orderItems(order.wc_order_items||[]):[];}
+  openPackageContents(pkg:ShipmentPackageRow){
+    this.contentsPackage.set(pkg);
+    this.contentsDraft.set(this.f.packageContents(pkg).map(x=>({...x})));
+    if(!this.contentsDraft().length)this.addContentRow();
+  }
+  addContentRow(){
+    const item=this.contentOrderItems()[0]; if(!item)return;
+    this.contentsDraft.update(rows=>[...rows,{order_item_id:item.id,product_name:String(item.product_name||'Unnamed product'),component_name:'',quantity:1}]);
+  }
+  setContentProduct(index:number,itemId:string){
+    const item=this.contentOrderItems().find(x=>x.id===itemId); if(!item)return;
+    this.contentsDraft.update(rows=>rows.map((x,i)=>i===index?{...x,order_item_id:item.id,product_name:String(item.product_name||'Unnamed product')}:x));
+  }
+  setContentField(index:number,key:'component_name'|'quantity',value:string){
+    this.contentsDraft.update(rows=>rows.map((x,i)=>i===index?{...x,[key]:key==='quantity'?Number(value):value}:x));
+  }
+  removeContentRow(index:number){this.contentsDraft.update(rows=>rows.filter((_,i)=>i!==index));}
+  async saveContents(){const pkg=this.contentsPackage();if(!pkg)return;if(await this.f.savePackageContents(pkg,this.contentsDraft()))this.contentsPackage.set(null);}
+  onContentsVisible(visible:boolean){if(!visible)this.contentsPackage.set(null);}
+  contentsSummary(pkg:ShipmentPackageRow){const rows=this.f.packageContents(pkg);return rows.length?rows.map(x=>`${x.component_name} ×${x.quantity}`).join(' · '):'not specified';}
+  unassignedNames(shipmentId:string){return this.f.unassignedOrderItems(shipmentId).map(x=>x.product_name||'Unnamed product').join(', ');}
   address(a:Record<string,unknown>){const x:any=a;return[x.addressLine,x.city,x.subdivision,x.postalCode,x.country].filter(Boolean).join(', ');}
   open(row:FulfilmentRow){
     this.selected.set(row);
@@ -278,5 +325,5 @@ export class FulfilmentComponent implements OnInit {
   n(v:string){return v===''?null:Number(v);}
   savePkg(pkg:ShipmentPackageRow,name:string,l:string,w:string,h:string,kg:string){void this.f.savePackage(pkg,{package_name:name.trim()||'Package '+pkg.package_no,length_mm:this.n(l),width_mm:this.n(w),height_mm:this.n(h),weight_kg:this.n(kg)});}
   async collect(row:FulfilmentRow){await this.f.markCollected(row);}
-  onDrawerVisible(visible:boolean){if(!visible)this.selected.set(null);}
+  onDrawerVisible(visible:boolean){if(!visible){this.selected.set(null);this.contentsPackage.set(null);}}
 }
