@@ -89,7 +89,13 @@ export class FulfilmentService {
   }
 
   private route(order:OrderRow):'Pickup'|'Shipping'{
-    return String(order.delivery_type||'Shipping').toLowerCase()==='pickup'?'Pickup':'Shipping';
+    const declared=String(`${order.delivery_type||''} ${order.delivery_title||''}`).toLowerCase();
+    if(declared.includes('pickup')||declared.includes('pick-up')||declared.includes('pick up'))return 'Pickup';
+    const deliveryLines=(order.wc_order_items??[]).filter(item=>this.isDeliveryItem(item));
+    const deliveryAmount=deliveryLines.reduce((sum,item)=>sum+Number(item.unit_price||0)*Math.max(1,Number(item.quantity||1)),0);
+    const shippingAmount=Number(order.shipping||0);
+    if(deliveryLines.length&&Math.abs(deliveryAmount)<0.005&&Math.abs(shippingAmount)<0.005)return 'Pickup';
+    return 'Shipping';
   }
 
   private normalise(v:string){
@@ -180,6 +186,7 @@ export class FulfilmentService {
     if(!sr.error)this.shipments.set((sr.data??[]) as ShipmentRow[]);
     if(!pr.error)this.shipmentPackages.set((pr.data??[]) as ShipmentPackageRow[]);
     await this.ensureReadyOrders();
+    await this.reconcileZeroValuePickupOrders();
     await this.ensureShipments();
     this.loading.set(false);
   }
@@ -197,6 +204,26 @@ export class FulfilmentService {
     this.rows.set([...(data??[]) as FulfilmentRow[],...this.rows()]);
   }
 
+  private async reconcileZeroValuePickupOrders(){
+    for(const row of this.rows()){
+      const order=this.orders.orders().find(o=>o.id===row.order_id);
+      if(!order||row.route!=='Shipping'||this.route(order)!=='Pickup'||row.status==='Fulfilled')continue;
+      const shipment=this.shipmentFor(row);
+      if(row.status==='Shipping Booked'||(shipment&&['Shipping Booked','In Transit','Delivered'].includes(shipment.status)))continue;
+      const payload={route:'Pickup',status:'Awaiting Pickup',pickup_email_status:'Pending integration',shipping_booked_at:null,updated_at:new Date().toISOString()};
+      const {error}=await this.supabase.client.from('wc_fulfilment').update(payload).eq('id',row.id);
+      if(error){this.error.set(error.message);continue;}
+      this.rows.update(rows=>rows.map(item=>item.id===row.id?{...item,...payload} as FulfilmentRow:item));
+      if(shipment){
+        const {error:deleteError}=await this.supabase.client.from('wc_shipments').delete().eq('id',shipment.id);
+        if(!deleteError){
+          this.shipments.update(rows=>rows.filter(item=>item.id!==shipment.id));
+          this.shipmentPackages.update(rows=>rows.filter(item=>item.shipment_id!==shipment.id));
+        }
+      }
+    }
+  }
+
   async ensureShipments(){
     const shippingRows=this.rows().filter(r=>r.route==='Shipping');
     const existing=new Set(this.shipments().map(s=>s.fulfilment_id));
@@ -207,7 +234,8 @@ export class FulfilmentService {
       this.shipments.set([...(data??[]) as ShipmentRow[],...this.shipments()]);
     }
     if(!await this.loadShippingProfiles())return;
-    for(const s of this.shipments()){
+    const activeShippingIds=new Set(shippingRows.map(row=>row.id));
+    for(const s of this.shipments().filter(shipment=>activeShippingIds.has(shipment.fulfilment_id))){
       await this.removeMismatchedProfilePackages(s);
       if(!this.shipmentPackages().some(p=>p.shipment_id===s.id))await this.seedPackages(s);
     }
