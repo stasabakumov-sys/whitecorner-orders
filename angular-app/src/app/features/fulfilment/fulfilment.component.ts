@@ -273,8 +273,8 @@ type BookingDraft = {
             <label class="wide">Company<input pInputText maxlength="19" [value]="bookingDraft().pickupCompanyName" (input)="setBookingField('pickupCompanyName',$any($event.target).value)" /></label>
             <label>Email *<input pInputText type="email" [value]="bookingDraft().pickupEmail" (input)="setBookingField('pickupEmail',$any($event.target).value)" /></label>
             <label>Phone *<input pInputText [value]="bookingDraft().pickupPhone" (input)="setBookingField('pickupPhone',$any($event.target).value)" /></label>
-            <label class="wide">Street address *<input pInputText [value]="bookingDraft().pickupAddress1" (input)="setBookingField('pickupAddress1',$any($event.target).value)" /></label>
-            <label class="wide">Address line 2<input pInputText [value]="bookingDraft().pickupAddress2" (input)="setBookingField('pickupAddress2',$any($event.target).value)" /></label>
+            <label class="wide">Street address *<input pInputText maxlength="19" [value]="bookingDraft().pickupAddress1" (input)="setBookingField('pickupAddress1',$any($event.target).value)" /></label>
+            <label class="wide">Address line 2<input pInputText maxlength="19" [value]="bookingDraft().pickupAddress2" (input)="setBookingField('pickupAddress2',$any($event.target).value)" /></label>
             <div class="booking-locality wide"><label>Suburb<input pInputText value="BURLEIGH HEADS" readonly /></label><label>State<input pInputText value="QLD" readonly /></label><label>Postcode<input pInputText value="4220" readonly /></label></div>
           </fieldset>
           <fieldset>
@@ -284,8 +284,8 @@ type BookingDraft = {
             <label class="wide">Company<input pInputText maxlength="19" [value]="bookingDraft().destinationCompanyName" (input)="setBookingField('destinationCompanyName',$any($event.target).value)" /></label>
             <label>Email *<input pInputText type="email" [value]="bookingDraft().destinationEmail" (input)="setBookingField('destinationEmail',$any($event.target).value)" /></label>
             <label>Phone *<input pInputText [value]="bookingDraft().destinationPhone" (input)="setBookingField('destinationPhone',$any($event.target).value)" /></label>
-            <label class="wide">Street address *<input pInputText [value]="bookingDraft().destinationAddress1" (input)="setBookingField('destinationAddress1',$any($event.target).value)" /></label>
-            <label class="wide">Address line 2<input pInputText [value]="bookingDraft().destinationAddress2" (input)="setBookingField('destinationAddress2',$any($event.target).value)" /></label>
+            <label class="wide">Street address *<input pInputText maxlength="19" [value]="bookingDraft().destinationAddress1" (input)="setBookingField('destinationAddress1',$any($event.target).value)" /></label>
+            <label class="wide">Address line 2<input pInputText maxlength="19" [value]="bookingDraft().destinationAddress2" (input)="setBookingField('destinationAddress2',$any($event.target).value)" /></label>
             <div class="booking-locality wide"><label>Suburb<input pInputText [value]="bookingDestinationSuburb(context.shipment)" readonly /></label><label>State<input pInputText [value]="bookingDestinationState(context.shipment)" readonly /></label><label>Postcode<input pInputText [value]="bookingDestinationPostcode(context.shipment)" readonly /></label></div>
           </fieldset>
         </div>
@@ -416,9 +416,19 @@ export class FulfilmentComponent implements OnInit {
   today(){return this.dateValue(new Date());}
   private nextCollectionDate(){const date=new Date();date.setDate(date.getDate()+1);while(date.getDay()===0||date.getDay()===6)date.setDate(date.getDate()+1);return this.dateValue(date);}
   private dateValue(date:Date){const year=date.getFullYear(),month=String(date.getMonth()+1).padStart(2,'0'),day=String(date.getDate()).padStart(2,'0');return `${year}-${month}-${day}`;}
-  private emptyBookingDraft():BookingDraft{return{pickupFirstName:'Stanislav',pickupLastName:'Abakumov',pickupCompanyName:'White Corner Group',pickupEmail:'info@whitecorner.com.au',pickupAddress1:'Unit 6, 1 Hornet Place',pickupAddress2:'',pickupPhone:'+61450787086',destinationFirstName:'',destinationLastName:'',destinationCompanyName:'',destinationEmail:'',destinationAddress1:'',destinationAddress2:'',destinationPhone:'',collectionDate:'',pickupTimeWindow:'9am to 5pm',parcelContent:'',specialInstructions:'',authorityToLeave:false,noPrinter:false,accepted:false};}
+  private emptyBookingDraft():BookingDraft{return{pickupFirstName:'Stanislav',pickupLastName:'Abakumov',pickupCompanyName:'White Corner Group',pickupEmail:'info@whitecorner.com.au',pickupAddress1:'1 Hornet Place',pickupAddress2:'Unit 6',pickupPhone:'+61450787086',destinationFirstName:'',destinationLastName:'',destinationCompanyName:'',destinationEmail:'',destinationAddress1:'',destinationAddress2:'',destinationPhone:'',collectionDate:'',pickupTimeWindow:'9am to 5pm',parcelContent:'',specialInstructions:'',authorityToLeave:false,noPrinter:false,accepted:false};}
   private splitName(value:string|undefined|null){const parts=String(value||'').trim().split(/\s+/).filter(Boolean);return{firstName:parts.length>1?parts.slice(0,-1).join(' '):(parts[0]||''),lastName:parts.length>1?(parts.at(-1)||''):''};}
   private cleanPhone(value:string|undefined|null){const raw=String(value||'').trim();const digits=raw.replace(/\D/g,'');return raw.startsWith('+')?`+${digits}`:digits;}
+  private courierAddressLines(address1:string,address2:string){
+    const first=String(address1||'').trim().replace(/\s+/g,' '),second=String(address2||'').trim().replace(/\s+/g,' ');
+    if(first.length<=19&&second.length<=19)return{address1:first,address2:second};
+    const lines=['',''];
+    for(const word of [first,second].filter(Boolean).join(' ').split(/\s+/)){
+      const index=(lines[0]&&`${lines[0]} ${word}`.length>19)?1:0;
+      lines[index]=(lines[index]?`${lines[index]} `:'')+word;
+    }
+    return{address1:lines[0].slice(0,19),address2:lines[1].slice(0,19)};
+  }
   private addressPart(value:any){if(!value)return'';if(typeof value==='string')return value.replace(/^AU-/i,'');return String(value.code||value.shortName||value.name||'').replace(/^AU-/i,'');}
   bookingDestinationSuburb(shipment:ShipmentRow){return String(shipment.quote_request?.destinationSuburb||this.destination().suburb||'');}
   bookingDestinationState(shipment:ShipmentRow){return String(shipment.quote_request?.destinationState||this.destination().state||'');}
@@ -432,8 +442,9 @@ export class FulfilmentComponent implements OnInit {
   openBooking(row:FulfilmentRow,shipment:ShipmentRow,order:OrderRow){
     if(shipment.status!=='Quote Selected'||!shipment.selected_quote_id)return;
     const address:any=order.delivery_address||{},name=this.splitName(order.customer_name);
+    const destination=this.courierAddressLines(String(address.addressLine||address.addressLine1||address.streetAddress||''),String(address.addressLine2||address.addressLineSecondary||''));
     this.bookingContext.set({row,shipment,order});
-    this.bookingDraft.set({...this.emptyBookingDraft(),destinationFirstName:name.firstName,destinationLastName:name.lastName,destinationCompanyName:String(order.company||'').trim().slice(0,19),destinationEmail:String(order.buyer_email||''),destinationAddress1:String(address.addressLine||address.addressLine1||address.streetAddress||''),destinationAddress2:String(address.addressLine2||address.addressLineSecondary||''),destinationPhone:this.cleanPhone(order.phone),collectionDate:this.nextCollectionDate(),parcelContent:this.parcelContents(shipment)});
+    this.bookingDraft.set({...this.emptyBookingDraft(),destinationFirstName:name.firstName,destinationLastName:name.lastName,destinationCompanyName:String(order.company||'').trim().slice(0,19),destinationEmail:String(order.buyer_email||''),destinationAddress1:destination.address1,destinationAddress2:destination.address2,destinationPhone:this.cleanPhone(order.phone),collectionDate:this.nextCollectionDate(),parcelContent:this.parcelContents(shipment)});
     this.bookingDialogOpen.set(true);
   }
   onBookingVisible(visible:boolean){if(!visible&&this.f.bookingShipmentId()===null){this.bookingDialogOpen.set(false);this.bookingContext.set(null);}}
@@ -447,8 +458,8 @@ export class FulfilmentComponent implements OnInit {
     const insurance=this.insuranceSelection(context.order);if(!insurance){this.f.error.set('Insurance cover is insufficient for this order. Booking was not created.');return;}
     const total=this.money(this.selectedQuoteTotal(context.shipment,context.order));
     if(!window.confirm(`Create this Fast Courier booking and charge ${total} to the saved payment method?`))return;
-    const clean=(value:string)=>value.trim(),company=(value:string)=>clean(value).slice(0,19);
-    const details:FastCourierBookingDetails={quoteId:String(context.shipment.selected_quote_id),senderType:'sender',pickupFirstName:clean(draft.pickupFirstName),pickupLastName:clean(draft.pickupLastName),pickupCompanyName:company(draft.pickupCompanyName),pickupEmail:clean(draft.pickupEmail),pickupAddress1:clean(draft.pickupAddress1),pickupAddress2:clean(draft.pickupAddress2),pickupPhone:this.cleanPhone(draft.pickupPhone),destinationFirstName:clean(draft.destinationFirstName),destinationLastName:clean(draft.destinationLastName),destinationCompanyName:company(draft.destinationCompanyName),destinationEmail:clean(draft.destinationEmail),destinationAddress1:clean(draft.destinationAddress1),destinationAddress2:clean(draft.destinationAddress2),destinationPhone:this.cleanPhone(draft.destinationPhone),collectionDate:draft.collectionDate,pickupTimeWindow:draft.pickupTimeWindow,parcelContent:clean(draft.parcelContent),specialInstructions:clean(draft.specialInstructions),valueOfContent:this.goodsValueInclGst(context.order),authorityToLeave:draft.authorityToLeave,noPrinter:draft.noPrinter,extendedLiability:String(insurance.tier),insuranceValue:`$${insurance.insuranceValue}`,insuranceFee:`$${insurance.insuranceFee.toFixed(2)}`,acceptInsuranceConditions:true,acceptTermConditions:true,acceptAttachment:true,acceptNoDangerousGoods:true,acceptReadFinancialServiceGuide:true,emailForDocuments:clean(draft.pickupEmail),additionalEmailsForDocuments:draft.destinationEmail.trim()&&draft.destinationEmail.trim()!==draft.pickupEmail.trim()?[{email:draft.destinationEmail.trim()}]:[]};
+    const clean=(value:string)=>value.trim(),limited=(value:string)=>clean(value).slice(0,19);
+    const details:FastCourierBookingDetails={quoteId:String(context.shipment.selected_quote_id),senderType:'sender',pickupFirstName:clean(draft.pickupFirstName),pickupLastName:clean(draft.pickupLastName),pickupCompanyName:limited(draft.pickupCompanyName),pickupEmail:clean(draft.pickupEmail),pickupAddress1:limited(draft.pickupAddress1),pickupAddress2:limited(draft.pickupAddress2),pickupPhone:this.cleanPhone(draft.pickupPhone),destinationFirstName:clean(draft.destinationFirstName),destinationLastName:clean(draft.destinationLastName),destinationCompanyName:limited(draft.destinationCompanyName),destinationEmail:clean(draft.destinationEmail),destinationAddress1:limited(draft.destinationAddress1),destinationAddress2:limited(draft.destinationAddress2),destinationPhone:this.cleanPhone(draft.destinationPhone),collectionDate:draft.collectionDate,pickupTimeWindow:draft.pickupTimeWindow,parcelContent:clean(draft.parcelContent),specialInstructions:clean(draft.specialInstructions),valueOfContent:this.goodsValueInclGst(context.order),authorityToLeave:draft.authorityToLeave,noPrinter:draft.noPrinter,extendedLiability:String(insurance.tier),insuranceValue:`$${insurance.insuranceValue}`,insuranceFee:`$${insurance.insuranceFee.toFixed(2)}`,acceptInsuranceConditions:true,acceptTermConditions:true,acceptAttachment:true,acceptNoDangerousGoods:true,acceptReadFinancialServiceGuide:true,emailForDocuments:clean(draft.pickupEmail),additionalEmailsForDocuments:draft.destinationEmail.trim()&&draft.destinationEmail.trim()!==draft.pickupEmail.trim()?[{email:draft.destinationEmail.trim()}]:[]};
     if(await this.f.bookShipment(context.row,details)){this.bookingDialogOpen.set(false);this.bookingContext.set(null);}
   }
   n(v:string){return v===''?null:Number(v);}
