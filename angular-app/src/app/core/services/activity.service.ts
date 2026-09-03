@@ -7,6 +7,7 @@ import { OrderActivityRow, OrderRow } from '../models/order.models';
 export class ActivityService {
   readonly rows = signal<OrderActivityRow[]>([]);
   private loaded = false;
+  private readonly fulfilledNote = 'Order status: FULFILLED';
 
   constructor(
     private readonly supabase: SupabaseService,
@@ -15,14 +16,44 @@ export class ActivityService {
 
   async load(): Promise<void> {
     if (this.loaded) return;
-    const { data, error } = await this.supabase.client
-      .from('wc_order_activity')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (!error) {
-      this.rows.set((data ?? []) as OrderActivityRow[]);
-      this.loaded = true;
+    const [activityResult, fulfilmentResult] = await Promise.all([
+      this.supabase.client
+        .from('wc_order_activity')
+        .select('*')
+        .order('created_at', { ascending: false }),
+      this.supabase.client
+        .from('wc_fulfilment')
+        .select('order_id,fulfilled_at')
+        .eq('status', 'Fulfilled'),
+    ]);
+    if (activityResult.error) return;
+
+    let rows = (activityResult.data ?? []) as OrderActivityRow[];
+    const notedOrderIds = new Set(
+      rows
+        .filter(row => row.activity_type === 'note' && row.message === this.fulfilledNote)
+        .map(row => row.order_id),
+    );
+    const missingNotes = (fulfilmentResult.data ?? [])
+      .filter(row => !notedOrderIds.has(String(row.order_id)))
+      .map(row => ({
+        order_id: String(row.order_id),
+        activity_type: 'note' as const,
+        message: this.fulfilledNote,
+        created_by: 'Fulfilment',
+        created_at: row.fulfilled_at || new Date().toISOString(),
+      }));
+
+    if (missingNotes.length) {
+      const { data: inserted } = await this.supabase.client
+        .from('wc_order_activity')
+        .insert(missingNotes)
+        .select();
+      if (inserted?.length) rows = [...inserted as OrderActivityRow[], ...rows];
     }
+
+    this.rows.set(rows);
+    this.loaded = true;
   }
 
   async addNote(orderId: string, message: string): Promise<void> {
@@ -39,6 +70,24 @@ export class ActivityService {
       .single();
     if (error) throw error;
     this.rows.update((rows) => [data as OrderActivityRow, ...rows]);
+  }
+
+  async addFulfilledNote(orderId: string, createdAt: string): Promise<void> {
+    if (this.rows().some(row => row.order_id === orderId && row.message === this.fulfilledNote)) return;
+    const payload = {
+      order_id: orderId,
+      activity_type: 'note',
+      message: this.fulfilledNote,
+      created_by: 'Fulfilment',
+      created_at: createdAt,
+    };
+    const { data, error } = await this.supabase.client
+      .from('wc_order_activity')
+      .insert(payload)
+      .select()
+      .single();
+    if (error) throw error;
+    this.rows.update(rows => [data as OrderActivityRow, ...rows]);
   }
 
   eventsFor(order: OrderRow): OrderActivityRow[] {
