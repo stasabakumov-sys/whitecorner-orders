@@ -31,6 +31,19 @@ function deliveryType(order: any) {
   const logistics = info?.logistics || {};
   const title = String(info?.title || "").toLowerCase();
   if (logistics?.pickupDetails || title.includes("pickup") || title.includes("pick-up")) return "Pickup";
+
+  // Wix can keep a zero-value "Delivery" custom item on pickup orders. The
+  // label alone is therefore not a reliable shipping signal: when both that
+  // line and the order shipping total are zero, treat the order as pickup.
+  const deliveryLines = (order?.lineItems || []).filter((item: any) =>
+    /^(delivery|shipping)(\s+(fee|charge))?$/i.test(String(item?.productName?.original || "").trim())
+  );
+  const shippingAmount = num(order?.priceSummary?.shipping) || 0;
+  const deliveryAmount = deliveryLines.reduce((sum: number, item: any) => {
+    const quantity = Math.max(1, Number(item?.quantity || 1));
+    return sum + (num(item?.price) || 0) * quantity;
+  }, 0);
+  if (deliveryLines.length && Math.abs(shippingAmount) < 0.005 && Math.abs(deliveryAmount) < 0.005) return "Pickup";
   return "Shipping";
 }
 
