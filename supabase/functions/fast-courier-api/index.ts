@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +14,57 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 const text = (value: unknown) => String(value ?? '').trim();
 const positive = (value: unknown) => Number.isFinite(Number(value)) && Number(value) > 0;
+const documentBucket = 'shipping-documents';
+
+async function courierJson(url: string, apiKey: string, init: RequestInit = {}) {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      'Secret-Key': apiKey,
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init.headers || {}),
+    },
+  });
+  const raw = await response.text();
+  let result: any;
+  try { result = raw ? JSON.parse(raw) : {}; }
+  catch { result = { status: false, message: raw || 'Invalid response from Fast Courier.' }; }
+  return { response, result };
+}
+
+async function storeCourierDocuments(orderId: string, documents: Record<string, unknown> | null | undefined) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceRoleKey || !documents) return {};
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const { error: bucketError } = await supabase.storage.createBucket(documentBucket, { public: false });
+  if (bucketError && !/already exists/i.test(bucketError.message)) throw bucketError;
+  const stored: Record<string, { path: string }> = {};
+  for (const kind of ['label', 'invoice', 'manifest']) {
+    const source = text(documents[kind]);
+    if (!source) continue;
+    const response = await fetch(source);
+    if (!response.ok) continue;
+    const contentType = response.headers.get('content-type') || 'application/pdf';
+    const extension = contentType.includes('pdf') ? 'pdf' : 'bin';
+    const path = `fast-courier/${orderId}/${kind}.${extension}`;
+    const { error } = await supabase.storage.from(documentBucket).upload(path, await response.arrayBuffer(), { contentType, upsert: true });
+    if (!error) stored[kind] = { path };
+  }
+  return stored;
+}
+
+async function signedDocumentUrl(path: string) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceRoleKey) throw new Error('Document storage is not configured.');
+  if (!path.startsWith('fast-courier/') || path.includes('..')) throw new Error('Invalid document path.');
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const { data, error } = await supabase.storage.from(documentBucket).createSignedUrl(path, 300);
+  if (error) throw error;
+  return data.signedUrl;
+}
 
 function validateQuote(payload: any) {
   const required = ['pickupSuburb', 'pickupState', 'pickupPostcode', 'destinationSuburb', 'destinationState', 'destinationPostcode'];
@@ -77,7 +129,8 @@ serve(async (req) => {
   try {
     const body = await req.json();
     if (body?.action === 'address-type') return await detectAddressType(body.payload);
-    if (!['quotes', 'insurance-list'].includes(body?.action)) return json({ status: false, message: 'Unsupported Fast Courier action.' }, 400);
+    if (!['quotes', 'insurance-list', 'save-order-details', 'booking', 'order-status', 'document-url'].includes(body?.action)) return json({ status: false, message: 'Unsupported Fast Courier action.' }, 400);
+    if (body.action === 'document-url') return json({ status: true, url: await signedDocumentUrl(text(body.path)) });
     // Fast Courier credentials are loaded from Supabase runtime secrets.
     const apiKey = Deno.env.get('FAST_COURIER_API_KEY');
     if (!apiKey) return json({ status: false, message: 'Fast Courier is not configured.' }, 503);
@@ -92,6 +145,26 @@ serve(async (req) => {
       let result: any;
       try { result = raw ? JSON.parse(raw) : {}; } catch { result = { status: false, message: raw || 'Invalid response from Fast Courier.' }; }
       if (!response.ok) return json({ ...result, status: false, upstreamStatus: response.status }, response.status);
+      return json(result);
+    }
+
+    if (['save-order-details', 'booking', 'order-status'].includes(body.action)) {
+      const orderId = text(body.orderId);
+      if (!/^[A-Za-z0-9_-]+$/.test(orderId)) return json({ status: false, message: 'A valid Fast Courier orderId is required.' }, 422);
+      const route = body.action === 'save-order-details'
+        ? `/api/save-order-details/${encodeURIComponent(orderId)}`
+        : body.action === 'booking'
+          ? `/api/order-booking/${encodeURIComponent(orderId)}`
+          : `/api/order-status/${encodeURIComponent(orderId)}`;
+      const init: RequestInit = body.action === 'order-status'
+        ? { method: 'GET' }
+        : { method: 'POST', ...(body.action === 'save-order-details' ? { body: JSON.stringify(body.payload || {}) } : {}) };
+      const { response, result } = await courierJson(`${baseUrl}${route}`, apiKey, init);
+      if (!response.ok) return json({ ...result, status: false, upstreamStatus: response.status }, response.status);
+      if (body.action === 'order-status' && result?.documents) {
+        try { result.storedDocuments = await storeCourierDocuments(orderId, result.documents); }
+        catch (storageError) { result.documentStorageError = storageError instanceof Error ? storageError.message : 'Documents could not be stored.'; }
+      }
       return json(result);
     }
 
