@@ -6,6 +6,9 @@ on:
       - '.github/workflows/build-angular2-preview.yml'
 permissions:
   contents: write
+concurrency:
+  group: angular2-preview-main
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,5 +38,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add angular2
           git commit -m "Publish Angular2 preview" || exit 0
+          git fetch origin main
+          git rebase origin/main
           git push
 # email-iteration5-build-trigger-20260902
