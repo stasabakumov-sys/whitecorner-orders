@@ -207,6 +207,7 @@ export class FastCourierService {
   }
 
   private responseError(body: any, fallback: string) {
+    // Fast Courier may hide additional validation messages behind "and more errors".
     const details = body?.errors && typeof body.errors === 'object'
       ? Object.values(body.errors).flatMap((value: any) => Array.isArray(value) ? value : [value]).map(String).filter(Boolean)
       : [];
