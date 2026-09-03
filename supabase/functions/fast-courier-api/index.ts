@@ -78,7 +78,8 @@ serve(async (req) => {
     const body = await req.json();
     if (body?.action === 'address-type') return await detectAddressType(body.payload);
     if (body?.action !== 'quotes') return json({ status: false, message: 'Unsupported Fast Courier action.' }, 400);
-    // Fast Courier credentials are loaded from Supabase runtime secrets.\n    const apiKey = Deno.env.get('FAST_COURIER_API_KEY');
+    // Fast Courier credentials are loaded from Supabase runtime secrets.
+    const apiKey = Deno.env.get('FAST_COURIER_API_KEY');
     if (!apiKey) return json({ status: false, message: 'Fast Courier is not configured.' }, 503);
     const validationError = validateQuote(body.payload);
     if (validationError) return json({ status: false, message: validationError }, 422);
