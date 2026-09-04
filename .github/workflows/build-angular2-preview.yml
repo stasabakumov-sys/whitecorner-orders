@@ -27,7 +27,8 @@ jobs:
       - name: Build Angular app
         run: |
           cd angular-app
-          npm ci --legacy-peer-deps
+          npm ci
+          npm run test:ci
           npm run build -- --base-href /whitecorner-orders/angular2/
       - name: Publish clean preview path
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
