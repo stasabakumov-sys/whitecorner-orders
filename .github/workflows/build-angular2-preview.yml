@@ -1,13 +1,20 @@
 name: Build Angular2 preview
 on:
   push:
+    branches:
+      - main
+      - 'codex/**'
+    paths:
+      - 'angular-app/**'
+      - '.github/workflows/build-angular2-preview.yml'
+  pull_request:
     paths:
       - 'angular-app/**'
       - '.github/workflows/build-angular2-preview.yml'
 permissions:
   contents: write
 concurrency:
-  group: angular2-preview-main
+  group: angular2-preview-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   build:
@@ -23,6 +30,7 @@ jobs:
           npm ci --legacy-peer-deps
           npm run build -- --base-href /whitecorner-orders/angular2/
       - name: Publish clean preview path
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
@@ -37,7 +45,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add angular2
-          git commit -m "Publish Angular2 preview" || exit 0
+          git commit -m "Publish Angular2 preview [skip ci]" || exit 0
           git fetch origin main
           git rebase origin/main
           git push
