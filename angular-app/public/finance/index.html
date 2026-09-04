@@ -267,6 +267,9 @@ body.embedded{background:var(--surface-ground);color:var(--text-color);font-size
 .embedded #incomeMain>.card:first-child{display:flex;align-items:center;min-height:54px}
 .embedded #assetsMain>.card>.card{padding:0;overflow:auto}
 .embedded #assetsSubtabs{margin:0 0 14px}
+.category-list{display:flex;flex-wrap:wrap;gap:6px}
+.category-chip{display:inline-flex;align-items:center;border:1px solid #d0d5dd;border-radius:999px;background:#f9fafb;color:#344054;padding:4px 9px;font-size:11px;line-height:1.2}
+.category-count{color:#667085;font-size:11px;white-space:nowrap}
 .embedded .overview-group td{background:#f2f4f7;font-weight:700}.embedded .overview-child td:first-child{padding-left:34px}
 .embedded ::-webkit-scrollbar{width:9px;height:9px}.embedded ::-webkit-scrollbar-track{background:transparent}.embedded ::-webkit-scrollbar-thumb{background:#d0d5dd;border:2px solid transparent;background-clip:padding-box;border-radius:999px}
 @media(max-width:1100px){.embedded .stats{grid-template-columns:repeat(3,minmax(140px,1fr))}.embedded .desc{min-width:280px}}
@@ -465,8 +468,9 @@ body.embedded{background:var(--surface-ground);color:var(--text-color);font-size
       
 <div id="assetTaxAttrView">
   <div class="card">
+    <p class="note" style="margin:0 0 12px">Business categories inherit the tax attribute shown here when expenses are classified.</p>
     <table>
-      <thead><tr><th>Tax Attribute</th><th>Included Business Categories</th></tr></thead>
+      <thead><tr><th>Tax Attribute</th><th>Business Categories</th><th class="amount">Categories</th></tr></thead>
       <tbody id="assetTaxAttrBody"></tbody>
     </table>
   </div>
@@ -1624,7 +1628,10 @@ function renderTaxAttributeDirect(){
     const cats=(groups[attr]||[]).sort((a,b)=>a.localeCompare(b));
     return `<tr>
       <td><strong>${esc(attr)}</strong></td>
-      <td>${cats.length?cats.map(c=>esc(c)).join(', '):'—'}</td>
+      <td>${cats.length
+        ? `<div class="category-list">${cats.map(c=>`<span class="category-chip">${esc(c)}</span>`).join('')}</div>`
+        : '<span class="note">No business categories assigned</span>'}</td>
+      <td class="amount category-count">${cats.length}</td>
     </tr>`;
   }).join('');
 }
