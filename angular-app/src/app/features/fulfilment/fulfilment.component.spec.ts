@@ -56,4 +56,19 @@ describe('FulfilmentComponent', () => {
     expect(row?.textContent).toContain('Standard Delivery');
     expect(service.load).toHaveBeenCalledOnce();
   });
+
+  it('moves fulfilled deliveries below active orders and uses the persisted status', () => {
+    fixture = TestBed.createComponent(FulfilmentComponent);
+    const completed = { ...delivery, id: 'completed', status: 'Fulfilled' as const };
+    rows.set([completed, delivery]);
+    expect(fixture.componentInstance.delivery().map(row => row.id)).toEqual([delivery.id, 'completed']);
+    expect(fixture.componentInstance.displayStatus(completed)).toBe('Fulfilled');
+  });
+
+  it('refreshes an open drawer when automatic synchronization updates the row', () => {
+    fixture = TestBed.createComponent(FulfilmentComponent);
+    fixture.componentInstance.selected.set(delivery);
+    rows.set([{ ...delivery, status: 'Fulfilled' }]);
+    expect(fixture.componentInstance.currentSelected()?.status).toBe('Fulfilled');
+  });
 });

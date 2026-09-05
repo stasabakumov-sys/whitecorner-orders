@@ -14,8 +14,8 @@ export class ActivityService {
     private readonly auth: AuthService,
   ) {}
 
-  async load(): Promise<void> {
-    if (this.loaded) return;
+  async load(force = false): Promise<void> {
+    if (this.loaded && !force) return;
     const [activityResult, fulfilmentResult] = await Promise.all([
       this.supabase.client
         .from('wc_order_activity')
