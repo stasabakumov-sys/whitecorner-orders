@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { syncShippingFulfillment } from "./shipping-fulfillment.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,13 +87,28 @@ Deno.serve(async (req) => {
       "wix-site-id": wixSiteId,
     };
 
+    if (requestBody?.action === "fulfillShipping") {
+      // Gateway JWT verification remains enabled; also require a user session.
+      const jwt = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') || '';
+      const { data: user, error: authError } = await db.auth.getUser(jwt);
+      if (authError || !user.user) return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: jsonHeaders });
+      const orderId = String(requestBody.orderId || '');
+      if (!/^[0-9a-f-]{36}$/i.test(orderId)) return new Response(JSON.stringify({ error: 'Valid orderId is required' }), { status: 400, headers: jsonHeaders });
+      try {
+        const result = await syncShippingFulfillment(db, orderId, wixHeaders);
+        return new Response(JSON.stringify(result), { headers: jsonHeaders });
+      } catch (error) {
+        return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Shipping synchronization failed' }), { status: 409, headers: jsonHeaders });
+      }
+    }
+
     if (requestBody?.action === "markFulfilled") {
       const localOrderId = String(requestBody?.orderId || "").trim();
       if (!localOrderId) return new Response(JSON.stringify({ error: "orderId is required" }), { status: 400, headers: jsonHeaders });
 
       const [{ data: order, error: orderError }, { data: localFulfilment, error: fulfilmentError }] = await Promise.all([
         db.from("wc_orders").select("id,wix_order_id,order_number,raw_order").eq("id", localOrderId).maybeSingle(),
-        db.from("wc_fulfilment").select("id,status").eq("order_id", localOrderId).eq("status", "Fulfilled").maybeSingle(),
+        db.from("wc_fulfilment").select("id,status").eq("order_id", localOrderId).eq("route", "Pickup").eq("status", "Fulfilled").maybeSingle(),
       ]);
       if (orderError) throw orderError;
       if (fulfilmentError) throw fulfilmentError;

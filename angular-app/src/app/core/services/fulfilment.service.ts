@@ -19,6 +19,12 @@ export interface FulfilmentRow {
   updated_at?: string|null;
 }
 
+export interface ShippingFulfillmentSync {
+  order_id: string;
+  status: 'pending'|'syncing'|'uncertain'|'failed'|'synced';
+  error: string|null;
+}
+
 export interface ShipmentRow {
   id:string;
   fulfilment_id:string;
@@ -69,6 +75,8 @@ export class FulfilmentService {
   readonly loading = signal(false);
   readonly quotingShipmentId = signal<string|null>(null);
   readonly bookingShipmentId = signal<string|null>(null);
+  readonly syncingOrderIds = signal<string[]>([]);
+  readonly shippingSync = signal<ShippingFulfillmentSync[]>([]);
   readonly checkingBookingShipmentId = signal<string|null>(null);
   readonly savingProfileShipmentId = signal<string|null>(null);
   readonly shippingProducts = signal<ShippingProduct[]>([]);
@@ -187,6 +195,7 @@ export class FulfilmentService {
     this.rows.set((fr.data??[]) as FulfilmentRow[]);
     if(!sr.error)this.shipments.set((sr.data??[]) as ShipmentRow[]);
     if(!pr.error)this.shipmentPackages.set((pr.data??[]) as ShipmentPackageRow[]);
+    await this.loadShippingSync();
     await this.ensureReadyOrders();
     await this.reconcileZeroValuePickupOrders();
     await this.ensureShipments();
@@ -380,6 +389,7 @@ export class FulfilmentService {
   }
 
   async markCollected(row:FulfilmentRow){
+    if(row.route!=='Pickup'){this.error.set('Only pickup orders can be marked collected.');return false;}
     const now=new Date().toISOString();
     const payload={status:'Fulfilled' as const,fulfilled_at:now,updated_at:now};
     const {data:fulfilment,error:fulfilmentError}=await this.supabase.client.from('wc_fulfilment').update(payload).eq('id',row.id).eq('route','Pickup').select('id').maybeSingle();
@@ -473,31 +483,63 @@ export class FulfilmentService {
 
   async bookShipment(row:FulfilmentRow, details:FastCourierBookingDetails){
     const shipment=this.shipmentFor(row);
-    if(!shipment||shipment.status!=='Quote Selected'||!shipment.courier_order_id||!shipment.selected_quote){
+    if(row.route!=='Shipping'||!shipment||shipment.status!=='Quote Selected'||!shipment.courier_order_id||!shipment.selected_quote){
       this.error.set('Select a courier quote before booking.');return false;
     }
     if(this.bookingShipmentId())return false;
     this.error.set('');this.bookingShipmentId.set(shipment.id);
     try{
+      const {error:syncSetupError}=await this.supabase.client.from('wc_shipping_fulfillment_sync').select('order_id').eq('order_id',row.order_id);
+      if(syncSetupError)throw new Error('Shipping synchronization is not available. Install the shipping sync migration before booking.');
       await this.fastCourier.saveOrderDetails(shipment.courier_order_id,details);
       await this.fastCourier.bookOrder(shipment.courier_order_id);
       const now=new Date().toISOString();
       const selectedQuote={...(shipment.selected_quote as any),booking:{details,initiatedAt:now,status:null}};
       const shipmentPayload={status:'Shipping Booked' as const,selected_quote:selectedQuote,updated_at:now};
       const fulfilmentPayload={status:'Shipping Booked' as const,shipping_booked_at:now,updated_at:now};
-      const [{error:shipmentError},{error:fulfilmentError}]=await Promise.all([
-        this.supabase.client.from('wc_shipments').update(shipmentPayload).eq('id',shipment.id),
-        this.supabase.client.from('wc_fulfilment').update(fulfilmentPayload).eq('id',row.id),
-      ]);
-      if(shipmentError)throw shipmentError;
-      if(fulfilmentError)throw fulfilmentError;
+      // Booking already charged the account. Disable another booking even if
+      // persisting its result fails; that requires reconciliation, not rebooking.
       this.shipments.update(xs=>xs.map(x=>x.id===shipment.id?{...x,...shipmentPayload}:x));
+      const {error:saveError}=await this.supabase.client.rpc('wc_save_shipping_booking',{
+        p_shipment_id:shipment.id,p_booking:selectedQuote.booking,
+      });
+      if(saveError)throw new Error('Shipping was booked, but its local record could not be saved. Do not book again; request reconciliation.');
       this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,...fulfilmentPayload}:x));
+      await this.syncShippingFulfillment({...row,...fulfilmentPayload});
       void this.refreshBookingStatus(shipment.id,true);
       return true;
     }catch(error:any){
       this.error.set(error?.message||'Fast Courier booking failed.');return false;
     }finally{this.bookingShipmentId.set(null);}
+  }
+
+  async loadShippingSync(){
+    const {data,error}=await this.supabase.client.from('wc_shipping_fulfillment_sync').select('order_id,status,error');
+    if(error){this.error.set('Could not load shipping synchronization status. Check that the shipping sync migration is installed.');return;}
+    this.shippingSync.set((data??[]) as ShippingFulfillmentSync[]);
+  }
+
+  syncFor(row:FulfilmentRow){return this.shippingSync().find(sync=>sync.order_id===row.order_id);}
+
+  async syncShippingFulfillment(row:FulfilmentRow){
+    if(row.route!=='Shipping'||this.syncingOrderIds().includes(row.order_id))return false;
+    this.syncingOrderIds.update(ids=>[...ids,row.order_id]);
+    this.error.set('');
+    try{
+      await this.orders.fulfillShippingInWix(row.order_id);
+      // Both statuses and the Wix note have already committed together on the server.
+      const {data,error}=await this.supabase.client.from('wc_fulfilment').select('*').eq('id',row.id).single();
+      if(error||!data)throw new Error('Wix synchronized, but the local view could not refresh. Reload the page.');
+      this.rows.update(rows=>rows.map(item=>item.id===row.id?data as FulfilmentRow:item));
+      await this.activity.load(true);
+      return true;
+    }catch(error:any){
+      this.error.set(error?.message||'Shipping is booked; Wix synchronization needs a retry.');
+      return false;
+    }finally{
+      try{await this.loadShippingSync();}
+      finally{this.syncingOrderIds.update(ids=>ids.filter(id=>id!==row.order_id));}
+    }
   }
 
   async refreshBookingStatus(shipmentId:string,scheduleMore=false,remainingAttempts=12){

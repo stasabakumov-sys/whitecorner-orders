@@ -53,7 +53,7 @@ type BookingDraft = {
     </section>
 
     <p-drawer [visible]="selected() !== null" (visibleChange)="onDrawerVisible($event)" position="right" [modal]="true" [dismissible]="true" [blockScroll]="true" [style]="{ width: 'min(980px, 96vw)' }">
-      @if (selected(); as row) {
+      @if (currentSelected(); as row) {
         @if (f.orderFor(row); as o) {
           <ng-template pTemplate="header">
             <div class="drawer-title"><div><b class="order-number">#{{ o.order_number }}</b><div>{{ o.customer_name || '—' }}</div><small>{{ o.company }}</small></div><p-tag [value]="displayStatus(row)" [severity]="statusSeverity(row)" /></div>
@@ -148,7 +148,13 @@ type BookingDraft = {
                     </div>
                     @if (!f.shipmentComplete(shipment.id)) { <div class="muted hint">Complete L × W × H and weight for every package before approval.</div> }
                     @else if (shipment.status !== 'Packaging Review') { <div class="done">Packing list approved ✓</div><div class="muted hint">Changing any package will require approval and fresh quotes again.</div> }
-                  } @else if (row.status === 'Shipping Booked') { <div class="done">Shipping booked ✓</div><div class="muted hint">Future: In Transit → Delivered → Fulfilled from courier tracking.</div> }
+                  } @else if (row.status === 'Shipping Booked') {
+                    <div class="done">Shipping booked ✓</div>
+                    <div class="callout warning">{{ f.syncFor(row)?.error || 'Wix fulfillment synchronization is pending.' }}</div>
+                    <p-button label="Retry Wix synchronization" [loading]="f.syncingOrderIds().includes(row.order_id)" (onClick)="f.syncShippingFulfillment(row)" />
+                  } @else if (row.status === 'Fulfilled') {
+                    <div class="done">Fulfilled ✓</div><div class="wix-sync-ok">Wix: FULFILLED ✓</div>
+                  }
                 } @else { <div class="callout warning">Shipment record is being prepared.</div> }
               </section>
 
@@ -313,6 +319,7 @@ export class FulfilmentComponent implements OnInit {
   readonly String = String;
   tab = signal<'Pickup' | 'Delivery'>('Delivery');
   selected = signal<FulfilmentRow | null>(null);
+  currentSelected = computed(() => this.f.rows().find(row => row.id === this.selected()?.id) ?? this.selected());
   pickupAddress = signal({suburb:'BURLEIGH HEADS',state:'QLD',postcode:'4220'});
   destination = signal({suburb:'',state:'',postcode:''});
   destinationBuildingType = signal<'commercial'|'residential'>('residential');

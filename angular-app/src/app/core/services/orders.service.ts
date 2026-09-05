@@ -96,4 +96,18 @@ export class OrdersService {
     this.orders.update(rows => rows.map(order => order.id === orderId ? { ...order, fulfillment_status: 'FULFILLED', raw_order: { ...(order.raw_order ?? {}), fulfillmentStatus: 'FULFILLED' } } : order));
     return data;
   }
+
+  async fulfillShippingInWix(orderId: string) {
+    const { data, error } = await this.supabase.client.functions.invoke(environment.wixSyncFunction, {
+      body: { action: 'fulfillShipping', orderId },
+    });
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null);
+      throw new Error(detail?.error || 'Shipping is booked, but Wix synchronization could not be confirmed. Retry synchronization.');
+    }
+    if (!data?.ok) throw new Error(data?.error || 'Wix synchronization was not confirmed.');
+    this.orders.update(rows => rows.map(order => order.id === orderId
+      ? { ...order, fulfillment_status: 'FULFILLED', raw_order: { ...(order.raw_order ?? {}), fulfillmentStatus: 'FULFILLED' } }
+      : order));
+  }
 }
