@@ -36,7 +36,9 @@ Wix failure leaves the shipment booked and the order visibly awaiting synchroniz
 
 The audited [rename manifest](audits/migrations-20260905/rename-manifest.json) maps the original filenames to unique 14-digit timestamps. Eleven files were renamed without changing SQL; the confirmed-finance migration already had a unique timestamp. The manifest hashes record the audited working-copy bytes, including their line endings. Its `registerOnly` field records the earlier audit assessment, not permission to modify database history.
 
-Repository preparation does not reconcile production migration history or apply pending SQL. Before merging, review the existing main-branch workflows: the updated package-contents workflow will execute its SQL, and the Fast Courier workflow will deploy its function. Creating this PR does not trigger those workflows.
+Repository preparation does not reconcile production migration history or apply pending SQL. The package-contents and Fast Courier workflows first run a read-only `changes` job. It compares the complete before/after push commits: migration Git objects are matched by their stable suffix, so timestamp-only renames do not count as SQL edits. Courier source edits and operational workflow configuration changes still enable the corresponding production job. The guard's own wiring and timestamp references are excluded from the workflow comparison; this lets the guard be introduced safely in the same PR as the renames.
+
+For PR #13's changes, both guards return `run=false`; `migrate` and `deploy` are skipped after merge. PR events run validation only. Missing commit history, missing/duplicate migration matches, parser errors, or test failures prevent production jobs. Explicit `workflow_dispatch` remains available and was not invoked. Run the guard tests with `npm ci --ignore-scripts --no-audit --no-fund` from `.github/scripts`, then `node --test .github/scripts/production-changes.test.mjs` from the repository root.
 
 ## Validation
 
