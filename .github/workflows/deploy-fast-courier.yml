@@ -5,15 +5,48 @@ on:
     branches: [main]
     paths:
       - 'supabase/functions/fast-courier-api/**'
-      - 'supabase/migrations/20260903_add_fast_courier_quotes.sql'
+      - 'supabase/migrations/*_add_fast_courier_quotes.sql'
       - '.github/workflows/deploy-fast-courier.yml'
+      - '.github/scripts/**'
+  pull_request:
+    paths:
+      - 'supabase/functions/fast-courier-api/**'
+      - '.github/scripts/**'
+      - '.github/workflows/deploy-fast-courier.yml'
+      - 'supabase/migrations/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.classify.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install workflow parser
+        working-directory: .github/scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Test production change guard
+        run: node --test .github/scripts/production-changes.test.mjs
+      - name: Detect operational changes
+        id: classify
+        env:
+          BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          AFTER: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node .github/scripts/production-changes.mjs courier "$BEFORE" "$AFTER"
   deploy:
+    needs: changes
+    if: ${{ github.event_name != 'pull_request' && needs.changes.outputs.run == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
