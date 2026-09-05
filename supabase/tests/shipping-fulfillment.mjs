@@ -18,13 +18,13 @@ await db.exec(`
   create table wc_shipping_products(id uuid primary key);
   insert into wc_orders values('${order}','NOT_FULFILLED','{}',null),('${other}','NOT_FULFILLED','{}',null);
 `);
-for (const file of ['20260831_create_wc_fulfilment.sql','20260831_create_wc_shipments.sql','20260903_add_fast_courier_quotes.sql']) {
+for (const file of ['20260831000100_create_wc_fulfilment.sql','20260831000300_create_wc_shipments.sql','20260903000100_add_fast_courier_quotes.sql']) {
   const sql = await readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8');
   // gen_random_uuid is built into this PostgreSQL runtime; pgcrypto is not needed.
   await db.exec(sql.replace(/create extension if not exists pgcrypto;/gi, ''));
 }
 await db.exec(`create table wc_order_activity(id uuid default gen_random_uuid(),order_id uuid references wc_orders(id),activity_type text,message text,created_by text);`);
-await db.exec(await readFile(new URL('../migrations/20260905_shipping_fulfillment_sync.sql', import.meta.url), 'utf8'));
+await db.exec(await readFile(new URL('../migrations/20260905000100_shipping_fulfillment_sync.sql', import.meta.url), 'utf8'));
 await db.exec(`
   insert into wc_fulfilment(id,order_id,route,status) values('${order}','${order}','Shipping','Shipping Preparation'),('${other}','${other}','Pickup','Awaiting Pickup');
   insert into wc_shipments(id,fulfilment_id,order_id,status,courier_order_id,selected_quote)

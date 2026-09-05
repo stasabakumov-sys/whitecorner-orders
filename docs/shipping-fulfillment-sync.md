@@ -26,11 +26,17 @@ Wix failure leaves the shipment booked and the order visibly awaiting synchroniz
 
 ## Operational boundaries
 
-- Apply `20260905_shipping_fulfillment_sync.sql` before releasing the updated UI/Edge Function. The existing `deploy-wix-orders-sync.yml` path filter already includes the new module; JWT verification is not disabled. No workflow change is necessary. The baseline `orders-schema.sql` is not treated as the current schema snapshot.
+- Apply `20260905000100_shipping_fulfillment_sync.sql` before releasing the updated UI/Edge Function. The existing `deploy-wix-orders-sync.yml` path filter already includes the new module; JWT verification is not disabled. No workflow change is necessary. The baseline `orders-schema.sql` is not treated as the current schema snapshot.
 - No migration, deployment, courier booking, Wix mutation, notification, or backfill was executed against production. Existing bookings are not automatically processed by this migration or by page load.
 - If the browser disconnects between saving booking and invoking Wix, the stored pending state can be retried. This change does not introduce a background worker. A courier booking accepted before its local save fails needs reconciliation, not another booking.
 - Wix can send its configured buyer notification on fulfillment creation. The tests use mocks only; no such notification was sent.
 - An unresolved ambiguous POST requires verification/manual review rather than assuming a retry is safe.
+
+## Migration filename normalization
+
+The audited [rename manifest](audits/migrations-20260905/rename-manifest.json) maps the original filenames to unique 14-digit timestamps. Eleven files were renamed without changing SQL; the confirmed-finance migration already had a unique timestamp. The manifest hashes record the audited working-copy bytes, including their line endings. Its `registerOnly` field records the earlier audit assessment, not permission to modify database history.
+
+Repository preparation does not reconcile production migration history or apply pending SQL. Before merging, review the existing main-branch workflows: the updated package-contents workflow will execute its SQL, and the Fast Courier workflow will deploy its function. Creating this PR does not trigger those workflows.
 
 ## Validation
 

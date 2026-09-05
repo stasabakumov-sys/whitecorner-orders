@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'supabase/migrations/20260903_add_package_contents.sql'
+      - 'supabase/migrations/20260903000200_add_package_contents.sql'
       - '.github/workflows/apply-package-contents.yml'
   workflow_dispatch:
 
@@ -22,7 +22,7 @@ jobs:
           SUPABASE_PROJECT_REF: zgvnrpspwluapaxnycrg
         run: |
           test -n "$SUPABASE_ACCESS_TOKEN"
-          jq -n --rawfile query supabase/migrations/20260903_add_package_contents.sql \
+          jq -n --rawfile query supabase/migrations/20260903000200_add_package_contents.sql \
             '{query: $query, read_only: false}' > request.json
           curl --fail-with-body --silent --show-error \
             --request POST \

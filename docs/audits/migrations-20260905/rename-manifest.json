@@ -1,0 +1,86 @@
+[
+  {
+    "source": "20260830_create_wc_address_issues.sql",
+    "name": "20260830000100_create_wc_address_issues.sql",
+    "version": "20260830000100",
+    "registerOnly": true,
+    "sha256": "f475be9613ef6d823b3402d22a0aa5d695dbe9d39291b60e57deccf1c59df273"
+  },
+  {
+    "source": "20260830_create_wc_shipping_data.sql",
+    "name": "20260830000200_create_wc_shipping_data.sql",
+    "version": "20260830000200",
+    "registerOnly": true,
+    "sha256": "f6b1a584ca0104e607e4baa466de8c27e48fb0e088ade49d1e803e9c6f4a319f"
+  },
+  {
+    "source": "20260831_create_wc_fulfilment.sql",
+    "name": "20260831000100_create_wc_fulfilment.sql",
+    "version": "20260831000100",
+    "registerOnly": true,
+    "sha256": "abf273162f7fa7422caab0b5698ca6e2c0621a5dd54e80bc7f229f4e2a133db4"
+  },
+  {
+    "source": "20260831_create_wc_order_activity.sql",
+    "name": "20260831000200_create_wc_order_activity.sql",
+    "version": "20260831000200",
+    "registerOnly": true,
+    "sha256": "33cc3f7a9602726a5a535e6d3382797c9e2966de1bef860816d047afba99c9cb"
+  },
+  {
+    "source": "20260831_create_wc_shipments.sql",
+    "name": "20260831000300_create_wc_shipments.sql",
+    "version": "20260831000300",
+    "registerOnly": true,
+    "sha256": "4be10477d152a8342f7fc992160c6fbdb865a8a10fdfbd94580387625c8c82a0"
+  },
+  {
+    "source": "20260901_create_wc_email_ai.sql",
+    "name": "20260901000100_create_wc_email_ai.sql",
+    "version": "20260901000100",
+    "registerOnly": false,
+    "sha256": "60794cc52a55d113b546411af1c3c606a85a804ed5b5cc7107051304c25847e4"
+  },
+  {
+    "source": "20260901_create_wc_mailboxes.sql",
+    "name": "20260901000200_create_wc_mailboxes.sql",
+    "version": "20260901000200",
+    "registerOnly": true,
+    "sha256": "e2d44c518f684a7d284f3d393baa42b601a416081821b9360e7cf540edd61726"
+  },
+  {
+    "source": "20260903_add_fast_courier_quotes.sql",
+    "name": "20260903000100_add_fast_courier_quotes.sql",
+    "version": "20260903000100",
+    "registerOnly": true,
+    "sha256": "90eba955b5591b83d80e532e10721259d435dc4c05fc3029a53d2fa5e0d3a88f"
+  },
+  {
+    "source": "20260903_add_package_contents.sql",
+    "name": "20260903000200_add_package_contents.sql",
+    "version": "20260903000200",
+    "registerOnly": true,
+    "sha256": "4bd19f903b45ac1d5c0103c5000bd14d355e14a0deb6ac4f889b37ecbfc77049"
+  },
+  {
+    "source": "20260904_restore_business_categories.sql",
+    "name": "20260904000100_restore_business_categories.sql",
+    "version": "20260904000100",
+    "registerOnly": true,
+    "sha256": "3357150c264787f0e82663ad348bacc86063b5b0ec38bb3856a716b8ac663b79"
+  },
+  {
+    "source": "20260904193000_add_confirmed_finance_business_categories.sql",
+    "name": "20260904193000_add_confirmed_finance_business_categories.sql",
+    "version": "20260904193000",
+    "registerOnly": true,
+    "sha256": "e75d56a54d89cd0d6a144df1f1c139d36a8afce5887484f8f4f799d94dd30c8b"
+  },
+  {
+    "source": "20260905_shipping_fulfillment_sync.sql",
+    "name": "20260905000100_shipping_fulfillment_sync.sql",
+    "version": "20260905000100",
+    "registerOnly": false,
+    "sha256": "390ef1803e7c75d6ba0899ffc15b5e791fd139dc60dd46e17fa90397039ed59b"
+  }
+]

@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'supabase/functions/fast-courier-api/**'
-      - 'supabase/migrations/20260903_add_fast_courier_quotes.sql'
+      - 'supabase/migrations/20260903000100_add_fast_courier_quotes.sql'
       - '.github/workflows/deploy-fast-courier.yml'
   workflow_dispatch:
 
