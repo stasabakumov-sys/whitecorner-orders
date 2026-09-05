@@ -46,7 +46,7 @@ import { AuthService } from '../../core/services/auth.service';
         @if (loadState() === 'loading') {
           <div class="loading-layer" role="status" aria-live="polite">
             <p-progress-spinner strokeWidth="3" ariaLabel="Loading Finance data" />
-            <div><b>Loading Finance</b><span>Connecting to the White Corner database…</span></div>
+            <div><b>Loading Finance data…</b><span>You can keep browsing while data loads.</span></div>
           </div>
         } @else if (loadState() === 'error') {
           <div class="error-layer" role="alert">
@@ -71,11 +71,11 @@ import { AuthService } from '../../core/services/auth.service';
     .title-block{min-width:0}.title-line{display:flex;align-items:center;gap:10px}.title-line h2{margin:0;color:#101828;font-size:20px;font-weight:650;letter-spacing:-.02em}.title-block>p{margin:4px 0 0;color:#667085;font-size:11px}
     .toolbar{margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
     .section-tabs{display:flex;gap:6px;padding:9px 18px;background:#fff;border-bottom:1px solid #e4e7ec;flex:0 0 auto}
-    .frame-wrap{flex:1 1 auto;min-height:0;position:relative}
-    iframe{display:block;width:100%;height:100%;border:0;background:#f6f7f9}
-    .loading-layer,.error-layer{position:absolute;z-index:3;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(246,247,249,.94)}
+    .frame-wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+    iframe{display:block;width:100%;flex:1;min-height:0;border:0;background:#f6f7f9}
+    .loading-layer,.error-layer{flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:#f6f7f9;padding:8px 18px}
     .loading-layer{gap:13px;color:#344054}.loading-layer p-progress-spinner{width:30px;height:30px}.loading-layer div{display:flex;flex-direction:column;gap:3px}.loading-layer b{font-size:12px}.loading-layer span{font-size:10px;color:#667085}
-    .error-layer{flex-direction:column;gap:12px;padding:20px}
+    .error-layer{gap:12px}
     :host ::ng-deep .page-head .p-tag{font-size:9px;padding:2px 7px}
     :host ::ng-deep .toolbar .p-button,:host ::ng-deep .section-tabs .p-button{font-size:11px;padding:.42rem .7rem}
     @media(max-width:900px){.page-head{align-items:flex-start;flex-direction:column;gap:10px}.toolbar{margin-left:0;justify-content:flex-start}.section-tabs{overflow-x:auto}.section-tabs p-button{flex:0 0 auto}}
@@ -121,9 +121,8 @@ export class FinanceComponent {
 
   selectTab(tab: (typeof this.tabs)[number]['id']): void {
     this.activeTab = tab;
-    const frame = this.financeFrame?.nativeElement.contentWindow as (Window & { showMainTab?: (tab: string) => void; hideAssetsCompletely?: () => void }) | undefined;
+    const frame = this.financeFrame?.nativeElement.contentWindow as (Window & { showMainTab?: (tab: string) => void }) | undefined;
     if (!frame?.showMainTab) return;
-    if (tab !== 'assets') frame.hideAssetsCompletely?.();
     frame.showMainTab(tab);
   }
 

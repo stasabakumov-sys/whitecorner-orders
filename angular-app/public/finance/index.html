@@ -535,6 +535,50 @@ let remoteBusinessCategories=[];
 let remoteClassificationRules=[];
 let dbUser=null;
 let databaseLoading=false;
+let databaseLoaded=false;
+let databasePromise=null;
+let personalRulesPromise=null;
+let personalRulesLoaded=false;
+let activeFinanceTab='expenses';
+let activeAssetSection='tax-attribute';
+const dirtyFinanceTabs=new Set(['expenses','income','profit','assets']);
+const financeTabErrors={};
+
+function renderActiveFinanceTab(){
+  if(!databaseLoaded || !dirtyFinanceTabs.has(activeFinanceTab)) return;
+  const renders={expenses:render,income:renderIncome,profit:renderProfit,assets:renderAssets};
+  try{
+    renders[activeFinanceTab]();
+    dirtyFinanceTabs.delete(activeFinanceTab);
+    delete financeTabErrors[activeFinanceTab];
+  }catch(error){
+    financeTabErrors[activeFinanceTab]='This section could not be displayed. Refresh to try again.';
+  }
+  updateFinanceStatus();
+}
+
+function updateFinanceStatus(){
+  const message=financeTabErrors[activeFinanceTab] || financeTabErrors.database;
+  const loading=databaseLoading || !databaseLoaded || (activeFinanceTab==='assets' && personalRulesPromise);
+  notifyHub(message?'white-corner-finance-error':loading?'white-corner-finance-loading':'white-corner-finance-ready',message?{message}:{});
+}
+
+async function ensurePersonalRules(){
+  if(personalRulesLoaded) return;
+  if(personalRulesPromise) return personalRulesPromise;
+  personalRulesPromise=loadPersonalRulesFromDatabase().then(()=>{
+    personalRulesLoaded=true;
+    delete financeTabErrors.assets;
+  }).catch(error=>{
+    financeTabErrors.assets='Personal rules could not be loaded. Refresh to try again.';
+    throw error;
+  }).finally(()=>{personalRulesPromise=null;});
+  return personalRulesPromise;
+}
+
+function refreshDatabase(){
+  return loadDatabaseData();
+}
 
 function notifyHub(type,detail={}){
   if(window.parent===window) return;
@@ -587,9 +631,13 @@ async function useHubSession(session){
   });
   if(error) throw error;
   if(!data || !data.session) throw new Error('Hub session could not be restored.');
+  if(dbUser?.id!==data.session.user.id){
+    databaseLoaded=false;
+    personalRulesLoaded=false;
+  }
   dbUser=data.session.user;
   showDatabaseApp();
-  await loadDatabaseData();
+  await loadDatabaseData({force:false});
 }
 
 window.addEventListener('message',async(event)=>{
@@ -622,7 +670,7 @@ async function supabaseLogin(){
 
     dbUser=data.user;
     showDatabaseApp();
-    await loadDatabaseData();
+    await loadDatabaseData({force:false});
 
     if(btn){btn.disabled=false;btn.textContent='Login';}
   }catch(err){
@@ -639,15 +687,22 @@ async function logout(){
   }catch(e){}
   dbUser=null;
   dbTransactions=[];
+  databaseLoaded=false;
+  personalRulesLoaded=false;
   showDatabaseLogin();
   document.getElementById('password').value='';
   setLoginMessage('Signed out.');
 }
 
+const monthLabels=new Map();
 function monthLabelFromISO(iso){
   if(!iso) return '';
+  const key=String(iso).slice(0,7);
+  if(monthLabels.has(key)) return monthLabels.get(key);
   const [y,m]=String(iso).slice(0,10).split('-').map(Number);
-  return new Date(y,m-1,1).toLocaleString('en-AU',{month:'long',year:'numeric'});
+  const label=new Date(y,m-1,1).toLocaleString('en-AU',{month:'long',year:'numeric'});
+  monthLabels.set(key,label);
+  return label;
 }
 
 function monthDateFromLabel(label){
@@ -786,16 +841,13 @@ function syncClassificationDataFromDatabase(){
 }
 
 async function loadPersonalRulesFromDatabase(){
-  const {data:rules,error}=await supabaseClient
-    .from('personal_rules')
-    .select('*')
-    .order('created_at',{ascending:true});
-  if(error) throw error;
-
-  const {data:links,error:linkError}=await supabaseClient
-    .from('personal_rule_transactions')
-    .select('personal_rule_id,transaction_id');
-  if(linkError) throw linkError;
+  const [rulesResult,linksResult]=await Promise.all([
+    supabaseClient.from('personal_rules').select('*').order('created_at',{ascending:true}),
+    supabaseClient.from('personal_rule_transactions').select('personal_rule_id,transaction_id')
+  ]);
+  if(rulesResult.error) throw rulesResult.error;
+  if(linksResult.error) throw linksResult.error;
+  const rules=rulesResult.data, links=linksResult.data;
 
   const txById=new Map(dbTransactions.map(tx=>[tx.id,tx]));
   const linkMap={};
@@ -825,35 +877,14 @@ async function loadPersonalRulesFromDatabase(){
 }
 
 
-async function reconcileIncomeInternalTransfers(){
-  const candidates=dbTransactions.filter(tx=>
-    tx.direction==='income' &&
-    String(tx.description||'').toUpperCase().includes('TRANSFER FROM COMMBANK APP') &&
-    (tx.business_category!=='Internal Transfer' || tx.company_personal!=='Not Applicable')
-  );
-
-  if(!candidates.length) return 0;
-
-  let updated=0;
-  for(let i=0;i<candidates.length;i+=100){
-    const ids=candidates.slice(i,i+100).map(tx=>tx.id);
-    const {data,error}=await supabaseClient
-      .from('transactions')
-      .update({
-        business_category:'Internal Transfer',
-        company_personal:'Not Applicable',
-        status:'Auto'
-      })
-      .in('id',ids)
-      .select('id');
-    if(error) throw error;
-    updated += (data||[]).length;
-  }
-  return updated;
+function loadDatabaseData({force=true}={}){
+  if(databasePromise) return databasePromise;
+  if(databaseLoaded && !force) return Promise.resolve();
+  databasePromise=fetchDatabaseData().finally(()=>{databasePromise=null;});
+  return databasePromise;
 }
 
-async function loadDatabaseData(){
-  if(databaseLoading) return;
+async function fetchDatabaseData(){
   databaseLoading=true;
   notifyHub('white-corner-finance-loading');
   try{
@@ -875,32 +906,26 @@ async function loadDatabaseData(){
     remoteBusinessCategories=catRes.data||[];
     remoteClassificationRules=ruleRes.data||[];
 
-    const correctedIncomeTransfers=await reconcileIncomeInternalTransfers();
-    if(correctedIncomeTransfers>0){
-      const {data:refreshedTransactions,error:refreshTransactionsError}=await supabaseClient
-        .from('transactions')
-        .select('*')
-        .order('transaction_date',{ascending:false});
-      if(refreshTransactionsError) throw refreshTransactionsError;
-      dbTransactions=refreshedTransactions||[];
-    }
-
-    if(!dbTransactions.length){
-      throw new Error('Connected to Supabase, but no transactions were returned. Check RLS/policies or database contents.');
-    }
+    // Preserve the existing classification without writing to production on a read.
+    dbTransactions=dbTransactions.map(tx=>tx.direction==='income' &&
+      String(tx.description||'').toUpperCase().includes('TRANSFER FROM COMMBANK APP') &&
+      (tx.business_category!=='Internal Transfer' || tx.company_personal!=='Not Applicable')
+        ? {...tx,business_category:'Internal Transfer',company_personal:'Not Applicable',status:'Auto'} : tx);
 
     syncClassificationDataFromDatabase();
     rebuildMonthCachesFromDatabase();
-    await loadPersonalRulesFromDatabase();
+    personalRulesLoaded=false;
 
     rows=expenseMonth?dbExpenseRowsForMonth(expenseMonth):[];
     incomeRows=incomeMonth?dbIncomeRowsForMonth(incomeMonth):[];
 
-    render();
-    renderIncome();
-    renderExpenseOverview();
-    renderProfit();
-    renderAssets();
+    databaseLoaded=true;
+    delete financeTabErrors.database;
+    ['expenses','income','profit','assets'].forEach(tab=>dirtyFinanceTabs.add(tab));
+    if(activeFinanceTab==='assets'){
+      try{await ensurePersonalRules();}catch(error){updateFinanceStatus();return;}
+    }
+    renderActiveFinanceTab();
 
     if(status) status.textContent=`Database v5.3.2 · ${dbTransactions.length} transactions`;
     notifyHub('white-corner-finance-ready',{transactionCount:dbTransactions.length});
@@ -909,9 +934,11 @@ async function loadDatabaseData(){
     if(window.parent===window) alert('Database load failed: '+(err.message||err));
     const status=document.getElementById('dbStatus');
     if(status) status.textContent='Database connection error';
+    financeTabErrors.database='Finance data could not be refreshed. Previously loaded data is still available.';
     notifyHub('white-corner-finance-error',{message:err.message||String(err)});
   }finally{
     databaseLoading=false;
+    updateFinanceStatus();
   }
 }
 
@@ -1526,7 +1553,7 @@ setTimeout(async()=>{
     if(data && data.session){
       dbUser=data.session.user;
       showDatabaseApp();
-      await loadDatabaseData();
+      await loadDatabaseData({force:false});
     }else{
       showDatabaseLogin();
     }
@@ -1535,12 +1562,14 @@ setTimeout(async()=>{
       if(event==='SIGNED_OUT'){
         dbUser=null;
         dbTransactions=[];
+        databaseLoaded=false;
+        personalRulesLoaded=false;
         showDatabaseLogin();
       }
       if(event==='SIGNED_IN' && session && !dbUser){
         dbUser=session.user;
         showDatabaseApp();
-        await loadDatabaseData();
+        await loadDatabaseData({force:false});
       }
     });
   }catch(err){
@@ -1691,6 +1720,7 @@ function renderAssetBusinessCategories(){
 }
 
 function switchAssetSection(section,btn){
+  activeAssetSection=section;
   const map={
     'tax-attribute':'assetTaxAttrView',
     'tax-category':'assetTaxCatView',
@@ -1719,6 +1749,7 @@ function switchAssetSection(section,btn){
 }
 
 function renderAssets(){
+  if(activeFinanceTab!=='assets'){dirtyFinanceTabs.add('assets');return;}
   renderTaxAttributeDirect();
   renderAssetTaxCategories();
   renderAssetBusinessCategories();
@@ -2176,6 +2207,7 @@ function getFilteredExpenseRows(){
 }
 
 function render(){
+  if(activeFinanceTab!=='expenses'){dirtyFinanceTabs.add('expenses');return;}
   const tb=document.getElementById('tbody'); tb.innerHTML='';
   const noData=document.getElementById('expenseNoData');
   if(noData) noData.classList.toggle('hidden', rows.length>0);
@@ -2291,7 +2323,7 @@ function showExpenseTab(t){
   document.getElementById('expenseOverviewView').classList.toggle('hidden',t!=='overview');
   document.getElementById('expenseByMonthTab').classList.toggle('active',t==='bymonth');
   document.getElementById('expenseOverviewTab').classList.toggle('active',t==='overview');
-  if(t==='overview') renderExpenseOverview();
+  // The overview is refreshed with expenses; switching only reveals the cached DOM.
 }
 
 const OVERVIEW_GROUP_ORDER=['Cost of Sales','Operating Expenses'];
@@ -2312,6 +2344,7 @@ function setOverviewWithPersonal(checked){
 }
 
 function renderExpenseOverview(){
+  if(activeFinanceTab!=='expenses'){dirtyFinanceTabs.add('expenses');return;}
   const head=document.getElementById('expenseOverviewHead');
   const body=document.getElementById('expenseOverviewBody');
   const foot=document.getElementById('expenseOverviewFoot');
@@ -2410,6 +2443,7 @@ function renderExpenseOverview(){
 
 
 function renderIncome(){
+  if(activeFinanceTab!=='income'){dirtyFinanceTabs.add('income');return;}
   const tb=document.getElementById('incomeBody');
   if(!tb) return;
   tb.innerHTML='';
@@ -2473,6 +2507,7 @@ function getExpenseTotalsForProfit(month){
 }
 
 function renderProfit(){
+  if(activeFinanceTab!=='profit'){dirtyFinanceTabs.add('profit');return;}
   const root=document.getElementById('profitMain');
   if(!root) return;
 
@@ -2700,7 +2735,8 @@ function personalBusinessCategories(){
     .sort((a,b)=>a.localeCompare(b));
 }
 
-function showPersonalRuleModal(opts={}){
+async function showPersonalRuleModal(opts={}){
+  try{await ensurePersonalRules();}catch(error){alert('Personal rules could not be loaded. Please refresh and try again.');return;}
   const old=document.getElementById('pcRuleModal');
   if(old) old.remove();
 
@@ -2817,6 +2853,7 @@ function pcPeriodChanged(){
 
 
 function renderPersonalRules(){
+  if(activeFinanceTab!=='assets'){dirtyFinanceTabs.add('assets');return;}
   const body=document.getElementById('personalRulesBody');
   if(!body) return;
 
@@ -3033,14 +3070,25 @@ function showAssetTab(t){
 }
 
 function showMainTab(t){
+  activeFinanceTab=t;
   ['expenses','income','profit','assets'].forEach(x=>{
     document.getElementById(x+'Main').classList.toggle('hidden',x!==t);
     const id='main'+x[0].toUpperCase()+x.slice(1);
     document.getElementById(id).classList.toggle('active',x===t);
   });
-  if(t==='income') renderIncome();
-  if(t==='profit') renderProfit();
-  if(t==='assets') renderAssets();
+  if(t==='assets'){
+    const sections={'tax-attribute':'assetTaxAttrView','tax-category':'assetTaxCatView','business-category':'assetBizView','pc':'assetPersonalView'};
+    Object.entries(sections).forEach(([section,id])=>document.getElementById(id)?.classList.toggle('hidden',section!==activeAssetSection));
+  }
+  updateFinanceStatus();
+  if(!databaseLoaded) return;
+  if(t==='assets' && !personalRulesLoaded){
+    notifyHub('white-corner-finance-loading');
+    ensurePersonalRules().then(()=>{renderActiveFinanceTab();updateFinanceStatus();}).catch(()=>updateFinanceStatus());
+    return;
+  }
+  // Paint the selected panel first; subsequent visits reuse its DOM.
+  if(dirtyFinanceTabs.has(t)) setTimeout(renderActiveFinanceTab,0);
 }
 
 
