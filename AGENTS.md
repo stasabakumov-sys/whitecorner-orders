@@ -6,7 +6,7 @@ White Corner Hub — внутреннее операционное прилож�
 
 ## Актуальная структура репозитория
 
-- `angular-app/` — **основное приложение**, Angular 22 workspace. Рабочий UI, модели и интеграционные сервисы находятся в `angular-app/src/app/`; публичные файлы — в `angular-app/public/`; настройки окружения — в `angular-app/src/environments/`.
+- `angular-app/` — **основное приложение**, Angular 21.2 workspace (`^21.2.0` в `package.json`; в `package-lock.json` — Angular core/compiler-cli 21.2.22, CLI/build 21.2.23), PrimeNG 21.1.9, PrimeUIX Themes (`@primeuix/themes`) 2.0.3 и TypeScript (`~5.9.2` в `package.json`, 5.9.3 в lockfile). Рабочий UI, модели и интеграционные сервисы находятся в `angular-app/src/app/`; публичные файлы — в `angular-app/public/`; настройки окружения — в `angular-app/src/environments/`.
 - `supabase/` — серверная часть: SQL-схема, последовательные migrations, конфигурация Supabase, cron-пример и Edge Functions.
   - `supabase/migrations/` — версионируемые изменения рабочей схемы и RLS. Новые изменения БД оформляйте новой миграцией; не переписывайте уже применённые миграции без явного запроса.
   - `supabase/functions/` — Deno Edge Functions, через которые выполняются привилегированные операции и обращения к внешним API.
@@ -32,7 +32,7 @@ npm run watch          # development build в watch-режиме
 npm test -- --watch=false  # однократный запуск unit tests
 ```
 
-В `package.json` нет lint-скрипта и в workspace не настроен e2e runner. Поддерживаемая версия Node.js отдельно не зафиксирована; её нужно уточнить, если изменение зависит от версии runtime. Для Supabase CLI также нет локального npm-скрипта или зафиксированной версии вне CI (`latest`); команды локального запуска/проверки Supabase следует согласовать, а не придумывать.
+В `package.json` нет lint-скрипта и в workspace не настроен e2e runner. Версия Node.js зафиксирована в корневом `.nvmrc`: `v22.22.3`; версия npm — в `angular-app/package.json`, поле `packageManager`: `npm@10.9.8`. Для Supabase CLI также нет локального npm-скрипта или зафиксированной версии вне CI (`latest`); команды локального запуска/проверки Supabase следует согласовать, а не придумывать.
 
 ## Supabase migrations и Edge Functions
 
