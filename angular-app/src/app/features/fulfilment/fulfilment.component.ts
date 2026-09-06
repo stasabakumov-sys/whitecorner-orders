@@ -151,7 +151,8 @@ type BookingDraft = {
                   } @else if (row.status === 'Shipping Booked') {
                     <div class="done">Shipping booked ✓</div>
                     <div class="callout warning">{{ f.syncFor(row)?.error || 'Wix fulfillment synchronization is pending.' }}</div>
-                    <p-button label="Retry Wix synchronization" [loading]="f.syncingOrderIds().includes(row.order_id)" (onClick)="f.syncShippingFulfillment(row)" />
+                    <p-button label="Retry Wix synchronization" [disabled]="!f.canSyncShipping(row) || f.syncingOrderIds().includes(row.order_id)" [loading]="f.syncingOrderIds().includes(row.order_id)" (onClick)="f.syncShippingFulfillment(row)" />
+                    @if (!f.canSyncShipping(row)) { <div class="muted hint">Waiting for saved tracking, carrier and service before Wix synchronization.</div> }
                   } @else if (row.status === 'Fulfilled') {
                     <div class="done">Fulfilled ✓</div><div class="wix-sync-ok">Wix: FULFILLED ✓</div>
                   }

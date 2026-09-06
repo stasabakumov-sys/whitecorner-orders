@@ -25,6 +25,7 @@ for (const file of ['20260831000100_create_wc_fulfilment.sql','20260831000300_cr
 }
 await db.exec(`create table wc_order_activity(id uuid default gen_random_uuid(),order_id uuid references wc_orders(id),activity_type text,message text,created_by text);`);
 await db.exec(await readFile(new URL('../migrations/20260905000100_shipping_fulfillment_sync.sql', import.meta.url), 'utf8'));
+await db.exec(await readFile(new URL('../migrations/20260906000100_shipping_fulfillment_completed.sql', import.meta.url), 'utf8'));
 await db.exec(`
   insert into wc_fulfilment(id,order_id,route,status) values('${order}','${order}','Shipping','Shipping Preparation'),('${other}','${other}','Pickup','Awaiting Pickup');
   insert into wc_shipments(id,fulfilment_id,order_id,status,courier_order_id,selected_quote)
@@ -40,7 +41,7 @@ assert.equal(await scalar(`select status from wc_fulfilment where order_id='${or
 assert.equal(await scalar(`select status from wc_shipments where order_id='${order}'`), 'Shipping Booked');
 await db.exec('set role authenticated');
 assert.equal(await scalar('select count(*)::int from wc_shipping_fulfillment_sync'), 1);
-assert.equal((await db.query("update wc_shipping_fulfillment_sync set status='synced' returning *")).rows.length, 0, 'RLS prevents forged success');
+assert.equal((await db.query("update wc_shipping_fulfillment_sync set status='completed' returning *")).rows.length, 0, 'RLS prevents forged success');
 await assert.rejects(db.exec(`select wc_claim_shipping_fulfillment('${order}','${token}')`), /permission denied/);
 await db.exec('reset role; set role anon');
 assert.equal(await scalar('select count(*)::int from wc_shipping_fulfillment_sync'), 0, 'anon cannot read synchronization data');
@@ -52,22 +53,25 @@ await db.exec(`select wc_record_shipping_fulfillment('${order}','${token}','unce
 await db.exec(`update wc_shipping_fulfillment_sync set started_at=now()-interval '3 minutes'`);
 await db.exec('set role service_role');
 assert.equal((await scalar(`select wc_claim_shipping_fulfillment('${order}','${token2}')`)).uncertain, true);
-await assert.rejects(db.exec(`select wc_record_shipping_fulfillment('${order}','${token}','synced')`), /lease lost/);
+await assert.rejects(db.exec(`select wc_record_shipping_fulfillment('${order}','${token}','completed')`), /lease lost/);
 await db.exec('reset role');
 // An activity write failure must roll back BOTH local statuses and sync state.
 await db.exec(`create function reject_note() returns trigger language plpgsql as $$begin raise exception 'test note failure'; end$$;
  create trigger reject_note before insert on wc_order_activity for each row execute function reject_note();`);
-await assert.rejects(db.exec(`select wc_record_shipping_fulfillment('${order}','${token2}','synced')`), /test note failure/);
+await assert.rejects(db.exec(`select wc_record_shipping_fulfillment('${order}','${token2}','completed',null,'wix-test')`), /test note failure/);
 assert.equal(await scalar(`select status from wc_fulfilment where order_id='${order}'`), 'Shipping Booked');
 assert.equal(await scalar(`select fulfillment_status from wc_orders where id='${order}'`), 'NOT_FULFILLED');
 await db.exec(`drop trigger reject_note on wc_order_activity; set role service_role;
- select wc_record_shipping_fulfillment('${order}','${token2}','synced',null,'wix-test'); reset role;`);
+ select wc_record_shipping_fulfillment('${order}','${token2}','completed',null,'wix-test'); reset role;`);
 assert.equal(await scalar(`select status from wc_fulfilment where order_id='${order}'`), 'Fulfilled');
 assert.equal(await scalar(`select fulfillment_status from wc_orders where id='${order}'`), 'FULFILLED');
 assert.equal(await scalar(`select raw_order->>'fulfillmentStatus' from wc_orders where id='${order}'`), 'FULFILLED');
 assert.equal(await scalar(`select fulfillment_status from wc_orders where id='${other}'`), 'NOT_FULFILLED');
 assert.equal(await scalar(`select count(*)::int from wc_order_activity where message like 'WIX fulfilled%'`), 1);
-assert.equal((await scalar(`select wc_claim_shipping_fulfillment('${order}','${token}')`)).status, 'synced');
+assert.equal((await scalar(`select wc_claim_shipping_fulfillment('${order}','${token}')`)).status, 'completed');
+assert.equal(await scalar(`select wix_fulfillment_id from wc_shipping_fulfillment_sync where order_id='${order}'`), 'wix-test');
+await db.exec(`set role service_role; select wc_record_shipping_fulfillment('${order}','${token2}','completed',null,'wix-test'); reset role;`);
+assert.equal(await scalar(`select count(*)::int from wc_order_activity where message='WIX fulfilled'`), 1);
 assert.equal(await scalar('select count(*)::int from wc_order_activity'), 1);
 await db.close();
 console.log('PASS: shipping booking transaction, sync leases, uncertain recovery, atomic completion/notes, repeat safety, pickup isolation, RLS, existing data');
