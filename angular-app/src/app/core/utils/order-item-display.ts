@@ -7,7 +7,7 @@ function scalar(value: unknown): string {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
   if (typeof value !== 'object') return '';
   const obj = value as Record<string, unknown>;
-  for (const key of ['value','name','description','text','plainText','label','title']) {
+  for (const key of ['original','translated','value','name','description','text','plainText','plainTextValue','label','title']) {
     const candidate = scalar(obj[key]);
     if (candidate) return candidate;
   }
@@ -34,7 +34,7 @@ function addDescriptionLines(out: string[], lines: unknown): void {
     if (!line || typeof line !== 'object') continue;
     const obj = line as Record<string, unknown>;
     const label = scalar(obj['name'] ?? obj['label'] ?? obj['title']);
-    const value = scalar(obj['value'] ?? obj['description'] ?? obj['text'] ?? obj['plainText']);
+    const value = scalar(obj['value'] ?? obj['description'] ?? obj['text'] ?? obj['plainText'] ?? obj['plainTextValue'] ?? obj['colorInfo']);
     if (label && value && label !== value) out.push(`${label}: ${value}`);
     else if (value) out.push(value);
   }
