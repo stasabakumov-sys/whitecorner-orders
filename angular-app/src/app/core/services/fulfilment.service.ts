@@ -21,7 +21,7 @@ export interface FulfilmentRow {
 
 export interface ShippingFulfillmentSync {
   order_id: string;
-  status: 'pending'|'syncing'|'uncertain'|'failed'|'synced';
+  status: 'pending'|'syncing'|'uncertain'|'failed'|'synced'|'completed';
   error: string|null;
 }
 
@@ -505,8 +505,10 @@ export class FulfilmentService {
       });
       if(saveError)throw new Error('Shipping was booked, but its local record could not be saved. Do not book again; request reconciliation.');
       this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,...fulfilmentPayload}:x));
-      await this.syncShippingFulfillment({...row,...fulfilmentPayload});
-      void this.refreshBookingStatus(shipment.id,true);
+      // Tracking is returned by the existing booking-status flow, not by bookOrder.
+      // Persist it before the shared Wix action reads the saved shipment.
+      await this.refreshBookingStatus(shipment.id,true);
+      if(this.canSyncShipping({...row,...fulfilmentPayload}))await this.syncShippingFulfillment({...row,...fulfilmentPayload});
       return true;
     }catch(error:any){
       this.error.set(error?.message||'Fast Courier booking failed.');return false;
@@ -521,8 +523,15 @@ export class FulfilmentService {
 
   syncFor(row:FulfilmentRow){return this.shippingSync().find(sync=>sync.order_id===row.order_id);}
 
+  canSyncShipping(row:FulfilmentRow){
+    const shipment=this.shipmentFor(row),quote=shipment?.selected_quote as any;
+    return row.route==='Shipping'&&row.status==='Shipping Booked'&&!!shipment?.courier_order_id
+      &&!!String(quote?.booking?.status?.consignmentNumber||'').trim()
+      &&!!String(quote?.courierName||'').trim()&&!!String(quote?.name||'').trim();
+  }
+
   async syncShippingFulfillment(row:FulfilmentRow){
-    if(row.route!=='Shipping'||this.syncingOrderIds().includes(row.order_id))return false;
+    if(!this.canSyncShipping(row)||this.syncingOrderIds().includes(row.order_id))return false;
     this.syncingOrderIds.update(ids=>[...ids,row.order_id]);
     this.error.set('');
     try{
@@ -557,7 +566,11 @@ export class FulfilmentService {
       const {error}=await this.supabase.client.from('wc_shipments').update(payload).eq('id',shipmentId);
       if(error)throw error;
       this.shipments.update(xs=>xs.map(x=>x.id===shipmentId?{...x,...payload}:x));
-      if(scheduleMore&&remainingAttempts>0&&!mergedStatus.storedDocuments?.label)setTimeout(()=>void this.refreshBookingStatus(shipmentId,true,remainingAttempts-1),5000);
+      // The initial bookShipment caller synchronizes after this refresh. Later polls
+      // may receive delayed tracking; Retry itself never enters this courier flow.
+      const row=this.rows().find(r=>r.order_id===latest.order_id);
+      if(scheduleMore&&remainingAttempts<12&&row&&this.canSyncShipping(row))await this.syncShippingFulfillment(row);
+      if(scheduleMore&&remainingAttempts>0&&(!mergedStatus.storedDocuments?.label||!mergedStatus.consignmentNumber))setTimeout(()=>void this.refreshBookingStatus(shipmentId,true,remainingAttempts-1),5000);
     }catch(error:any){
       this.error.set(error?.message||'Could not refresh Fast Courier documents.');
       if(scheduleMore&&remainingAttempts>0)setTimeout(()=>void this.refreshBookingStatus(shipmentId,true,remainingAttempts-1),8000);

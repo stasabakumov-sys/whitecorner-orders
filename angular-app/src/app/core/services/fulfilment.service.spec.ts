@@ -4,7 +4,7 @@ import { OrdersService } from './orders.service';
 
 function setup() {
   const row: FulfilmentRow = { id: 'fulfilment', order_id: 'order', route: 'Shipping', status: 'Shipping Preparation', ready_at: '', pickup_email_status: 'Not required' };
-  const shipment: ShipmentRow = { id: 'shipment', fulfilment_id: row.id, order_id: row.order_id, status: 'Quote Selected', courier_order_id: 'courier-order', selected_quote: { id: 'quote' } as any };
+  const shipment: ShipmentRow = { id: 'shipment', fulfilment_id: row.id, order_id: row.order_id, status: 'Quote Selected', courier_order_id: 'courier-order', selected_quote: { id: 'quote', courierName: 'Test Carrier', name: 'Road', booking: { status: { consignmentNumber:'TEST' } } } as any };
   const saved = { row: { ...row }, order: { id: 'order', order_number: 'TEST-1', fulfillment_status: 'NOT_FULFILLED' }, sync: [] as any[], shipment: { ...shipment } };
   const query = (table: string) => {
     let update: any;
@@ -31,7 +31,7 @@ function setup() {
     return { error: null };
   }), functions: { invoke: vi.fn(async () => {
     saved.row.status = 'Fulfilled'; saved.order.fulfillment_status = 'FULFILLED';
-    saved.sync[0].status = 'synced'; return { data: { ok: true } };
+    saved.sync[0].status = 'completed'; return { data: { ok: true } };
   }) } } };
   const orders = new OrdersService(supabase as any);
   orders.orders.set([saved.order, { id: 'unrelated', order_number: 'TEST-2', fulfillment_status: 'NOT_FULFILLED' }]);
@@ -39,11 +39,33 @@ function setup() {
   const courier = { saveOrderDetails: vi.fn(async () => {}), bookOrder: vi.fn(async () => {}) };
   const service = new FulfilmentService(supabase as any, orders, activity as any, { unitsForOrder: () => [] } as any, courier as any);
   service.rows.set([row]); service.shipments.set([shipment]);
-  vi.spyOn(service, 'refreshBookingStatus').mockResolvedValue(undefined);
+  vi.spyOn(service, 'refreshBookingStatus').mockImplementation(async () => { service.shipments.update(rows=>rows.map(row=>({...row,selected_quote:{...(row.selected_quote as any),booking:{status:{consignmentNumber:'TEST'}}}}))); });
   return { row, saved, supabase, orders, activity, courier, service };
 }
 
 describe('FulfilmentService shipping completion', () => {
+  it('blocks Retry without tracking and blocks concurrent clicks without courier calls', async () => {
+    const s=setup(),row={...s.row,status:'Shipping Booked' as const};
+    s.service.shipments.set([{...s.service.shipments()[0],selected_quote:{} as any}]);
+    expect(await s.service.syncShippingFulfillment(row)).toBe(false);
+    s.service.shipments.set([s.saved.shipment]);
+    s.service.syncingOrderIds.set([row.order_id]);
+    expect(await s.service.syncShippingFulfillment(row)).toBe(false);
+    expect(s.supabase.client.functions.invoke).not.toHaveBeenCalled();
+    expect(s.service.refreshBookingStatus).not.toHaveBeenCalled();
+    expect(s.courier.bookOrder).not.toHaveBeenCalled();
+  });
+  it('automatically uses the same action when delayed tracking is saved by the booking poll', async () => {
+    const s=setup();
+    s.service.rows.set([{...s.row,status:'Shipping Booked'}]);
+    s.saved.sync=[{order_id:'order',status:'pending'}];
+    vi.mocked(s.service.refreshBookingStatus).mockRestore();
+    (s.courier as any).getOrderStatus=vi.fn(async()=>({status:true,consignmentNumber:'DELAYED',storedDocuments:{label:{path:'mock'}}}));
+    await s.service.refreshBookingStatus('shipment',true,0);
+    expect(s.supabase.client.functions.invoke).toHaveBeenCalledWith(expect.anything(),{body:{action:'fulfillShipping',orderId:'order'}});
+    expect((s.service.shipments()[0].selected_quote as any).booking.status.consignmentNumber).toBe('DELAYED');
+    expect(s.courier.bookOrder).not.toHaveBeenCalled();
+  });
   it('automatically calls Wix after the booking is saved and updates Hub', async () => {
     const s = setup(); await expect(s.service.bookShipment(s.row, {} as any)).resolves.toBe(true);
     expect(s.supabase.client.rpc).toHaveBeenCalledWith('wc_save_shipping_booking', expect.anything());

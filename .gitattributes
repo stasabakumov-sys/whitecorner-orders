@@ -1,0 +1,3 @@
+# Preserve the reviewed deployment-file hashes on Windows checkouts.
+supabase/migrations/20260906000100_shipping_fulfillment_completed.sql text eol=lf
+docs/audits/shipping-completed-20260906/apply-completed-only.sql text eol=lf
