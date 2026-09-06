@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { packageComponents, componentIdentity, packagingSignature } from '../utils/package-components';
 import { OrderItemRow, OrderRow } from '../models/order.models';
 import { OrdersService } from './orders.service';
 import { ActivityService } from './activity.service';
@@ -60,6 +61,12 @@ export interface PackageContentRow {
   order_item_id:string;
   wix_product_id?:string|null;
   product_name:string;
+  component_key?:string;
+  component_name?:string;
+  unit_index?:number;
+  quantity?:number;
+  profile_item_key?:string;
+  profile_signature?:string;
 }
 
 type ShippingProduct={id:string;product_name:string;wix_product_id?:string|null;product_type?:string|null;notes?:string|null};
@@ -140,21 +147,32 @@ export class FulfilmentService {
   }
 
   packageItems(order:OrderRow){return this.orderItems(order).filter(item=>!this.noPackageRequired(item));}
+  packageComponents(order:OrderRow){return packageComponents(this.packageItems(order),(name,value)=>this.noPackageRules().some(r=>r.active!==false&&r.effect_type==='No effect'&&this.normalise(r.match_name||'')===this.normalise(name)&&(!r.match_value||this.normalise(r.match_value)===this.normalise(value))));}
   noPackageItems(order:OrderRow){return this.orderItems(order).filter(item=>this.noPackageRequired(item));}
 
   packageContents(pkg:ShipmentPackageRow){return Array.isArray(pkg.contents)?pkg.contents:[];}
 
   private validContents(value:unknown):PackageContentRow[]{
     if(!Array.isArray(value))return [];
-    return value.map((x:any)=>({
+    const clean=value.map((x:any)=>({
       order_item_id:String(x?.order_item_id||''),
       wix_product_id:x?.wix_product_id?String(x.wix_product_id):null,
       product_name:String(x?.product_name||''),
+      component_key:String(x?.component_key||'main'),
+      component_name:String(x?.component_name||x?.product_name||''),
+      unit_index:Math.max(1,Math.floor(Number(x?.unit_index)||1)),quantity:1,
+      profile_item_key:x?.profile_item_key,profile_signature:x?.profile_signature,
     })).filter(x=>x.order_item_id&&x.product_name);
+    return [...new Map(clean.map(c=>[componentIdentity(c),c])).values()];
   }
 
   private restoreProfileContents(value:unknown,order:OrderRow){
     if(!Array.isArray(value))return [];
+    if(value.some(x=>x?.profile_signature)){
+      if(value.some(x=>x.profile_signature!==packagingSignature(this.packageItems(order))))return [];
+      const components=this.packageComponents(order);
+      return value.flatMap(x=>{const c=components.find(c=>c.profile_item_key===x.profile_item_key&&c.component_key===x.component_key&&c.unit_index===x.unit_index);return c?[{...c,profile_signature:x.profile_signature}]:[];});
+    }
     const items=this.packageItems(order);
     return value.map((x:any)=>{
       const wixId=String(x?.wix_product_id||'');
@@ -260,6 +278,15 @@ export class FulfilmentService {
       if(!match)continue;
       const base=this.shippingProfiles.filter(p=>p.shipping_product_id===match.id);
       if(!base.length)continue;
+      if(base.some(p=>Array.isArray(p.contents)&&p.contents.some((c:any)=>c.profile_signature))){
+        const signature=packagingSignature(this.packageItems(order));
+        if(base.every(p=>Array.isArray(p.contents)&&p.contents.length&&p.contents.every((c:any)=>c.profile_signature===signature))){
+          out.length=0; no=1;
+          for(const p of base)out.push({shipment_id:shipment.id,package_no:no++,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,contents:this.restoreProfileContents(p.contents,order),source_type:'Profile',shipping_product_id:match.id});
+          break; // Component profiles describe the entire matching order, including quantity.
+        }
+        continue;
+      }
       const qty=Math.max(1,Number(item.quantity||1));
       for(let q=0;q<qty;q++)for(const p of base)out.push({shipment_id:shipment.id,package_no:no++,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,contents:this.restoreProfileContents(p.contents,order),source_type:'Profile',shipping_product_id:match.id});
     }
@@ -287,7 +314,6 @@ export class FulfilmentService {
     const order=this.orders.orders().find(o=>o.id===shipment.order_id);
     const item=order&&this.profileTarget(order);
     if(!order||!item){this.error.set('No product was found for this shipment.');return;}
-    if(Number(item.quantity||1)!==1){this.error.set('Save a reusable product profile only from an order with quantity 1.');return;}
     this.error.set(''); this.savingProfileShipmentId.set(shipment.id);
     try{
       let product=this.exactProfile(item);
@@ -303,7 +329,7 @@ export class FulfilmentService {
       const current=this.packagesFor(shipment.id);
       const {error:deleteError}=await this.supabase.client.from('wc_shipping_packages').delete().eq('shipping_product_id',product.id).eq('source_type','Base');
       if(deleteError)throw deleteError;
-      const templates=current.map((p,index)=>({shipping_product_id:product!.id,source_type:'Base',package_no:index+1,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,contents:this.packageContents(p).map(c=>{const source=this.packageItems(order).find(i=>i.id===c.order_item_id);return{...c,wix_product_id:(source?this.wixProductId(source):'')||c.wix_product_id||null};}),quantity:1,active:true,notes:`Saved from order #${order.order_number}.`}));
+      const templates=current.map((p,index)=>({shipping_product_id:product!.id,source_type:'Base',package_no:index+1,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,contents:this.packageContents(p).map(c=>{const source=this.packageItems(order).find(i=>i.id===c.order_item_id);return{...this.packageComponents(order).find(x=>componentIdentity(x)===componentIdentity(c))!,profile_signature:packagingSignature(this.packageItems(order)),wix_product_id:(source?this.wixProductId(source):'')||c.wix_product_id||null};}),quantity:1,active:true,notes:`Saved from order #${order.order_number}.`}));
       const {data,error}=await this.supabase.client.from('wc_shipping_packages').insert(templates).select('*');
       if(error)throw error;
       this.shippingProfiles=this.shippingProfiles.filter(p=>p.shipping_product_id!==product!.id).concat((data??[]) as ShippingPackage[]);
@@ -318,13 +344,17 @@ export class FulfilmentService {
   shipmentFor(row:FulfilmentRow){return this.shipments().find(s=>s.fulfilment_id===row.id)??null;}
   packagesFor(shipmentId:string){return this.shipmentPackages().filter(p=>p.shipment_id===shipmentId).sort((a,b)=>a.package_no-b.package_no);}
   packageDimensionsComplete(p:ShipmentPackageRow){return p.length_mm!=null&&p.width_mm!=null&&p.height_mm!=null&&p.weight_kg!=null;}
-  packageContentsComplete(p:ShipmentPackageRow){return this.validContents(p.contents).length>0;}
+  packageContentsComplete(p:ShipmentPackageRow){
+    const shipment=this.shipments().find(s=>s.id===p.shipment_id),order=shipment&&this.orders.orders().find(o=>o.id===shipment.order_id);
+    const contents=this.validContents(p.contents),components=order?this.packageComponents(order):[];
+    return contents.length>0&&contents.every(c=>components.some(x=>x.id===componentIdentity(c)));
+  }
   packageComplete(p:ShipmentPackageRow){return this.packageDimensionsComplete(p)&&this.packageContentsComplete(p);}
   unassignedOrderItems(shipmentId:string){
     const shipment=this.shipments().find(s=>s.id===shipmentId),order=shipment&&this.orders.orders().find(o=>o.id===shipment.order_id);
     if(!order)return [];
-    const assigned=new Set(this.packagesFor(shipmentId).flatMap(p=>this.validContents(p.contents).map(c=>c.order_item_id)));
-    return this.packageItems(order).filter(i=>!assigned.has(i.id));
+    const assigned=new Set(this.packagesFor(shipmentId).flatMap(p=>this.validContents(p.contents).map(componentIdentity)));
+    return this.packageComponents(order).filter(i=>!assigned.has(i.id));
   }
   shipmentComplete(shipmentId:string){const ps=this.packagesFor(shipmentId);return ps.length>0&&ps.every(p=>this.packageComplete(p))&&this.unassignedOrderItems(shipmentId).length===0;}
 
@@ -345,7 +375,13 @@ export class FulfilmentService {
   }
 
   async savePackageContents(pkg:ShipmentPackageRow,contents:PackageContentRow[]){
-    const clean=this.validContents(contents);
+    const shipment=this.shipments().find(s=>s.id===pkg.shipment_id);
+    const order=shipment&&this.orders.orders().find(o=>o.id===shipment.order_id);
+    if(!order)return false;
+    const components=this.packageComponents(order);
+    const selected=this.validContents(contents);
+    if(selected.some(c=>!components.some(x=>x.id===componentIdentity(c)))){this.error.set('Order components changed. Reopen Contents.');return false;}
+    const clean=selected.map(c=>components.find(x=>x.id===componentIdentity(c))!);
     if(!clean.length){this.error.set('Select at least one order product for this package.');return false;}
     const payload={contents:clean,updated_at:new Date().toISOString()};
     const {error}=await this.supabase.client.from('wc_shipment_packages').update(payload).eq('id',pkg.id);

@@ -1,3 +1,4 @@
+import { PackageComponent, componentIdentity } from '../../core/utils/package-components';
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ButtonModule } from 'primeng/button';
@@ -253,18 +254,18 @@ type BookingDraft = {
       }
     </p-drawer>
 
-    <p-dialog [visible]="contentsPackage() !== null" (visibleChange)="onContentsVisible($event)" [modal]="true" [draggable]="false" [style]="{ width: 'min(720px, 96vw)' }" header="Products in this package">
+    <p-dialog [visible]="contentsPackage() !== null" (visibleChange)="onContentsVisible($event)" [modal]="true" [draggable]="false" [style]="{ width: 'min(720px, 96vw)' }" header="Components in this package">
       @if (contentsPackage(); as pkg) {
-        <div class="contents-intro"><b>{{ pkg.package_name || 'Package '+pkg.package_no }}</b><span>The package name already describes its physical parts. Select which order product or products these parts belong to. The same product may be selected in several packages.</span></div>
+        <div class="contents-intro"><b>{{ pkg.package_name || 'Package '+pkg.package_no }}</b><span>Select each product or addon packed here. Each unit can be selected in several packages when split across boxes.</span></div>
         <div class="product-choice-list">
           @for (item of contentOrderItems(); track item.id) {
             <label class="product-choice">
               <input type="checkbox" [checked]="contentProductSelected(item.id)" (change)="toggleContentProduct(item,$any($event.target).checked)" />
-              <span><b>{{ item.product_name || 'Unnamed product' }}</b>@if (options(item).length) { <small>{{ options(item).join(' · ') }}</small> }</span>
+              <span><b>{{ item.component_name }} · Unit {{ item.unit_index }}</b>@if (item.component_key !== 'main') { <small>{{ item.product_name }}</small> }</span>
             </label>
           }
         </div>
-        <div class="content-actions"><span></span><span></span><p-button label="Cancel" severity="secondary" text (onClick)="contentsPackage.set(null)" /><p-button label="Save products" (onClick)="saveContents()" /></div>
+        <div class="content-actions"><span></span><span></span><p-button label="Cancel" severity="secondary" text (onClick)="contentsPackage.set(null)" /><p-button label="Save components" (onClick)="saveContents()" /></div>
       }
     </p-dialog>
 
@@ -347,20 +348,20 @@ export class FulfilmentComponent implements OnInit {
   orderItems(items: OrderItemRow[]) { return items.filter((i) => !/^(delivery|shipping)(\s+(fee|charge))?$/i.test(String(i.product_name || '').trim())); }
   image(item: OrderItemRow) { const x:any=item.image||{},r:any=item.raw_item||{}; return x.url||x.imageUrl||x.imageInfo?.url||r.media?.url||r.image?.url||r.image?.imageInfo?.url||''; }
   options(item: OrderItemRow) { const out:string[]=[]; for(const obj of [item.wix_options,item.custom_text_fields]) if(obj&&typeof obj==='object') for(const[k,v]of Object.entries(obj)){const z=typeof v==='object'&&v?(v as any).value||(v as any).name||(v as any).description:String(v??'');if(String(z).trim())out.push(`${k}: ${String(z).trim()}`);} return [...new Set(out)].slice(0,10); }
-  contentOrderItems(){const row=this.selected(),order=row&&this.f.orderFor(row);return order?this.f.packageItems(order):[];}
+  contentOrderItems(){const row=this.selected(),order=row&&this.f.orderFor(row);return order?this.f.packageComponents(order):[];}
   openPackageContents(pkg:ShipmentPackageRow){
     this.contentsPackage.set(pkg);
     this.contentsDraft.set(this.f.packageContents(pkg).map(x=>({...x})));
   }
-  contentProductSelected(itemId:string){return this.contentsDraft().some(x=>x.order_item_id===itemId);}
-  toggleContentProduct(item:OrderItemRow,checked:boolean){
-    if(checked&&!this.contentProductSelected(item.id))this.contentsDraft.update(rows=>[...rows,{order_item_id:item.id,product_name:String(item.product_name||'Unnamed product')}]);
-    else if(!checked)this.contentsDraft.update(rows=>rows.filter(x=>x.order_item_id!==item.id));
+  contentProductSelected(itemId:string){return this.contentsDraft().some(x=>componentIdentity(x)===itemId);}
+  toggleContentProduct(item:PackageComponent,checked:boolean){
+    if(checked&&!this.contentProductSelected(item.id))this.contentsDraft.update(rows=>[...rows,{...item}]);
+    else if(!checked)this.contentsDraft.update(rows=>rows.filter(x=>componentIdentity(x)!==item.id));
   }
   async saveContents(){const pkg=this.contentsPackage();if(!pkg)return;if(await this.f.savePackageContents(pkg,this.contentsDraft()))this.contentsPackage.set(null);}
   onContentsVisible(visible:boolean){if(!visible)this.contentsPackage.set(null);}
-  assignedProductNames(pkg:ShipmentPackageRow){return [...new Set(this.f.packageContents(pkg).map(x=>x.product_name).filter(Boolean))];}
-  unassignedNames(shipmentId:string){return this.f.unassignedOrderItems(shipmentId).map(x=>x.product_name||'Unnamed product').join(', ');}
+  assignedProductNames(pkg:ShipmentPackageRow){return [...new Set(this.f.packageContents(pkg).map(x=>`${x.component_name||x.product_name} · Unit ${x.unit_index||1}`).filter(Boolean))];}
+  unassignedNames(shipmentId:string){return this.f.unassignedOrderItems(shipmentId).map(x=>`${x.component_name} · Unit ${x.unit_index}`).join(', ');}
   address(a:Record<string,unknown>){const x:any=a;return[x.addressLine||x.addressLine1,x.city||x.suburb||x.locality,this.addressPart(x.subdivision||x.state||x.region),x.postalCode||x.postcode||x.zipCode,this.addressPart(x.country)].filter(Boolean).join(', ');}
   open(row:FulfilmentRow){
     this.selected.set(row);
