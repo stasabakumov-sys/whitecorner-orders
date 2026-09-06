@@ -8,7 +8,7 @@ function setup() {
   const db = {
     rpc: vi.fn(async (name: string, args: any) => {
       if (name === 'wc_claim_shipping_fulfillment') {
-        if (state.status === 'completed') return { data: { status: 'completed', contractVersion: 2 } };
+        if (state.status === 'completed') return { data: { status: 'synced', contractVersion: 2, wixFulfillmentId: state.fulfillmentId } };
         if (state.token) return { data: { status: 'busy' } };
         state.token = args.p_token;
         return { data: { status: 'claimed', contractVersion: 2, uncertain: state.status === 'uncertain' } };
@@ -39,6 +39,11 @@ function setup() {
 }
 
 describe('shipping fulfillment server workflow', () => {
+  it('requires manual verification of legacy completion without a saved Wix ID', async () => {
+    const s=setup(); s.db.rpc.mockResolvedValueOnce({data:{status:'synced',contractVersion:2,wixFulfillmentId:null}} as any);
+    await expect(s.run()).rejects.toThrow('ID is missing');
+    expect(s.request).not.toHaveBeenCalled();
+  });
   it('does not call Wix when the completed-status migration is missing', async () => {
     const s=setup(); s.db.rpc.mockResolvedValueOnce({data:{status:'claimed'}} as any);
     await expect(s.run()).rejects.toThrow('migration is required');

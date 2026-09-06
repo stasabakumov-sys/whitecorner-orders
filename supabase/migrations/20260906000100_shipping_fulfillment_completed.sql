@@ -19,7 +19,7 @@ begin
   insert into wc_shipping_fulfillment_sync(order_id,status) values(p_order_id,'pending')
     on conflict do nothing;
   select * into job from wc_shipping_fulfillment_sync where order_id=p_order_id for update;
-  if job.status in ('completed','synced') and job.wix_fulfillment_id is not null then return jsonb_build_object('status','completed','contractVersion',2); end if;
+  if job.status in ('completed','synced') then return jsonb_build_object('status','synced','contractVersion',2,'wixFulfillmentId',job.wix_fulfillment_id); end if;
   if job.token is not null and job.started_at > now()-interval '2 minutes' then
     return jsonb_build_object('status','busy');
   end if;

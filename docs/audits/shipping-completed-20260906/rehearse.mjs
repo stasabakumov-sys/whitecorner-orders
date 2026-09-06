@@ -1,0 +1,53 @@
+import {readFile} from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+import assert from 'node:assert/strict';
+const {PGlite}=await import(pathToFileURL(process.argv[2]).href);
+const db=new PGlite();
+const dir='docs/audits/shipping-completed-20260906/';
+const manifest=JSON.parse(await readFile('docs/audits/migrations-20260905/rename-manifest.json','utf8'));
+const clean=s=>s.replaceAll('\r\n','\n').replace(/create extension if not exists pgcrypto;/gi,'');
+await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+alter default privileges for role postgres in schema public grant all on tables to anon,authenticated,service_role;
+alter default privileges for role postgres in schema public grant all on functions to anon,authenticated,service_role;
+create schema auth;create function auth.uid() returns uuid language sql as 'select null::uuid';
+create table business_categories(name text primary key,tax_attribute text,tax_category text,active boolean);
+create table transactions(business_category text,tax_attribute text,tax_category text);
+create table classification_rules(business_category text,tax_attribute text,tax_category text);
+create schema supabase_migrations;create table supabase_migrations.schema_migrations(version text primary key,name text,statements text[]);`);
+await db.exec(clean(await readFile('supabase/orders-schema.sql','utf8')));
+for(const e of manifest.filter(e=>e.registerOnly||e.version==='20260905000100')){
+ await db.exec(clean(await readFile('supabase/migrations/'+e.name,'utf8')));
+ await db.query('insert into supabase_migrations.schema_migrations(version) values($1)',[e.version]);
+}
+const id='00000000-0000-4000-8000-000000000001', token='00000000-0000-4000-8000-000000000002';
+await db.exec(`insert into wc_orders(id,wix_order_id,order_number,fulfillment_status) values('${id}','fixture-only','TEST-ONLY','NOT_FULFILLED');
+insert into wc_fulfilment(id,order_id,route,status,shipping_booked_at) values('${id}','${id}','Shipping','Shipping Booked',now());
+insert into wc_shipments(id,order_id,fulfilment_id,status,courier_order_id) values('${id}','${id}','${id}','Shipping Booked','fixture-only');`);
+const snapshots=async()=>{
+ const tables=(await db.query("select tablename from pg_tables where schemaname='public' order by tablename")).rows;
+ const state={}; for(const {tablename} of tables)state[tablename]=(await db.query(`select to_jsonb(t) as row from public."${tablename}" t order by to_jsonb(t)::text`)).rows;
+ return state;
+};
+const before=await snapshots();
+const sql=await readFile(dir+'apply-completed-only.sql','utf8');
+await db.exec("delete from supabase_migrations.schema_migrations where version='20260830000100'");
+await assert.rejects(db.exec(sql),/Migration history differs/);await db.exec('rollback');
+await db.exec("insert into supabase_migrations.schema_migrations(version) values('20260830000100')");
+await assert.rejects(db.exec(sql.replace('insert into supabase_migrations.schema_migrations(version,name,statements)', 'select 1/0;\ninsert into supabase_migrations.schema_migrations(version,name,statements)')), /division by zero/);
+await db.exec('rollback');
+assert.deepEqual(await snapshots(),before);
+assert.equal((await db.query("select count(*)::int n from supabase_migrations.schema_migrations")).rows[0].n,11);
+await db.exec(sql);
+assert.deepEqual(await snapshots(),before,'Applying migration must not change business rows');
+assert.equal((await db.query("select count(*)::int n from supabase_migrations.schema_migrations")).rows[0].n,12);
+assert.equal((await db.query("select count(*)::int n from supabase_migrations.schema_migrations where version='20260901000100'")).rows[0].n,0);
+await assert.rejects(db.exec(sql),/Migration history differs/);await db.exec('rollback');
+const call=async(q)=>(await db.query(q)).rows[0].result;
+const claim=await call(`select wc_claim_shipping_fulfillment('${id}','${token}') as result`);
+assert.equal(claim.status,'claimed');assert.equal(claim.contractVersion,2);
+// The currently deployed Edge code uses 'synced' and may omit the ID.
+await db.exec(`select wc_record_shipping_fulfillment('${id}','${token}','synced')`);
+assert.equal((await call(`select wc_claim_shipping_fulfillment('${id}','${token}') as result`)).status,'synced');
+assert.equal((await db.query("select count(*)::int n from wc_order_activity where message='WIX fulfilled'")).rows[0].n,1);
+await db.close();
+console.log('PASS: exact production-definition guards; history drift/replay blocked; apply atomic; all business rows unchanged; only new history version added; Email AI pending; legacy synced/no-ID RPC compatible.');

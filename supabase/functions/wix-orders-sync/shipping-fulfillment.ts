@@ -23,7 +23,10 @@ export async function syncShippingFulfillment(db: any, orderId: string,
   });
   if (claimError) throw new Error('Could not claim shipping sync. A saved shipping booking and the shipping sync migration are required.');
   if (claim?.status !== 'busy' && claim?.contractVersion !== 2) throw new Error('Shipping tracking migration is required before synchronization.');
-  if (claim?.status === 'completed') return { ok: true, alreadyFulfilled: true };
+  if (claim?.status === 'synced') {
+    if (!claim.wixFulfillmentId) throw new Error('Wix fulfillment ID is missing from legacy completion. Manual review required.');
+    return { ok: true, alreadyFulfilled: true };
+  }
   if (claim?.status !== 'claimed') throw new Error('Wix synchronization is already running. Retry after it finishes.');
   let uncertain = Boolean(claim.uncertain);
   const record = async (status: string, error: string | null = null, id: string | null = null) => {

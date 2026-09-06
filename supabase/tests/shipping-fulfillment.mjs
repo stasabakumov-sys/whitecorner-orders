@@ -68,7 +68,7 @@ assert.equal(await scalar(`select fulfillment_status from wc_orders where id='${
 assert.equal(await scalar(`select raw_order->>'fulfillmentStatus' from wc_orders where id='${order}'`), 'FULFILLED');
 assert.equal(await scalar(`select fulfillment_status from wc_orders where id='${other}'`), 'NOT_FULFILLED');
 assert.equal(await scalar(`select count(*)::int from wc_order_activity where message like 'WIX fulfilled%'`), 1);
-assert.equal((await scalar(`select wc_claim_shipping_fulfillment('${order}','${token}')`)).status, 'completed');
+assert.equal((await scalar(`select wc_claim_shipping_fulfillment('${order}','${token}')`)).status, 'synced');
 assert.equal(await scalar(`select wix_fulfillment_id from wc_shipping_fulfillment_sync where order_id='${order}'`), 'wix-test');
 await db.exec(`set role service_role; select wc_record_shipping_fulfillment('${order}','${token2}','completed',null,'wix-test'); reset role;`);
 assert.equal(await scalar(`select count(*)::int from wc_order_activity where message='WIX fulfilled'`), 1);

@@ -18,6 +18,8 @@ Apply the new migration in a separately approved operation before deploying the 
 
 The updated action requires the migration's `contractVersion: 2` claim response before any Wix request, so deploying code prematurely cannot create a fulfillment with an incompatible completion function.
 
+For deployment compatibility, terminal claim responses keep `status: synced` for the old Edge Function and include `contractVersion: 2` and `wixFulfillmentId` for the new one. Stored completion still uses `completed`. Legacy terminal records without a fulfillment ID remain terminal for the old code; the new action reports manual review rather than claiming verified success or creating a duplicate.
+
 ## Validation
 
 - `npm test -- --watch=false` and `npm run build` from `angular-app`.
