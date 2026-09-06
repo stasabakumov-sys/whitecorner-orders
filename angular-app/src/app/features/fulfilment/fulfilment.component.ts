@@ -269,7 +269,7 @@ type BookingDraft = {
       }
     </p-dialog>
 
-    <p-dialog [visible]="bookingDialogOpen()" (visibleChange)="onBookingVisible($event)" [modal]="true" [draggable]="false" [closable]="f.bookingShipmentId() === null" [style]="{ width: 'min(900px, 96vw)' }" header="Confirm Fast Courier booking">
+    <p-dialog [visible]="bookingDialogOpen()" (visibleChange)="onBookingVisible($event)" [modal]="true" [draggable]="false" [closable]="!bookingBusy()" [style]="{ width: 'min(900px, 96vw)' }" header="Confirm Fast Courier booking">
       @if (bookingContext(); as context) {
         <div class="booking-warning"><b>This action creates a real booking and charges the Fast Courier account.</b><span>Review the contacts and collection details. Closing this window does not book anything.</span></div>
         <div class="booking-summary"><span><b>Courier</b>{{ context.shipment.selected_quote?.courierName }} · {{ context.shipment.selected_quote?.name }}</span><span><b>Delivery + insurance</b>{{ money(selectedQuoteTotal(context.shipment,context.order)) }}</span><span><b>Declared value</b>{{ money(goodsValueInclGst(context.order)) }} incl. GST</span></div>
@@ -308,7 +308,9 @@ type BookingDraft = {
         </fieldset>
         <label class="final-consent"><input type="checkbox" [checked]="bookingDraft().accepted" (change)="setBookingBoolean('accepted',$any($event.target).checked)" /><span>I confirm the addresses, packaging and contents, accept Fast Courier’s terms, insurance conditions and financial services guide, confirm there are no dangerous goods, and authorise the account charge.</span></label>
         @if (!bookingFormValid()) { <div class="muted booking-required">Complete all fields marked * and tick the confirmation box.</div> }
-        <div class="booking-dialog-actions"><p-button label="Cancel" severity="secondary" text [disabled]="f.bookingShipmentId() !== null" (onClick)="bookingDialogOpen.set(false)" /><p-button [label]="'Confirm booking and charge '+money(selectedQuoteTotal(context.shipment,context.order))" icon="pi pi-lock" [disabled]="!bookingFormValid()" [loading]="f.bookingShipmentId() === context.shipment.id" (onClick)="confirmBooking()" /></div>
+        @if (bookingBusy()) { <div role="status" aria-live="polite">Booking… Please wait. Do not submit again.</div> }
+        @if (bookingError()) { <div class="booking-warning" role="alert">{{ bookingError() }}</div> }
+        <div class="booking-dialog-actions"><p-button label="Cancel" severity="secondary" text [disabled]="bookingBusy()" (onClick)="bookingDialogOpen.set(false)" /><p-button [label]="bookingBusy() ? 'Booking…' : 'Confirm booking and charge '+money(selectedQuoteTotal(context.shipment,context.order))" icon="pi pi-lock" [disabled]="!bookingFormValid() || bookingBusy()" [loading]="bookingBusy()" (onClick)="confirmBooking()" /></div>
       }
     </p-dialog>
   `,
@@ -331,6 +333,9 @@ export class FulfilmentComponent implements OnInit {
   contentsPackage = signal<ShipmentPackageRow|null>(null);
   contentsDraft = signal<PackageContentRow[]>([]);
   bookingDialogOpen = signal(false);
+  bookingSubmitting = signal(false);
+  bookingError = signal('');
+  bookingBusy(){return this.bookingSubmitting()||this.f.bookingShipmentId()!==null;}
   bookingContext = signal<{row:FulfilmentRow;shipment:ShipmentRow;order:OrderRow}|null>(null);
   bookingDraft = signal<BookingDraft>(this.emptyBookingDraft());
   collectingRowId = signal<string|null>(null);
@@ -452,24 +457,34 @@ export class FulfilmentComponent implements OnInit {
     if(shipment.status!=='Quote Selected'||!shipment.selected_quote_id)return;
     const address:any=order.delivery_address||{},name=this.splitName(order.customer_name);
     const destination=this.courierAddressLines(String(address.addressLine||address.addressLine1||address.streetAddress||''),String(address.addressLine2||address.addressLineSecondary||''));
+    this.bookingError.set('');
     this.bookingContext.set({row,shipment,order});
     this.bookingDraft.set({...this.emptyBookingDraft(),destinationFirstName:name.firstName,destinationLastName:name.lastName,destinationCompanyName:String(order.company||'').trim().slice(0,19),destinationEmail:String(order.buyer_email||''),destinationAddress1:destination.address1,destinationAddress2:destination.address2,destinationPhone:this.cleanPhone(order.phone),collectionDate:this.nextCollectionDate(),parcelContent:this.parcelContents(shipment)});
     this.bookingDialogOpen.set(true);
   }
-  onBookingVisible(visible:boolean){if(!visible&&this.f.bookingShipmentId()===null){this.bookingDialogOpen.set(false);this.bookingContext.set(null);}}
+  onBookingVisible(visible:boolean){if(!visible&&!this.bookingBusy()){this.bookingDialogOpen.set(false);this.bookingContext.set(null);}}
   setBookingField(key:keyof BookingDraft,value:string){this.bookingDraft.update(draft=>({...draft,[key]:value}));}
   setBookingBoolean(key:'authorityToLeave'|'noPrinter'|'accepted',value:boolean){this.bookingDraft.update(draft=>({...draft,[key]:value}));}
   bookingFormValid(){const d=this.bookingDraft(),required=[d.pickupFirstName,d.pickupLastName,d.pickupEmail,d.pickupAddress1,d.pickupPhone,d.destinationFirstName,d.destinationLastName,d.destinationEmail,d.destinationAddress1,d.destinationPhone,d.collectionDate,d.pickupTimeWindow,d.parcelContent];return required.every(value=>String(value).trim())&&d.collectionDate>=this.today()&&d.accepted;}
   selectedQuoteTotal(shipment:ShipmentRow,order:OrderRow){return shipment.selected_quote?this.quoteTotal(shipment.selected_quote,order):0;}
   bookingStatusLabel(value:string|undefined){return String(value||'Booking submitted').replace(/_/g,' ').replace(/\b\w/g,char=>char.toUpperCase());}
   async confirmBooking(){
-    const context=this.bookingContext(),draft=this.bookingDraft();if(!context||!this.bookingFormValid())return;
-    const insurance=this.insuranceSelection(context.order);if(!insurance){this.f.error.set('Insurance cover is insufficient for this order. Booking was not created.');return;}
-    const total=this.money(this.selectedQuoteTotal(context.shipment,context.order));
-    if(!window.confirm(`Create this Fast Courier booking and charge ${total} to the saved payment method?`))return;
+    if(this.bookingBusy())return;
+    this.bookingError.set('');
+    const context=this.bookingContext(),draft=this.bookingDraft();
+    if(!context||!this.bookingFormValid()){this.bookingError.set('Complete the required fields, choose today or a future collection date, and accept the account charge.');return;}
+    // The modal and explicit charge consent confirm this action. A native confirm
+    // may be suppressed by embedded browsers, silently cancelling submission.
+    this.bookingSubmitting.set(true);
+    try{
+    const insurance=this.insuranceSelection(context.order);if(!insurance){this.bookingError.set('Insurance cover is insufficient or unavailable. Booking was not created. Review the insurance selection.');return;}
     const clean=(value:string)=>value.trim(),limited=(value:string)=>clean(value).slice(0,19);
     const details:FastCourierBookingDetails={quoteId:String(context.shipment.selected_quote_id),senderType:'sender',pickupFirstName:clean(draft.pickupFirstName),pickupLastName:clean(draft.pickupLastName),pickupCompanyName:limited(draft.pickupCompanyName),pickupEmail:clean(draft.pickupEmail),pickupAddress1:limited(draft.pickupAddress1),pickupAddress2:limited(draft.pickupAddress2),pickupPhone:this.cleanPhone(draft.pickupPhone),destinationFirstName:clean(draft.destinationFirstName),destinationLastName:clean(draft.destinationLastName),destinationCompanyName:limited(draft.destinationCompanyName),destinationEmail:clean(draft.destinationEmail),destinationAddress1:limited(draft.destinationAddress1),destinationAddress2:limited(draft.destinationAddress2),destinationPhone:this.cleanPhone(draft.destinationPhone),collectionDate:draft.collectionDate,pickupTimeWindow:draft.pickupTimeWindow,parcelContent:clean(draft.parcelContent),specialInstructions:clean(draft.specialInstructions),valueOfContent:this.goodsValueInclGst(context.order),authorityToLeave:draft.authorityToLeave,noPrinter:draft.noPrinter,extendedLiability:String(insurance.tier),insuranceValue:`$${insurance.insuranceValue}`,insuranceFee:`$${insurance.insuranceFee.toFixed(2)}`,acceptInsuranceConditions:true,acceptTermConditions:true,acceptAttachment:true,acceptNoDangerousGoods:true,acceptReadFinancialServiceGuide:true,emailForDocuments:clean(draft.pickupEmail),additionalEmailsForDocuments:draft.destinationEmail.trim()&&draft.destinationEmail.trim()!==draft.pickupEmail.trim()?[{email:draft.destinationEmail.trim()}]:[]};
     if(await this.f.bookShipment(context.row,details)){this.bookingDialogOpen.set(false);this.bookingContext.set(null);}
+    else this.bookingError.set(this.f.error()||'Booking could not be completed. Check Fast Courier before trying again.');
+    }catch(error:any){
+      this.bookingError.set(error?.message||'Booking could not be confirmed. Check Fast Courier before trying again.');
+    }finally{this.bookingSubmitting.set(false);}
   }
   n(v:string){return v===''?null:Number(v);}
   savePkg(pkg:ShipmentPackageRow,name:string,l:string,w:string,h:string,kg:string){void this.f.savePackage(pkg,{package_name:name.trim()||'Package '+pkg.package_no,length_mm:this.n(l),width_mm:this.n(w),height_mm:this.n(h),weight_kg:this.n(kg)});}
