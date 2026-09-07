@@ -1,3 +1,4 @@
+import {signal} from '@angular/core';
 import {describe,it,expect,vi} from 'vitest';
 import {orderItemOptionLabels,packageComponents,partnerPans,restoreReviewPackages} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {PartnerPansService} from './partner-pans.service';
@@ -14,7 +15,7 @@ describe('Partner supplied Pans',()=>{
  it('uses Wix raw/catalog/description fields, deduplicates and excludes negative selections',()=>{
   const item={id:'i',quantity:3,wix_options:{Pans:'6 pans'},description_lines:[{name:{original:'Pans'},plainText:{original:'6 pans'}}],raw_item:{catalogReference:{options:{options:{Pans:'6 pans'}}}}};
   expect(partnerPans(item).choices).toEqual(['6 pans']);expect(partnerPans(item).quantity).toBe(3);
-  for(const Pans of ['Cart without pans','Without pans','No','None','0','No pans'])expect(partnerPans({id:'i',wix_options:{Pans}}).choices).toEqual([]);
+  for(const Pans of ['Cart without pans','Shelf without steel pans','Without stainless steel pans','WITHOUT METAL PANS','Shelf no steel pans','Without pans','No','None','0','No pans'])expect(partnerPans({id:'i',wix_options:{Pans}}).choices).toEqual([]);
   expect(partnerPans({id:'i',wix_options:{'Side panels':'Yes'}}).choices).toEqual([]);
   expect(partnerPans({...item,quantity:4}).key).not.toBe(partnerPans(item).key);
  });
@@ -30,6 +31,13 @@ describe('Partner supplied Pans',()=>{
   const saving=s.setStatus(row,'ordered_and_sent');expect(await s.setStatus(row,'ordered_and_sent')).toBe(false);expect(rpc).toHaveBeenCalledTimes(1);
   resolve({error:{message:'Stale item'}});expect(await saving).toBe(false);expect(s.rows()[0].status).toBe('pending');expect(s.error()).toBe('Stale item');
   rpc.mockImplementation(async()=>({data:{status:'ordered_and_sent',selection_key:'k'}}));expect(await s.setStatus(row,'ordered_and_sent')).toBe(true);expect(s.rows()[0].status).toBe('ordered_and_sent');
+ });
+ it('publishes the transaction note to the shared order and product activity cache',async()=>{
+  const note={id:'note',order_id:'order',order_item_id:'item',activity_type:'note',message:'Partner Pans: Ordered and sent'};
+  const activity={rows:signal<any[]>([])},rpc=vi.fn(async()=>({data:{status:'ordered_and_sent',activity:note}}));
+  const s=new PartnerPansService({client:{rpc}} as any,activity as any),row={item:{id:'item'},pans:{key:'key'}};
+  s.rows.set([row]);await s.setStatus(row,'ordered_and_sent');await s.setStatus(row,'ordered_and_sent');
+  expect(activity.rows()).toEqual([note]);
  });
  it('loads persisted status and resets changed selections, with no writes on report open',async()=>{
   const item={id:'i',quantity:2,wix_options:{Pans:'Yes'}};

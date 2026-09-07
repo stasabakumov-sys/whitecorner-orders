@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, Optional } from '@angular/core';
+import { ActivityService } from './activity.service';
 import { SupabaseService } from './supabase.service';
 import { partnerPans } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
@@ -8,7 +9,7 @@ export class PartnerPansService {
  readonly loading=signal(false);
  readonly busy=signal(false);
  readonly error=signal('');
- constructor(private supabase:SupabaseService){}
+ constructor(private supabase:SupabaseService,@Optional() private activity?:ActivityService){}
  async load(){
   if(this.loading()||this.busy())return;
   this.loading.set(true);this.error.set('');
@@ -39,6 +40,7 @@ export class PartnerPansService {
     p_item_id:row.item.id,p_source:row.item,p_selection_key:row.pans.key,p_status:status,
    });
    if(error||!data)throw Error(error?.message||'Status was not confirmed. Refresh before retrying.');
+   if(data.activity)this.activity?.rows.update(rows=>[data.activity,...rows.filter(a=>a.id!==data.activity.id)]);
    this.rows.update(rows=>rows.map(r=>r.item.id===row.item.id?{...r,record:data,status:data.status,changed:false}:r));
    return true;
   }catch(e:any){this.error.set(e.message);return false;}finally{this.busy.set(false);}

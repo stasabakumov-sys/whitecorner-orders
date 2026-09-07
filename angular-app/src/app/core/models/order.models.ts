@@ -52,6 +52,7 @@ export interface OrderActivityRow {
   id?: string;
   order_id: string;
   production_unit_id?: string | null;
+  order_item_id?: string | null;
   activity_type: 'note' | 'status_change' | 'wix';
   message?: string | null;
   old_status?: string | null;
