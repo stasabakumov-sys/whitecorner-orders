@@ -55,6 +55,7 @@ import { isPartnerPansComponent, cents, deliveryCents, orderItemOptionLabels, re
  }@else{<b>Unassigned packaging — select its contents</b>}
  </div>
  <div class="product-packages"><h4>{{group.boxes.length}} package(s)</h4>
+ @if(editable(row)&&group.item){<a [href]="variantLink(group.item)">Configure packaging variant</a> <button [disabled]="s.busy()||variantLoading" (click)="loadVariant(group.item)">Load saved variant</button>}
  @for(p of group.boxes;track p){
  <fieldset class="package-card" [disabled]="s.busy()"><legend>Package {{packageNumber(row,p)}}</legend>
  @if(editable(row)){
@@ -101,6 +102,15 @@ import { isPartnerPansComponent, cents, deliveryCents, orderItemOptionLabels, re
  styleUrl:'./delivery-review.component.css',
 })
 export class DeliveryReviewComponent implements OnInit {
+ variantLoading=false;
+ variantLink(item:any){return '#/shipping-data?product='+encodeURIComponent(item.product_name||'');}
+ async loadVariant(item:any){
+  if(this.variantLoading||this.s.busy())return;
+  if(this.draft.some(p=>p.contents.some(c=>c.order_item_id===item.id)&&new Set(p.contents.map(c=>c.order_item_id)).size>1)){this.s.error.set('A box is shared with another product. Adjust its contents manually before loading a variant.');return;}
+  this.variantLoading=true;this.s.error.set('');
+  try{const boxes=await this.s.variantPackages(item);this.draft=[...this.draft.filter(p=>this.owner(p)!==item.id),...boxes];for(const p of boxes)this.boxOwners.set(p,item.id);this.confirmed=false;}
+  catch(e:any){this.s.error.set(e.message);}finally{this.variantLoading=false;}
+ }
 
  acceptUnknownCost=false;
  private boxOwners=new WeakMap<ReviewPackage,string>();

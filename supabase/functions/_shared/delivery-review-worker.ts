@@ -1,4 +1,5 @@
 import { buildReviewRequest, componentNormal, eligibleOrder, evaluateQuotes, goodsCents, insuranceFor, packagingError, productId, restoreReviewPackages, reviewComponents, reviewInputKey, reviewItems, reviewSignature } from './delivery-review-domain.ts';
+import {expandVariant, hasSizeOption, variantSignature} from './delivery-review-domain.ts';
 
 function checked(result:any){if(result.error)throw Error(result.error.message);return result.data;}
 export async function reviewContext(db:any,orderId:string){
@@ -37,6 +38,13 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
    const profile=checked(await db.from('wc_delivery_packaging_profiles').select('packages').eq('signature',signature).maybeSingle());
    if(profile)packages=restoreReviewPackages(profile.packages,components);
    else {
+    const variantPackages:any[]=[];
+    for(const item of reviewItems(order,rules)){
+     const variant=checked(await db.from('wc_delivery_packaging_profiles').select('packages').eq('signature',variantSignature(item)).maybeSingle());
+     if(variant)variantPackages.push(...expandVariant(variant.packages,item,rules));
+    }
+    if(!packagingError(variantPackages,components))packages=variantPackages;
+    if(!packages.length){
     // Existing exact composition profiles created in Fulfilment are reusable.
     const templates=checked(await db.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no'))||[];
     const groups=new Map<string,any[]>();
@@ -53,6 +61,7 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
      const products=checked(await db.from('wc_shipping_products').select('id,wix_product_id,product_name').eq('active',true))||[];
      const candidate:any[]=[];
      for(const item of reviewItems(order,rules)){
+      if(hasSizeOption(item))continue; // Never apply size-agnostic legacy boxes.
       const units=components.filter(c=>c.order_item_id===item.id);
       if(units.some(c=>c.component_key!=='main'))continue;
       const product=products.find((p:any)=>productId(item)?p.wix_product_id===productId(item):!p.wix_product_id&&componentNormal(p.product_name)===componentNormal(item.product_name||''));
@@ -61,6 +70,7 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
       for(const unit of units)for(const p of base)candidate.push({...p,contents:[unit]});
      }
      if(!packagingError(candidate,components))packages=candidate;
+    }
     }
    }
   }

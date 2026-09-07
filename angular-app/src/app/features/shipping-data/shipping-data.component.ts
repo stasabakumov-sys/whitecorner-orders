@@ -1,5 +1,7 @@
-import { Component, OnInit, computed, signal } from '@angular/core';
+import { Component, OnInit, computed, signal, Optional } from '@angular/core';
+import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
+import {PackagingVariantsComponent} from './packaging-variants.component';
 
 type ShippingProduct = {
   id: string;
@@ -35,6 +37,7 @@ type ShippingRule = {
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
+  imports:[PackagingVariantsComponent],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -71,6 +74,7 @@ type ShippingRule = {
               </span>
             </div>
 
+            @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" />}
             <div class="shipsection">
               <h3>Packages</h3>
               <div class="tablewrap">
@@ -167,7 +171,7 @@ export class ShippingDataComponent implements OnInit {
   visibleProducts = computed(() => this.products().filter(p => this.kindFilter()==='all' || this.kind(p.product_name)===this.kindFilter()));
   selectedProduct = computed(() => this.products().find(p => p.id===this.selectedId()) ?? null);
 
-  constructor(private supabase: SupabaseService) {}
+  constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute) {}
 
   async ngOnInit() {
     await this.load();
@@ -184,6 +188,8 @@ export class ShippingDataComponent implements OnInit {
     this.products.set((pr.data ?? []) as ShippingProduct[]);
     this.packages.set((pk.data ?? []) as ShippingPackage[]);
     this.rules.set((rr.data ?? []) as ShippingRule[]);
+    const requested=this.route?.snapshot.queryParamMap.get('product');
+    const target=this.products().find(p=>p.product_name===requested);if(target)this.selectedId.set(target.id);
     if (!this.selectedId() && this.products().length) this.selectedId.set(this.products()[0].id);
   }
 
