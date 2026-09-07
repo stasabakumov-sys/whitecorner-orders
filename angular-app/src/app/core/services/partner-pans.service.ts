@@ -32,6 +32,12 @@ export class PartnerPansService {
    this.rows.set(rows.sort((a,b)=>String(b.order.wix_created_at||'').localeCompare(String(a.order.wix_created_at||''))));
   }catch(e:any){this.error.set(e.message);}finally{this.loading.set(false);}
  }
+ async addComment(row:any,message:string){
+  const text=message.trim();if(!text||this.busy()||this.loading())return false;
+  this.busy.set(true);this.error.set('');
+  try{if(!this.activity)throw Error('Order notes unavailable.');await this.activity.addNote(row.order.id,text,row.item.id);return true;}
+  catch(e:any){this.error.set(e.message);return false;}finally{this.busy.set(false);}
+ }
  async setStatus(row:any,status:'pending'|'ordered_and_sent'){
   if(this.busy()||this.loading())return false;
   this.busy.set(true);this.error.set('');
