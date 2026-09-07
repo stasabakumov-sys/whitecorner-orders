@@ -29,6 +29,8 @@ import { LoginComponent } from './shared/login/login.component';
         <a routerLink="/email" routerLinkActive="active"><span>✉</span>Email</a>
         <a routerLink="/finance" routerLinkActive="active"><span>$</span>Finance</a>
         <a routerLink="/address-review" routerLinkActive="active"><span>◎</span>Address Review</a>
+        <a routerLink="/materials" routerLinkActive="active"><span>▤</span>Materials</a>
+        <a routerLink="/product-costing" routerLinkActive="active"><span>▤</span>Product Costing</a>
         <a routerLink="/shipping-data" routerLinkActive="active"><span>⇄</span>Shipping Data</a>
         <button (click)="auth.signOut()">Sign out</button>
       </aside>

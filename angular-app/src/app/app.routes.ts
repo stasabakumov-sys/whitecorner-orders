@@ -16,6 +16,8 @@ export const routes:Routes=[
   {path:'orders',component:OrdersComponent},
   {path:'delivery-cost-review',component:DeliveryReviewComponent},
   {path:'partner-pans',component:PartnerPansComponent},
+  {path:'materials',loadComponent:()=>import('./features/costing/materials.component').then(m=>m.MaterialsComponent)},
+  {path:'product-costing',loadComponent:()=>import('./features/costing/product-costing.component').then(m=>m.ProductCostingComponent)},
   {path:'production',component:ProductionBoardComponent},
   {path:'fulfilment',pathMatch:'full',redirectTo:'fulfilment/delivery'},
   {path:'fulfilment/:tab',component:FulfilmentComponent},
