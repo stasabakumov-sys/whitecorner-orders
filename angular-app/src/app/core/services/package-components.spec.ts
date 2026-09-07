@@ -5,7 +5,7 @@ import { OrdersService } from './orders.service';
 const item=(id='line',quantity=1,options:any={Colour:'Pink',Shelf:'Yes',Tray:'Yes - painted'})=>({id,product_name:'Cart',quantity,wix_options:options,catalog_reference:{catalogItemId:'product',options:{options}},raw_item:{descriptionLines:Object.entries(options).map(([name,value])=>({name:{original:name},plainText:{original:value}}))}} as any);
 function setup(quantity=1,options?:any){
  const saved:any={};
- const from=vi.fn((table:string)=>{let rows:any;const q:any={delete:()=>q,eq:()=>q,update:()=>q,insert:(r:any)=>{rows=r;saved[table]=structuredClone(r);return q;},select:()=>q,then:(resolve:any)=>resolve({data:rows||[],error:null})};return q;});
+ const from=vi.fn((table:string)=>{let rows:any;const q:any={delete:()=>q,eq:()=>q,update:()=>q,insert:(r:any)=>{rows=r;saved[table]=structuredClone(r);return q;},select:()=>q,maybeSingle:async()=>({data:saved[table]||null,error:null}),then:(resolve:any)=>resolve({data:rows||[],error:null})};return q;});
  const orders=new OrdersService({client:{from}} as any),order:any={id:'order',order_number:'fixture',wc_order_items:[item('line',quantity,options)]};orders.orders.set([order]);
  const service=new FulfilmentService({client:{from}} as any,orders,{} as any,{} as any,{} as any),shipment:any={id:'shipment',order_id:'order',status:'Packaging Review'};
  service.shipments.set([shipment]);service.shippingProducts.set([{id:'profile',wix_product_id:'product',product_name:'Cart'} as any]);

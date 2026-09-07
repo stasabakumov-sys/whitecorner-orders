@@ -6,10 +6,18 @@ on:
       - 'codex/**'
     paths:
       - 'angular-app/**'
+      - 'supabase/functions/_shared/**'
+      - 'supabase/functions/delivery-cost-review/**'
+      - 'supabase/migrations/*_delivery_cost_review.sql'
+      - '.github/scripts/delivery-review*'
       - '.github/workflows/build-angular2-preview.yml'
   pull_request:
     paths:
       - 'angular-app/**'
+      - 'supabase/functions/_shared/**'
+      - 'supabase/functions/delivery-cost-review/**'
+      - 'supabase/migrations/*_delivery_cost_review.sql'
+      - '.github/scripts/delivery-review*'
       - '.github/workflows/build-angular2-preview.yml'
 permissions:
   contents: write
@@ -30,6 +38,18 @@ jobs:
           npm ci
           npm run test:ci
           npm run build -- --base-href /whitecorner-orders/angular2/
+      - name: Test delivery estimate worker with mocks
+        run: node --test .github/scripts/delivery-review-worker.test.cjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.6
+      - name: Type-check delivery review and Wix import
+        run: deno check --no-lock supabase/functions/delivery-cost-review/index.ts supabase/functions/wix-orders-sync/index.ts supabase/functions/fast-courier-api/index.ts
+      - name: Rehearse delivery migration in isolated PostgreSQL
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/delivery-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/delivery-review-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Publish clean preview path
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash

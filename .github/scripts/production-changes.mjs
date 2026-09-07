@@ -51,7 +51,7 @@ export function shouldRun(before, after, key) {
   const sqlChanged = migration(before, target.suffix) !== migration(after, target.suffix);
   const workflowPath = `.github/workflows/${target.workflow}`;
   const workflowChanged = !isDeepStrictEqual(operationalWorkflow(before.read(workflowPath), target), operationalWorkflow(after.read(workflowPath), target));
-  const subtree = state => [...state.files].filter(([name]) => target.directory && name.startsWith(target.directory)).sort();
+  const subtree = state => [...state.files].filter(([name]) => target.directory && (name.startsWith(target.directory) || name.startsWith('supabase/functions/_shared/'))).sort();
   return sqlChanged || workflowChanged || !isDeepStrictEqual(subtree(before), subtree(after));
 }
 

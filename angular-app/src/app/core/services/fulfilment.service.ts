@@ -1,5 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { packageComponents, componentIdentity, packagingSignature } from '../utils/package-components';
+import { packagingError, restoreReviewPackages, reviewInputKey, reviewOutcome } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import { OrderItemRow, OrderRow } from '../models/order.models';
 import { OrdersService } from './orders.service';
 import { ActivityService } from './activity.service';
@@ -272,6 +273,18 @@ export class FulfilmentService {
 
   private async seedPackages(shipment:ShipmentRow){
     const order=this.orders.orders().find(o=>o.id===shipment.order_id); if(!order)return;
+    // Reuse the confirmed estimate packaging without approving an actual booking.
+    // A missing migration preserves the existing profile flow during rollout.
+    const {data:review}=await this.supabase.client.from('wc_delivery_reviews').select('packages,input_key').eq('order_id',order.id).maybeSingle();
+    if(review?.packages?.length&&review.input_key===reviewInputKey(order,this.noPackageRules())){
+      const restored=restoreReviewPackages(review.packages,this.packageComponents(order));
+      if(!packagingError(restored,this.packageComponents(order))){
+        const {data,error}=await this.supabase.client.from('wc_shipment_packages').insert(restored.map((p,index)=>({shipment_id:shipment.id,package_no:index+1,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,contents:p.contents,source_type:'Manual'}))).select();
+        if(error){this.error.set(error.message);return;}
+        this.shipmentPackages.update(xs=>[...xs,...(data??[]) as ShipmentPackageRow[]]);
+        await this.syncShipmentStatus(shipment.id);return;
+      }
+    }
     const out:any[]=[]; let no=1;
     for(const item of this.packageItems(order)){
       const match=this.exactProfile(item);
@@ -525,6 +538,15 @@ export class FulfilmentService {
     if(this.bookingShipmentId())return false;
     this.error.set('');this.bookingShipmentId.set(shipment.id);
     try{
+      const {data:exemption,error:exemptionError}=await this.supabase.client.from('wc_delivery_booking_exemptions').select('order_id').eq('order_id',row.order_id).maybeSingle();
+      // Missing table is permitted only during an additive rollout. The server
+      // independently enforces the gate once DELIVERY_REVIEW_ENABLED is true.
+      if(exemptionError&&!['42P01','PGRST205'].includes(exemptionError.code))throw Error('Delivery cost approval could not be verified.');
+      if(!exemptionError&&!exemption){
+        const {data:review,error}=await this.supabase.client.from('wc_delivery_reviews').select('*').eq('order_id',row.order_id).maybeSingle();
+        const order=this.orderFor(row);
+        if(error||!review||!order||!['within_target','approved_exception'].includes(reviewOutcome(review,order,reviewInputKey(order,this.noPackageRules())).status))throw Error('Booking blocked: resolve Delivery Cost Review or approve the current delivery price first.');
+      }
       const {error:syncSetupError}=await this.supabase.client.from('wc_shipping_fulfillment_sync').select('order_id').eq('order_id',row.order_id);
       if(syncSetupError)throw new Error('Shipping synchronization is not available. Install the shipping sync migration before booking.');
       await this.fastCourier.saveOrderDetails(shipment.courier_order_id,details);

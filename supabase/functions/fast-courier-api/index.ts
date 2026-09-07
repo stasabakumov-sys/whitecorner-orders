@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { assertDeliveryBookingAllowed } from '../_shared/delivery-booking-gate.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -151,6 +152,13 @@ serve(async (req) => {
     if (['save-order-details', 'booking', 'order-status'].includes(body.action)) {
       const orderId = text(body.orderId);
       if (!/^[A-Za-z0-9_-]+$/.test(orderId)) return json({ status: false, message: 'A valid Fast Courier orderId is required.' }, 422);
+      if (body.action !== 'order-status' && Deno.env.get('DELIVERY_REVIEW_ENABLED') === 'true') {
+        const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+        const { data: { user }, error: authError } = await db.auth.getUser((req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, ''));
+        if (authError || !user) return json({status:false,message:'Authentication required before booking.'},401);
+        try { await assertDeliveryBookingAllowed(db, orderId); }
+        catch (error) { return json({status:false,message:error instanceof Error?error.message:'Delivery cost review is required.'},409); }
+      }
       const route = body.action === 'save-order-details'
         ? `/api/save-order-details/${encodeURIComponent(orderId)}`
         : body.action === 'booking'
