@@ -100,6 +100,19 @@ export interface PackageComponent {
 export const componentNormal=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 export function productId(item:OrderItemRow){const c=item.catalog_reference as any,r=item.raw_item as any;return String(c?.catalogItemId||c?.productId||r?.catalogReference?.catalogItemId||r?.productId||'');}
 const attribute=/^(colou?r|size|dimensions?|width|height|length|finish|foldable|material|personalisation|personalization|engraving|notes?|message)$/i;
+// Pans are supplied directly by a partner, never packed with our cart.
+export const isPartnerPansOption=(name:string)=>componentNormal(name)==='pans';
+export const isPartnerPansComponent=(c:{component_key?:string})=>c.component_key==='option:pans';
+export function partnerPans(item:OrderItemRow){
+ const choices=[...new Set(orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).flatMap(label=>{
+  const split=label.indexOf(':');if(split<0||!isPartnerPansOption(label.slice(0,split)))return [];
+  const value=label.slice(split+1).trim(),normal=componentNormal(value);
+  if(!normal||/^(no|none|false|0|not required|not selected)$/.test(normal)||/\bwithout\s+pans?\b/.test(normal)||/^no pans?\b/.test(normal))return [];
+  return [value];
+ }))];
+ const quantity=Math.max(1,Math.floor(Number(item.quantity)||1));
+ return {choices,quantity,key:JSON.stringify([choices.map(componentNormal).sort(),quantity])};
+}
 export function packageComponents(items:OrderItemRow[],ignored:(name:string,value:string)=>boolean=()=>false):PackageComponent[]{
  const occurrences=new Map<string,number>();
  return items.flatMap(item=>{
@@ -111,7 +124,7 @@ export function packageComponents(items:OrderItemRow[],ignored:(name:string,valu
   for(const label of labels){
    const split=label.indexOf(':');if(split<0)continue;
    const name=label.slice(0,split).trim(),value=label.slice(split+1).trim();
-   if(attribute.test(name)||/^(no|none|false|not selected|not required|without|0)(\b|$)/i.test(value)||ignored(name,value))continue;
+   if(isPartnerPansOption(name)||attribute.test(name)||/^(no|none|false|not selected|not required|without|0)(\b|$)/i.test(value)||ignored(name,value))continue;
    const numeric=/^\d+$/.test(value)?Number(value):1;if(numeric<1)continue;
    const key='option:'+componentNormal(name);
    if(!components.has(key))components.set(key,{name:name+( /^(yes|true)$/i.test(value)?'':': '+value),count:numeric});
