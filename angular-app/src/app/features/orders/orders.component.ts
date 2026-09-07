@@ -41,9 +41,11 @@ import { OrderDrawerComponent } from '../../shared/order-drawer/order-drawer.com
     </section>
     @if(selected();as order){<app-order-drawer [order]="order" (closed)="selected.set(null)"/>}
   `,
-  styles:[`
+  styles: [`@layer hub-layout {
+
     .panel{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}.head{padding:15px 18px;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;gap:18px;flex-wrap:wrap}.title-block h2{margin:0;font-size:23px;font-weight:600;color:#101828}.title-block small{display:block;margin-top:3px;color:#98a2b3;font-size:11px}.actions{margin-left:auto;display:flex;gap:9px;align-items:center;flex-wrap:wrap}.sync-note{color:#98a2b3;font-size:10px;white-space:nowrap}.search-box{position:relative}.search-box i{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#98a2b3;font-size:11px}.search-box input{width:235px;height:38px;padding-left:30px}.row{cursor:pointer}.order-no{font-weight:700;color:#172033}.date{color:#667085;font-size:12px}.customer-cell{display:flex;flex-direction:column;gap:2px}.customer-cell b{font-weight:600;color:#27364a}.customer-cell small{color:#8a95a8;font-size:11px}.fulfilment-cell{display:grid;grid-template-columns:80px max-content;align-items:center;gap:7px}.method{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;gap:5px;background:#f4f6f8;color:#475467;border-radius:999px;padding:5px 8px;font-size:10px;font-weight:600}.method.pickup{background:#fff7ed;color:#9a5b13}.method i{font-size:10px}.total,.total-head{text-align:right!important}.total b{font-weight:700;color:#172033}.empty{text-align:center!important;color:#758198;padding:28px!important}.error{margin:12px 18px;background:#fff1f1;color:#8c2f2f;padding:10px;border-radius:8px}:host ::ng-deep .p-datatable-thead>tr>th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:#8b95a7;background:#fafbfc;padding:11px 16px;border-color:#e8ebef}:host ::ng-deep .p-datatable-tbody>tr>td{padding:13px 16px;border-color:#edf0f3}:host ::ng-deep .p-datatable-tbody>tr:hover{background:#f8fafc!important}:host ::ng-deep .p-tag{font-size:10px;font-weight:700;padding:.25rem .5rem}@media(max-width:760px){.actions{margin-left:0;width:100%}.search-box,.search-box input{width:100%}}
-  `]
+
+}`]
 })
 export class OrdersComponent implements OnInit{
   search=signal('');selected=signal<OrderRow|null>(null);syncing=signal(false);

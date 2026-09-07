@@ -1,3 +1,4 @@
+@layer hub-layout {
 :host{display:block;color:#344054;font:13px/1.35 Inter,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;letter-spacing:normal}
 :host *{box-sizing:border-box;letter-spacing:normal}
 h1,h2,h3,h4,p{font-family:inherit;line-height:1.35}
@@ -28,3 +29,5 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7fa;padding:9px;f
 .margin-cell{white-space:nowrap;font-variant-numeric:tabular-nums}
 
 .margin-badge{display:inline-block;padding:3px 6px;border-radius:5px;font-weight:600}.margin-badge[data-tone=red]{background:#ffe3e0;color:#a22c24}.margin-badge[data-tone=yellow]{background:#fff0c2;color:#805900}.margin-badge[data-tone=green]{background:#dff5e7;color:#1a633d}
+
+}

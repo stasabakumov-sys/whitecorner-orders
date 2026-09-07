@@ -64,7 +64,8 @@ import { AuthService } from '../../core/services/auth.service';
       </div>
     </section>
   `,
-  styles: [`
+  styles: [`@layer hub-layout {
+
     :host{display:block;height:100%;min-height:0;overflow:hidden}
     .finance-shell{height:100%;min-height:0;background:#f6f7f9;display:flex;flex-direction:column;overflow:hidden}
     .page-head{display:flex;align-items:center;gap:20px;padding:14px 18px 10px;background:#fff;border-bottom:1px solid #e4e7ec;flex:0 0 auto}
@@ -79,7 +80,8 @@ import { AuthService } from '../../core/services/auth.service';
     :host ::ng-deep .page-head .p-tag{font-size:9px;padding:2px 7px}
     :host ::ng-deep .toolbar .p-button,:host ::ng-deep .section-tabs .p-button{font-size:11px;padding:.42rem .7rem}
     @media(max-width:900px){.page-head{align-items:flex-start;flex-direction:column;gap:10px}.toolbar{margin-left:0;justify-content:flex-start}.section-tabs{overflow-x:auto}.section-tabs p-button{flex:0 0 auto}}
-  `],
+
+}`],
 })
 export class FinanceComponent {
   @ViewChild('financeFrame') private financeFrame?: ElementRef<HTMLIFrameElement>;
@@ -97,6 +99,15 @@ export class FinanceComponent {
   readonly loadError = signal('Finance data could not be loaded.');
 
   onFrameLoad(): void {
+    // The same-origin standalone frame cannot inherit Angular's Aura variables.
+    const frameRoot = this.financeFrame?.nativeElement.contentDocument?.documentElement;
+    if (frameRoot) {
+      const theme = getComputedStyle(document.documentElement);
+      for (let i = 0; i < theme.length; i++) {
+        const name = theme.item(i);
+        if (name.startsWith('--p-')) frameRoot.style.setProperty(name, theme.getPropertyValue(name));
+      }
+    }
     this.loadState.set('loading');
     this.shareHubSession();
     this.runFinanceAction('setEmbedded');
