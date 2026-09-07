@@ -2,7 +2,7 @@ import { Component, computed, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DeliveryReviewService } from '../../core/services/delivery-review.service';
-import { cents, deliveryCents, packagingError, PackageComponent, ReviewPackage } from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import { cents, deliveryCents, orderItemOptionLabels, reviewItems, packagingError, PackageComponent, ReviewPackage } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 @Component({
  selector:'app-delivery-review',standalone:true,imports:[CommonModule,FormsModule],
@@ -29,6 +29,45 @@ import { cents, deliveryCents, packagingError, PackageComponent, ReviewPackage }
  @if(s.error()){<p class="error" role="alert">{{s.error()}}</p>}
  @if(result.status==='data_changed'){<p class="error">Order inputs changed after the saved estimate. Review manually; a second quote will not be requested by this report.</p>}
  @if(result.status==='address_required'){<p>Complete the delivery address in Wix and synchronize Orders. The estimate has not been requested yet.</p>}
+ <div class="address"><b>Delivery address:</b> {{address(row.wc_orders?.delivery_address)}}</div>
+ <h3>Order composition &amp; packaging</h3>
+ <p>Assign packaging under each product. All {{packages(row).length}} boxes are sent together in one delivery quote for this order.</p>
+ @for(group of productGroups(row);track group.id){
+ <section class="product-group" [attr.data-product-id]="group.id">
+ <div class="product-card">
+ @if(group.item;as item){
+ @if(image(item)){<img [src]="image(item)" [alt]="item.product_name||'Product'" loading="lazy" />}
+ <div class="product-description"><b>{{item.product_name||'Unnamed product'}}</b><div class="chips"><span>qty: {{item.quantity||1}}</span>@for(option of options(item);track option){<span>{{option}}</span>}</div></div>
+ <span class="product-price">{{money(productTotal(item))}}</span>
+ }@else{<b>Unassigned packaging — select its contents</b>}
+ </div>
+ <div class="product-packages"><h4>{{group.boxes.length}} package(s)</h4>
+ @for(p of group.boxes;track p){
+ <fieldset class="package-card" [disabled]="s.busy()"><legend>Package {{packageNumber(row,p)}}</legend>
+ @if(editable(row)){
+ <div class="package-fields"><label>Name<input [(ngModel)]="p.package_name" (ngModelChange)="confirmed=false" /></label>
+ <label>L mm<input type="number" min="1" [(ngModel)]="p.length_mm" (ngModelChange)="confirmed=false" /></label><label>W mm<input type="number" min="1" [(ngModel)]="p.width_mm" (ngModelChange)="confirmed=false" /></label><label>H mm<input type="number" min="1" [(ngModel)]="p.height_mm" (ngModelChange)="confirmed=false" /></label><label>kg<input type="number" min="0.001" step="0.1" [(ngModel)]="p.weight_kg" (ngModelChange)="confirmed=false" /></label></div>
+ }@else{<p><b>{{p.package_name}}</b> · {{p.length_mm}} × {{p.width_mm}} × {{p.height_mm}} mm · {{p.weight_kg}} kg</p>}
+ <b>Assigned components:</b><ul>@for(c of p.contents;track c.id){<li>{{c.component_name}} · Unit {{c.unit_index}}</li>}@empty{<li>No components assigned</li>}</ul>
+ @if(sharedBox(p)){<small>Shared box containing components from multiple products. Counted once in the order quote.</small>}
+ @if(editable(row)){
+ <details class="contents"><summary>Contents ({{p.contents.length}})</summary><div class="components">
+ @for(c of s.components(row);track c.id){<label><input type="checkbox" [checked]="assigned(p,c)" (change)="toggle(p,c,$event)" />{{c.component_name}} · Unit {{c.unit_index}}<small>{{componentProduct(row,c)}}</small></label>}
+ </div></details>
+ <button (click)="removeBox(p)" [disabled]="s.busy()">Remove box</button>
+ }
+ </fieldset>
+ }@empty{<p class="empty-packages">No packaging assigned to this product yet.</p>}
+ @if(editable(row)&&group.item){<button (click)="addBox(group.id)" [disabled]="s.busy()">Add box</button>}
+ @for(p of linkedBoxes(row,group.id);track p){<p class="shared-link">Also in shared package {{packageNumber(row,p)}}: {{p.package_name}} (shown under another product; counted once).</p>}
+ </div></section>
+ }
+ @if(editable(row)){
+ @if(packagingIssue(row)){<p class="error">{{packagingIssue(row)}}</p>}
+ <label class="check"><input type="checkbox" [(ngModel)]="saveProfile" />Save packaging for the next identical order</label>
+ <label class="check"><input type="checkbox" [(ngModel)]="confirmed" />I confirm all {{draft.length}} boxes and component assignments for this order's one-time estimate.</label>
+ <button class="primary" (click)="save(row)" [disabled]="s.busy()||!!packagingIssue(row)||!confirmed">{{s.busy()?'Saving and calculating…':'Save packaging and calculate once'}}</button>
+ }
  @if(row.quote_attempted_at){
  <div class="summary"><div>Invoice delivery incl. GST<b>{{money(invoice(row))}}</b></div><div>Lowest eligible total<b>{{money(result.best?.total_cents)}}</b></div><div>Minimum invoice delivery incl. GST<b>{{money(result.minimum_invoice_cents)}}</b></div><div>Margin<b>{{margin(row)}}</b></div></div>
  <p>Requested {{row.quote_attempted_at|date:'dd MMM yyyy, HH:mm'}}. This snapshot is kept for reference and never triggers another request. Actual booking prices must be checked in Fulfilment.</p>
@@ -45,27 +84,12 @@ import { cents, deliveryCents, packagingError, PackageComponent, ReviewPackage }
  }
  @if(row.approval_history?.length){<h3>Approval history</h3>@for(a of row.approval_history;track $index){<p>{{a.at|date:'dd MMM yyyy, HH:mm'}} · {{a.reason}} · {{money(a.invoice_cents)}}<small>Approved by {{a.actor}}</small></p>}}
  }
- <h3>Packaging</h3>
- @if(!row.quote_attempted_at&&['pending','packaging_required','legacy_packaging_required','address_required'].includes(row.state)){
- <p>Assign every required component. A component can be present in more than one box. Dimensions are in millimetres; weight is in kilograms.</p>
- @for(p of draft;track $index;let i=$index){<fieldset><legend>Package {{i+1}}</legend><div class="package-fields">
- <label>Name<input [(ngModel)]="p.package_name" [name]="'name'+i" /></label>
- <label>Length mm<input type="number" min="1" [(ngModel)]="p.length_mm" /></label><label>Width mm<input type="number" min="1" [(ngModel)]="p.width_mm" /></label><label>Height mm<input type="number" min="1" [(ngModel)]="p.height_mm" /></label><label>Weight kg<input type="number" min="0.001" step="0.1" [(ngModel)]="p.weight_kg" /></label></div>
- <div class="components">@for(c of s.components(row);track c.id){<label><input type="checkbox" [checked]="assigned(p,c)" (change)="toggle(p,c,$event)" />{{c.component_name}} · Unit {{c.unit_index}}</label>}</div>
- <button (click)="draft.splice(i,1)" [disabled]="s.busy()">Remove box</button></fieldset>}
- <button (click)="addBox()" [disabled]="s.busy()">Add box</button>
- @if(packagingIssue(row)){<p class="error">{{packagingIssue(row)}}</p>}
- <label class="check"><input type="checkbox" [(ngModel)]="saveProfile" />Save packaging for the next identical order</label>
- <label class="check"><input type="checkbox" [(ngModel)]="confirmed" />I confirm these boxes and component assignments for the one-time estimate.</label>
- <button class="primary" (click)="save(row)" [disabled]="s.busy()||!!packagingIssue(row)||!confirmed">{{s.busy()?'Saving and calculating…':'Save packaging and calculate once'}}</button>
- }@else{
- @for(p of row.packages;track $index){<p><b>{{p.package_name}}</b> · {{p.length_mm}} × {{p.width_mm}} × {{p.height_mm}} mm · {{p.weight_kg}} kg</p><ul>@for(c of p.contents;track $index){<li>{{c.component_name}} · Unit {{c.unit_index}}</li>}</ul>}
- }
  </section></div>}
  `,
  styleUrl:'./delivery-review.component.css',
 })
 export class DeliveryReviewComponent implements OnInit {
+ private boxOwners=new WeakMap<ReviewPackage,string>();
  filter='all';selectedId=signal<string|null>(null);reason='';draft:ReviewPackage[]=[];saveProfile=true;confirmed=false;
  selected=computed(()=>this.s.rows().find(r=>r.order_id===this.selectedId())||null);
  constructor(public s:DeliveryReviewService){}
@@ -81,8 +105,27 @@ export class DeliveryReviewComponent implements OnInit {
   }).sort((a,b)=>Number(resolved(a))-Number(resolved(b)));
  }
  async reload(){this.s.error.set('');await this.s.load();}
- open(row:any){this.selectedId.set(row.order_id);this.draft=structuredClone(row.packages||[]);this.reason='';this.confirmed=false;this.s.error.set('');}
- addBox(){this.draft.push({package_name:`Package ${this.draft.length+1}`,length_mm:0,width_mm:0,height_mm:0,weight_kg:0,contents:[]});this.confirmed=false;}
+ open(row:any){this.selectedId.set(row.order_id);this.draft=structuredClone(row.packages||[]);this.boxOwners=new WeakMap();for(const p of this.draft)this.boxOwners.set(p,p.contents[0]?.order_item_id||'');this.reason='';this.confirmed=false;this.s.error.set('');}
+ editable(row:any){return !row.quote_attempted_at&&['pending','packaging_required','legacy_packaging_required','address_required'].includes(row.state);}
+ packages(row:any):ReviewPackage[]{return this.editable(row)?this.draft:row.packages||[];}
+ owner(p:ReviewPackage){return this.boxOwners.get(p)||p.contents[0]?.order_item_id||'';}
+ productGroups(row:any){
+  const items=reviewItems(row.wc_orders,this.s.rules()),boxes=this.packages(row);
+  const groups=items.map(item=>({id:item.id,item:item as any,boxes:boxes.filter(p=>this.owner(p)===item.id)}));
+  const unassigned=boxes.filter(p=>!items.some(item=>item.id===this.owner(p)));
+  if(unassigned.length)groups.push({id:'unassigned',item:null,boxes:unassigned});
+  return groups;
+ }
+ linkedBoxes(row:any,id:string){return this.packages(row).filter(p=>this.owner(p)!==id&&p.contents.some(c=>c.order_item_id===id));}
+ sharedBox(p:ReviewPackage){return new Set(p.contents.map(c=>c.order_item_id)).size>1;}
+ packageNumber(row:any,p:ReviewPackage){return this.packages(row).indexOf(p)+1;}
+ componentProduct(row:any,c:PackageComponent){return row.wc_orders?.wc_order_items?.find((i:any)=>i.id===c.order_item_id)?.product_name||'';}
+ options(item:any){return orderItemOptionLabels(item);}
+ image(item:any){const x=item.image||{},r=item.raw_item||{};return x.url||x.imageUrl||x.imageInfo?.url||r.media?.url||r.image?.url||r.image?.imageInfo?.url||'';}
+ productTotal(item:any){return cents(item.raw_item?.totalPriceAfterTax?.amount)??(cents(item.unit_price)===null?null:cents(item.unit_price)!*Math.max(1,Number(item.quantity)||1));}
+ address(a:any){if(!a)return 'Not provided';const part=(v:any)=>typeof v==='object'?v?.name||v?.code||'':v;return [a.addressLine||a.addressLine1,a.city||a.suburb||a.locality,part(a.subdivision||a.state||a.region),a.postalCode||a.postcode||a.zipCode,part(a.country)].filter(Boolean).join(', ');}
+ addBox(productId?:string){const p:ReviewPackage={package_name:'Package '+(this.draft.length+1),length_mm:0,width_mm:0,height_mm:0,weight_kg:0,contents:[]};this.boxOwners.set(p,productId||'');this.draft.push(p);this.confirmed=false;}
+ removeBox(p:ReviewPackage){this.draft=this.draft.filter(box=>box!==p);this.confirmed=false;}
  assigned(p:ReviewPackage,c:PackageComponent){return p.contents.some(x=>x.id===c.id);}
  toggle(p:ReviewPackage,c:PackageComponent,event:Event){if((event.target as HTMLInputElement).checked){if(!this.assigned(p,c))p.contents.push(c);}else p.contents=p.contents.filter(x=>x.id!==c.id);this.confirmed=false;}
  packagingIssue(row:any){return packagingError(this.draft,this.s.components(row));}

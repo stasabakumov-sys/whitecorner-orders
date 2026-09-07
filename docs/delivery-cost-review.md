@@ -49,3 +49,5 @@ git diff --check
 CI runs Angular tests/build, worker mocks, Deno check and the in-memory PostgreSQL migration rehearsal. Manual browser review uses synthetic data with outbound integrations blocked.
 
 GST correction: apply only `20260907000200_delivery_invoice_gst.sql` before deploying its shared calculation. It replaces only the exception RPC calculation, preserves privileges and does not update order/review rows, request quotes or apply Email AI.
+
+The estimate card groups product photo/options/quantity and its boxes. A shared physical box is shown once, with links under the other products. The complete flat order package list is submitted in one quote request; grouping never duplicates parcel dimensions or weight.
