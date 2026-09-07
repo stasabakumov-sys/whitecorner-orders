@@ -1,0 +1,19 @@
+:host{display:block;min-width:0}
+.shipping{background:var(--wc-surface);border:1px solid var(--wc-border);border-radius:12px;overflow:hidden}
+.shiphead{padding:12px 16px;border-bottom:1px solid var(--wc-border);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.push{margin-left:auto}.mut,.small,.pm{color:var(--wc-muted);font-size:.875rem}.typefilter{display:flex;gap:4px;flex-wrap:wrap}
+:host .typefilter button.on{background:var(--p-highlight-background,#ecfdf5);color:var(--p-highlight-color,#047857);border-color:var(--wc-primary)}
+.shipgrid{display:grid;grid-template-columns:280px minmax(0,1fr);min-height:590px}
+.shiplist{border-right:1px solid var(--wc-border);min-width:0}
+:host .shiplist button.shipitem{display:block;width:100%;border:0;border-bottom:1px solid var(--wc-border);border-radius:0;text-align:left;padding:12px 14px;white-space:normal;overflow-wrap:anywhere}
+:host .shiplist button.shipitem.on{background:var(--p-highlight-background,#ecfdf5);color:var(--p-highlight-color,#047857);box-shadow:inset 3px 0 var(--wc-primary)}
+.pn{font-weight:600;line-height:1.5}.pm{margin-top:4px}.shipdetail{padding:16px;min-width:0}
+.detailhead{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}.detailhead>div{flex:1;min-width:200px}.detailhead h2{margin:0 0 4px;overflow-wrap:anywhere}
+.badge{display:inline-block;padding:3px 8px;background:var(--wc-ground);white-space:nowrap}.ok{background:#d9f3e5;color:#17643d}.saved{margin-right:6px}
+.shipsection{margin-top:16px}.shipsection h3{margin:0 0 8px}.shipsection p{margin:0 0 10px}
+.tablewrap{overflow:auto;border:1px solid var(--wc-border);border-radius:var(--wc-radius)}.shiptable{width:100%;min-width:600px}.shiptable tr:last-child td{border-bottom:0}
+input{width:76px;max-width:100%}.name{width:150px}input:disabled{background:var(--wc-ground);color:var(--wc-muted)}.delta{width:60px}
+.rule{border:1px solid var(--wc-border);border-radius:var(--wc-radius);padding:10px;margin-bottom:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.rule>div{flex:1;min-width:90px}
+.error{background:#fff1f1;color:#991b1b;border:1px solid #fecaca;padding:12px;border-radius:var(--wc-radius);margin-bottom:10px}
+@media(max-width:1000px){.shipgrid{grid-template-columns:220px minmax(0,1fr)}}
+@media(max-width:700px){.shipgrid{grid-template-columns:minmax(0,1fr)}.shiplist{border-right:0;border-bottom:1px solid var(--wc-border);max-height:260px;overflow:auto}.shipdetail{padding:12px}.push{margin-left:0}}
