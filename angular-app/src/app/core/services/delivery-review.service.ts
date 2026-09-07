@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
 import {expandVariant,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
-import { ReviewPackage, reviewComponents, reviewInputKey, reviewOutcome } from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import { ReviewPackage, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 @Injectable({providedIn:'root'})
 export class DeliveryReviewService {
@@ -37,6 +37,20 @@ export class DeliveryReviewService {
   catch{return {status:'data_changed',best:null,minimum_invoice_cents:null};}
  }
  components(row:any){return reviewComponents(row.wc_orders,this.rules());}
+ async variantTarget(item:any,order?:any){
+  let signature='',profile:any=null;
+  for(const candidate of new Set([variantSignature(item),reviewSignature(order||{wc_order_items:[item]},this.rules())])){
+   const {data,error}=await this.supabase.client.from('wc_delivery_packaging_profiles').select('shipping_product_id').eq('signature',candidate).maybeSingle();
+   if(error)throw Error('Could not check saved packaging. Please try again.');
+   if(data){profile=data;signature=candidate;break;}
+  }
+  if(!profile)throw Error('No packaging variant for this product and its options is saved in Shipping Data. Add boxes here to prepare this order.');
+  if(!profile.shipping_product_id)return {productName:item.product_name,signature};
+  const {data:product,error:productError}=await this.supabase.client.from('wc_shipping_products').select('id').eq('id',profile.shipping_product_id).eq('active',true).maybeSingle();
+  if(productError)throw Error('Could not check the shipping product. Please try again.');
+  if(!product)throw Error('The shipping product is unavailable. Add boxes here to prepare this order.');
+  return {productId:product.id,signature};
+ }
  async variantPackages(item:any){
   const {data,error}=await this.supabase.client.from('wc_delivery_packaging_profiles').select('packages').eq('signature',variantSignature(item)).maybeSingle();
   if(error)throw Error('Could not load packaging variant.');
