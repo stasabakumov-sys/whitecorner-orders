@@ -18,7 +18,7 @@ import { cents, deliveryCents, orderItemOptionLabels, reviewItems, packagingErro
  <td><b>#{{row.wc_orders?.order_number}}</b><small>{{row.wc_orders?.customer_name}}</small></td>
  <td>{{money(orderTotal(row))}}</td><td>{{money(invoice(row))}}</td><td>{{money(result.best?.total_cents)}}</td>
  <td>{{result.best?.quote?.courierName||'—'}}<small>{{result.best?.quote?.name}}</small></td>
- <td>{{money(increase(row))}}</td><td class="margin-cell">{{margin(row)}}</td><td><span class="badge" [attr.data-status]="result.status">{{label(result.status)}}</span></td>
+ <td>{{money(increase(row))}}</td><td class="margin-cell"><span class="margin-badge" [attr.data-tone]="marginTone(row)">{{margin(row)}}</span></td><td><span class="badge" [attr.data-status]="result.status">{{label(result.status)}}</span></td>
  <td>@if(row.quoted_at){<span class="saved-date">{{row.quoted_at|date:'dd MMM yyyy'}}</span><span class="saved-time">{{row.quoted_at|date:'HH:mm'}}</span>}@else{—}</td><td><button (click)="open(row)">View / Packaging</button></td>
  </tr>}@empty{<tr><td colspan="10">{{s.loading()?'Loading…':'No new delivery orders to review.'}}</td></tr>}
  </tbody></table></div>
@@ -132,6 +132,7 @@ export class DeliveryReviewComponent implements OnInit {
  orderTotal(row:any){return cents(row.wc_orders?.total);}
  invoice(row:any){return deliveryCents(row.wc_orders);}
  increase(row:any){const min=this.s.outcome(row).minimum_invoice_cents,invoice=this.invoice(row);return min==null||invoice==null?null:Math.max(0,min-invoice);}
+ marginTone(row:any){const invoice=this.invoice(row),best=this.s.outcome(row).best;if(!invoice||!best)return null;const difference=invoice-best.total_cents;return difference*100>=invoice*20?'green':difference*100>=invoice*10?'yellow':'red';}
  margin(row:any){const invoice=this.invoice(row),best=this.s.outcome(row).best;return invoice&&best?`${((invoice-best.total_cents)/invoice*100).toFixed(1)}% (${this.money(invoice-best.total_cents)})`:'—';}
  money(value:number|null|undefined){return value==null?'—':new Intl.NumberFormat('en-AU',{style:'currency',currency:'AUD'}).format(value/100);}
  label(status:string){return ({importing:'Awaiting import',pending:'Awaiting calculation',packaging_required:'Packaging required',legacy_packaging_required:'Packaging required',address_required:'Address required',calculating:'Calculating',within_target:'Within target',price_review_required:'Price review required',approved_exception:'Approved exception',no_eligible_quotes:'No eligible quotes',failed:'Calculation failed',uncertain:'Response uncertain',data_changed:'Inputs changed — manual review',invoice_required:'Invoice delivery required'} as Record<string,string>)[status]||status;}
