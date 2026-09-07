@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { courierReviewCall, processDeliveryQueue } from '../_shared/delivery-review-worker.ts';
 import { syncShippingFulfillment } from "./shipping-fulfillment.ts";
 
 const corsHeaders = {
@@ -309,6 +310,27 @@ Deno.serve(async (req) => {
         const { error: delErr } = await db.from("wc_order_items").delete().eq("order_id", orderId).not("wix_line_item_id", "in", `(${safeIds})`);
         if (delErr) console.warn("Could not prune removed line items", delErr);
       }
+    }
+
+    // Importing rows are released only after ALL line items have been saved.
+    // No backfill: the migration seeds reviews only for newly inserted orders.
+    if (Deno.env.get('DELIVERY_REVIEW_ENABLED') === 'true') {
+      try {
+        const importedIds = uniqueOrders.map((o:any) => String(o.id));
+        const {data: imported} = await db.from('wc_orders').select('id').in('wix_order_id', importedIds);
+        if (imported?.length) {
+          const {error} = await db.from('wc_delivery_reviews').update({state:'pending'}).eq('state','importing').in('order_id',imported.map((o:any)=>o.id));
+          if (error) throw error;
+        }
+        const key = Deno.env.get('FAST_COURIER_API_KEY');
+        if (key) {
+          const work = processDeliveryQueue(db,(route,payload)=>courierReviewCall(route,payload,key,Deno.env.get('FAST_COURIER_API_BASE_URL')||'https://enterprise-api.fastcourier.com.au'))
+            .catch(()=>console.warn('DELIVERY_REVIEW_WORKER_FAILED'));
+          // Supabase keeps background work alive after the Wix sync response.
+          const runtime = (globalThis as any).EdgeRuntime;
+          if (runtime?.waitUntil) runtime.waitUntil(work); else await work;
+        }
+      } catch { console.warn('DELIVERY_REVIEW_QUEUE_UNAVAILABLE'); }
     }
 
     const result = {

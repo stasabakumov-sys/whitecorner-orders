@@ -44,6 +44,12 @@ for (const [key, target] of Object.entries(targets)) {
   test(`${key}: courier code edits affect only courier deployment`, () => {
     assert.equal(shouldRun(state('20260903'), state('20260903', undefined, current, '100644 blob changed'), key), key === 'courier');
   });
+  test(`${key}: shared delivery gate edits deploy courier but never package SQL`, () => {
+    const before=state('20260903'),after=state('20260903');
+    before.files.set('supabase/functions/_shared/delivery-booking-gate.ts','100644 blob before');
+    after.files.set('supabase/functions/_shared/delivery-booking-gate.ts','100644 blob after');
+    assert.equal(shouldRun(before,after,key),key==='courier');
+  });
   test(`${key}: missing or ambiguous migrations fail closed`, () => {
     const missing = state('20260903');
     missing.files.clear();

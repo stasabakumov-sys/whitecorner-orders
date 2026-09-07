@@ -44,6 +44,26 @@ function setup() {
 }
 
 describe('FulfilmentService shipping completion', () => {
+  it('blocks booking without a delivery-cost decision before courier calls, even when production is Ready', async () => {
+    const s=setup(),original=s.supabase.client.from.getMockImplementation()!;
+    (s.orders.orders()[0] as any).wc_order_items=[{id:'item',product_name:'Cart',quantity:1,unit_price:110,wc_production_units:[{production_status:'Ready'}]}];
+    s.supabase.client.from.mockImplementation((table:string)=>{
+      if(table==='wc_delivery_booking_exemptions'||table==='wc_delivery_reviews'){
+        const q:any={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:table==='wc_delivery_reviews'?{state:'pending'}:null,error:null})};return q;
+      }
+      return original(table);
+    });
+    expect(await s.service.bookShipment(s.row,{} as any)).toBe(false);
+    expect(s.service.error()).toContain('Booking blocked');expect(s.courier.saveOrderDetails).not.toHaveBeenCalled();expect(s.courier.bookOrder).not.toHaveBeenCalled();
+  });
+  it('permits a previously captured Ready exemption through the usual booking checks', async () => {
+    const s=setup(),original=s.supabase.client.from.getMockImplementation()!;
+    s.supabase.client.from.mockImplementation((table:string)=>{
+      if(table==='wc_delivery_booking_exemptions'){const q:any={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:{order_id:'order'},error:null})};return q;}
+      return original(table);
+    });
+    expect(await s.service.bookShipment(s.row,{} as any)).toBe(true);expect(s.courier.bookOrder).toHaveBeenCalledOnce();
+  });
   it('blocks Retry without tracking and blocks concurrent clicks without courier calls', async () => {
     const s=setup(),row={...s.row,status:'Shipping Booked' as const};
     s.service.shipments.set([{...s.service.shipments()[0],selected_quote:{} as any}]);
