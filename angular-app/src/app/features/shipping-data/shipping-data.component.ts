@@ -58,7 +58,7 @@ type ShippingRule = {
       <div class="shipgrid">
         <div class="shiplist">
           @for (p of visibleProducts(); track p.id) {
-            <button class="shipitem" [class.on]="selectedId()===p.id" (click)="selectedId.set(p.id);requestedVariant=''">
+            <button class="shipitem" [class.on]="selectedId()===p.id" [attr.aria-pressed]="selectedId()===p.id" (click)="selectedId.set(p.id);requestedVariant=''">
               <div class="pn">{{ p.product_name }}</div>
               <div class="pm">{{p.saved_profiles?.length||0}} saved profile(s) · {{ basePackages(p.id).length }} base boxes</div>
             </button>
@@ -137,29 +137,7 @@ type ShippingRule = {
       </div>
     </section>
   `,
-  styles: [`@layer hub-layout {
-
-    .shipping{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}
-    .shiphead{padding:16px 18px;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-    .push{margin-left:auto}.mut,.small{color:#758198;font-size:12px}.small{font-size:11px}
-    .typefilter{display:inline-flex;gap:4px;padding:3px;background:#f3f5f8;border:1px solid #e1e5eb;border-radius:999px}
-    .typefilter button{border:0;background:transparent;color:#5f6b7a;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer}
-    .typefilter button.on{background:#fff;color:#116dff;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-    .shipgrid{display:grid;grid-template-columns:360px 1fr;min-height:590px}.shiplist{counter-reset:prod;border-right:1px solid #e4e7ec}
-    .shipitem{counter-increment:prod;position:relative;width:100%;border:0;border-bottom:1px solid #edf0f3;background:#fff;text-align:left;padding:17px 16px 17px 54px;cursor:pointer}
-    .shipitem:before{content:counter(prod);position:absolute;left:18px;top:17px;width:24px;height:24px;border:1px solid #d9dde5;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;color:#566174}
-    .shipitem.on{background:#f3f7ff;box-shadow:inset 3px 0 0 #116dff}.pn{font-weight:600;line-height:1.35}.pm{font-size:11px;color:#7d8797;margin-top:5px}
-    .shipdetail{padding:22px}.detailhead{display:flex;gap:12px;align-items:flex-start}.detailhead h2{margin:0 0 4px;font-size:21px}.detailhead .badge{margin-left:auto}
-    .shipsection{margin-top:24px}.tablewrap{overflow:auto}.shiptable{width:100%;border-collapse:separate;border-spacing:0;border:1px solid #e4e7ec;border-radius:9px;overflow:hidden;min-width:760px}
-    .shiptable th,.shiptable td{padding:9px 8px;border-bottom:1px solid #edf0f3;text-align:left}.shiptable th{background:#fafbfc;color:#758198;font-size:10px;text-transform:uppercase}.shiptable tr:last-child td{border-bottom:0}
-    input{width:82px;border:1px solid #d4d9e2;border-radius:8px;padding:7px 8px;background:#fff}.name{width:165px}input:disabled{background:#f7f8fa;color:#566174}.delta{width:55px}
-    .rule{border:1px solid #e4e7ec;border-radius:8px;padding:11px 12px;margin-bottom:8px;display:grid;grid-template-columns:100px 1fr 120px 110px 78px;gap:8px;align-items:center}
-    .btn{border:1px solid #d4d9e2;background:#fff;color:#116dff;border-radius:8px;padding:8px 11px;cursor:pointer}.btn.primary{background:#116dff;color:#fff;border-color:#116dff}
-    .badge{display:inline-block;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:600}.warn{background:#fff0e6;color:#9a4b00}.ok{background:#d9f3e5;color:#17643d}.saved{margin-right:8px}
-    .error{background:#fff1f1;color:#8c2f2f;border:1px solid #f0caca;padding:12px;border-radius:8px;margin-bottom:10px}
-    @media(max-width:1000px){.shipgrid{grid-template-columns:1fr}.shiplist{border-right:0;border-bottom:1px solid #e4e7ec}.rule{grid-template-columns:1fr 1fr}}
-
-}`]
+  styleUrl: './shipping-data.component.css',
 })
 export class ShippingDataComponent implements OnInit {
   profileOptions=savedProfileOptions;

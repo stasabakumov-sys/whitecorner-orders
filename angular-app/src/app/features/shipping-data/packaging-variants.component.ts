@@ -28,7 +28,7 @@ import {orderItemOptionLabels,packagingError,reviewComponents,variantSignature,p
  <button [disabled]="!!issue()||!confirmed" (click)="save()">{{busy()?'Saving…':'Save variant'}}</button>
  </fieldset>
  @if(saved()){<p role="status">Variant saved. Existing orders and quotes were not changed.</p>}
- `,styles:[`:host{display:block;border:1px solid #e2e8f0;border-radius:8px;padding:1rem;margin-top:1rem}.tools{display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin:.6rem 0}.box{border:1px solid #e2e8f0;border-radius:6px;padding:.7rem;margin:.7rem 0}input,select,button{font:inherit}label input{display:block;max-width:140px}.choice{display:flex;gap:.5rem;align-items:center;margin:.5rem 0}.choice input{display:inline}fieldset{border:0;padding:0}[role=alert]{color:#b91c1c}`]})
+ `,styles:[`:host{display:block;border:1px solid var(--wc-border);border-radius:var(--wc-radius);padding:1rem;margin-top:1rem}.tools{display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin:.6rem 0}.box{border:1px solid var(--wc-border);border-radius:var(--wc-radius);padding:.7rem;margin:.7rem 0}input,select,button{font:inherit}label input{display:block;max-width:140px}.choice{display:flex;gap:.5rem;align-items:center;margin:.5rem 0}.choice input{display:inline}h3{margin:0 0 .5rem}p{margin:.5rem 0;color:var(--wc-muted)}select{max-width:100%}.tools input{min-width:0;max-width:100%;width:160px}.tools label{min-width:0}fieldset{border:0;padding:0;min-width:0}[role=alert]{color:#b91c1c}`]})
 export class PackagingVariantsComponent implements OnChanges {
  @Input() product:any;
  @Input() initialSignature='';
