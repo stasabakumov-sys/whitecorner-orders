@@ -82,7 +82,8 @@ type AddressIssue = {
       <app-order-drawer [order]="order" (closed)="selected.set(null)" />
     }
   `,
-  styles: [`
+  styles: [`@layer hub-layout {
+
     .panel{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}
     .issuehead{padding:14px 16px;border-bottom:1px solid #e4e7ec;display:flex;gap:12px;align-items:center}
     .issuehead .mut{margin-left:auto}
@@ -100,7 +101,8 @@ type AddressIssue = {
     .suggested{color:#17643d;font-size:12px;margin-top:4px}
     .actions{white-space:nowrap}
     .actions .btn+.btn{margin-left:5px}
-  `]
+
+}`]
 })
 export class AddressReviewComponent implements OnInit {
   readonly issues = signal<AddressIssue[]>([]);

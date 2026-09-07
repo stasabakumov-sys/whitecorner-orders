@@ -113,7 +113,8 @@ import { OrderActivityComponent } from '../order-activity/order-activity.compone
       </div>
     </p-drawer>
   `,
-  styles:[`
+  styles: [`@layer hub-layout {
+
     :host ::ng-deep .p-drawer-content{background:#f3f5f8}.order-header{min-width:0}.order-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.order-title-row h2{margin:0;font-size:28px;font-weight:600;line-height:1.1;letter-spacing:-.02em;color:#101828}.placed{margin-top:6px;font-size:14px;color:#475467}
     .page-grid{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:18px;padding:14px 4px 24px}.main-column,.side-column{min-width:0}.wix-section{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden;margin-bottom:18px}.wix-section-head{min-height:56px;padding:0 22px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #e4e7ec;font-size:17px;color:#101828}.items-group-label{padding:10px 22px;background:#edf4ff;border-bottom:1px solid #d7e5ff;font-weight:500;color:#344054}.addons-label{border-top:1px solid #e4e7ec;background:#f8fafc}
     .line-item{display:grid;grid-template-columns:64px minmax(0,1fr) 84px 48px 96px;gap:12px;align-items:start;padding:14px 22px;border-bottom:1px solid #edf0f3}.line-item:last-child{border-bottom:0}.media img,.placeholder{width:56px;height:56px;border-radius:7px;border:1px solid #e4e7ec;object-fit:cover;background:#f6f8fa}.item-main>b,.item-name-row>b{font-weight:600;color:#26364d}.item-name-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.options{display:flex;flex-direction:column;gap:2px;margin-top:6px;color:#526078;font-size:13px;line-height:1.35}.unit-price,.qty,.line-total{text-align:right;white-space:nowrap;color:#344054}.line-total{font-weight:600}
@@ -122,7 +123,8 @@ import { OrderActivityComponent } from '../order-activity/order-activity.compone
     :host ::ng-deep app-order-activity .activity-section{margin-top:0}:host ::ng-deep app-order-activity .section-title{margin-left:2px}
     @media(max-width:980px){.page-grid{grid-template-columns:1fr}.side-column{order:-1}.order-info{position:static}.line-item{grid-template-columns:58px minmax(0,1fr) 80px 48px 90px;padding-left:18px;padding-right:18px}.wix-section-head,.items-group-label,.payment-list{padding-left:18px;padding-right:18px}}
     @media(max-width:720px){.order-title-row h2{font-size:24px}.line-item{grid-template-columns:58px 1fr}.unit-price,.qty,.line-total{grid-column:2;text-align:left}.page-grid{padding-left:0;padding-right:0}.side-column{order:0}}
-  `]
+
+}`]
 })
 export class OrderDrawerComponent{
   @Input({required:true}) order!:OrderRow;

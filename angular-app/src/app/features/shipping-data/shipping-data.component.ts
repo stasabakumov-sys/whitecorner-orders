@@ -123,7 +123,8 @@ type ShippingRule = {
       </div>
     </section>
   `,
-  styles: [`
+  styles: [`@layer hub-layout {
+
     .shipping{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}
     .shiphead{padding:16px 18px;border-bottom:1px solid #e4e7ec;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
     .push{margin-left:auto}.mut,.small{color:#758198;font-size:12px}.small{font-size:11px}
@@ -143,7 +144,8 @@ type ShippingRule = {
     .badge{display:inline-block;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:600}.warn{background:#fff0e6;color:#9a4b00}.ok{background:#d9f3e5;color:#17643d}.saved{margin-right:8px}
     .error{background:#fff1f1;color:#8c2f2f;border:1px solid #f0caca;padding:12px;border-radius:8px;margin-bottom:10px}
     @media(max-width:1000px){.shipgrid{grid-template-columns:1fr}.shiplist{border-right:0;border-bottom:1px solid #e4e7ec}.rule{grid-template-columns:1fr 1fr}}
-  `]
+
+}`]
 })
 export class ShippingDataComponent implements OnInit {
   products = signal<ShippingProduct[]>([]);

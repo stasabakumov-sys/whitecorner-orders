@@ -47,9 +47,11 @@ import { ActivityService } from '../../core/services/activity.service';
       </div>
     </section>
   `,
-  styles: [`
+  styles: [`@layer hub-layout {
+
     .section-title{font-size:11px;text-transform:uppercase;color:#758198;font-weight:700;margin-bottom:8px}.box{border:1px solid #e4e7ec;border-radius:10px;background:#fff;overflow:hidden}.add{padding:12px 18px;border-bottom:1px solid #e4e7ec}.add label{display:block;font-weight:600;margin-bottom:6px}.add label span{font-size:12px;color:#758198;font-weight:400}.add textarea{width:min(560px,100%);height:42px;min-height:42px;max-height:100px;resize:vertical;border:1px solid #d4d9e2;border-radius:8px;padding:8px 10px;font:inherit}.add button{margin-top:6px;background:#116dff;color:#fff;border:0;border-radius:8px;padding:8px 12px}.timeline{padding:8px 18px 16px}.date{font-size:12px;color:#758198;font-weight:700;margin:14px 0 7px}.event{position:relative;margin-left:10px;padding:4px 82px 16px 28px;min-height:36px}.dot{position:absolute;left:-4px;top:11px;width:7px;height:7px;border-radius:50%;background:#68758a;z-index:2}.line{position:absolute;left:-1px;top:18px;bottom:-1px;width:1px;background:#9aa5b5}.event:last-child .line{display:none}.time{position:absolute;right:0;top:4px;color:#758198;font-size:11px}.who{font-size:12px;color:#4d5a70;margin-bottom:4px}.message{line-height:1.45;white-space:pre-wrap}.empty{padding:16px 0;color:#758198;font-size:12px}
-  `],
+
+}`],
 })
 export class OrderActivityComponent implements OnInit {
   @Input({ required: true }) order!: OrderRow;

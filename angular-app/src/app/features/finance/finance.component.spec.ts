@@ -49,4 +49,20 @@ describe('FinanceComponent', () => {
     }));
     expect(fixture.componentInstance.loadState()).toBe('loading');
   });
+
+  it('shares the active Aura palette with the standalone Finance frame', () => {
+    document.documentElement.style.setProperty('--p-primary-color', '#10b981');
+    try {
+      const fixture = TestBed.createComponent(FinanceComponent);
+      fixture.detectChanges();
+      const frame: HTMLIFrameElement = fixture.nativeElement.querySelector('iframe');
+      frame.contentDocument!.open();
+      frame.contentDocument!.write('<!doctype html><html><head></head><body></body></html>');
+      frame.contentDocument!.close();
+      fixture.componentInstance.onFrameLoad();
+      expect(frame.contentDocument?.documentElement.style.getPropertyValue('--p-primary-color')).toBe('#10b981');
+    } finally {
+      document.documentElement.style.removeProperty('--p-primary-color');
+    }
+  });
 });

@@ -53,7 +53,8 @@ import { LoginComponent } from './shared/login/login.component';
       </main>
     }
   `,
-  styles: [`
+  styles: [`@layer hub-layout {
+
     .boot{position:fixed;inset:0;display:grid;place-items:center;background:#f4f6f8}.boot>div{display:flex;flex-direction:column;gap:8px;text-align:center}.boot span{color:#758198;font-size:12px}
     aside{position:fixed;inset:0 auto 0 0;width:205px;background:#17191f;color:#fff;padding:16px 9px}.brand{padding:2px 11px 18px;font-size:16px}.brand small{display:block;color:#9097a5;font-size:10px}
     aside a{color:#dfe4ec;text-decoration:none;padding:8px 11px;border-radius:8px;display:flex;gap:9px;margin:2px 0;align-items:center;font-size:12px}aside a.active{background:#2b3039;color:#fff}
@@ -64,7 +65,8 @@ import { LoginComponent } from './shared/login/login.component';
     :host ::ng-deep app-fulfilment .head{align-items:flex-start!important;flex-direction:column!important;gap:12px!important}
     :host ::ng-deep app-fulfilment .tabs{margin-left:0!important}
     @media(max-width:760px){.gmail-title{width:100%}.gmail-account{flex:1 1 100%}}
-  `],
+
+}`],
 })
 export class AppComponent {
   readonly workspaceReady = signal(false);
