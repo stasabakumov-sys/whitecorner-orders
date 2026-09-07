@@ -5,6 +5,14 @@ const order=()=>({id:'order',currency:'AUD',shipping:300,subtotal:1100,delivery_
 const rules=['Umbrella hole','4 Castor Wheels'].map(match_name=>({match_name,match_value:'Yes',effect_type:'No effect',active:true}));
 const box=(contents:any[])=>({package_name:'Cart/Shelves',length_mm:1200,width_mm:600,height_mm:100,weight_kg:20,contents});
 describe('Delivery cost policy and durable snapshots',()=>{
+ it('uses Wix after-tax invoice delivery without adding GST twice or multiplying line totals by quantity',()=>{
+  const o={...order(),shipping:86.36,raw_order:{taxIncludedInPrices:true,shippingInfo:{cost:{totalPriceAfterTax:{amount:'95.00'}}}}};
+  expect(deliveryCents(o)).toBe(9500);
+  const review={state:'quoted',evaluated_quotes:evaluateQuotes([{courierName:'Aramex',priceIncludingGst:85.5}],insuranceFor(['Free up to $500'],11000))};
+  expect(reviewOutcome(review,o).status).toBe('within_target');
+  expect(deliveryCents({...o,wc_order_items:[{product_name:'Delivery',unit_price:10,quantity:2,raw_item:{totalPriceAfterTax:{amount:'22.00'}}}]})).toBe(11700);
+  expect(deliveryCents({...o,shipping:0,raw_order:{shippingInfo:{cost:{totalPriceAfterTax:{amount:'0.00'}}}}})).toBe(0);
+ });
  it('selects the lowest allowed carrier including insurance and retains every excluded quote',()=>{
   const insurance=insuranceFor(['Free up to $500','+$30 up to $1500'],110000);
   expect(insurance?.fee_cents).toBe(3000);

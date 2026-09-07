@@ -12,7 +12,7 @@ One durable estimate per new delivery order, or after packaging confirmation for
 - The complete HTTP response/body is saved BEFORE interpreting it. All returned carriers are retained and visible. The browser uses saved data only. Carrier eligibility is separate from storage.
 - Aramex, Couriers Please and FedEx exact normalized aliases are considered. TNT is not mapped to FedEx. Unknown carriers remain visible but excluded.
 - Existing Hub insurance rules are retained: goods value includes GST; divide by 1.1 for cover selection; insurance fee applies above AUD 450 excluding GST; quote total is GST-inclusive price plus tier fee. Insufficient cover blocks quoting rather than inventing coverage.
-- Comparison uses cents: `total * 10 <= invoiceDelivery * 9`. Minimum invoice delivery is rounded UP: `ceil(total * 10 / 9)`. Invoice delivery includes the Wix shipping total plus explicit Delivery/Shipping fee line items. AUD only; missing monetary values do not become zero.
+- Comparison uses cents: `total * 10 <= invoiceDelivery * 9`. Minimum invoice delivery is rounded UP: `ceil(total * 10 / 9)`. Invoice delivery uses Wix shippingInfo.cost.totalPriceAfterTax plus explicit Delivery/Shipping fee line totals after tax. Legacy records without those fields retain imported shipping/unit-price values. GST is never added a second time. The report also displays the full Wix order total including GST. AUD only; missing monetary values do not become zero.
 - An exception records authenticated actor, timestamp, reason and exact invoice/input values. Order version and items are checked again in its transaction. A Wix price change recomputes the result against the same saved quotes. Changed goods/address/options/rules show manual review, without another quote. Approval history remains available.
 - Saved report packages can seed Fulfilment when its order inputs still match. They do not approve a packing list or create a booking. Existing booking safety checks remain in place. Booking is additionally blocked in Hub and on the server until the review is Within target or Approved exception. Only the fixed pre-cutover Ready exemption bypasses this new gate; becoming Ready later never creates an exemption.
 
@@ -47,3 +47,7 @@ git diff --check
 ```
 
 CI runs Angular tests/build, worker mocks, Deno check and the in-memory PostgreSQL migration rehearsal. Manual browser review uses synthetic data with outbound integrations blocked.
+
+GST correction: apply only `20260907000200_delivery_invoice_gst.sql` before deploying its shared calculation. It replaces only the exception RPC calculation, preserves privileges and does not update order/review rows, request quotes or apply Email AI.
+
+The estimate card groups product photo/options/quantity and its boxes. A shared physical box is shown once, with links under the other products. The complete flat order package list is submitted in one quote request; grouping never duplicates parcel dimensions or weight.
