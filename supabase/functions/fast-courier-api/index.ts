@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { withGeneralContents } from './quote-payload.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -182,7 +183,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
           'Secret-Key': apiKey,
         },
-        body: JSON.stringify(body.payload),
+        body: JSON.stringify(withGeneralContents(body.payload)),
         signal: controller.signal,
       });
     } finally {

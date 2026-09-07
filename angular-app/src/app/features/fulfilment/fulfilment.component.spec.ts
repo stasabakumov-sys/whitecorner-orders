@@ -31,7 +31,9 @@ describe('FulfilmentComponent', () => {
     bookingShipmentId: signal<string | null>(null),
     load: vi.fn(async () => undefined),
     orderFor: vi.fn((row: FulfilmentRow) => row.order_id === order.id ? order : undefined),
-    shipmentFor: vi.fn(() => undefined),
+    shipmentFor: vi.fn((): any => undefined),
+    packagesFor: vi.fn((): any[] => []),
+    requestFastCourierQuotes: vi.fn(async (_row: any, _request: any) => undefined),
   };
 
   beforeEach(async () => {
@@ -40,6 +42,9 @@ describe('FulfilmentComponent', () => {
     service.bookShipment.mockReset().mockResolvedValue(true);
     service.error.set('');
     service.bookingShipmentId.set(null);
+    service.shipmentFor.mockReset();
+    service.packagesFor.mockReset().mockReturnValue([]);
+    service.requestFastCourierQuotes.mockClear();
     await TestBed.configureTestingModule({
       imports: [FulfilmentComponent],
       providers: [
@@ -75,6 +80,22 @@ describe('FulfilmentComponent', () => {
     fixture.componentInstance.selected.set(delivery);
     rows.set([{ ...delivery, status: 'Fulfilled' }]);
     expect(fixture.componentInstance.currentSelected()?.status).toBe('Fulfilled');
+  });
+
+  it('sends General/Others for every parcel while preserving Hub package names and converting mm to cm', () => {
+    fixture = TestBed.createComponent(FulfilmentComponent);
+    const packages = ['Top/Side shelves', 'Roof/Castors', ''].map(package_name => ({
+      package_name, weight_kg: 25, length_mm: 1230, width_mm: 630, height_mm: 160,
+    }));
+    service.shipmentFor.mockReturnValue({ id: 'shipment-1' });
+    service.packagesFor.mockReturnValue(packages);
+    fixture.componentInstance.getQuotes(delivery, 'Test', 'QLD', '4000', 'commercial', false,
+      'Test destination', 'VIC', '3000', 'residential', false);
+    expect(service.requestFastCourierQuotes).toHaveBeenCalledOnce();
+    expect(service.requestFastCourierQuotes.mock.calls[0][1].items).toEqual(packages.map(() => ({
+      type: 'box', weight: 25, length: 123, width: 63, height: 16, quantity: 1, contents: 'General/Others',
+    })));
+    expect(packages.map(p => p.package_name)).toEqual(['Top/Side shelves', 'Roof/Castors', '']);
   });
 
   function bookingSetup(){
