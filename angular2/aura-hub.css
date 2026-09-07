@@ -2,7 +2,8 @@
    these light Aura fallbacks. Keep layout rules in hub-layout so they cannot
    override the shared visual system or PrimeNG's component tokens.
    Mail HTML is deliberately outside this adapter: it is document content. */
-html { font-size: 14px; }
+/* One rem scale for Angular, overlays and the standalone Finance frame. */
+html:root { font-size: 12px; }
 body.wc-aura {
   --wc-surface: var(--p-content-background, #ffffff);
   --wc-ground: var(--p-surface-50, #fafafa);
@@ -19,7 +20,7 @@ body.wc-aura {
   --border: var(--wc-border);
   --accent: var(--wc-primary);
   margin: 0;
-  font: 14px/1.5 Inter, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  font: 1rem/1.5 Inter, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   color: var(--wc-text);
   background: var(--wc-ground);
 }
