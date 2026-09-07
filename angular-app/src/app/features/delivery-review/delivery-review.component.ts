@@ -132,7 +132,7 @@ export class DeliveryReviewComponent implements OnInit {
  orderTotal(row:any){return cents(row.wc_orders?.total);}
  invoice(row:any){return deliveryCents(row.wc_orders);}
  increase(row:any){const min=this.s.outcome(row).minimum_invoice_cents,invoice=this.invoice(row);return min==null||invoice==null?null:Math.max(0,min-invoice);}
- marginTone(row:any){const invoice=this.invoice(row),best=this.s.outcome(row).best;if(!invoice||!best)return null;const difference=invoice-best.total_cents;return difference*100>=invoice*20?'green':difference*100>=invoice*10?'yellow':'red';}
+ marginTone(row:any){const invoice=this.invoice(row),best=this.s.outcome(row).best;if(!invoice||!best)return 'red';const difference=invoice-best.total_cents;return difference*100>=invoice*20?'green':difference*100>=invoice*10?'yellow':'red';}
  margin(row:any){const invoice=this.invoice(row),best=this.s.outcome(row).best;return invoice&&best?`${((invoice-best.total_cents)/invoice*100).toFixed(1)}% (${this.money(invoice-best.total_cents)})`:'—';}
  money(value:number|null|undefined){return value==null?'—':new Intl.NumberFormat('en-AU',{style:'currency',currency:'AUD'}).format(value/100);}
  label(status:string){return ({importing:'Awaiting import',pending:'Awaiting calculation',packaging_required:'Packaging required',legacy_packaging_required:'Packaging required',address_required:'Address required',calculating:'Calculating',within_target:'Within target',price_review_required:'Price review required',approved_exception:'Approved exception',no_eligible_quotes:'No eligible quotes',failed:'Calculation failed',uncertain:'Response uncertain',data_changed:'Inputs changed — manual review',invoice_required:'Invoice delivery required'} as Record<string,string>)[status]||status;}

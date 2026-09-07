@@ -11,8 +11,8 @@ describe('Delivery review UI',()=>{
   for(const [cost,tone] of [[11000,'red'],[10000,'red'],[9001,'red'],[9000,'yellow'],[8001,'yellow'],[8000,'green'],[0,'green']] as const){
    outcome.mockReturnValue({best:{total_cents:cost}} as any);expect(component.marginTone(row)).toBe(tone);
   }
-  outcome.mockReturnValue({best:null} as any);expect(component.marginTone(row)).toBeNull();
-  outcome.mockReturnValue({best:{total_cents:0}} as any);expect(component.marginTone({wc_orders:{shipping:0}})).toBeNull();
+  outcome.mockReturnValue({best:null} as any);expect(component.marginTone(row)).toBe('red');
+  outcome.mockReturnValue({best:{total_cents:0}} as any);expect(component.marginTone({wc_orders:{shipping:0}})).toBe('red');
  });
  it('groups packages by product but submits every physical box once in one order request',async()=>{
   const service=new DeliveryReviewService({} as any);vi.spyOn(service,'load').mockResolvedValue();const save=vi.spyOn(service,'savePackages').mockResolvedValue(true);
