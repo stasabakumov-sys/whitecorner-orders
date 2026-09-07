@@ -420,7 +420,7 @@ export class FulfilmentComponent implements OnInit {
     const request:FastCourierQuoteRequest={
       pickupSuburb:ps.trim().toUpperCase(),pickupState:this.stateCode(pstate),pickupPostcode:Number(pp),pickupBuildingType:ptype as 'commercial'|'residential',isPickupTailLift:ptail,
       destinationSuburb:ds.trim().toUpperCase(),destinationState:this.stateCode(dstate),destinationPostcode:Number(dp),destinationBuildingType:dtype as 'commercial'|'residential',isDropOffTailLift:dtail,isDropOffPOBox:false,
-      items:this.f.packagesFor(shipment.id).map(p=>({type:'box',weight:Number(p.weight_kg),length:Number(p.length_mm)/10,width:Number(p.width_mm)/10,height:Number(p.height_mm)/10,quantity:1,contents:String(p.package_name||'Other')})),
+      items:this.f.packagesFor(shipment.id).map(p=>({type:'box',weight:Number(p.weight_kg),length:Number(p.length_mm)/10,width:Number(p.width_mm)/10,height:Number(p.height_mm)/10,quantity:1,contents:'General/Others'})),
     };
     void this.f.requestFastCourierQuotes(row,request);
   }
