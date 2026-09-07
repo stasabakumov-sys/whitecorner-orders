@@ -13,14 +13,14 @@ import { cents, deliveryCents, orderItemOptionLabels, reviewItems, packagingErro
  @if(s.error()){<p class="error" role="alert">{{s.error()}}</p>}
  <div class="toolbar"><label>Show <select [(ngModel)]="filter"><option value="all">All orders</option><option value="attention">Needs attention</option><option value="within_target">Within target</option><option value="approved_exception">Approved exceptions</option><option value="packaging_required">Packaging required</option></select></label>
  <span>{{visible().length}} orders</span></div>
- <div class="table-wrap"><table class="order-table"><thead><tr><th>Order / Customer</th><th aria-label="Order total incl. GST">Order total <small>incl. GST</small></th><th aria-label="Invoice delivery incl. GST">Invoice delivery <small>incl. GST</small></th><th>Best + insurance</th><th>Carrier / Service</th><th>Required increase</th><th>Status</th><th>Saved</th><th></th></tr></thead><tbody>
+ <div class="table-wrap"><table class="order-table"><thead><tr><th>Order / Customer</th><th aria-label="Order total incl. GST">Order total <small>incl. GST</small></th><th aria-label="Invoice delivery incl. GST">Invoice delivery <small>incl. GST</small></th><th>Best + insurance</th><th>Carrier / Service</th><th>Required increase</th><th>Margin</th><th>Status</th><th>Saved</th><th></th></tr></thead><tbody>
  @for(row of visible();track row.order_id){@let result=s.outcome(row);<tr>
  <td><b>#{{row.wc_orders?.order_number}}</b><small>{{row.wc_orders?.customer_name}}</small></td>
  <td>{{money(orderTotal(row))}}</td><td>{{money(invoice(row))}}</td><td>{{money(result.best?.total_cents)}}</td>
  <td>{{result.best?.quote?.courierName||'—'}}<small>{{result.best?.quote?.name}}</small></td>
- <td>{{money(increase(row))}}</td><td><span class="badge" [attr.data-status]="result.status">{{label(result.status)}}</span></td>
+ <td>{{money(increase(row))}}</td><td class="margin-cell">{{margin(row)}}</td><td><span class="badge" [attr.data-status]="result.status">{{label(result.status)}}</span></td>
  <td>@if(row.quoted_at){<span class="saved-date">{{row.quoted_at|date:'dd MMM yyyy'}}</span><span class="saved-time">{{row.quoted_at|date:'HH:mm'}}</span>}@else{—}</td><td><button (click)="open(row)">View / Packaging</button></td>
- </tr>}@empty{<tr><td colspan="9">{{s.loading()?'Loading…':'No new delivery orders to review.'}}</td></tr>}
+ </tr>}@empty{<tr><td colspan="10">{{s.loading()?'Loading…':'No new delivery orders to review.'}}</td></tr>}
  </tbody></table></div>
  @if(selected();as row){@let result=s.outcome(row);
  <div class="overlay"><section class="drawer" role="dialog" aria-modal="true" aria-labelledby="review-title">
