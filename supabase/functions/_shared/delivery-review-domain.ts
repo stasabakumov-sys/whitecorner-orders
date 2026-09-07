@@ -134,10 +134,14 @@ export interface ReviewPackage {
 export const deliveryLine=(i:OrderItemRow)=>/^(delivery|shipping)(\s+(fee|charge))?$/i.test((i.product_name||'').trim());
 export const cents=(n:unknown):number|null=>n===null||n===undefined||n===''||!Number.isFinite(Number(n))||Number(n)<0?null:Math.round(Number(n)*100);
 export function deliveryCents(order:any) {
- const shipping=cents(order.shipping); if(shipping===null)return null;
+ // Wix priceSummary.shipping is before tax even when taxIncludedInPrices=true.
+ // The shipping cost's after-tax total is already GST inclusive: never add 10% again.
+ const amount=(v:any)=>cents(v?.amount??v);
+ const shipping=amount(order.raw_order?.shippingInfo?.cost?.totalPriceAfterTax)??cents(order.shipping); if(shipping===null)return null;
  const lines=(order.wc_order_items||[]).filter(deliveryLine);
- if(lines.some((i:any)=>cents(i.unit_price)===null))return null;
- return shipping+lines.reduce((n:number,i:any)=>n+cents(i.unit_price)!*Math.max(1,Number(i.quantity)||1),0);
+ const totals=lines.map((i:any)=>amount(i.raw_item?.totalPriceAfterTax)??(cents(i.unit_price)===null?null:cents(i.unit_price)!*Math.max(1,Number(i.quantity)||1)));
+ if(totals.some((n:number|null)=>n===null))return null;
+ return shipping+totals.reduce((n:number,total:number)=>n+total,0);
 }
 export function reviewItems(order:any,rules:any[]=[]):OrderItemRow[]{
  return (order.wc_order_items||[]).filter((i:OrderItemRow)=>!deliveryLine(i)&&!rules.some(r=>r.active!==false&&r.effect_type==='No effect'&&!r.match_value&&componentNormal(r.match_name||'')===componentNormal(i.product_name||'')));

@@ -2,25 +2,25 @@ import { Component, computed, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DeliveryReviewService } from '../../core/services/delivery-review.service';
-import { deliveryCents, packagingError, PackageComponent, ReviewPackage } from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import { cents, deliveryCents, packagingError, PackageComponent, ReviewPackage } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 @Component({
  selector:'app-delivery-review',standalone:true,imports:[CommonModule,FormsModule],
  template:`
- <header><div><h1>Delivery Cost Review</h1><p>One saved estimate per order. Target: delivery including insurance ≤ 90% of the invoice delivery charge.</p></div>
+ <header><div><h1>Delivery Cost Review</h1><p>One saved estimate per order. Target: delivery including insurance ≤ 90% of the invoice delivery charge. Amounts include GST.</p></div>
  <button (click)="reload()" [disabled]="s.loading()||s.busy()">Refresh saved data</button></header>
  <div class="notice">All courier quotes are saved. Only Aramex, Couriers Please and FedEx count toward the target. Opening this report never requests a new quote.</div>
  @if(s.error()){<p class="error" role="alert">{{s.error()}}</p>}
  <div class="toolbar"><label>Show <select [(ngModel)]="filter"><option value="all">All orders</option><option value="attention">Needs attention</option><option value="within_target">Within target</option><option value="approved_exception">Approved exceptions</option><option value="packaging_required">Packaging required</option></select></label>
  <span>{{visible().length}} orders</span></div>
- <div class="table-wrap"><table><thead><tr><th>Order / Customer</th><th>Invoice delivery</th><th>Best + insurance</th><th>Carrier / Service</th><th>Required increase</th><th>Status</th><th>Saved</th><th></th></tr></thead><tbody>
+ <div class="table-wrap"><table><thead><tr><th>Order / Customer</th><th>Order total incl. GST</th><th>Invoice delivery incl. GST</th><th>Best + insurance</th><th>Carrier / Service</th><th>Required increase</th><th>Status</th><th>Saved</th><th></th></tr></thead><tbody>
  @for(row of visible();track row.order_id){@let result=s.outcome(row);<tr>
  <td><b>#{{row.wc_orders?.order_number}}</b><small>{{row.wc_orders?.customer_name}}</small></td>
- <td>{{money(invoice(row))}}</td><td>{{money(result.best?.total_cents)}}</td>
+ <td>{{money(orderTotal(row))}}</td><td>{{money(invoice(row))}}</td><td>{{money(result.best?.total_cents)}}</td>
  <td>{{result.best?.quote?.courierName||'—'}}<small>{{result.best?.quote?.name}}</small></td>
  <td>{{money(increase(row))}}</td><td><span class="badge" [attr.data-status]="result.status">{{label(result.status)}}</span></td>
  <td>{{row.quoted_at?(row.quoted_at|date:'dd MMM yyyy, HH:mm'):'—'}}</td><td><button (click)="open(row)">View / Packaging</button></td>
- </tr>}@empty{<tr><td colspan="8">{{s.loading()?'Loading…':'No new delivery orders to review.'}}</td></tr>}
+ </tr>}@empty{<tr><td colspan="9">{{s.loading()?'Loading…':'No new delivery orders to review.'}}</td></tr>}
  </tbody></table></div>
  @if(selected();as row){@let result=s.outcome(row);
  <div class="overlay"><section class="drawer" role="dialog" aria-modal="true" aria-labelledby="review-title">
@@ -30,7 +30,7 @@ import { deliveryCents, packagingError, PackageComponent, ReviewPackage } from '
  @if(result.status==='data_changed'){<p class="error">Order inputs changed after the saved estimate. Review manually; a second quote will not be requested by this report.</p>}
  @if(result.status==='address_required'){<p>Complete the delivery address in Wix and synchronize Orders. The estimate has not been requested yet.</p>}
  @if(row.quote_attempted_at){
- <div class="summary"><div>Invoice delivery<b>{{money(invoice(row))}}</b></div><div>Lowest eligible total<b>{{money(result.best?.total_cents)}}</b></div><div>Minimum invoice delivery<b>{{money(result.minimum_invoice_cents)}}</b></div><div>Margin<b>{{margin(row)}}</b></div></div>
+ <div class="summary"><div>Invoice delivery incl. GST<b>{{money(invoice(row))}}</b></div><div>Lowest eligible total<b>{{money(result.best?.total_cents)}}</b></div><div>Minimum invoice delivery incl. GST<b>{{money(result.minimum_invoice_cents)}}</b></div><div>Margin<b>{{margin(row)}}</b></div></div>
  <p>Requested {{row.quote_attempted_at|date:'dd MMM yyyy, HH:mm'}}. This snapshot is kept for reference and never triggers another request. Actual booking prices must be checked in Fulfilment.</p>
  <h3>All saved courier quotes</h3>
  <div class="table-wrap"><table><thead><tr><th>Carrier / Service</th><th>Quote incl. GST</th><th>Insurance</th><th>Total</th><th>Assessment</th></tr></thead><tbody>
@@ -86,6 +86,7 @@ export class DeliveryReviewComponent implements OnInit {
  assigned(p:ReviewPackage,c:PackageComponent){return p.contents.some(x=>x.id===c.id);}
  toggle(p:ReviewPackage,c:PackageComponent,event:Event){if((event.target as HTMLInputElement).checked){if(!this.assigned(p,c))p.contents.push(c);}else p.contents=p.contents.filter(x=>x.id!==c.id);this.confirmed=false;}
  packagingIssue(row:any){return packagingError(this.draft,this.s.components(row));}
+ orderTotal(row:any){return cents(row.wc_orders?.total);}
  invoice(row:any){return deliveryCents(row.wc_orders);}
  increase(row:any){const min=this.s.outcome(row).minimum_invoice_cents,invoice=this.invoice(row);return min==null||invoice==null?null:Math.max(0,min-invoice);}
  margin(row:any){const invoice=this.invoice(row),best=this.s.outcome(row).best;return invoice&&best?`${((invoice-best.total_cents)/invoice*100).toFixed(1)}% (${this.money(invoice-best.total_cents)})`:'—';}

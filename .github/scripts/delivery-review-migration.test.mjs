@@ -15,6 +15,7 @@ try {
  await db.exec("create table wc_fulfilment(order_id uuid,ready_at timestamptz);insert into wc_fulfilment values('00000000-0000-4000-8000-000000000001',now());");
  const baseline=(await db.query('select to_jsonb(o) row from wc_orders o')).rows;
  await db.exec(await readFile('supabase/migrations/20260907000100_delivery_cost_review.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20260907000200_delivery_invoice_gst.sql','utf8'));
  assert.deepEqual((await db.query('select to_jsonb(o) row from wc_orders o')).rows,baseline);
  assert.equal((await db.query('select count(*)::int n from wc_delivery_reviews')).rows[0].n,1);
  assert.equal((await db.query('select state from wc_delivery_reviews')).rows[0].state,'legacy_packaging_required');
@@ -39,6 +40,11 @@ try {
  await db.query('select wc_approve_delivery_review($1,$2,$3,$4,$5,$6,$7)',[id,actor,'Manual exception','key',30000,params.updated_at,JSON.stringify(params.items)]);
  assert.equal((await db.query('select jsonb_array_length(approval_history) n from wc_delivery_reviews where order_id=$1',[id])).rows[0].n,1);
  await assert.rejects(db.query('select wc_approve_delivery_review($1,$2,$3,$4,$5,$6,$7)',[id,actor,'Stale exception','key',29999,params.updated_at,JSON.stringify(params.items)]),/changed/);
+ await db.query("update wc_orders set shipping=86.36,raw_order=$2 where id=$1",[id,JSON.stringify({shippingInfo:{cost:{totalPriceAfterTax:{amount:'95.00'}}}})]);
+ const gstVersion=(await db.query('select updated_at from wc_orders where id=$1',[id])).rows[0].updated_at;
+ await assert.rejects(db.query('select wc_approve_delivery_review($1,$2,$3,$4,$5,$6,$7)',[id,actor,'Before tax rejected','key',8636,gstVersion,JSON.stringify(params.items)]),/changed/);
+ await db.query('select wc_approve_delivery_review($1,$2,$3,$4,$5,$6,$7)',[id,actor,'After tax accepted','key',9500,gstVersion,JSON.stringify(params.items)]);
+ assert.equal((await db.query("select (approval->>'invoice_cents')::int n from wc_delivery_reviews where order_id=$1",[id])).rows[0].n,9500);
  await db.exec('set role authenticated');
  assert.equal((await db.query('select count(*)::int n from wc_delivery_reviews')).rows[0].n,2);
  await assert.rejects(db.query('insert into wc_delivery_booking_exemptions(order_id) values($1)',[id]),/permission denied/);
