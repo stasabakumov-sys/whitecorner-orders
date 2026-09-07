@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>White Corner Expense Classifier</title>
 <style>
+@layer hub-layout {
 :root{--bg:#f4f6f8;--card:#fff;--text:#172033;--muted:#667085;--border:#e4e7ec;--accent:#172033;}
 *{box-sizing:border-box}
 body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -53,9 +54,11 @@ select{width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;background
 .stat.review-alert .label,.stat.review-alert .value{color:#9a5600}
 .review-focus{outline:2px solid #f0a63a;outline-offset:-2px;background:#fff7e8 !important}
 
+}
 </style>
 
 <style>
+@layer hub-layout {
 .rule-modal-backdrop{
   position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;
   z-index:9999; padding:20px;
@@ -74,10 +77,12 @@ select{width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;background
 .rule-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
 .rule-badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#f2f2f2;font-size:12px}
 .rule-table td,.rule-table th{vertical-align:middle}
+}
 </style>
 
 
 <style>
+@layer hub-layout {
 .pc-toolbar{display:flex;justify-content:flex-end;margin:10px 0 14px}
 .pc-rule-card{border:1px solid #e5e5e5;border-radius:12px;padding:14px;margin-bottom:10px;background:#fff}
 .pc-rule-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr auto;gap:10px;align-items:center}
@@ -91,10 +96,12 @@ select{width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;background
 .pc-list label{display:flex;gap:8px;align-items:flex-start;padding:8px;border-bottom:1px solid #eee}
 .pc-list label:last-child{border-bottom:0}
 .pc-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+}
 </style>
 
 
 <style>
+@layer hub-layout {
 .main-tabs{
   display:flex;
   justify-content:flex-start;
@@ -103,10 +110,12 @@ select{width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;background
   margin:10px 0 14px;
 }
 
+}
 </style>
 
 
 <style>
+@layer hub-layout {
 .main-tabs{
   display:flex;
   justify-content:flex-start;
@@ -117,10 +126,12 @@ select{width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;background
 
 
 
+}
 </style>
 
 
 <style>
+@layer hub-layout {
 .pc-page{
   max-width:980px;
   margin:0;
@@ -147,10 +158,12 @@ select{width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;background
 .pc-rules-card td:last-child{
   width:150px;
 }
+}
 </style>
 
 
 <style>
+@layer hub-layout {
 #asset-section-pc{
   width:100%;
 }
@@ -177,11 +190,13 @@ select{width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;background
 .pc-rules-card td{
   padding:10px 12px;
 }
+}
 </style>
 
 
 
 <style>
+@layer hub-layout {
 #profitMain .card{
   overflow-x:auto;
 }
@@ -213,9 +228,11 @@ select{width:100%;padding:6px;border:1px solid #ccc;border-radius:6px;background
   max-width:140px !important;
   text-align:right !important;
 }
+}
 </style>
 
 <style>
+@layer hub-layout {
 /* Hub / PrimeNG visual language for the legacy Finance data surface. */
 :root{
   --surface-ground:#f6f7f9;
@@ -274,11 +291,13 @@ body.embedded{background:var(--surface-ground);color:var(--text-color);font-size
 .embedded ::-webkit-scrollbar{width:9px;height:9px}.embedded ::-webkit-scrollbar-track{background:transparent}.embedded ::-webkit-scrollbar-thumb{background:#d0d5dd;border:2px solid transparent;background-clip:padding-box;border-radius:999px}
 @media(max-width:1100px){.embedded .stats{grid-template-columns:repeat(3,minmax(140px,1fr))}.embedded .desc{min-width:280px}}
 @media(max-width:720px){.embedded>.container{padding:10px}.embedded .stats{grid-template-columns:1fr 1fr}.embedded .stat{min-height:74px}.embedded .stat .value{font-size:18px}.embedded .tabs{overflow-x:auto}.embedded .card{padding:10px}}
+}
 </style>
 
 
+<link rel="stylesheet" href="../aura-hub.css">
 </head>
-<body>
+<body class="wc-aura">
 <div id="authWaitView" class="login card">
   <h2>White Corner Finance</h2>
   <p>Opening Finance…</p>
