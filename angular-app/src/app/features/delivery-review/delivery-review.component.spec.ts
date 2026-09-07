@@ -5,6 +5,17 @@ import {DeliveryReviewService} from '../../core/services/delivery-review.service
 import {buildReviewRequest,evaluateQuotes,insuranceFor,reviewComponents,reviewInputKey} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 describe('Delivery review UI',()=>{
+ it('requires reason and risk acknowledgement for unquoted approval',async()=>{
+  const s=new DeliveryReviewService({} as any);vi.spyOn(s,'load').mockResolvedValue();
+  const approve=vi.spyOn(s,'approveWithoutQuote').mockResolvedValue(true);
+  const c=new DeliveryReviewComponent(s);const row:any={order_id:'order',state:'packaging_required',packages:[]};
+  c.open(row);await c.approveWithoutQuote(row);expect(approve).not.toHaveBeenCalled();
+  c.reason='First manufacture';await c.approveWithoutQuote(row);expect(approve).not.toHaveBeenCalled();
+  c.acceptUnknownCost=true;await c.approveWithoutQuote(row);expect(approve).toHaveBeenCalledExactlyOnceWith('order','First manufacture');
+  expect(c.editable({...row,state:'approved_without_quote'})).toBe(true);
+  expect(c.canApproveWithoutQuote({...row,quote_attempted_at:'2026-09-07'})).toBe(false);
+  expect(c.canApproveWithoutQuote({...row,token:'worker'})).toBe(false);
+ });
  it('colors margin at exact 10 and 20 percent thresholds without changing the outcome',()=>{
   const service=new DeliveryReviewService({} as any),outcome=vi.spyOn(service,'outcome');
   const component=new DeliveryReviewComponent(service),row={wc_orders:{shipping:100}};

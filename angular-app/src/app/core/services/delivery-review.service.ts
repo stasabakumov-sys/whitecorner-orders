@@ -38,6 +38,7 @@ export class DeliveryReviewService {
  components(row:any){return reviewComponents(row.wc_orders,this.rules());}
  async savePackages(orderId:string,packages:ReviewPackage[],saveProfile:boolean){return this.perform({action:'packages',orderId,packages,saveProfile});}
  async approve(orderId:string,reason:string){return this.perform({action:'approve',orderId,reason});}
+ async approveWithoutQuote(orderId:string,reason:string){return this.perform({action:'approve-without-quote',orderId,reason});}
  private async perform(body:any){
   if(this.busy())return false;
   this.busy.set(true);this.error.set('');

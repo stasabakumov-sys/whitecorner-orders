@@ -1,4 +1,5 @@
-import { Component, computed, OnInit, signal } from '@angular/core';
+import { Component, computed, OnInit, signal, Optional } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DeliveryReviewService } from '../../core/services/delivery-review.service';
@@ -11,7 +12,7 @@ import { cents, deliveryCents, orderItemOptionLabels, reviewItems, packagingErro
  <button (click)="reload()" [disabled]="s.loading()||s.busy()">Refresh saved data</button></header>
  <div class="notice">All courier quotes are saved. Only Aramex, Couriers Please and FedEx count toward the target. Opening this report never requests a new quote.</div>
  @if(s.error()){<p class="error" role="alert">{{s.error()}}</p>}
- <div class="toolbar"><label>Show <select [(ngModel)]="filter"><option value="all">All orders</option><option value="attention">Needs attention</option><option value="within_target">Within target</option><option value="approved_exception">Approved exceptions</option><option value="packaging_required">Packaging required</option></select></label>
+ <div class="toolbar"><label>Show <select [(ngModel)]="filter"><option value="all">All orders</option><option value="attention">Needs attention</option><option value="within_target">Within target</option><option value="approved_exception">Approved exceptions</option><option value="approved_without_quote">Approved without quote</option><option value="packaging_required">Packaging required</option></select></label>
  <span>{{visible().length}} orders</span></div>
  <div class="table-wrap"><table class="order-table"><thead><tr><th>Order / Customer</th><th aria-label="Order total incl. GST">Order total <small>incl. GST</small></th><th aria-label="Invoice delivery incl. GST">Invoice delivery <small>incl. GST</small></th><th>Best + insurance</th><th>Carrier / Service</th><th>Required increase</th><th>Margin</th><th>Status</th><th>Saved</th><th></th></tr></thead><tbody>
  @for(row of visible();track row.order_id){@let result=s.outcome(row);<tr>
@@ -29,6 +30,18 @@ import { cents, deliveryCents, orderItemOptionLabels, reviewItems, packagingErro
  @if(s.error()){<p class="error" role="alert">{{s.error()}}</p>}
  @if(result.status==='data_changed'){<p class="error">Order inputs changed after the saved estimate. Review manually; a second quote will not be requested by this report.</p>}
  @if(result.status==='address_required'){<p>Complete the delivery address in Wix and synchronize Orders. The estimate has not been requested yet.</p>}
+ @if(result.status==='approved_without_quote'){
+ <p class="notice">Production approved without a quote. Actual packaging and a valid insured quote are still required before booking.</p>
+ }@else if(canApproveWithoutQuote(row)){
+ <section class="notice">
+ <h3>Approve without quote</h3>
+ <p>For a first-time product with unknown packaging, accept the unknown delivery cost to release production. This does not request a quote or create a booking.</p>
+ <label>Reason<textarea [(ngModel)]="reason" maxlength="2000" placeholder="First production run; packaging will be measured after manufacture"></textarea></label>
+ <label class="check"><input type="checkbox" [(ngModel)]="acceptUnknownCost" />I accept the risk of unknown delivery cost for this order.</label>
+ <button (click)="approveWithoutQuote(row)" [disabled]="s.busy()||!acceptUnknownCost||reason.trim().length<3">{{s.busy()?'Saving…':'Approve without quote'}}</button>
+ </section>
+ }
+ @if(row.approval_history?.length){<h3>Approval history</h3>@for(a of row.approval_history;track $index){<p>{{a.at|date:'dd MMM yyyy, HH:mm'}} · {{a.kind==='without_quote'?'Approved without quote':'Price exception'}} · {{a.reason}}<small>Approved by {{a.actor}}</small></p>}}
  <div class="address"><b>Delivery address:</b> {{address(row.wc_orders?.delivery_address)}}</div>
  <h3>Order composition &amp; packaging</h3>
  <p>Assign packaging under each product. All {{packages(row).length}} boxes are sent together in one delivery quote for this order.</p>
@@ -82,20 +95,21 @@ import { cents, deliveryCents, orderItemOptionLabels, reviewItems, packagingErro
  <label>Reason for accepting the current price<textarea [(ngModel)]="reason" maxlength="2000"></textarea></label>
  <button (click)="approve(row)" [disabled]="s.busy()||reason.trim().length<3">{{s.busy()?'Saving…':'Approve current delivery price'}}</button>
  }
- @if(row.approval_history?.length){<h3>Approval history</h3>@for(a of row.approval_history;track $index){<p>{{a.at|date:'dd MMM yyyy, HH:mm'}} · {{a.reason}} · {{money(a.invoice_cents)}}<small>Approved by {{a.actor}}</small></p>}}
  }
  </section></div>}
  `,
  styleUrl:'./delivery-review.component.css',
 })
 export class DeliveryReviewComponent implements OnInit {
+
+ acceptUnknownCost=false;
  private boxOwners=new WeakMap<ReviewPackage,string>();
  filter='all';selectedId=signal<string|null>(null);reason='';draft:ReviewPackage[]=[];saveProfile=true;confirmed=false;
  selected=computed(()=>this.s.rows().find(r=>r.order_id===this.selectedId())||null);
- constructor(public s:DeliveryReviewService){}
- ngOnInit(){void this.s.load();}
+ constructor(public s:DeliveryReviewService, @Optional() private route?:ActivatedRoute){}
+ ngOnInit(){void this.s.load().then(()=>{const number=this.route?.snapshot.queryParamMap.get('order');if(number){const row=this.s.rows().find(r=>String(r.wc_orders?.order_number)===number);if(row)this.open(row);}});}
  visible(){
-  const resolved=(r:any)=>['within_target','approved_exception'].includes(this.s.outcome(r).status);
+  const resolved=(r:any)=>['within_target','approved_exception','approved_without_quote'].includes(this.s.outcome(r).status);
   return this.s.rows().filter(r=>{
    const status=this.s.outcome(r).status;
    if(this.filter==='all')return true;
@@ -105,8 +119,10 @@ export class DeliveryReviewComponent implements OnInit {
   }).sort((a,b)=>Number(resolved(a))-Number(resolved(b)));
  }
  async reload(){this.s.error.set('');await this.s.load();}
- open(row:any){this.selectedId.set(row.order_id);this.draft=structuredClone(row.packages||[]);this.boxOwners=new WeakMap();for(const p of this.draft)this.boxOwners.set(p,p.contents[0]?.order_item_id||'');this.reason='';this.confirmed=false;this.s.error.set('');}
- editable(row:any){return !row.quote_attempted_at&&['pending','packaging_required','legacy_packaging_required','address_required'].includes(row.state);}
+ open(row:any){this.acceptUnknownCost=false;this.selectedId.set(row.order_id);this.draft=structuredClone(row.packages||[]);this.boxOwners=new WeakMap();for(const p of this.draft)this.boxOwners.set(p,p.contents[0]?.order_item_id||'');this.reason='';this.confirmed=false;this.s.error.set('');}
+ editable(row:any){return !row.quote_attempted_at&&['pending','packaging_required','legacy_packaging_required','address_required','approved_without_quote'].includes(row.state);}
+ canApproveWithoutQuote(row:any){return !row.quote_attempted_at&&!row.token&&['pending','packaging_required','legacy_packaging_required','address_required','failed','approved_without_quote'].includes(row.state);}
+ async approveWithoutQuote(row:any){if(this.canApproveWithoutQuote(row)&&this.acceptUnknownCost&&this.reason.trim().length>=3&&!this.s.busy())await this.s.approveWithoutQuote(row.order_id,this.reason);}
  packages(row:any):ReviewPackage[]{return this.editable(row)?this.draft:row.packages||[];}
  owner(p:ReviewPackage){return this.boxOwners.get(p)||p.contents[0]?.order_item_id||'';}
  productGroups(row:any){
@@ -135,7 +151,7 @@ export class DeliveryReviewComponent implements OnInit {
  marginTone(row:any){const invoice=this.invoice(row),best=this.s.outcome(row).best;if(!invoice||!best)return 'red';const difference=invoice-best.total_cents;return difference*100>=invoice*20?'green':difference*100>=invoice*10?'yellow':'red';}
  margin(row:any){const invoice=this.invoice(row),best=this.s.outcome(row).best;return invoice&&best?`${((invoice-best.total_cents)/invoice*100).toFixed(1)}% (${this.money(invoice-best.total_cents)})`:'—';}
  money(value:number|null|undefined){return value==null?'—':new Intl.NumberFormat('en-AU',{style:'currency',currency:'AUD'}).format(value/100);}
- label(status:string){return ({importing:'Awaiting import',pending:'Awaiting calculation',packaging_required:'Packaging required',legacy_packaging_required:'Packaging required',address_required:'Address required',calculating:'Calculating',within_target:'Within target',price_review_required:'Price review required',approved_exception:'Approved exception',no_eligible_quotes:'No eligible quotes',failed:'Calculation failed',uncertain:'Response uncertain',data_changed:'Inputs changed — manual review',invoice_required:'Invoice delivery required'} as Record<string,string>)[status]||status;}
+ label(status:string){return ({importing:'Awaiting import',pending:'Awaiting calculation',packaging_required:'Packaging required',legacy_packaging_required:'Packaging required',address_required:'Address required',calculating:'Calculating',within_target:'Within target',price_review_required:'Price review required',approved_exception:'Approved exception',approved_without_quote:'Approved without quote',no_eligible_quotes:'No eligible quotes',failed:'Calculation failed',uncertain:'Response uncertain',data_changed:'Inputs changed — manual review',invoice_required:'Invoice delivery required'} as Record<string,string>)[status]||status;}
  async save(row:any){if(!this.confirmed||this.packagingIssue(row))return;await this.s.savePackages(row.order_id,this.draft,this.saveProfile);}
  async approve(row:any){await this.s.approve(row.order_id,this.reason);}
 }

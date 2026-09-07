@@ -14,12 +14,18 @@
       </div>
       <div class="status">
         <span>Production status</span>
-        <p-select [options]="production.statuses" [disabled]="saving()" [ngModel]="view.status" (ngModelChange)="statusChanged($event)" appendTo="body" />
+        <p-select [options]="production.statuses" [disabled]="saving()||checking()||!deliveryAllowed()" [ngModel]="view.status" (ngModelChange)="statusChanged($event)" appendTo="body" />
       </div>
     </div>
   </ng-template>
 
   <div class="body">
+    <p *ngIf="checking()" role="status">Checking delivery approval…</p>
+    <section *ngIf="!checking()&&!deliveryAllowed()" class="wix-section" role="alert">
+      <p>Production is blocked. Add packaging and resolve the delivery estimate, or approve without a quote with a reason.</p>
+      <p-button label="Open Delivery Review" (onClick)="openDeliveryReview()" />
+      <p-button label="Check again" [text]="true" (onClick)="checkDelivery()" />
+    </section>
     <div class="error" *ngIf="error()">{{ error() }}</div>
 
     <section class="wix-section">

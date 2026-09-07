@@ -9,6 +9,7 @@ on:
       - 'supabase/functions/_shared/**'
       - 'supabase/functions/delivery-cost-review/**'
       - 'supabase/migrations/*_delivery_cost_review.sql'
+      - 'supabase/migrations/*_delivery_production_gate.sql'
       - '.github/scripts/delivery-review*'
       - '.github/workflows/build-angular2-preview.yml'
   pull_request:
@@ -17,6 +18,7 @@ on:
       - 'supabase/functions/_shared/**'
       - 'supabase/functions/delivery-cost-review/**'
       - 'supabase/migrations/*_delivery_cost_review.sql'
+      - 'supabase/migrations/*_delivery_production_gate.sql'
       - '.github/scripts/delivery-review*'
       - '.github/workflows/build-angular2-preview.yml'
 permissions:
@@ -50,6 +52,7 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/delivery-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
           node .github/scripts/delivery-review-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+          node .github/scripts/delivery-production-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Publish clean preview path
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash

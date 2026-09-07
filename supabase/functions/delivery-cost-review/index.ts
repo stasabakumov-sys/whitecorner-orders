@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { productionDecision, setReviewedProductionStatus, unquotedApprovalStates } from '../_shared/delivery-production-gate.ts';
 import { courierReviewCall, processDeliveryReview, reviewContext } from '../_shared/delivery-review-worker.ts';
 import { deliveryCents, packagingError, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../_shared/delivery-review-domain.ts';
 const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,x-client-info,apikey,content-type','Access-Control-Allow-Methods':'POST,OPTIONS','Content-Type':'application/json'};
@@ -15,8 +16,23 @@ Deno.serve(async(req)=>{
   const body=await req.json();
   if(!/^[\da-f-]{36}$/i.test(body.orderId||''))return json({error:'Valid order ID required'},422);
   const {order,rules}=await reviewContext(db,body.orderId);
-  const {data:review,error:reviewError}=await db.from('wc_delivery_reviews').select('*').eq('order_id',body.orderId).single();
-  if(reviewError||!review)return json({error:'Delivery review unavailable'},404);
+  const {data:review,error:reviewError}=await db.from('wc_delivery_reviews').select('*').eq('order_id',body.orderId).maybeSingle();
+  if(reviewError)return json({error:'Delivery review unavailable'},503);
+  if(body.action==='production-check')return json(await productionDecision(db,order,rules,review));
+  if(body.action==='production-status'){
+   try{return json({ok:true,activity:await setReviewedProductionStatus(db,order,rules,review,body,user.id)});}
+   catch(e){return json({error:(e as Error).message},409);}
+  }
+  if(!review)return json({error:'Delivery review unavailable'},404);
+  if(body.action==='approve-without-quote'){
+   if(review.quote_attempted_at||review.token||!unquotedApprovalStates.includes(review.state))return json({error:'An unquoted, idle delivery review is required.'},409);
+   if(typeof body.reason!=='string'||body.reason.trim().length<3||body.reason.length>2000)return json({error:'Enter an approval reason (3–2000 characters).'},422);
+   const {error}=await db.rpc('wc_approve_delivery_without_quote',{
+    p_order_id:order.id,p_actor:user.id,p_reason:body.reason,p_input_key:reviewInputKey(order,rules),p_invoice_cents:deliveryCents(order),
+    p_order_version:order.updated_at,p_items:order.wc_order_items,p_rules:rules,p_review_version:review.updated_at,
+   });
+   return error?json({error:'Review changed or approval is unavailable. Reload before approving.'},409):json({ok:true});
+  }
   if(body.action==='packages'){
    if(Deno.env.get('DELIVERY_REVIEW_ENABLED')!=='true')return json({error:'Delivery estimates are not enabled yet.'},503);
    if(review.quote_attempted_at)return json({error:'The one-time quote has already been requested. Saved packaging is locked.'},409);
