@@ -1,3 +1,4 @@
+import {orderItemOptionLabels} from '../../core/utils/order-item-display';
 import { PackageComponent, componentIdentity } from '../../core/utils/package-components';
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
@@ -354,7 +355,7 @@ export class FulfilmentComponent implements OnInit {
   canQuote(status:string){return status==='Ready to Quote'||status==='Quoted'||status==='Quote Selected';}
   orderItems(items: OrderItemRow[]) { return items.filter((i) => !/^(delivery|shipping)(\s+(fee|charge))?$/i.test(String(i.product_name || '').trim())); }
   image(item: OrderItemRow) { const x:any=item.image||{},r:any=item.raw_item||{}; return x.url||x.imageUrl||x.imageInfo?.url||r.media?.url||r.image?.url||r.image?.imageInfo?.url||''; }
-  options(item: OrderItemRow) { const out:string[]=[]; for(const obj of [item.wix_options,item.custom_text_fields]) if(obj&&typeof obj==='object') for(const[k,v]of Object.entries(obj)){const z=typeof v==='object'&&v?(v as any).value||(v as any).name||(v as any).description:String(v??'');if(String(z).trim())out.push(`${k}: ${String(z).trim()}`);} return [...new Set(out)].slice(0,10); }
+  options(item: OrderItemRow) { return orderItemOptionLabels(item,10); }
   contentOrderItems(){const row=this.selected(),order=row&&this.f.orderFor(row);return order?this.f.packageComponents(order):[];}
   openPackageContents(pkg:ShipmentPackageRow){
     this.contentsPackage.set(pkg);
