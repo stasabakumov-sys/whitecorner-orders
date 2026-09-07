@@ -33,4 +33,3 @@ describe('Exact packaging variants',()=>{
   expect(c.issue()).toContain('positive');c.boxes=[box([c.components()[0]])];expect(c.issue()).toContain('Internal Shelf');
  });
 });
-
