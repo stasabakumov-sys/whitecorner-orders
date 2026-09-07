@@ -14,6 +14,7 @@ try{
  const before=(await db.query('select to_jsonb(o) v from wc_orders o')).rows;
  await db.exec(await readFile('supabase/migrations/20260907000400_partner_pans_report.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20260907000600_partner_pans_activity.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20260907000700_partner_pans_short_notes.sql','utf8'));
  await db.exec('grant select on wc_order_activity to authenticated');
  assert.deepEqual((await db.query('select to_jsonb(o) v from wc_orders o')).rows,before);
  await db.exec('set role anon');await assert.rejects(db.query('select * from wc_partner_pans'),/permission denied/);await db.exec('reset role');
@@ -22,7 +23,7 @@ try{
  const save=(source=item,status='ordered_and_sent')=>db.query('select wc_set_partner_pans_status($1,$2,$3,$4)',[item.id,source,'key',status]);
  await assert.rejects(save({...item,quantity:99}),/changed/);await assert.rejects(save(item,'unknown'),/Invalid/);
  await save();await save();
- const notes=(await db.query('select * from wc_order_activity')).rows;assert.equal(notes.length,1);assert.equal(notes[0].order_id,order);assert.equal(notes[0].order_item_id,item.id);assert.match(notes[0].message,/Ordered and sent.*Cart/);
+ const notes=(await db.query('select * from wc_order_activity')).rows;assert.equal(notes.length,1);assert.equal(notes[0].order_id,order);assert.equal(notes[0].order_item_id,item.id);assert.equal(notes[0].message,'Pans were sent.');
 
  let r=(await db.query('select * from wc_partner_pans')).rows[0];assert.equal(r.history.length,1);assert.equal(r.status,'ordered_and_sent');assert.equal(r.updated_by,'00000000-0000-4000-8000-000000000009');
  await assert.rejects(db.query("update wc_partner_pans set status='pending'"),/permission denied/);

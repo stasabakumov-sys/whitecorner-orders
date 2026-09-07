@@ -1,3 +1,4 @@
+import {ActivityService} from './activity.service';
 import {signal} from '@angular/core';
 import {describe,it,expect,vi} from 'vitest';
 import {orderItemOptionLabels,packageComponents,partnerPans,restoreReviewPackages} from '../../../../../supabase/functions/_shared/delivery-review-domain';
@@ -38,6 +39,25 @@ describe('Partner supplied Pans',()=>{
   const s=new PartnerPansService({client:{rpc}} as any,activity as any),row={item:{id:'item'},pans:{key:'key'}};
   s.rows.set([row]);await s.setStatus(row,'ordered_and_sent');await s.setStatus(row,'ordered_and_sent');
   expect(activity.rows()).toEqual([note]);
+ });
+ it('requires explicit confirmation before resetting a sent row',async()=>{
+  const setStatus=vi.fn(async()=>true),s={busy:signal(false),loading:signal(false),setStatus},c=new PartnerPansComponent(s as any),row={status:'ordered_and_sent'};
+  await c.changeStatus(row);expect(setStatus).not.toHaveBeenCalled();c.closeConfirmation(false);expect(c.cancelRow).toBeNull();
+  await c.changeStatus(row);await c.confirmReset();expect(setStatus).toHaveBeenCalledWith(row,'pending');expect(c.cancelRow).toBeNull();
+ });
+ it('keeps a failed comment draft and clears only a saved comment',async()=>{
+  const addComment=vi.fn(async()=>false),c=new PartnerPansComponent({addComment} as any),row={item:{id:'item'}};c.comments['item']='Partner reference';await c.saveComment(row);expect(c.comments['item']).toBe('Partner reference');
+  addComment.mockResolvedValue(true);await c.saveComment(row);expect(c.comments['item']).toBe('');
+ });
+ it('saves optional comments against the order and product without changing status',async()=>{
+  const addNote=vi.fn(async()=>{}),rpc=vi.fn(),s=new PartnerPansService({client:{rpc}} as any,{addNote} as any);
+  expect(await s.addComment({order:{id:'order'},item:{id:'item'}},'  Reference  ')).toBe(true);
+  expect(addNote).toHaveBeenCalledWith('order','Reference','item');expect(rpc).not.toHaveBeenCalled();
+ });
+ it('persists item attribution on manual Order Notes',async()=>{
+  const insert=vi.fn(()=>({select:()=>({single:async()=>({data:{id:'note'}})})}));
+  const activity=new ActivityService({client:{from:()=>({insert})}} as any,{userEmail:()=> 'staff@example.invalid'} as any);
+  await activity.addNote('order','Reference','item');expect(insert).toHaveBeenCalledWith({order_id:'order',order_item_id:'item',activity_type:'note',message:'Reference',created_by:'staff@example.invalid'});
  });
  it('loads persisted status and resets changed selections, with no writes on report open',async()=>{
   const item={id:'i',quantity:2,wix_options:{Pans:'Yes'}};

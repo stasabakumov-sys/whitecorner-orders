@@ -56,9 +56,10 @@ export class ActivityService {
     this.loaded = true;
   }
 
-  async addNote(orderId: string, message: string): Promise<void> {
+  async addNote(orderId: string, message: string, orderItemId?: string): Promise<void> {
     const payload = {
       order_id: orderId,
+      ...(orderItemId ? { order_item_id: orderItemId } : {}),
       activity_type: 'note',
       message,
       created_by: this.auth.userEmail() || 'User',
