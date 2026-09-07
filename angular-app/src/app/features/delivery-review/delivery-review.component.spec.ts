@@ -5,6 +5,15 @@ import {DeliveryReviewService} from '../../core/services/delivery-review.service
 import {buildReviewRequest,evaluateQuotes,insuranceFor,reviewComponents,reviewInputKey} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 describe('Delivery review UI',()=>{
+ it('colors margin at exact 10 and 20 percent thresholds without changing the outcome',()=>{
+  const service=new DeliveryReviewService({} as any),outcome=vi.spyOn(service,'outcome');
+  const component=new DeliveryReviewComponent(service),row={wc_orders:{shipping:100}};
+  for(const [cost,tone] of [[11000,'red'],[10000,'red'],[9001,'red'],[9000,'yellow'],[8001,'yellow'],[8000,'green'],[0,'green']] as const){
+   outcome.mockReturnValue({best:{total_cents:cost}} as any);expect(component.marginTone(row)).toBe(tone);
+  }
+  outcome.mockReturnValue({best:null} as any);expect(component.marginTone(row)).toBe('red');
+  outcome.mockReturnValue({best:{total_cents:0}} as any);expect(component.marginTone({wc_orders:{shipping:0}})).toBe('red');
+ });
  it('groups packages by product but submits every physical box once in one order request',async()=>{
   const service=new DeliveryReviewService({} as any);vi.spyOn(service,'load').mockResolvedValue();const save=vi.spyOn(service,'savePackages').mockResolvedValue(true);
   const order={id:'grouped',currency:'AUD',shipping:100,total:540,delivery_address:{addressLine:'1 Test St',city:'TEST',state:'VIC',postalCode:'3000',country:'AU'},wc_order_items:[{id:'cart',product_name:'Cart',quantity:2,unit_price:110,wix_options:{Shelf:'Yes'}},{id:'stand',product_name:'Stand',quantity:1,unit_price:220}]};
