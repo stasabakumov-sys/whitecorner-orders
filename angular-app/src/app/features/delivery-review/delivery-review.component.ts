@@ -1,5 +1,5 @@
 import { Component, computed, OnInit, signal, Optional } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DeliveryReviewService } from '../../core/services/delivery-review.service';
@@ -55,7 +55,8 @@ import { isPartnerPansComponent, cents, deliveryCents, orderItemOptionLabels, re
  }@else{<b>Unassigned packaging — select its contents</b>}
  </div>
  <div class="product-packages"><h4>{{group.boxes.length}} package(s)</h4>
- @if(editable(row)&&group.item){<a [href]="variantLink(group.item)">Configure packaging variant</a> <button [disabled]="s.busy()||variantLoading" (click)="loadVariant(group.item)">Load saved variant</button>}
+ @if(editable(row)&&group.item){<button [disabled]="s.busy()||variantLoading" (click)="configureVariant(group.item)">Configure packaging variant</button> <button [disabled]="s.busy()||variantLoading" (click)="loadVariant(group.item)">Load saved variant</button>
+ @if(variantNotices()[group.item.id]){<p role="status">{{variantNotices()[group.item.id]}}</p>}}
  @for(p of group.boxes;track p){
  <fieldset class="package-card" [disabled]="s.busy()"><legend>Package {{packageNumber(row,p)}}</legend>
  @if(editable(row)){
@@ -103,7 +104,15 @@ import { isPartnerPansComponent, cents, deliveryCents, orderItemOptionLabels, re
 })
 export class DeliveryReviewComponent implements OnInit {
  variantLoading=false;
- variantLink(item:any){return '#/shipping-data?product='+encodeURIComponent(item.product_name||'');}
+ variantNotices=signal<Record<string,string>>({});
+ async configureVariant(item:any){
+  if(this.variantLoading||this.s.busy())return;
+  this.variantLoading=true;const selected=this.selectedId();
+  this.variantNotices.update(messages=>({...messages,[item.id]:''}));
+  try{const target=await this.s.variantTarget(item,this.selected()?.wc_orders);if(this.selectedId()===selected)await this.router?.navigate(['/shipping-data'],{queryParams:target.productId?{productId:target.productId,variant:target.signature}:{product:target.productName,savedProfile:target.signature}});}
+  catch(e:any){this.variantNotices.update(messages=>({...messages,[item.id]:e.message}));}
+  finally{this.variantLoading=false;}
+ }
  async loadVariant(item:any){
   if(this.variantLoading||this.s.busy())return;
   if(this.draft.some(p=>p.contents.some(c=>c.order_item_id===item.id)&&new Set(p.contents.map(c=>c.order_item_id)).size>1)){this.s.error.set('A box is shared with another product. Adjust its contents manually before loading a variant.');return;}
@@ -116,7 +125,7 @@ export class DeliveryReviewComponent implements OnInit {
  private boxOwners=new WeakMap<ReviewPackage,string>();
  filter='all';selectedId=signal<string|null>(null);reason='';draft:ReviewPackage[]=[];saveProfile=true;confirmed=false;
  selected=computed(()=>this.s.rows().find(r=>r.order_id===this.selectedId())||null);
- constructor(public s:DeliveryReviewService, @Optional() private route?:ActivatedRoute){}
+ constructor(public s:DeliveryReviewService, @Optional() private route?:ActivatedRoute,@Optional() private router?:Router){}
  ngOnInit(){void this.s.load().then(()=>{const number=this.route?.snapshot.queryParamMap.get('order');if(number){const row=this.s.rows().find(r=>String(r.wc_orders?.order_number)===number);if(row)this.open(row);}});}
  visible(){
   const resolved=(r:any)=>['within_target','approved_exception','approved_without_quote'].includes(this.s.outcome(r).status);

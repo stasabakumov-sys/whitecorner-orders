@@ -31,6 +31,7 @@ import {orderItemOptionLabels,packagingError,reviewComponents,variantSignature,p
  `,styles:[`:host{display:block;border:1px solid #e2e8f0;border-radius:8px;padding:1rem;margin-top:1rem}.tools{display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin:.6rem 0}.box{border:1px solid #e2e8f0;border-radius:6px;padding:.7rem;margin:.7rem 0}input,select,button{font:inherit}label input{display:block;max-width:140px}.choice{display:flex;gap:.5rem;align-items:center;margin:.5rem 0}.choice input{display:inline}fieldset{border:0;padding:0}[role=alert]{color:#b91c1c}`]})
 export class PackagingVariantsComponent implements OnChanges {
  @Input() product:any;
+ @Input() initialSignature='';
  variants=signal<any[]>([]);examples=signal<any[]>([]);rules:any[]=[];error=signal('');busy=signal(false);saved=signal(false);
  selectedKey='';sourceItemId='';catalogId='';
  options:{name:string,value:string}[]=[{name:'Size',value:''}];boxes:any[]=[];confirmed=false;
@@ -39,6 +40,7 @@ export class PackagingVariantsComponent implements OnChanges {
   const [profiles,rules]=await Promise.all([this.supabase.client.from('wc_delivery_packaging_profiles').select('*').eq('shipping_product_id',this.product.id),this.supabase.client.from('wc_shipping_rules').select('*').eq('active',true).eq('effect_type','No effect')]);
   if(profiles.error||rules.error)throw Error('Variants unavailable. Check the packaging variant migration.');
   this.variants.set(profiles.data||[]);this.rules=rules.data||[];
+  if(this.initialSignature){if(this.variants().some(v=>v.signature===this.initialSignature))this.open(this.initialSignature);else this.error.set('The requested packaging variant is no longer available.');}
   const examples:any[]=[];
   for(let start=0;;start+=250){const {data,error}=await this.supabase.client.from('wc_order_items').select('*').order('id').range(start,start+249);if(error)throw Error('Order option examples unavailable');
    examples.push(...(data||[]).filter((i:any)=>this.product.wix_product_id?i.catalog_reference?.catalogItemId===this.product.wix_product_id:i.product_name===this.product.product_name));if((data||[]).length<250)break;}

@@ -2,12 +2,15 @@ import { Component, OnInit, computed, signal, Optional } from '@angular/core';
 import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
 import {PackagingVariantsComponent} from './packaging-variants.component';
+import {shippingProfileCatalog,savedProfileOptions} from '../../core/utils/shipping-profile-catalog';
 
 type ShippingProduct = {
   id: string;
   product_name: string;
   product_type?: string | null;
   active?: boolean;
+  saved_profiles?:any[];
+  saved_only?:boolean;
 };
 
 type ShippingPackage = {
@@ -55,9 +58,9 @@ type ShippingRule = {
       <div class="shipgrid">
         <div class="shiplist">
           @for (p of visibleProducts(); track p.id) {
-            <button class="shipitem" [class.on]="selectedId()===p.id" (click)="selectedId.set(p.id)">
+            <button class="shipitem" [class.on]="selectedId()===p.id" (click)="selectedId.set(p.id);requestedVariant=''">
               <div class="pn">{{ p.product_name }}</div>
-              <div class="pm">{{ basePackages(p.id).length }} base boxes · {{ incompleteBaseCount(p.id) ? incompleteBaseCount(p.id)+' incomplete' : 'complete' }}</div>
+              <div class="pm">{{p.saved_profiles?.length||0}} saved profile(s) · {{ basePackages(p.id).length }} base boxes</div>
             </button>
           }
         </div>
@@ -69,12 +72,18 @@ type ShippingRule = {
                 <h2>{{ p.product_name }}</h2>
                 <div class="small">{{ p.product_type }}</div>
               </div>
-              <span class="badge" [class.warn]="incompleteCount(p.id)>0" [class.ok]="incompleteCount(p.id)===0">
-                {{ incompleteCount(p.id)>0 ? incompleteCount(p.id)+' packages incomplete' : 'Ready for quoting' }}
-              </span>
+              <span class="badge">{{p.saved_profiles?.length||0}} reusable profile(s)</span>
             </div>
 
-            @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" />}
+            @for(profile of p.saved_profiles||[];track profile.signature){
+             <section class="shipsection"><h3>Saved packaging · {{profileOptions(profile)}}</h3>
+             <p class="small">Used automatically for an identical composition and quantity. This is the saved profile, not a second copy.</p>
+             <div class="tablewrap"><table class="shiptable"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th></tr></thead><tbody>
+             @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{c.product_name}} · {{c.component_name}} · Unit {{c.unit_index}}</div>}</td></tr>}
+             </tbody></table></div></section>
+            }
+            @if(!p.saved_only){
+            @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" />}
             <div class="shipsection">
               <h3>Packages</h3>
               <div class="tablewrap">
@@ -120,6 +129,7 @@ type ShippingRule = {
                 <div class="mut">No rules for this product.</div>
               }
             </div>
+            }
           } @else {
             <div class="mut">No products in this filter.</div>
           }
@@ -152,10 +162,12 @@ type ShippingRule = {
 }`]
 })
 export class ShippingDataComponent implements OnInit {
+  profileOptions=savedProfileOptions;
   products = signal<ShippingProduct[]>([]);
   packages = signal<ShippingPackage[]>([]);
   rules = signal<ShippingRule[]>([]);
   selectedId = signal<string | null>(null);
+  requestedVariant='';
   kindFilter = signal<'all'|'backdrops'|'carts'|'others'>('all');
   error = signal('');
   editingIds = signal<Set<string>>(new Set());
@@ -185,11 +197,25 @@ export class ShippingDataComponent implements OnInit {
       this.supabase.client.from('wc_shipping_rules').select('*').order('created_at')
     ]);
     if (pr.error) { this.error.set(pr.error.message); return; }
-    this.products.set((pr.data ?? []) as ShippingProduct[]);
+    const profiles:any[]=[];
+    for(let start=0;;start+=250){
+      const page=await this.supabase.client.from('wc_delivery_packaging_profiles').select('*').order('signature').range(start,start+249);
+      if(page.error){this.error.set('Saved packaging profiles could not be loaded.');return;}
+      profiles.push(...(page.data||[]));if((page.data||[]).length<250)break;
+    }
+    this.products.set(shippingProfileCatalog(pr.data||[],profiles));
     this.packages.set((pk.data ?? []) as ShippingPackage[]);
     this.rules.set((rr.data ?? []) as ShippingRule[]);
-    const requested=this.route?.snapshot.queryParamMap.get('product');
-    const target=this.products().find(p=>p.product_name===requested);if(target)this.selectedId.set(target.id);
+    const params=this.route?.snapshot.queryParamMap;
+    const requested=params?.get('product'),requestedId=params?.get('productId');
+    this.requestedVariant=params?.get('variant')||'';
+    if(requestedId!==null&&requestedId!==undefined||requested!==null&&requested!==undefined){
+      const saved=params?.get('savedProfile');
+      const matches=this.products().filter(p=>(requestedId!==null&&requestedId!==undefined?p.id===requestedId:p.product_name===requested)&&(!saved||p.saved_profiles?.some(x=>x.signature===saved)));
+      this.selectedId.set(matches.length===1?matches[0].id:null);
+      if(matches.length!==1)this.error.set('No matching shipping product is available. Return to the order and add boxes there.');
+      return; // An explicit, missing target must never fall back to the first product.
+    }
     if (!this.selectedId() && this.products().length) this.selectedId.set(this.products()[0].id);
   }
 
