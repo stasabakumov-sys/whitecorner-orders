@@ -89,7 +89,7 @@ export function orderItemOptionLabels(item: OrderItemRow, limit = 12): string[] 
     }
   }
 
-  return [...new Set(out.map(x => x.trim()).filter(Boolean))].slice(0, limit);
+  return [...new Set(out.map(x => x.trim()).filter(x=>!!x&&!isLogoFileInstruction(x)))].slice(0, limit);
 }
 
 
@@ -98,11 +98,15 @@ export interface PackageComponent {
   unit_index:number; quantity:number; profile_item_key:string; wix_product_id:string|null;
 }
 export const componentNormal=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+export const isLogoFileInstruction=(text:string)=>/^please email us (?:a )?ready to use svg\b/.test(componentNormal(text));
+export const isLogoOption=(name:string)=>/^(?:add )?logo(?: or personali[sz]ation)?$/.test(componentNormal(name));
 export function productId(item:OrderItemRow){const c=item.catalog_reference as any,r=item.raw_item as any;return String(c?.catalogItemId||c?.productId||r?.catalogReference?.catalogItemId||r?.productId||'');}
 const attribute=/^(colou?r|size|dimensions?|width|height|length|finish|foldable|material|personalisation|personalization|engraving|notes?|message)$/i;
 // Pans are supplied directly by a partner, never packed with our cart.
 export const isPartnerPansOption=(name:string)=>componentNormal(name)==='pans';
 export const isPartnerPansComponent=(c:{component_key?:string})=>c.component_key==='option:pans';
+export const isNonPackagingComponent=(c:{component_key?:string;component_name?:string})=>isPartnerPansComponent(c)||
+ ((c.component_key||'').startsWith('option:')&&(isLogoOption(c.component_key!.slice(7))||isLogoFileInstruction(c.component_key!.slice(7))))||isLogoFileInstruction(c.component_name||'');
 export function partnerPans(item:OrderItemRow){
  const choices=[...new Set(orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).flatMap(label=>{
   const split=label.indexOf(':');if(split<0||!isPartnerPansOption(label.slice(0,split)))return [];
@@ -116,7 +120,7 @@ export function partnerPans(item:OrderItemRow){
 export function packageComponents(items:OrderItemRow[],ignored:(name:string,value:string)=>boolean=()=>false):PackageComponent[]{
  const occurrences=new Map<string,number>();
  return items.flatMap(item=>{
-  const labels=orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER);
+  const labels=orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).filter(label=>!isLogoOption(label.split(':')[0]));
   const signature=JSON.stringify([productId(item)||componentNormal(item.product_name||''),[...new Set(labels.map(componentNormal))].sort()]);
   const occurrence=occurrences.get(signature)||0;occurrences.set(signature,occurrence+1);
   const profile_item_key=signature+':'+occurrence;
