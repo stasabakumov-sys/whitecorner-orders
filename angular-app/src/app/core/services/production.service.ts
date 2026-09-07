@@ -55,32 +55,27 @@ export class ProductionService {
   async changeStatus(view: ProductionUnitView, next: ProductionStatus): Promise<void> {
     const old = (view.unit.production_status || 'New') as ProductionStatus;
     if (old === next) return;
-    const { error } = await this.supabase.client
-      .from('wc_production_units')
-      .update({ production_status: next })
-      .eq('id', view.unit.id);
-    if (error) throw error;
-
+    const result = await this.deliveryAction({action:'production-status',orderId:view.order.id,unitId:view.unit.id,next});
+    if(result.ok!==true)throw new Error('Production change was not confirmed. Reload the order.');
     view.unit.production_status = next;
     view.status = next;
     this.ordersService.orders.set([...this.ordersService.orders()]);
+    if(result.activity)this.activity.rows.update(rows=>[result.activity as OrderActivityRow,...rows]);
+  }
 
-    const { data, error: activityError } = await this.supabase.client
-      .from('wc_order_activity')
-      .insert({
-        order_id: view.order.id,
-        production_unit_id: view.unit.id,
-        activity_type: 'status_change',
-        old_status: old,
-        new_status: next,
-        created_by: this.auth.userEmail() || 'User',
-      })
-      .select()
-      .single();
-    if (activityError) {
-      throw new Error(`Status changed, but activity history could not be saved: ${activityError.message}`);
+  async checkDelivery(orderId:string):Promise<{allowed:boolean;status:string}>{
+    return this.deliveryAction({action:'production-check',orderId});
+  }
+
+  private async deliveryAction(body:Record<string,unknown>){
+    const {data,error}=await this.supabase.client.functions.invoke('delivery-cost-review',{body});
+    if(error){
+      const detail=await error.context?.json?.().catch(()=>null);
+      throw new Error(detail?.error||'Delivery approval could not be verified. Reload before continuing.');
     }
-    if (data) this.activity.rows.update((rows) => [data as OrderActivityRow, ...rows]);
+    if(data?.error)throw new Error(data.error);
+    if(!data)throw new Error('Delivery approval response missing.');
+    return data;
   }
 
   imageUrl(item: OrderItemRow): string {

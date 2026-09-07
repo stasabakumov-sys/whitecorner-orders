@@ -10,5 +10,5 @@ export async function assertDeliveryBookingAllowed(db:any,courierOrderId:string)
  if(reviewError||!review)throw Error('Delivery Cost Review is required before booking.');
  const {order,rules}=await reviewContext(db,shipment.order_id);
  const result=reviewOutcome(review,order,reviewInputKey(order,rules));
- if(!['within_target','approved_exception'].includes(result.status))throw Error('Booking blocked: resolve Delivery Cost Review or approve the current delivery price first.');
+ if(!['within_target','approved_exception','approved_without_quote'].includes(result.status))throw Error('Booking blocked: resolve Delivery Cost Review or approve the current delivery price first.');
 }

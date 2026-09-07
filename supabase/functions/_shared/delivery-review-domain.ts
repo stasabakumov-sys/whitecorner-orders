@@ -222,6 +222,11 @@ export function evaluateQuotes(quotes:any[],insurance:ReturnType<typeof insuranc
  });
 }
 export function reviewOutcome(review:any,order:any,currentKey?:string){
+ if(review.state==='approved_without_quote'){
+  const a=review.approval;
+  const valid=!review.quote_attempted_at&&a?.kind==='without_quote'&&a.input_key===currentKey&&a.invoice_cents===deliveryCents(order);
+  return {status:valid?'approved_without_quote':'data_changed',best:null,minimum_invoice_cents:null};
+ }
  if(review.state!=='quoted')return {status:review.state,best:null,minimum_invoice_cents:null};
  const best=(review.evaluated_quotes||[]).filter((q:any)=>q.eligible&&Number.isInteger(q.total_cents)).sort((a:any,b:any)=>a.total_cents-b.total_cents)[0]||null;
  if(currentKey&&review.input_key!==currentKey)return {status:'data_changed',best,minimum_invoice_cents:null};
@@ -229,6 +234,6 @@ export function reviewOutcome(review:any,order:any,currentKey?:string){
  const invoice=deliveryCents(order);
  if(invoice===null)return {status:'invoice_required',best,minimum_invoice_cents:null};
  const minimum=Math.ceil(best.total_cents*10/9);
- const approved=review.approval?.input_key===review.input_key&&review.approval?.invoice_cents===invoice;
+ const approved=review.approval?.kind!=='without_quote'&&review.approval?.input_key===review.input_key&&review.approval?.invoice_cents===invoice;
  return {status:best.total_cents*10<=invoice*9?'within_target':approved?'approved_exception':'price_review_required',best,minimum_invoice_cents:minimum};
 }

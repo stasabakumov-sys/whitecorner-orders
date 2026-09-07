@@ -545,7 +545,7 @@ export class FulfilmentService {
       if(!exemptionError&&!exemption){
         const {data:review,error}=await this.supabase.client.from('wc_delivery_reviews').select('*').eq('order_id',row.order_id).maybeSingle();
         const order=this.orderFor(row);
-        if(error||!review||!order||!['within_target','approved_exception'].includes(reviewOutcome(review,order,reviewInputKey(order,this.noPackageRules())).status))throw Error('Booking blocked: resolve Delivery Cost Review or approve the current delivery price first.');
+        if(error||!review||!order||!['within_target','approved_exception','approved_without_quote'].includes(reviewOutcome(review,order,reviewInputKey(order,this.noPackageRules())).status))throw Error('Booking blocked: resolve Delivery Cost Review or approve the current delivery price first.');
       }
       const {error:syncSetupError}=await this.supabase.client.from('wc_shipping_fulfillment_sync').select('order_id').eq('order_id',row.order_id);
       if(syncSetupError)throw new Error('Shipping synchronization is not available. Install the shipping sync migration before booking.');
