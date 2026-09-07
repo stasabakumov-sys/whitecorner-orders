@@ -111,7 +111,7 @@ export function partnerPans(item:OrderItemRow){
  const choices=[...new Set(orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).flatMap(label=>{
   const split=label.indexOf(':');if(split<0||!isPartnerPansOption(label.slice(0,split)))return [];
   const value=label.slice(split+1).trim(),normal=componentNormal(value);
-  if(!normal||/^(no|none|false|0|not required|not selected)$/.test(normal)||/\bwithout\s+pans?\b/.test(normal)||/^no pans?\b/.test(normal))return [];
+  if(!normal||/^(no|none|false|0|not required|not selected)$/.test(normal)||/\bwithout\b.*\bpans?\b/.test(normal)||/\bno\s+(?:steel\s+|metal\s+|stainless\s+steel\s+)?pans?\b/.test(normal))return [];
   return [value];
  }))];
  const quantity=Math.max(1,Math.floor(Number(item.quantity)||1));
