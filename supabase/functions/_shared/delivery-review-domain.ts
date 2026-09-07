@@ -250,3 +250,20 @@ export function reviewOutcome(review:any,order:any,currentKey?:string){
  const approved=review.approval?.kind!=='without_quote'&&review.approval?.input_key===review.input_key&&review.approval?.invoice_cents===invoice;
  return {status:best.total_cents*10<=invoice*9?'within_target':approved?'approved_exception':'price_review_required',best,minimum_invoice_cents:minimum};
 }
+
+
+export const hasSizeOption=(item:any)=>orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).some(label=>componentNormal(label.split(':')[0])==='size');
+export const variantItem=(item:any)=>({...item,quantity:1});
+export const variantSignature=(item:any)=>packagingSignature([variantItem(item)]);
+// Templates describe one physical product. Duplicate boxes, never dimensions,
+// for quantity > 1; assign each copy to its own physical component units.
+export function expandVariant(packages:any[],item:any,rules:any[]=[]){
+ const one=reviewComponents({wc_order_items:[variantItem(item)]},rules);
+ const restored=restoreReviewPackages(packages,one);
+ if(packagingError(restored,one))return [];
+ const all=reviewComponents({wc_order_items:[item]},rules),qty=Math.max(1,Math.floor(Number(item.quantity)||1));
+ return Array.from({length:qty},(_,index)=>restored.map(p=>({...p,contents:p.contents.map(c=>{
+  const perUnit=one.filter(x=>x.component_key===c.component_key).length;
+  return all.find(x=>x.component_key===c.component_key&&x.unit_index===index*perUnit+c.unit_index)!;
+ })}))).flat();
+}

@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { productionDecision, setReviewedProductionStatus, unquotedApprovalStates } from '../_shared/delivery-production-gate.ts';
 import { courierReviewCall, processDeliveryReview, reviewContext } from '../_shared/delivery-review-worker.ts';
 import { deliveryCents, packagingError, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../_shared/delivery-review-domain.ts';
+import { variantSignature, productId } from '../_shared/delivery-review-domain.ts';
 const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,x-client-info,apikey,content-type','Access-Control-Allow-Methods':'POST,OPTIONS','Content-Type':'application/json'};
 Deno.serve(async(req)=>{
  if(req.method==='OPTIONS')return new Response('ok',{headers});
@@ -14,6 +15,26 @@ Deno.serve(async(req)=>{
   const {data:{user},error}=await db.auth.getUser(auth.replace(/^Bearer\s+/i,''));
   if(error||!user)return json({error:'Authentication required'},401);
   const body=await req.json();
+  if(body.action==='save-packaging-variant'){
+   const {data:product,error:productError}=await db.from('wc_shipping_products').select('id,product_name,wix_product_id').eq('id',body.productId).eq('active',true).single();
+   if(productError||!product)return json({error:'Shipping product unavailable'},422);
+   if(!Array.isArray(body.options)||body.options.length>40||body.options.some((o:any)=>typeof o.name!=='string'||!o.name.trim()||typeof o.value!=='string'||!o.value.trim()||o.name.length>100||o.value.length>500))return json({error:'Complete every option name and value'},422);
+   if(new Set(body.options.map((o:any)=>o.name.trim().toLowerCase())).size!==body.options.length)return json({error:'Duplicate option names'},422);
+   let catalogId=product.wix_product_id||'';
+   if(!catalogId){
+    const {data:source,error:sourceError}=await db.from('wc_order_items').select('id,product_name,catalog_reference,raw_item').eq('id',body.sourceItemId).single();
+    if(sourceError||!source||source.product_name!==product.product_name)return json({error:'Choose an existing order composition for this product.'},422);
+    catalogId=productId(source);
+   }
+   const item={id:product.id,source_item_id:body.sourceItemId||null,product_name:product.product_name,quantity:1,catalog_reference:catalogId?{catalogItemId:catalogId}:{},wix_options:Object.fromEntries(body.options.map((o:any)=>[o.name.trim(),o.value.trim()]))};
+   const {data:rules,error:rulesError}=await db.from('wc_shipping_rules').select('match_name,match_value,effect_type,active').eq('active',true).eq('effect_type','No effect');
+   if(rulesError)return json({error:'Packaging rules unavailable'},503);
+   const components=reviewComponents({wc_order_items:[item]},rules||[]),issue=packagingError(body.packages,components);
+   if(issue)return json({error:issue},422);
+   const packages=body.packages.map((p:any)=>({package_name:String(p.package_name||'Package').slice(0,150),length_mm:Number(p.length_mm),width_mm:Number(p.width_mm),height_mm:Number(p.height_mm),weight_kg:Number(p.weight_kg),contents:p.contents.map((c:any)=>components.find(x=>x.order_item_id===c.order_item_id&&x.component_key===(c.component_key||'main')&&x.unit_index===(c.unit_index||1)))}));
+   const {error}=await db.from('wc_delivery_packaging_profiles').upsert({signature:variantSignature(item),shipping_product_id:product.id,template_item:item,packages,created_by:user.id,updated_at:new Date().toISOString()});
+   return error?json({error:'Variant could not be saved. Check the variant migration.'},409):json({ok:true});
+  }
   if(!/^[\da-f-]{36}$/i.test(body.orderId||''))return json({error:'Valid order ID required'},422);
   const {order,rules}=await reviewContext(db,body.orderId);
   const {data:review,error:reviewError}=await db.from('wc_delivery_reviews').select('*').eq('order_id',body.orderId).maybeSingle();

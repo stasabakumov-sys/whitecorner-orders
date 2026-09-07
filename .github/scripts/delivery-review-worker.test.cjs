@@ -105,3 +105,20 @@ test('delivery handler authenticates approval, validates reason and never calls 
  assert.equal((await call({reason:'First build',actor:'spoofed'})).status,200);assert.equal(rpc[0].args.p_actor,'verified-user');assert.equal(rpc[0].name,'wc_approve_delivery_without_quote');
  s.review.quote_attempted_at='2026-09-07';assert.equal((await call({reason:'Again'})).status,409);assert.equal(rpc.length,1);assert.equal(upstream,0);
 });
+
+test('variant save is authenticated, canonical, and never quotes or changes orders',async()=>{
+ let handler,authorized=true,saved=null;const product={id:'cart',product_name:'Cart',wix_product_id:'catalog'};
+ const db={auth:{getUser:async()=>({data:{user:authorized?{id:'actor'}:null}})},from(table){assert.ok(['wc_shipping_products','wc_shipping_rules','wc_delivery_packaging_profiles'].includes(table));const q={select(){return q},eq(){return q},single:async()=>({data:product}),then:resolve=>resolve({data:[]}),upsert:async value=>{saved=value;return {error:null}}};return q;}};
+ const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>db}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{throw Error('No upstream calls')}});
+ const item={id:'cart',product_name:'Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Size:'Size II'}};
+ const body={action:'save-packaging-variant',productId:'cart',options:[{name:'Size',value:'Size II'}],packages:[{package_name:'Box',length_mm:1300,width_mm:600,height_mm:100,weight_kg:15,contents:domain.reviewComponents({wc_order_items:[item]})}]};
+ const call=b=>handler(new Request('http://fixture.invalid',{method:'POST',body:JSON.stringify(b)}));authorized=false;assert.equal((await call(body)).status,401);authorized=true;
+ assert.equal((await call({...body,options:[{name:'Size',value:''}]})).status,422);assert.equal(saved,null);
+ body.packages[0].contents[0].component_name='Spoof';assert.equal((await call(body)).status,200);assert.equal(saved.created_by,'actor');assert.equal(saved.packages[0].contents[0].component_name,'Cart');assert.equal(saved.signature,domain.variantSignature(item));
+});
+
+test('legacy product-only boxes cannot quote a Size variant',async()=>{
+ const s=setup();s.review.packages=[];s.order.wc_order_items[0].wix_options={Size:'Size II'};
+ const original=s.db.from.bind(s.db);s.db.from=table=>{if(!['wc_shipping_products','wc_shipping_packages'].includes(table))return original(table);const data=table==='wc_shipping_products'?[{id:'p',product_name:'Cart'}]:[{shipping_product_id:'p',package_name:'Old size unknown',length_mm:1000,width_mm:500,height_mm:100,weight_kg:10,contents:[]}];const q={select(){return q},eq(){return q},order(){return q},then:resolve=>resolve({data})};return q;};
+ await processDeliveryReview(s.db,'order',s.call);assert.equal(s.calls.length,0);assert.equal(s.review.state,'packaging_required');
+});

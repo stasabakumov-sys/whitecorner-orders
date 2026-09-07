@@ -11,6 +11,8 @@ on:
       - 'supabase/migrations/*_delivery_cost_review.sql'
       - 'supabase/migrations/*_delivery_production_gate.sql'
       - 'supabase/migrations/*_partner_pans_report.sql'
+      - 'supabase/migrations/*_packaging_variant_editor.sql'
+      - '.github/scripts/packaging-variant*'
       - '.github/scripts/partner-pans*'
       - '.github/scripts/delivery-review*'
       - '.github/workflows/build-angular2-preview.yml'
@@ -22,6 +24,8 @@ on:
       - 'supabase/migrations/*_delivery_cost_review.sql'
       - 'supabase/migrations/*_delivery_production_gate.sql'
       - 'supabase/migrations/*_partner_pans_report.sql'
+      - 'supabase/migrations/*_packaging_variant_editor.sql'
+      - '.github/scripts/packaging-variant*'
       - '.github/scripts/partner-pans*'
       - '.github/scripts/delivery-review*'
       - '.github/workflows/build-angular2-preview.yml'
@@ -58,6 +62,7 @@ jobs:
           node .github/scripts/delivery-review-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/delivery-production-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/partner-pans-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+          node .github/scripts/packaging-variant-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Publish clean preview path
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
