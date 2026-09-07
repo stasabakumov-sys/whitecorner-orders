@@ -23,6 +23,7 @@ import { LoginComponent } from './shared/login/login.component';
         <a routerLink="/home" routerLinkActive="active"><span>⌂</span>Home</a>
         <a routerLink="/orders" routerLinkActive="active"><span>▤</span>Orders</a>
         <a routerLink="/delivery-cost-review" routerLinkActive="active"><span>↗</span>Delivery Cost Review</a>
+        <a routerLink="/partner-pans" routerLinkActive="active"><span>▤</span>Partner Pans</a>
         <a routerLink="/production" routerLinkActive="active"><span>▦</span>Production Board</a>
         <a routerLink="/fulfilment" routerLinkActive="active"><span>✓</span>Fulfilment</a>
         <a routerLink="/email" routerLinkActive="active"><span>✉</span>Email</a>

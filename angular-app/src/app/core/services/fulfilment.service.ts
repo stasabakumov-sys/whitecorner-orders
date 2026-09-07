@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { packageComponents, componentIdentity, packagingSignature } from '../utils/package-components';
-import { packagingError, restoreReviewPackages, reviewInputKey, reviewOutcome } from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import { isPartnerPansComponent, packagingError, restoreReviewPackages, reviewInputKey, reviewOutcome } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import { OrderItemRow, OrderRow } from '../models/order.models';
 import { OrdersService } from './orders.service';
 import { ActivityService } from './activity.service';
@@ -151,7 +151,7 @@ export class FulfilmentService {
   packageComponents(order:OrderRow){return packageComponents(this.packageItems(order),(name,value)=>this.noPackageRules().some(r=>r.active!==false&&r.effect_type==='No effect'&&this.normalise(r.match_name||'')===this.normalise(name)&&(!r.match_value||this.normalise(r.match_value)===this.normalise(value))));}
   noPackageItems(order:OrderRow){return this.orderItems(order).filter(item=>this.noPackageRequired(item));}
 
-  packageContents(pkg:ShipmentPackageRow){return Array.isArray(pkg.contents)?pkg.contents:[];}
+  packageContents(pkg:ShipmentPackageRow){return Array.isArray(pkg.contents)?pkg.contents.filter(c=>!isPartnerPansComponent(c)):[];}
 
   private validContents(value:unknown):PackageContentRow[]{
     if(!Array.isArray(value))return [];
@@ -163,7 +163,7 @@ export class FulfilmentService {
       component_name:String(x?.component_name||x?.product_name||''),
       unit_index:Math.max(1,Math.floor(Number(x?.unit_index)||1)),quantity:1,
       profile_item_key:x?.profile_item_key,profile_signature:x?.profile_signature,
-    })).filter(x=>x.order_item_id&&x.product_name);
+    })).filter(x=>x.order_item_id&&x.product_name&&!isPartnerPansComponent(x));
     return [...new Map(clean.map(c=>[componentIdentity(c),c])).values()];
   }
 

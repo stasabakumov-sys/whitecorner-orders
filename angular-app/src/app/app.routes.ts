@@ -8,12 +8,14 @@ import { ShippingDataComponent } from './features/shipping-data/shipping-data.co
 import { EmailComponent } from './features/email/email.component';
 import { FinanceComponent } from './features/finance/finance.component';
 import { DeliveryReviewComponent } from './features/delivery-review/delivery-review.component';
+import { PartnerPansComponent } from './features/partner-pans/partner-pans.component';
 
 export const routes:Routes=[
   {path:'',pathMatch:'full',redirectTo:'home'},
   {path:'home',component:HomeComponent},
   {path:'orders',component:OrdersComponent},
   {path:'delivery-cost-review',component:DeliveryReviewComponent},
+  {path:'partner-pans',component:PartnerPansComponent},
   {path:'production',component:ProductionBoardComponent},
   {path:'fulfilment',pathMatch:'full',redirectTo:'fulfilment/delivery'},
   {path:'fulfilment/:tab',component:FulfilmentComponent},
