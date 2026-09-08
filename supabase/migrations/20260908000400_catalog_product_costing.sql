@@ -160,7 +160,7 @@ begin
  if (select count(*) from jsonb_array_elements(p_lines))<>(select count(distinct l->>'material_id') from jsonb_array_elements(p_lines) l) then raise exception 'Duplicate materials';end if;
  if jsonb_typeof(p_work) is distinct from 'object' or (select count(*) from jsonb_object_keys(p_work))<>4 or exists(select 1 from unnest(array['cnc','assembly','sanding','painting']) category where not (p_work ? category) or (p_work->>category)::numeric<0 or (p_work->>category)::numeric>1000000 or (p_work->>category)::numeric='NaN'::numeric) then raise exception 'Enter every work cost; use zero for no work';end if;
  if p_pans<0 or p_pans>1000000 or p_pans='NaN'::numeric then raise exception 'Invalid Pans cost';end if;
- 
+
  pid=coalesce(wc_catalog_register(p_item),stored.shipping_product_id);
  insert into wc_material_profiles(variant_key,product_name,options,lines,updated_by,shipping_product_id,template_item,work_costs,pans_cost_gst,materials_confirmed,costing_version)
  values(p_key,i.product_name,i.wix_options,p_lines,auth.uid(),pid,jsonb_build_object('source_item_id',i.id,'kind',part.kind,'main_item_id',p_main,'multiplier',part.multiplier,'options',i.wix_options,'has_pans',wc_catalog_pans(i),'source_item',jsonb_build_object('id',i.id,'product_name',i.product_name,'quantity',1,'wix_options',i.wix_options,'catalog_reference',i.catalog_reference,'custom_text_fields',i.custom_text_fields,'description_lines',i.description_lines),'standard_top_excluded',top_excluded),p_work,case when wc_catalog_pans(i) then p_pans else 0 end,coalesce(p_confirmed,false),2)
