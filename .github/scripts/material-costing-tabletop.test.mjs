@@ -11,7 +11,7 @@ try {
  const makeOrder=async(number,qty=4,upgradeQty=qty)=>{
   const o=(await db.query('insert into wc_orders(wix_order_id,order_number,currency) values($1,$1,\'AUD\') returning id',[number])).rows[0].id;
   const line=async(name,q,product)=> (await db.query("insert into wc_order_items(order_id,product_name,quantity,wix_options,catalog_reference) values($1,$2,$3,'{}',jsonb_build_object('catalogItemId',$4::text)) returning id",[o,name,q,product])).rows[0].id;
-  const main=await line('Classic Cart',qty,'cart');
+  const main=await line('Collapsible Plywood Mobile Bar Classic',qty,'cart');
   const upgrade=upgradeQty?await line('Tasmanian Oak Timber Benchtop Upgrade',upgradeQty,'oak'):null;
   for(const id of [main,upgrade].filter(Boolean))await db.query("insert into wc_production_units(order_item_id,unit_index,production_status) select $1,n,'Painting' from generate_series(1,$2::int) n",[id,id===main?qty:upgradeQty]);
   return {o,main,upgrade,line};

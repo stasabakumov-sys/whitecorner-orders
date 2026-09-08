@@ -10,7 +10,7 @@ returns table(main_id uuid,upgrade_id uuid) language sql stable security definer
  )
  select m.id,a.id from mains m join rows a on a.id<>m.id
  where (select count(*) from rows)=2 and (select count(*) from mains)=1
- and m.product_name ~* '\mcart\M' and a.product_name ~* 'benchtop upgrade'
+ and m.product_name ~* '(\mcart\M|\mmobile bar\M)' and a.product_name ~* 'benchtop upgrade'
  and m.quantity>0 and a.quantity=m.quantity
 $$;
 

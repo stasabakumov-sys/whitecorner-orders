@@ -11,7 +11,7 @@ const cost=(i:string,u=1,total:number|null=10)=>({order_id:'o',item_id:i,unit_id
 const view=(o:any,c:any[])=>orderCostingView(o,c,board.unitsForOrder(o));
 describe('Order material composition',()=>{
  it('accepts four carts with one replacement top each and preserves the legacy Board units',()=>{
-  const main=item('a',4,'Painting','Classic Cart'),upgrade=item('b',4,'Painting','Tasmanian Oak Timber Benchtop Upgrade');
+  const main=item('a',4,'Painting','Collapsible Plywood Mobile Bar Classic'),upgrade=item('b',4,'Painting','Tasmanian Oak Timber Benchtop Upgrade');
   const o={...order([main,upgrade]),order_number:'10812'};
   const v=view(o,Array.from({length:4},(_,n)=>({...cost('b',n+1,null),item_id:'a'})));
   expect(v.issues).toEqual([]);expect(v.products).toHaveLength(1);expect(v.products[0].replacement.id).toBe('b');

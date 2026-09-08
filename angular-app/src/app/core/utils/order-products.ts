@@ -26,6 +26,6 @@ export function tabletopReplacement(items:OrderItemRow[]){
  if(composition.unresolved.length||composition.products.length!==1)return null;
  const product=composition.products[0];
  const upgrade=product.components.find(i=>i.id!==product.item.id&&/benchtop upgrade/i.test(i.product_name||''));
- if(!upgrade||product.components.length!==2||!/\bcart\b/i.test(product.item.product_name||'')||Number(upgrade.quantity)!==Number(product.item.quantity))return null;
+ if(!upgrade||product.components.length!==2||!/(\bcart\b|\bmobile bar\b)/i.test(product.item.product_name||'')||Number(upgrade.quantity)!==Number(product.item.quantity))return null;
  return {item:product.item,upgrade};
 }
