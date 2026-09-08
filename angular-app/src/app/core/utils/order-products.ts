@@ -19,3 +19,13 @@ export function orderProducts(items:OrderItemRow[]){
 }
 
 export function isDeliveryLine(item:Pick<OrderItemRow,'product_name'>){return /^(delivery|shipping)(\s+(fee|charge))?$/i.test(String(item.product_name||'').trim());}
+
+/** A replacement is safe only when there is exactly one cart and one top per cart. */
+export function tabletopReplacement(items:OrderItemRow[]){
+ const composition=orderProducts(items);
+ if(composition.unresolved.length||composition.products.length!==1)return null;
+ const product=composition.products[0];
+ const upgrade=product.components.find(i=>i.id!==product.item.id&&/benchtop upgrade/i.test(i.product_name||''));
+ if(!upgrade||product.components.length!==2||!/(\bcart\b|\bmobile bar\b)/i.test(product.item.product_name||'')||Number(upgrade.quantity)!==Number(product.item.quantity))return null;
+ return {item:product.item,upgrade};
+}

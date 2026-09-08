@@ -13,6 +13,7 @@ try{
  const ready=await makeItem('I','Ready'),a=await makeItem();
  await db.exec(await readFile('supabase/migrations/20260907000800_material_costing.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20260908000100_material_groups.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20260908000300_tabletop_material_costing.sql','utf8'));
  const costs=async()=> (await db.query('select * from wc_product_costs order by unit_id')).rows;
  assert.equal((await costs()).length,1);assert.equal((await costs())[0].state,'materials_required');
  const seededGroups=(await db.query('select name from wc_material_groups order by name')).rows.map(x=>x.name);
