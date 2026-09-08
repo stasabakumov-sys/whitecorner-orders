@@ -34,7 +34,7 @@ body.wc-aura {
 .wc-aura :is(.option-chips,.options,.chips) span { font-size: .875rem; letter-spacing: normal; }
 
 /* Native tables use the same tokens as p-table, not a separate compact theme. */
-.wc-aura .order-no { color: var(--wc-text); font-weight: 700; }
+.wc-aura .order-no { color: var(--wc-text); font-weight: 700; text-decoration: none; }
 .wc-aura table:not(.reader-html *) { border-collapse: collapse; color: var(--wc-text); }
 .wc-aura th:not(.reader-html *) {
   padding: var(--p-datatable-header-cell-padding, .75rem 1rem);
