@@ -4,6 +4,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DeliveryReviewService } from '../../core/services/delivery-review.service';
 import { isNonPackagingComponent, cents, deliveryCents, orderItemOptionLabels, reviewItems, packagingError, PackageComponent, ReviewPackage } from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {orderProducts} from '../../core/utils/order-products';
 
 @Component({
  selector:'app-delivery-review',standalone:true,imports:[CommonModule,FormsModule],
@@ -16,7 +17,7 @@ import { isNonPackagingComponent, cents, deliveryCents, orderItemOptionLabels, r
  <span>{{visible().length}} orders</span></div>
  <div class="table-wrap"><table class="order-table"><thead><tr><th>Order / Customer</th><th aria-label="Order total incl. GST">Order total <small>incl. GST</small></th><th aria-label="Invoice delivery incl. GST">Invoice delivery <small>incl. GST</small></th><th>Best + insurance</th><th>Carrier / Service</th><th>Required increase</th><th>Margin</th><th>Status</th><th>Saved</th><th></th></tr></thead><tbody>
  @for(row of visible();track row.order_id){@let result=s.outcome(row);<tr>
- <td><b>#{{row.wc_orders?.order_number}}</b><small>{{row.wc_orders?.customer_name}}</small></td>
+ <td><b class="order-no">#{{row.wc_orders?.order_number}}</b><small>{{row.wc_orders?.customer_name}}</small></td>
  <td>{{money(orderTotal(row))}}</td><td>{{money(invoice(row))}}</td><td>{{money(result.best?.total_cents)}}</td>
  <td>{{result.best?.quote?.courierName||'—'}}<small>{{result.best?.quote?.name}}</small></td>
  <td>{{money(increase(row))}}</td><td class="margin-cell"><span class="margin-badge" [attr.data-tone]="marginTone(row)">{{margin(row)}}</span></td><td><span class="badge" [attr.data-status]="result.status">{{label(result.status)}}</span></td>
@@ -45,6 +46,7 @@ import { isNonPackagingComponent, cents, deliveryCents, orderItemOptionLabels, r
  <div class="address"><b>Delivery address:</b> {{address(row.wc_orders?.delivery_address)}}</div>
  <h3>Order composition &amp; packaging</h3>
  <p>Assign packaging under each product. All {{packages(row).length}} boxes are sent together in one delivery quote for this order.</p>
+ @for(item of composition(row).unresolved;track item.id){<p role="alert">Composition review required: cannot assign {{item.product_name}} to a product. Its packaging components remain available below.</p>}
  @for(group of productGroups(row);track group.id){
  <section class="product-group" [attr.data-product-id]="group.id">
  <div class="product-card">
@@ -55,8 +57,10 @@ import { isNonPackagingComponent, cents, deliveryCents, orderItemOptionLabels, r
  }@else{<b>Unassigned packaging — select its contents</b>}
  </div>
  <div class="product-packages"><h4>{{group.boxes.length}} package(s)</h4>
- @if(editable(row)&&group.item){<button [disabled]="s.busy()||variantLoading" (click)="configureVariant(group.item)">Configure packaging variant</button> <button [disabled]="s.busy()||variantLoading" (click)="loadVariant(group.item)">Load saved variant</button>
- @if(variantNotices()[group.item.id]){<p role="status">{{variantNotices()[group.item.id]}}</p>}}
+ @for(source of group.sources;track source.id){
+ @if(group.sources.length>1){<p><b>{{source.product_name}}</b> · qty: {{source.quantity}}</p>}
+ @if(editable(row)){<button [disabled]="s.busy()||variantLoading" (click)="configureVariant(source)">Configure packaging variant</button> <button [disabled]="s.busy()||variantLoading" (click)="loadVariant(source)">Load saved variant</button>
+ @if(variantNotices()[source.id]){<p role="status">{{variantNotices()[source.id]}}</p>}}}
  @for(p of group.boxes;track p){
  <fieldset class="package-card" [disabled]="s.busy()"><legend>Package {{packageNumber(row,p)}}</legend>
  @if(editable(row)){
@@ -73,7 +77,7 @@ import { isNonPackagingComponent, cents, deliveryCents, orderItemOptionLabels, r
  }
  </fieldset>
  }@empty{<p class="empty-packages">No packaging assigned to this product yet.</p>}
- @if(editable(row)&&group.item){<button (click)="addBox(group.id)" [disabled]="s.busy()">Add box</button>}
+ @if(editable(row)&&group.item){<button (click)="addBox(group.sources[0].id)" [disabled]="s.busy()">Add box</button>}
  @for(p of linkedBoxes(row,group.id);track p){<p class="shared-link">Also in shared package {{packageNumber(row,p)}}: {{p.package_name}} (shown under another product; counted once).</p>}
  </div></section>
  }
@@ -144,14 +148,17 @@ export class DeliveryReviewComponent implements OnInit {
  async approveWithoutQuote(row:any){if(this.canApproveWithoutQuote(row)&&this.acceptUnknownCost&&this.reason.trim().length>=3&&!this.s.busy())await this.s.approveWithoutQuote(row.order_id,this.reason);}
  packages(row:any):ReviewPackage[]{return this.editable(row)?this.draft:(row.packages||[]).map((p:ReviewPackage)=>({...p,contents:(p.contents||[]).filter(c=>!isNonPackagingComponent(c))}));}
  owner(p:ReviewPackage){return this.boxOwners.get(p)||p.contents[0]?.order_item_id||'';}
+ composition(row:any){return orderProducts(row.wc_orders?.wc_order_items||[]);}
  productGroups(row:any){
   const items=reviewItems(row.wc_orders,this.s.rules()),boxes=this.packages(row);
-  const groups=items.map(item=>({id:item.id,item:item as any,boxes:boxes.filter(p=>this.owner(p)===item.id)}));
-  const unassigned=boxes.filter(p=>!items.some(item=>item.id===this.owner(p)));
-  if(unassigned.length)groups.push({id:'unassigned',item:null,boxes:unassigned});
+  const composition=this.composition(row);
+  const roots=[...composition.products,...composition.unresolved.map(item=>({item,components:[item]}))];
+  const groups=roots.map(root=>{const sources=root.components.filter(c=>items.some(i=>i.id===c.id));return {id:root.item.id,item:root.item as any,sources,boxes:boxes.filter(p=>sources.some(s=>s.id===this.owner(p)))};}).filter(g=>g.sources.length);
+  const unassigned=boxes.filter(p=>!groups.some(g=>g.boxes.includes(p)));
+  if(unassigned.length)groups.push({id:'unassigned',item:null,sources:[],boxes:unassigned});
   return groups;
  }
- linkedBoxes(row:any,id:string){return this.packages(row).filter(p=>this.owner(p)!==id&&p.contents.some(c=>c.order_item_id===id));}
+ linkedBoxes(row:any,id:string){const group=this.productGroups(row).find(g=>g.id===id);return group?this.packages(row).filter(p=>!group.sources.some(s=>s.id===this.owner(p))&&p.contents.some(c=>group.sources.some(s=>s.id===c.order_item_id))):[];}
  sharedBox(p:ReviewPackage){return new Set(p.contents.map(c=>c.order_item_id)).size>1;}
  packageNumber(row:any,p:ReviewPackage){return this.packages(row).indexOf(p)+1;}
  componentProduct(row:any,c:PackageComponent){return row.wc_orders?.wc_order_items?.find((i:any)=>i.id===c.order_item_id)?.product_name||'';}

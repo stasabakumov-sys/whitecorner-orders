@@ -8,7 +8,7 @@ import { ProductKind, ProductionStatus, ProductionUnitView, UnitAddonView } from
 import { orderItemOptionLabels } from '../utils/order-item-display';
 
 const STATUSES: ProductionStatus[] = ['New','CNC','Assembly','Painting','Packing','Ready'];
-const ADDON_WORDS = ['additional tabletop','custom cutout','custom cutouts','side shelves','integrated ice storage shelf','umbrella hole','support panel','customisation','customization','back panel with','benchtop upgrade'];
+import {orderProducts} from '../utils/order-products';
 
 @Injectable({ providedIn: 'root' })
 export class ProductionService {
@@ -26,15 +26,15 @@ export class ProductionService {
 
   unitsForOrder(order: OrderRow): ProductionUnitView[] {
     const rows = (order.wc_order_items ?? []).filter((i) => !/^delivery$/i.test(i.product_name ?? ''));
-    const addons = rows.filter((i) => this.isAddon(i));
-    const mains = rows.filter((i) => !this.isAddon(i));
+    const composition = orderProducts(rows);
+    const mains = composition.products.map(p=>p.item);
 
     // Legacy #10812: the first working prototype created the four tracked units
     // on the Tasmanian Oak upgrade row. Keep that mapping only as a data adapter
     // so existing status history is preserved; UI/pricing remains generic unit-level.
     if (String(order.order_number) === '10812') {
       const oak = rows.find((i) => /tasmanian oak timber benchtop upgrade/i.test(i.product_name ?? ''));
-      const main = rows.find((i) => i !== oak && !this.isAddon(i));
+      const main = mains.find((i) => i !== oak);
       const tracked = this.sortedUnits(oak);
       if (main && oak && tracked.length) {
         return tracked.slice(0, Number(main.quantity ?? tracked.length)).map((unit, index) =>
@@ -47,7 +47,7 @@ export class ProductionService {
       const tracked = this.sortedUnits(main);
       const expected = Math.max(1, Number(main.quantity ?? 1));
       return tracked.slice(0, expected).map((unit, index) =>
-        this.makeUnit(order, main, unit, index, tracked.length || expected, addons),
+        this.makeUnit(order, main, unit, index, tracked.length || expected, composition.products.find(p=>p.item.id===main.id)!.components.filter(i=>i.id!==main.id)),
       );
     });
   }
@@ -122,11 +122,6 @@ export class ProductionService {
 
   private sortedUnits(item?: OrderItemRow): ProductionUnitRow[] {
     return [...(item?.wc_production_units ?? [])].sort((a,b) => Number(a.unit_index) - Number(b.unit_index));
-  }
-
-  private isAddon(item: OrderItemRow): boolean {
-    const name = String(item.product_name ?? '').toLowerCase();
-    return ADDON_WORDS.some((word) => name.includes(word));
   }
 
   private kind(name?: string | null): ProductKind {

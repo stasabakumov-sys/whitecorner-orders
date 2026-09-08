@@ -7,6 +7,7 @@ import { TagModule } from 'primeng/tag';
 import { ProductKind, ProductionStatus, ProductionUnitView } from '../../core/models/production.models';
 import { OrdersService } from '../../core/services/orders.service';
 import { ProductionService } from '../../core/services/production.service';
+import { orderProducts } from '../../core/utils/order-products';
 import { ProductionUnitDrawerComponent } from '../../shared/production-unit-drawer/production-unit-drawer.component';
 
 type FilterKind = 'all' | ProductKind;
@@ -22,6 +23,7 @@ export class ProductionBoardComponent {
   readonly filter = signal<FilterKind>('all');
   readonly selected = signal<ProductionUnitView | null>(null);
   readonly firstPaintComplete = signal(false);
+  readonly compositionIssues = computed(() => this.orders.orders().filter(o=>String(o.fulfillment_status||'').toUpperCase()!=='FULFILLED').flatMap(o=>orderProducts(o.wc_order_items||[]).unresolved.map(i=>`#${o.order_number}: cannot assign ${i.product_name} to a product. Composition review required.`)));
   readonly allUnits = computed(() => this.production.unitsForOrders(this.orders.orders().filter(order=>String(order.fulfillment_status||'').toUpperCase()!=='FULFILLED')));
   readonly visibleUnits = computed(() => {
     const filter = this.filter();
