@@ -8,6 +8,7 @@
 </section>
 
 <div class="error" *ngIf="orders.error()">{{ orders.error() }}</div>
+@for (issue of compositionIssues(); track issue) { <p role="alert">{{issue}}</p> }
 @if (!boardReady()) {
   <div class="board board-placeholder" aria-label="Loading production board">
     @for (status of production.statuses; track status; let i = $index) {

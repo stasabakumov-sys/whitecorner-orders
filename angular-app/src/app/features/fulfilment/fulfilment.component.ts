@@ -1,4 +1,5 @@
 import {orderItemOptionLabels} from '../../core/utils/order-item-display';
+import {orderProducts} from '../../core/utils/order-products';
 import { PackageComponent, componentIdentity } from '../../core/utils/package-components';
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, signal } from '@angular/core';
@@ -74,13 +75,17 @@ type BookingDraft = {
 
             <section class="section">
               <div class="section-title">Order composition</div>
-              @for (item of orderItems(o.wc_order_items || []); track item.id) {
+              @for (item of composition(o).unresolved; track item.id) { <p role="alert">Composition review required: cannot assign {{item.product_name}} to a product. Its packaging components remain available.</p> }
+              @for (product of compositionGroups(o); track product.item.id) {
+              <section>
+              @for (item of product.components; track item.id) {
                 <div class="item-card">
                   @if (image(item)) { <img [src]="image(item)" alt="" /> } @else { <div class="image-placeholder"></div> }
-                  <div><b>{{ item.product_name || 'Unnamed item' }}</b><div class="chips"><span>qty: {{ item.quantity || 1 }}</span>@for (opt of options(item); track opt) { <span>{{ opt }}</span> }</div></div>
+                  <div>@if(item.id!==product.item.id){<small>Component of {{product.item.product_name}}</small>}<b>{{ item.product_name || 'Unnamed item' }}</b><div class="chips"><span>qty: {{ item.quantity || 1 }}</span>@for (opt of options(item); track opt) { <span>{{ opt }}</span> }</div></div>
                   <div class="price">{{ item.unit_price != null ? 'A$' + item.unit_price.toFixed(2) : '' }}</div>
                 </div>
               }
+              </section>}
             </section>
 
             @if (row.route === 'Pickup') {
@@ -354,6 +359,8 @@ export class FulfilmentComponent implements OnInit {
   shipmentSeverity(status:string): 'success'|'info'|'warn'|'secondary' { if(status==='Delivered')return'success'; if(status==='Ready to Quote'||status==='Quoted'||status==='Quote Selected')return'info'; if(status==='Packaging Review')return'warn'; return'secondary'; }
   canQuote(status:string){return status==='Ready to Quote'||status==='Quoted'||status==='Quote Selected';}
   orderItems(items: OrderItemRow[]) { return items.filter((i) => !/^(delivery|shipping)(\s+(fee|charge))?$/i.test(String(i.product_name || '').trim())); }
+  composition(order:OrderRow){return orderProducts(order.wc_order_items||[]);}
+  compositionGroups(order:OrderRow){const c=this.composition(order);return [...c.products,...c.unresolved.map(item=>({item,components:[item]}))];}
   image(item: OrderItemRow) { const x:any=item.image||{},r:any=item.raw_item||{}; return x.url||x.imageUrl||x.imageInfo?.url||r.media?.url||r.image?.url||r.image?.imageInfo?.url||''; }
   options(item: OrderItemRow) { return orderItemOptionLabels(item,10); }
   contentOrderItems(){const row=this.selected(),order=row&&this.f.orderFor(row);return order?this.f.packageComponents(order):[];}
