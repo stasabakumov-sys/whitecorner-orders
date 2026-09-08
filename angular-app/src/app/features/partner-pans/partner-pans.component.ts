@@ -15,7 +15,7 @@ import { PartnerPansService } from '../../core/services/partner-pans.service';
  <input aria-label="Search Pans orders" [(ngModel)]="search" placeholder="Order or customer"></div>
  @if(s.loading()){<p role="status">Loading…</p>}
  <div class="table-wrap"><table><thead><tr><th>Order / Customer</th><th>Product</th><th>Pans selection</th><th>Product qty</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>
- @for(row of visible();track row.item.id){<tr><td><a class="order-no" [routerLink]="['/orders']" [queryParams]="{order:row.order.order_number}"><b>#{{row.order.order_number}}</b></a><small>{{row.order.customer_name}}</small></td>
+ @for(row of visible();track row.item.id){<tr><td><a class="order-no" [routerLink]="['/orders']" [queryParams]="{order:row.order.order_number}">#{{row.order.order_number}}</a><small>{{row.order.customer_name}}</small></td>
  <td>{{row.item.product_name}}</td><td>@for(choice of row.pans.choices;track choice){<div>{{choice}}</div>}</td><td>{{row.pans.quantity}}</td>
  <td><span class="badge" [class.done]="row.status==='ordered_and_sent'">{{row.status==='ordered_and_sent'?'Ordered and sent':'To arrange'}}</span>
  @if(row.changed){<small>Selection or quantity changed; check again.</small>}</td>
