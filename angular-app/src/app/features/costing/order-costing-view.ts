@@ -1,5 +1,5 @@
 import {ProductionUnitView} from '../../core/models/production.models';
-import {orderProducts,isDeliveryLine} from '../../core/utils/order-products';
+import {orderProducts,isDeliveryLine,tabletopReplacement} from '../../core/utils/order-products';
 
 // Use Board identities, never an option label or a product name, to join costs.
 export function orderCostingView(order:any, costs:any[], units:ProductionUnitView[]) {
@@ -7,7 +7,8 @@ export function orderCostingView(order:any, costs:any[], units:ProductionUnitVie
  const products:any[]=[];
  const seen=new Set<string>();
  const composition=orderProducts(order.wc_order_items||[]);
- for(const p of composition.products)products.push({item:p.item,components:p.components,units:[],costs:[]});
+ const replacement=tabletopReplacement(order.wc_order_items||[]);
+ for(const p of composition.products)products.push({item:p.item,components:p.components,replacement:replacement?.item.id===p.item.id?replacement.upgrade:null,units:[],costs:[]});
  for(const view of units){
   let product=products.find(p=>p.item.id===view.mainItem.id);
   if(!product){product={item:view.mainItem,units:[],costs:[]};products.push(product);}
@@ -26,8 +27,8 @@ export function orderCostingView(order:any, costs:any[], units:ProductionUnitVie
  for(const item of order.wc_order_items||[]){
   if(isDeliveryLine(item))continue;
   const p=products.find(p=>p.item.id===item.id);
-  if(!p){const parent=composition.products.find(p=>p.components.some(c=>c.id===item.id));issues.push(parent?`${item.product_name}: component of ${parent.item.product_name}; a combined material profile needs review.`:`${item.product_name||'Unnamed order line'}: cannot assign this line to a costed product.`);}
-  else if(!Number.isInteger(Number(item.quantity))||Number(item.quantity)<1||p.units.length!==Number(item.quantity))issues.push(`${item.product_name}: product quantity does not match Production Board units.`);
+  if(!p&&replacement?.upgrade.id!==item.id){const parent=composition.products.find(p=>p.components.some(c=>c.id===item.id));issues.push(parent?`${item.product_name}: component of ${parent.item.product_name}; a combined material profile needs review.`:`${item.product_name||'Unnamed order line'}: cannot assign this line to a costed product.`);}
+  else if(p&&(!Number.isInteger(Number(item.quantity))||Number(item.quantity)<1||p.units.length!==Number(item.quantity)))issues.push(`${item.product_name}: product quantity does not match Production Board units.`);
  }
  if(costs.some(c=>!seen.has(c.unit_id)))issues.push('A saved calculation cannot be matched to a current Production Board product.');
  const partial=!!issues.length||products.some(p=>p.units.some((u:any)=>!p.costs.some((c:any)=>c.unit_id===u.id&&c.state==='calculated'&&!c.changed)));

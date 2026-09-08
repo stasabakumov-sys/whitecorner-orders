@@ -10,6 +10,18 @@ const order=(items:any[])=>({id:'o',order_number:'TEST',currency:'AUD',wc_order_
 const cost=(i:string,u=1,total:number|null=10)=>({order_id:'o',item_id:i,unit_id:`${i}-${u}`,unit_index:u,state:total==null?'materials_required':'calculated',total_gst:total,variant_key:i});
 const view=(o:any,c:any[])=>orderCostingView(o,c,board.unitsForOrder(o));
 describe('Order material composition',()=>{
+ it('accepts four carts with one replacement top each and preserves the legacy Board units',()=>{
+  const main=item('a',4,'Painting','Classic Cart'),upgrade=item('b',4,'Painting','Tasmanian Oak Timber Benchtop Upgrade');
+  const o={...order([main,upgrade]),order_number:'10812'};
+  const v=view(o,Array.from({length:4},(_,n)=>({...cost('b',n+1,null),item_id:'a'})));
+  expect(v.issues).toEqual([]);expect(v.products).toHaveLength(1);expect(v.products[0].replacement.id).toBe('b');
+  expect(v.products[0].units.map((u:any)=>u.id)).toEqual(['b-1','b-2','b-3','b-4']);
+ });
+ it('keeps ambiguous or partial tabletop upgrades blocked',()=>{
+  for(const items of [[item('a',4),item('b',2,'New','Timber Benchtop Upgrade')],[item('a'),item('other'),item('b',1,'New','Timber Benchtop Upgrade')]]){
+   expect(view(order(items),[cost('a')]).issues.length).toBeGreaterThan(0);
+  }
+ });
  it('groups by Board product identity, keeps quantities and totals every unit once',()=>{
   const v=view(order([item('a',2),item('b',1,'New','Backdrop')]),[cost('a'),cost('a',2,15),cost('b',1,20)]);
   expect(v.products).toHaveLength(2);expect(v.products[0].costs).toHaveLength(2);expect(v.total).toBe(45);expect(v.partial).toBe(false);expect(v.issues).toEqual([]);

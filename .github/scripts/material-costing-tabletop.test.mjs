@@ -1,0 +1,66 @@
+import {readFile} from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const {PGlite}=await import(pathToFileURL(path.resolve(process.argv[2])).href);
+const db=new PGlite();
+try {
+ await db.exec("create role anon;create role authenticated;create schema auth;create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.actor',true),'')::uuid$$;");
+ await db.exec(await readFile('supabase/orders-schema.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20260907000800_material_costing.sql','utf8'));
+ const makeOrder=async(number,qty=4,upgradeQty=qty)=>{
+  const o=(await db.query('insert into wc_orders(wix_order_id,order_number,currency) values($1,$1,\'AUD\') returning id',[number])).rows[0].id;
+  const line=async(name,q,product)=> (await db.query("insert into wc_order_items(order_id,product_name,quantity,wix_options,catalog_reference) values($1,$2,$3,'{}',jsonb_build_object('catalogItemId',$4::text)) returning id",[o,name,q,product])).rows[0].id;
+  const main=await line('Classic Cart',qty,'cart');
+  const upgrade=upgradeQty?await line('Tasmanian Oak Timber Benchtop Upgrade',upgradeQty,'oak'):null;
+  for(const id of [main,upgrade].filter(Boolean))await db.query("insert into wc_production_units(order_item_id,unit_index,production_status) select $1,n,'Painting' from generate_series(1,$2::int) n",[id,id===main?qty:upgradeQty]);
+  return {o,main,upgrade,line};
+ };
+ const legacy=await makeOrder('10812');
+ const originalUnits=(await db.query('select * from wc_production_units order by id')).rows;
+ assert.equal((await db.query('select count(*)::int n from wc_product_costs')).rows[0].n,8);
+ await db.exec(await readFile('supabase/migrations/20260908000300_tabletop_material_costing.sql','utf8'));
+ assert.deepEqual((await db.query('select * from wc_production_units order by id')).rows,originalUnits);
+ const report=async o=>(await db.query('select * from wc_product_costs where order_id=$1 order by unit_index',[o])).rows;
+ let rows=await report(legacy.o);
+ assert.equal(rows.length,4);assert.ok(rows.every(c=>c.item_id===legacy.main&&c.state==='materials_required'));
+ assert.deepEqual(rows.map(c=>c.unit_id),originalUnits.filter(u=>u.order_item_id===legacy.upgrade).sort((a,b)=>a.unit_index-b.unit_index).map(u=>u.id));
+ const key=async id=>(await db.query('select wc_material_variant(i) k from wc_order_items i where id=$1',[id])).rows[0].k;
+ const combination=await key(legacy.main);
+ assert.match(combination,/tabletop-replacement-v1/);
+ const future=await makeOrder('future',2);
+ assert.equal(await key(future.main),combination);
+ assert.equal((await report(future.o)).length,2);
+ assert.ok((await report(future.o)).every(c=>c.item_id===future.main));
+ await db.exec("select set_config('test.actor','00000000-0000-4000-8000-000000000009',false)");
+ const material=(await db.query("select wc_save_material(null,'Cart with Oak top','piece',100,true,null) m")).rows[0].m;
+ const lines=[{material_id:material.id,quantity:1}];
+ await assert.rejects(db.query('select wc_save_material_profile($1,$2,$3,null)',[legacy.upgrade,await key(legacy.upgrade),lines]),/main cart/);
+ await db.query('select wc_save_material_profile($1,$2,$3,null)',[legacy.main,combination,lines]);
+ const locked=await report(legacy.o);
+ assert.equal(locked.reduce((s,c)=>s+Number(c.total_gst),0),400);
+ assert.equal((await report(future.o)).reduce((s,c)=>s+Number(c.total_gst),0),200);
+ assert.equal((await db.query('select * from wc_costing_report()')).rows.some(r=>r.wc_costing_report.changed),false);
+ await db.query("select wc_save_material($1,'Cart with Oak top','piece',120,true,$2)",[material.id,material.updated_at]);
+ assert.deepEqual(await report(legacy.o),locked);
+ const next=await makeOrder('next',1);
+ assert.equal(Number((await report(next.o))[0].total_gst),120);
+ // The standard product must never reuse the replacement profile.
+ const standard=await makeOrder('standard',1,0);
+ assert.notEqual(await key(standard.main),combination);
+ assert.equal((await report(standard.o))[0].state,'materials_required');
+ const unequal=await makeOrder('unequal',4,2);
+ assert.equal((await db.query('select * from wc_material_tabletop($1)',[unequal.o])).rows.length,0);
+ const ambiguous=await makeOrder('ambiguous',1);
+ await ambiguous.line('Another Cart',1,'other');
+ assert.equal((await db.query('select * from wc_material_tabletop($1)',[ambiguous.o])).rows.length,0);
+ // Removing/changing the upgrade flags locked calculations, never rewrites them.
+ await db.query("update wc_order_items set wix_options='{\"Timber\":\"Different\"}' where id=$1",[legacy.upgrade]);
+ assert.deepEqual(await report(legacy.o),locked);
+ assert.ok((await db.query('select * from wc_costing_report()')).rows.filter(r=>r.wc_costing_report.order_id===legacy.o).every(r=>r.wc_costing_report.changed));
+ await db.exec('set role authenticated');
+ await assert.rejects(db.query('select wc_material_main($1)',[legacy.main]),/permission denied/);
+ await assert.rejects(db.query('update wc_product_costs set total_gst=0'),/permission denied/);
+ await db.exec('reset role');
+ console.log('PASS: legacy four-unit reconciliation, shared replacement profiles, quantities, ambiguous mapping, standard top isolation, locked GST snapshots and RLS');
+} catch(e) {console.error(e.message);console.error(e.where||'');process.exitCode=1;} finally {await db.close();}
