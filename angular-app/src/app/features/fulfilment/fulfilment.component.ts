@@ -2,6 +2,7 @@ import {orderItemOptionLabels} from '../../core/utils/order-item-display';
 import {orderProducts} from '../../core/utils/order-products';
 import { PackageComponent, componentIdentity } from '../../core/utils/package-components';
 import { DatePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -22,7 +23,7 @@ type BookingDraft = {
 @Component({
   selector: 'app-fulfilment',
   standalone: true,
-  imports: [DatePipe, ButtonModule, DialogModule, DrawerModule, InputTextModule, TableModule, TagModule],
+  imports: [DatePipe, RouterLink, ButtonModule, DialogModule, DrawerModule, InputTextModule, TableModule, TagModule],
   template: `
     <section class="page-card">
       <div class="page-head">
@@ -56,11 +57,15 @@ type BookingDraft = {
     </section>
 
     <p-drawer [visible]="selected() !== null" (visibleChange)="onDrawerVisible($event)" position="right" [modal]="true" [dismissible]="true" [blockScroll]="true" [style]="{ width: 'min(980px, 96vw)' }">
+      <ng-template pTemplate="header">
+        @if (currentSelected(); as row) {
+          @if (f.orderFor(row); as o) {
+            <div class="drawer-title"><div><a class="order-no" [routerLink]="['/orders']" [queryParams]="{order:o.order_number}" [attr.aria-label]="'Open order #' + o.order_number">#{{ o.order_number }}</a><div>{{ o.customer_name || '—' }}</div><small>{{ o.company }}</small></div><p-tag [value]="displayStatus(row)" [severity]="statusSeverity(row)" /></div>
+          }
+        }
+      </ng-template>
       @if (currentSelected(); as row) {
         @if (f.orderFor(row); as o) {
-          <ng-template pTemplate="header">
-            <div class="drawer-title"><div><b class="order-number">#{{ o.order_number }}</b><div>{{ o.customer_name || '—' }}</div><small>{{ o.company }}</small></div><p-tag [value]="displayStatus(row)" [severity]="statusSeverity(row)" /></div>
-          </ng-template>
           <div class="drawer-body">
             <section class="section">
               <div class="section-title">Overview</div>

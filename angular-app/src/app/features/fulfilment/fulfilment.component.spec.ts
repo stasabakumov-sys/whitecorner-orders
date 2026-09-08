@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderRow } from '../../core/models/order.models';
 import { FulfilmentRow, FulfilmentService } from '../../core/services/fulfilment.service';
@@ -44,6 +45,7 @@ describe('FulfilmentComponent', () => {
       imports: [FulfilmentComponent],
       providers: [
         provideNoopAnimations(),
+        provideRouter([]),
         { provide: FulfilmentService, useValue: service },
       ],
     }).compileComponents();
