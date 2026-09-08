@@ -71,10 +71,20 @@ body.wc-aura {
 .wc-aura :is(.panel,.page-card,.wix-section,.product-group,.summary>div,.stat,.card:not(p-card),fieldset):not(.reader-html *) { background: var(--wc-surface); border-color: var(--wc-border); border-radius: var(--p-card-border-radius, 12px); color: var(--wc-text); }
 .wc-aura :is(.drawer,.page-head,.table-wrap,.gmail-connect-bar,.finance-shell,.section-tabs):not(.reader-html *) { background: var(--wc-surface); color: var(--wc-text); border-color: var(--wc-border); }
 .wc-aura :is(.product-card,.boot,app-root>main,.wrap):not(.reader-html *) { background: var(--wc-ground); color: var(--wc-text); }
-.wc-aura app-root>aside { background: var(--wc-surface); color: var(--wc-text); border-right: 1px solid var(--wc-border); }
+/* Dark navigation only: local tokens keep the rest of Aura light. */
+.wc-aura app-root>aside {
+  --wc-surface: #141820;
+  --wc-text: #e4e7eb;
+  --wc-muted: #b0b6c0;
+  --wc-border: #3b4049;
+  background: var(--wc-surface); color: var(--wc-text);
+  border-right: 1px solid var(--wc-border);
+}
 .wc-aura app-root>aside a { color: var(--wc-text); font-size: 1rem; }
-.wc-aura app-root>aside a:hover { background: var(--p-content-hover-background, #f4f4f5); }
-.wc-aura app-root>aside a.active { background: var(--p-highlight-background, #ecfdf5); color: var(--p-highlight-color, #047857); }
+.wc-aura app-root>aside a:hover,
+.wc-aura app-root>aside button:hover { background: #242830; }
+.wc-aura app-root>aside a.active { background: #41454d; color: #ffffff; }
+.wc-aura app-root>aside a:focus-visible { outline: 2px solid var(--wc-primary); outline-offset: 2px; }
 .wc-aura .badge,.wc-aura .margin-badge { border-radius: var(--wc-radius); font-size: .875rem; font-weight: 600; }
 .wc-aura .loading-layer p-progress-spinner { width: 30px; height: 30px; flex: 0 0 30px; }
 /* Status/priority/margin colours intentionally retain their business meaning. */
