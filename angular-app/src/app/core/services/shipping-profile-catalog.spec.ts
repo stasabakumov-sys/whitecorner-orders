@@ -2,6 +2,11 @@ import {describe,it,expect} from 'vitest';
 import {shippingProfileCatalog,savedProfileOptions} from '../utils/shipping-profile-catalog';
 const profile=(signature='s')=>({signature,packages:[{package_name:'Box',length_mm:1000,contents:[{component_key:'main',product_name:'Roof cart',wix_product_id:'catalog',profile_item_key:'["catalog",["size ii","colour white"]]:0'}]}]});
 describe('Unified persisted packaging catalogue',()=>{
+ it('keeps an old name-only packaging profile under the product after Wix identity is attached',()=>{
+  const p=profile();p.packages[0].contents[0].wix_product_id='';
+  const rows=shippingProfileCatalog([{id:'one',wix_product_id:'catalog',product_name:'Roof cart'}],[p]);
+  expect(rows).toHaveLength(1);expect(rows[0].saved_profiles).toEqual([p]);
+ });
  it('shows unlinked order profiles without creating duplicate storage or losing measurements',()=>{
   const p=profile(),rows=shippingProfileCatalog([{id:'other',product_name:'Other cart'}],[p]);expect(rows).toHaveLength(2);expect(rows[1].product_name).toBe('Roof cart');expect(rows[1].saved_profiles[0]).toBe(p);expect(rows[1].saved_profiles[0].packages[0].length_mm).toBe(1000);expect(rows[1].saved_only).toBe(true);
  });
