@@ -3,24 +3,25 @@ import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TagModule } from 'primeng/tag';
 import { EmailService, GmailAttachment, GmailMessageDetail, GmailMessageRow, GmailThreadMessage, GmailView } from '../../core/services/email.service';
-import { EmailAiService } from '../../core/services/email-ai.service';
+import { EmailAiAnalysis, EmailAiService } from '../../core/services/email-ai.service';
+import { EmailAiReviewComponent } from './email-ai-review.component';
 import { OrdersService } from '../../core/services/orders.service';
 
 type EmailTab='Mail'|'AI Agent';
 type MailView='Inbox'|'Unread'|'Needs reply'|'Starred'|'Sent'|'Archive'|'Trash';
 type AiState='Not analysed'|'Review'|'Draft ready'|'No reply needed';
-type MailIntent='Order question'|'Customisation'|'Product question'|'Production / lead time'|'Pickup'|'Delivery / shipping'|'Payment / invoice'|'Order change'|'Claim / damage'|'Cancellation / refund'|'General enquiry';
+type MailIntent='Order question'|'Customisation'|'Product question'|'Production / lead time'|'Pickup'|'Delivery / shipping'|'Payment / invoice'|'Order change'|'Claim / damage'|'Cancellation / refund'|'General enquiry'|'Supplier onboarding'|'Equipment / safety'|'Spare parts / repair'|'Branding / finishing'|'Partnership / discount'|'Feedback';
 type PolicyMode='Auto later'|'Draft + review'|'Manual only';
 type MailboxId='all'|'info'|'support';
 
-interface MailRow{id:string;threadId?:string;mailbox:'info'|'support';correspondent:string;email:string;initials:string;subject:string;preview:string;body:string;html_body?:string;images_blocked?:boolean;attachments?:GmailAttachment[];received_at:string;time:string;direction:'Incoming'|'Outgoing';status:'Inbox'|'Sent'|'Archive'|'Trash';unread?:boolean;starred?:boolean;ai_state?:AiState;linked_order?:string|null;intent?:MailIntent|null;needs_reply?:boolean|null;confidence?:number|null;draft_reply?:string|null;ai_summary?:string|null;review_reason?:string|null;}
+interface MailRow{id:string;threadId?:string;mailbox:'info'|'support';correspondent:string;email:string;initials:string;subject:string;preview:string;body:string;html_body?:string;images_blocked?:boolean;attachments?:GmailAttachment[];received_at:string;time:string;direction:'Incoming'|'Outgoing';status:'Inbox'|'Sent'|'Archive'|'Trash';unread?:boolean;starred?:boolean;ai_state?:AiState;linked_order?:string|null;intent?:MailIntent|null;needs_reply?:boolean|null;confidence?:number|null;draft_reply?:string|null;ai_summary?:string|null;review_reason?:string|null;ai_analysis?:EmailAiAnalysis|null;}
 interface ThreadMail extends MailRow { outgoing?:boolean; }
 interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
 
 @Component({
   selector:'app-email',
   standalone:true,
-  imports:[ButtonModule,InputTextModule,TagModule],
+  imports:[ButtonModule,InputTextModule,TagModule,EmailAiReviewComponent],
   template:`
   <section class="email-page">
     <div class="page-head">
@@ -121,6 +122,8 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
               </div>
               @if(aiAnalysisError()){<div class="ai-analysis-error"><span>{{aiAnalysisError()}}</span><button type="button" (click)="analyseMail(mail)">Try again</button></div>}
               @if(mail.ai_summary){<div class="ai-summary"><div><i class="pi pi-sparkles"></i><b>AI Summary</b></div><p>{{mail.ai_summary}}</p>@if(mail.review_reason){<span><i class="pi pi-exclamation-triangle"></i>{{mail.review_reason}}</span>}</div>}
+              <app-email-ai-review [analysis]="mail.ai_analysis||null"/>
+              <p-button size="small" [outlined]="true" (onClick)="analyseMail(mail)" [disabled]="!!bodyLoading()||aiAnalysisLoading()===mail.mailbox+':'+mail.id" [label]="aiAnalysisLoading()===mail.mailbox+':'+mail.id?'Analysing…':'Analyse conversation'"/>
               @if(replyMode()==='none'){
                 <div class="gmail-actions">
                   <button (click)="startReply(replyTarget(mail))"><i class="pi pi-reply"></i><span>Reply</span></button>
@@ -189,7 +192,7 @@ interface IntentPolicy{intent:MailIntent;mode:PolicyMode;rule:string;}
           <div><div class="policy-title">Data priority</div><div class="source-list">@for(source of dataSources;track source.title){<div><i class="pi pi-database"></i><div><b>{{source.title}}</b><span>{{source.description}}</span></div></div>}</div></div>
         </section>
 
-        <div class="policy-note"><i class="pi pi-lock"></i><div><b>Auto-send remains locked in v1</b><span>No outgoing customer email can be sent automatically until the workflow has been tested on real mail and explicitly enabled later.</span></div></div>
+        <div class="policy-note"><i class="pi pi-lock"></i><div><b>Every reply requires staff review</b><span>No outgoing customer email can be sent automatically until the workflow has been tested on real mail and explicitly enabled later.</span></div></div>
       </div>
     }
   </section>`,
@@ -246,6 +249,7 @@ export class EmailComponent implements OnDestroy{
   readonly aiRuntimeReason=signal('');
   readonly aiAnalysisLoading=signal('');
   readonly aiAnalysisError=signal('');
+  private aiAnalysisVersion=0;
   private readerHistoryPushed=false;
   private selectionVersion=0;
   readonly mailboxInboxCounts=signal<{info:number;support:number}>({info:0,support:0});
@@ -255,9 +259,9 @@ export class EmailComponent implements OnDestroy{
   constructor(readonly email:EmailService,private readonly emailAi:EmailAiService,private readonly orders:OrdersService){this.hydrateMailCache();void this.initializeMail();void this.refreshAiRuntime();}
 
   readonly decisionFlow=['Read thread','Identify customer','Match order','Classify intent','Collect facts','Assess risk','Draft / escalate'];
-  readonly dataSources=[{title:'Orders',description:'Customer, items, options, notes, payment and delivery method.'},{title:'Production',description:'Current production units and live production status.'},{title:'Fulfilment',description:'Pickup readiness, shipping preparation and booked shipping.'},{title:'Pickup calendar',description:'Available pickup windows and closed dates once connected.'},{title:'Shipping data',description:'Packages, dimensions, weights and later tracking.'},{title:'Business rules',description:'Lead times, claims, cancellations, payments and approved answers.'}];
-  readonly intentPolicies:IntentPolicy[]=[{intent:'Order question',mode:'Draft + review',rule:'Use the actual linked order. Never invent status, dates or inclusions.'},{intent:'Customisation',mode:'Manual only',rule:'Custom design, feasibility and pricing require review.'},{intent:'Product question',mode:'Auto later',rule:'Factual catalogue questions may become automatic after approved product knowledge is connected.'},{intent:'Production / lead time',mode:'Auto later',rule:'Use current lead-time rules and actual order status; never promise an unconfirmed date.'},{intent:'Pickup',mode:'Auto later',rule:'Once calendar integration exists, factual pickup availability may be answered automatically.'},{intent:'Delivery / shipping',mode:'Draft + review',rule:'Use shipment and order data. Unusual freight remains reviewed.'},{intent:'Payment / invoice',mode:'Draft + review',rule:'Provide factual payment information only; money or term changes require review.'},{intent:'Order change',mode:'Manual only',rule:'Any requested change may affect production, timing or price and must be approved.'},{intent:'Claim / damage',mode:'Manual only',rule:'Never auto-send. Surface timing, evidence and order details for human review.'},{intent:'Cancellation / refund',mode:'Manual only',rule:'Never auto-send. Consequences must be reviewed before any commitment.'},{intent:'General enquiry',mode:'Draft + review',rule:'Prepare a concise draft; low-risk FAQs may become automatic later.'}];
-  readonly guardrails=['Claims / damage','Refunds / cancellations','Paid-order changes','Custom pricing or feasibility','Financial consequences','Legal / policy disputes','Low-confidence order match','Conflicting information'];
+  readonly dataSources=[{title:'Current Hub records',description:'Candidate orders are refreshed on the server: items, options, payment summary and production status.'},{title:'Full available conversation',description:'Dated customer statements, staff replies and explicit approvals; attachments are not analysed.'},{title:'Six-month correspondence research',description:'80 conversations inform questions, exceptions and review. Historical prices and refusals are not current policy.'},{title:'Not connected to analysis',description:'Current catalogue/Terms, pickup calendar, parcel tracking and separate payment ledger require staff verification.'}];
+  readonly intentPolicies:IntentPolicy[]=[{intent:'Order question',mode:'Draft + review',rule:'Use the actual linked order. Never invent status, dates or inclusions.'},{intent:'Customisation',mode:'Manual only',rule:'Custom design, feasibility and pricing require review.'},{intent:'Product question',mode:'Auto later',rule:'Factual catalogue questions may become automatic after approved product knowledge is connected.'},{intent:'Production / lead time',mode:'Auto later',rule:'Use current lead-time rules and actual order status; never promise an unconfirmed date.'},{intent:'Pickup',mode:'Auto later',rule:'Once calendar integration exists, factual pickup availability may be answered automatically.'},{intent:'Delivery / shipping',mode:'Draft + review',rule:'Use shipment and order data. Unusual freight remains reviewed.'},{intent:'Payment / invoice',mode:'Draft + review',rule:'Provide factual payment information only; money or term changes require review.'},{intent:'Order change',mode:'Manual only',rule:'Any requested change may affect production, timing or price and must be approved.'},{intent:'Claim / damage',mode:'Manual only',rule:'Never auto-send. Surface timing, evidence and order details for human review.'},{intent:'Cancellation / refund',mode:'Manual only',rule:'Never auto-send. Consequences must be reviewed before any commitment.'},{intent:'General enquiry',mode:'Draft + review',rule:'Prepare a concise draft with supported facts.'},{intent:'Supplier onboarding',mode:'Manual only',rule:'Registration and PO are separate from payment; staff approve forms.'},{intent:'Equipment / safety',mode:'Manual only',rule:'Cutouts do not establish load, heat or compliance certification.'},{intent:'Spare parts / repair',mode:'Manual only',rule:'Check product version and remedy context; no blanket promises or refusals.'},{intent:'Branding / finishing',mode:'Manual only',rule:'Check current service availability and permanent versus removable use.'},{intent:'Partnership / discount',mode:'Manual only',rule:'Commercial exceptions require a staff decision.'},{intent:'Feedback',mode:'Draft + review',rule:'Check for unresolved issues before requesting a review.'}];
+  readonly guardrails=['Equipment safety','Supplier registration','Spare parts / repair','Permanent or removable branding','Claims / damage','Refunds / cancellations','Paid-order changes','Custom pricing or feasibility','Financial consequences','Legal / policy disputes','Low-confidence order match','Conflicting information'];
   readonly visibleRows=computed(()=>{const view=this.activeView(),box=this.activeMailbox(),q=this.query().trim().toLowerCase();const filtered=this.rows().filter(row=>this.belongsToView(row,view)&&(box==='all'||row.mailbox===box)&&(!q||`${row.correspondent} ${row.email} ${row.subject} ${row.preview} ${row.linked_order||''}`.toLowerCase().includes(q)));const threads=new Map<string,MailRow>();for(const row of filtered){const key=`${row.mailbox}:${row.threadId||row.id}`;const existing=threads.get(key);if(!existing||this.dateValue(row.received_at)>this.dateValue(existing.received_at))threads.set(key,row);}return[...threads.values()].sort((a,b)=>this.dateValue(b.received_at)-this.dateValue(a.received_at));});
   belongsToView(row:MailRow,view:MailView){if(view==='Sent'||view==='Archive'||view==='Trash')return row.status===view;if(view==='Unread')return row.status==='Inbox'&&row.unread===true;if(view==='Needs reply')return row.status==='Inbox'&&row.needs_reply===true;if(view==='Starred')return row.status!=='Trash'&&row.starred===true;return row.status==='Inbox';}
   private sourceViews(view:MailView):GmailView[]{return view==='Starred'?['Inbox','Sent','Archive']:view==='Sent'||view==='Archive'||view==='Trash'?[view]:['Inbox'];}
@@ -295,7 +299,7 @@ export class EmailComponent implements OnDestroy{
   }
   private absorbBatch(mailbox:'info'|'support',view:GmailView,messages:GmailMessageRow[]){
     const current=this.rows();const existing=new Map(current.map(row=>[`${row.mailbox}:${row.id}`,row]));
-    const incoming=messages.map(message=>{const base=this.toMailRow(message);const old=existing.get(`${mailbox}:${message.id}`);return old?{...base,body:old.body,html_body:old.html_body,images_blocked:old.images_blocked,attachments:old.attachments,ai_state:old.ai_state,linked_order:old.linked_order,intent:old.intent,needs_reply:old.needs_reply,confidence:old.confidence,draft_reply:old.draft_reply,ai_summary:old.ai_summary,review_reason:old.review_reason}:base;});
+    const incoming=messages.map(message=>{const base=this.toMailRow(message);const old=existing.get(`${mailbox}:${message.id}`);return old?{...base,body:old.body,html_body:old.html_body,images_blocked:old.images_blocked,attachments:old.attachments,ai_state:old.ai_state,linked_order:old.linked_order,intent:old.intent,needs_reply:old.needs_reply,confidence:old.confidence,draft_reply:old.draft_reply,ai_summary:old.ai_summary,review_reason:old.review_reason,ai_analysis:old.ai_analysis}:base;});
     const status=view==='Sent'||view==='Archive'||view==='Trash'?view:'Inbox';
     const kept=current.filter(row=>!(row.mailbox===mailbox&&row.status===status));
     this.rows.set([...kept,...incoming].sort((a,b)=>this.dateValue(b.received_at)-this.dateValue(a.received_at)));
@@ -348,7 +352,7 @@ export class EmailComponent implements OnDestroy{
     const version=++this.selectionVersion;const loadingKey=`${mail.mailbox}:${mail.id}`;
     this.cancelReply();this.aiAnalysisError.set('');
     const cached=!mail.body?this.email.peekMessage(mail.mailbox,mail.id):null;
-    let current=cached?this.mergeMessageDetail(mail,cached):mail;
+    let current:MailRow={...(cached?this.mergeMessageDetail(mail,cached):mail),ai_state:'Not analysed',ai_analysis:null,draft_reply:'',ai_summary:null,review_reason:null,intent:null,linked_order:null,confidence:null};
     const cachedThread=mail.threadId?this.email.peekThread(mail.mailbox,mail.threadId):null;
     const cachedMessages=cachedThread?.messages.map(message=>this.toThreadMail(mail,message))||[];
     this.bodyLoading.set(current.body||cachedMessages.length?'':loadingKey);this.mediaLoading.set('');this.threadMessages.set(cachedMessages.length?cachedMessages:current.body?[current]:[]);this.expandedThreadMessages.set(new Set([mail.id,cachedMessages.at(-1)?.id||mail.id]));this.selected.set(current);
@@ -356,6 +360,7 @@ export class EmailComponent implements OnDestroy{
       if(mail.threadId){
         const thread=await this.email.getThread(mail.mailbox,mail.threadId,true);
         const messages=thread.messages.map(message=>this.toThreadMail(mail,message));
+        if(version!==this.selectionVersion||this.selected()?.id!==mail.id||this.selected()?.mailbox!==mail.mailbox)return;
         if(messages.length){
           this.threadMessages.set(messages);
           this.expandedThreadMessages.set(new Set([mail.id,messages[messages.length-1].id]));
@@ -366,7 +371,6 @@ export class EmailComponent implements OnDestroy{
       if(version!==this.selectionVersion||this.selected()?.id!==mail.id||this.selected()?.mailbox!==mail.mailbox)return;
       this.bodyLoading.set('');this.selected.set(current);
       for(const message of this.threadMessages().filter(message=>this.threadExpanded(message.id))){void this.loadImagePreviews(message,version);if(message.images_blocked)void this.loadThreadMessageMedia(message,version);}
-      if(current.status==='Inbox'&&current.unread){current=this.patchMail(current,{unread:false});void this.email.modify(current.mailbox,current.id,'markRead').catch(e=>{if(version===this.selectionVersion)this.patchMail(current,{unread:true});console.warn('Mark read failed',e);});}
       if(current.status==='Inbox'&&current.ai_state==='Not analysed')void this.analyseMail(current);
     }catch(e){if(version===this.selectionVersion)this.mailError.set(String((e as Error)?.message||e));}
     finally{if(version===this.selectionVersion&&this.bodyLoading()===loadingKey)this.bodyLoading.set('');}
@@ -382,7 +386,7 @@ export class EmailComponent implements OnDestroy{
   threadExpanded(id:string){return this.expandedThreadMessages().has(id);}
   imageLoadFailed(id:string){return this.imageLoadFailures().has(id);}
   toggleThreadMessage(message:ThreadMail){const next=new Set(this.expandedThreadMessages());if(next.has(message.id))next.delete(message.id);else next.add(message.id);this.expandedThreadMessages.set(next);if(next.has(message.id)){const version=this.selectionVersion;void this.loadImagePreviews(message,version);if(message.images_blocked)void this.loadThreadMessageMedia(message,version);}}
-  replyTarget(fallback:MailRow){return this.threadMessages().at(-1)||fallback;}
+  replyTarget(fallback:MailRow){return {...(this.threadMessages().at(-1)||fallback),draft_reply:fallback.draft_reply};}
   private mergeMessageDetail(mail:MailRow,full:GmailMessageDetail):MailRow{
     return {...mail,threadId:full.threadId||mail.threadId,body:this.normalizeMessageBody(full.body,mail.preview),html_body:full.html||'',images_blocked:full.imagesBlocked===true,attachments:full.attachments||[],received_at:full.date||mail.received_at,time:this.formatMailTime(full.date||mail.received_at),unread:full.unread??mail.unread,starred:full.starred??mail.starred};
   }
@@ -419,22 +423,40 @@ export class EmailComponent implements OnDestroy{
   aiRuntimeLabel(){if(this.aiRuntime()==='checking')return'Checking…';if(this.aiRuntime()==='ready')return'Ready';if(this.aiRuntime()==='setup')return'Setup required';return'Connection error';}
   aiRuntimeDescription(){if(this.aiRuntime()==='checking')return'Checking the protected AI service.';if(this.aiRuntime()==='ready')return'Analysis and draft generation are connected.';return this.aiRuntimeReason()||'AI runtime is not available.';}
   async analyseMail(mail:MailRow){
-    const key=`${mail.mailbox}:${mail.id}`;
-    if(this.aiAnalysisLoading())return;
+    const key=`${mail.mailbox}:${mail.id}`,version=this.selectionVersion;
+    if(this.aiAnalysisLoading()===key&&this.aiAnalysisVersion===version)return;
+    this.aiAnalysisVersion=version;
     this.aiAnalysisLoading.set(key);this.aiAnalysisError.set('');
+    const stillSelected=()=>version===this.selectionVersion&&this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox;
+    if(stillSelected())this.patchMail(this.selected()!,{ai_state:'Not analysed',ai_analysis:null,draft_reply:'',ai_summary:null,review_reason:null,intent:null,linked_order:null,confidence:null});
     try{
-      const candidates=this.orderCandidates(mail);
-      const thread=this.threadMessages().slice(-20).map(message=>({from:message.email,name:message.correspondent,direction:message.direction,date:message.received_at,body:message.body||message.preview}));
-      const result=await this.emailAi.analyse({id:mail.id,mailbox:mail.mailbox,correspondent:mail.correspondent,email:mail.email,subject:mail.subject,body:mail.body||mail.preview,thread},candidates);
+      // Read the original message text, not the reader's display-cleaned body.
+      const detail=mail.threadId
+        ?await this.email.getThread(mail.mailbox,mail.threadId,true)
+        :{id:mail.id,messages:[{...await this.email.getMessage(mail.mailbox,mail.id,false),id:mail.id,snippet:''}]};
+      if(!stillSelected())return;
+      const thread=detail.messages.map(message=>({
+        id:message.id,from:message.from,date:message.date,subject:message.subject,
+        body:message.body||message.snippet||'',attachments_present:!!message.attachments?.length,
+      }));
+      const candidates=this.orderCandidates(mail,thread);
+      const result=await this.emailAi.analyse({id:mail.id,mailbox:mail.mailbox,subject:mail.subject,thread,thread_complete:true},candidates);
+      if(!stillSelected())return;
       const state:AiState=result.review_required?'Review':(result.needs_reply?'Draft ready':'No reply needed');
-      const updated:MailRow={...mail,ai_state:state,intent:result.intent as MailIntent,linked_order:result.linked_order,confidence:result.confidence,needs_reply:result.needs_reply,draft_reply:result.draft_reply,ai_summary:result.summary,review_reason:result.review_reason||null};
-      this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));if(this.selected()?.id===mail.id&&this.selected()?.mailbox===mail.mailbox)this.selected.set(updated);
-    }catch(e){const message=String((e as Error)?.message||e);this.aiAnalysisError.set(`AI analysis failed: ${message}`);console.warn('Email AI analysis failed',e);}
-    finally{if(this.aiAnalysisLoading()===key)this.aiAnalysisLoading.set('');}
+      const updated:MailRow={...(this.selected()||mail),ai_state:state,intent:result.intent as MailIntent,linked_order:result.linked_order,confidence:result.confidence,needs_reply:result.needs_reply,draft_reply:result.draft_reply,ai_summary:result.summary,review_reason:result.review_reason||null,ai_analysis:result};
+      this.rows.update(rows=>rows.map(row=>row.id===mail.id&&row.mailbox===mail.mailbox?updated:row));this.selected.set(updated);
+    }catch{
+      if(stillSelected())this.aiAnalysisError.set('Analysis could not be completed. Retry or review the conversation manually.');
+    }finally{if(this.aiAnalysisLoading()===key&&this.aiAnalysisVersion===version)this.aiAnalysisLoading.set('');}
   }
-  private orderCandidates(mail:MailRow){
-    const email=mail.email.toLowerCase();const name=mail.correspondent.toLowerCase();const subject=(mail.subject+' '+mail.body+' '+mail.preview).toLowerCase();
-    return this.orders.orders().map(order=>{let score=0;if((order.buyer_email||'').toLowerCase()===email)score+=100;if(name&&((order.customer_name||'').toLowerCase().includes(name)||name.includes((order.customer_name||'').toLowerCase())))score+=20;if(subject.includes(String(order.order_number).toLowerCase()))score+=200;return{score,order};}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,8).map(({order})=>({order_number:order.order_number,customer_name:order.customer_name,buyer_email:order.buyer_email,payment_status:order.payment_status,fulfillment_status:order.fulfillment_status,delivery_type:order.delivery_type,delivery_title:order.delivery_title,buyer_note:order.buyer_note,total:order.total,items:(order.wc_order_items||[]).map(item=>({product_name:item.product_name,quantity:item.quantity,options:item.wix_options,production:(item.wc_production_units||[]).map(unit=>unit.production_status)}))}));
+  private orderCandidates(mail:MailRow,thread:{from:string;body:string;subject:string}[]){
+    const addresses=new Set([mail.email,...thread.map(message=>this.extractAddress(message.from))].map(value=>value.toLowerCase()));
+    const tokens=new Set((mail.subject+' '+thread.map(message=>message.subject+' '+message.body).join(' ')).toLowerCase().match(/[a-z0-9-]+/g)||[]);
+    return this.orders.orders().map(order=>{
+      const number=String(order.order_number||'').toLowerCase();
+      const score=(tokens.has(number)?200:0)+(order.buyer_email&&addresses.has(order.buyer_email.toLowerCase())?100:0);
+      return {score,order};
+    }).filter(item=>item.score>0).sort((a,b)=>b.score-a.score).slice(0,8).map(({order})=>({order_number:order.order_number}));
   }
   @HostListener('window:popstate',['$event'])
   onBrowserHistory(event:PopStateEvent){

@@ -54,11 +54,13 @@ jobs:
           npm run build -- --base-href /whitecorner-orders/angular2/
       - name: Test delivery estimate worker with mocks
         run: node --test .github/scripts/delivery-review-worker.test.cjs
+      - name: Test Email AI handler with mocks
+        run: node --test supabase/functions/email-ai/handler.test.cjs
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.9.6
       - name: Type-check delivery review and Wix import
-        run: deno check --no-lock supabase/functions/delivery-cost-review/index.ts supabase/functions/wix-orders-sync/index.ts supabase/functions/fast-courier-api/index.ts
+        run: deno check --no-lock supabase/functions/delivery-cost-review/index.ts supabase/functions/wix-orders-sync/index.ts supabase/functions/fast-courier-api/index.ts supabase/functions/email-ai/index.ts
       - name: Rehearse delivery migration in isolated PostgreSQL
         shell: bash
         run: |
