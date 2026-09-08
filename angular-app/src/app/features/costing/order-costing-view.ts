@@ -2,7 +2,7 @@ import {ProductionUnitView} from '../../core/models/production.models';
 import {orderProducts,isDeliveryLine,tabletopReplacement} from '../../core/utils/order-products';
 
 // Use Board identities, never an option label or a product name, to join costs.
-export function orderCostingView(order:any, costs:any[], units:ProductionUnitView[]) {
+export function orderCostingView(order:any, costs:any[], units:ProductionUnitView[],parts:any[]=[]) {
  const issues:string[]=[];
  const products:any[]=[];
  const seen=new Set<string>();
@@ -27,7 +27,7 @@ export function orderCostingView(order:any, costs:any[], units:ProductionUnitVie
  for(const item of order.wc_order_items||[]){
   if(isDeliveryLine(item))continue;
   const p=products.find(p=>p.item.id===item.id);
-  if(!p&&replacement?.upgrade.id!==item.id){const parent=composition.products.find(p=>p.components.some(c=>c.id===item.id));issues.push(parent?`${item.product_name}: component of ${parent.item.product_name}; a combined material profile needs review.`:`${item.product_name||'Unnamed order line'}: cannot assign this line to a costed product.`);}
+  if(!p&&replacement?.upgrade.id!==item.id&&!parts.some(cp=>cp.item_id===item.id&&composition.products.some(parent=>parent.item.id===cp.main_item_id&&parent.components.some(c=>c.id===item.id)))){const parent=composition.products.find(p=>p.components.some(c=>c.id===item.id));issues.push(parent?`${item.product_name}: component of ${parent.item.product_name}; a combined material profile needs review.`:`${item.product_name||'Unnamed order line'}: cannot assign this line to a costed product.`);}
   else if(p&&(!Number.isInteger(Number(item.quantity))||Number(item.quantity)<1||p.units.length!==Number(item.quantity)))issues.push(`${item.product_name}: product quantity does not match Production Board units.`);
  }
  if(costs.some(c=>!seen.has(c.unit_id)))issues.push('A saved calculation cannot be matched to a current Production Board product.');

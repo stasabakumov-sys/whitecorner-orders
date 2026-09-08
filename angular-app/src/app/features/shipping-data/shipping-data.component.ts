@@ -2,6 +2,8 @@ import { Component, OnInit, computed, signal, Optional } from '@angular/core';
 import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
 import {PackagingVariantsComponent} from './packaging-variants.component';
+import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
+import {CostingService} from '../costing/costing.service';
 import {shippingProfileCatalog,savedProfileOptions} from '../../core/utils/shipping-profile-catalog';
 
 type ShippingProduct = {
@@ -40,7 +42,7 @@ type ShippingRule = {
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[PackagingVariantsComponent],
+  imports:[PackagingVariantsComponent,CatalogCostEditorComponent],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -52,7 +54,7 @@ type ShippingRule = {
             <button [class.on]="kindFilter()===k.key" (click)="setFilter(k.key)">{{ k.label }}</button>
           }
         </div>
-        <span class="mut push">Packaging profiles for freight quotes</span>
+        <span class="mut push">Shared product catalogue · packaging, materials, work and Pans</span>
       </div>
 
       <div class="shipgrid">
@@ -75,6 +77,11 @@ type ShippingRule = {
               <span class="badge">{{p.saved_profiles?.length||0}} reusable profile(s)</span>
             </div>
 
+            <section class="shipsection"><h3>Product cost profiles · incl. GST</h3>
+            @if(costing.error()){<p role="alert">{{costing.error()}}</p>}
+            @for(part of costProfiles(p.id);track part.variant_key){<details><summary>{{costProfileLabel(part)}}</summary><app-catalog-cost-editor [part]="part" /></details>}
+            @empty{<p class="mut">No order variant available yet. Open Add materials on an order to define its costs.</p>}
+            </section>
             @for(profile of p.saved_profiles||[];track profile.signature){
              <section class="shipsection"><h3>Saved packaging · {{profileOptions(profile)}}</h3>
              <p class="small">Used automatically for an identical composition and quantity. This is the saved profile, not a second copy.</p>
@@ -161,10 +168,12 @@ export class ShippingDataComponent implements OnInit {
   visibleProducts = computed(() => this.products().filter(p => this.kindFilter()==='all' || this.kind(p.product_name)===this.kindFilter()));
   selectedProduct = computed(() => this.products().find(p => p.id===this.selectedId()) ?? null);
 
-  constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute) {}
+  constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute,@Optional() public costing:CostingService=new CostingService(supabase)) {}
+  costProfiles(id:string){const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile}));return [...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()];}
+  costProfileLabel(p:any){return `${p.kind} · ${Object.entries(p.options||{}).map(([k,v])=>k+': '+v).join(' · ')||'No options'}${p.standard_top_excluded?' · Standard top excluded':''}`;}
 
   async ngOnInit() {
-    await this.load();
+    await Promise.all([this.load(),this.costing.load()]);
   }
 
   async load() {

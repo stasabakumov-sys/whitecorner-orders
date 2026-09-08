@@ -5,13 +5,20 @@ import {RouterLink} from '@angular/router';
 import {DrawerModule} from 'primeng/drawer';
 import {ProductionService} from '../../core/services/production.service';
 import {orderCostingView} from './order-costing-view';
-import {isDeliveryLine} from '../../core/utils/order-products';
+import {orderProducts} from '../../core/utils/order-products';
+import {CatalogCostEditorComponent} from './catalog-cost-editor.component';
+import {deliveryCents,partnerPans} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {CostingService} from './costing.service';
-@Component({selector:'app-product-costing',standalone:true,imports:[CommonModule,FormsModule,RouterLink,DrawerModule],styleUrl:'./costing.css',templateUrl:'./product-costing.component.html'})
+@Component({selector:'app-product-costing',standalone:true,imports:[CommonModule,FormsModule,RouterLink,DrawerModule,CatalogCostEditorComponent],styleUrl:'./costing.css',templateUrl:'./product-costing.component.html'})
 export class ProductCostingComponent implements OnInit {
  orderId:string|null=null;
  readonly hasCost=(c:any)=>c.total_gst!=null;
- views(){return this.s.orders().filter(o=>this.s.costs().some(c=>c.order_id===o.id)||(!o.archived&&(o.currency||'AUD')==='AUD'&&String(o.fulfillment_status).toUpperCase()!=='FULFILLED'&&!['CANCELED','CANCELLED'].includes(String(o.wix_status).toUpperCase())&&(o.wc_order_items||[]).some((i:any)=>!isDeliveryLine(i)&&(!(i.wc_production_units||[]).length||(i.wc_production_units||[]).some((u:any)=>u.production_status!=='Ready'))))).map(o=>orderCostingView(o,this.s.costs().filter(c=>c.order_id===o.id),this.production.unitsForOrder(o)));}
+ views(){return this.s.orders().filter(o=>this.s.costs().some(c=>c.order_id===o.id&&c.state==='calculated')||(!o.archived&&(o.currency||'AUD')==='AUD'&&String(o.fulfillment_status).toUpperCase()!=='FULFILLED'&&!['CANCELED','CANCELLED'].includes(String(o.wix_status).toUpperCase())&&(this.production.unitsForOrder(o).some(v=>v.unit.production_status!=='Ready')||orderProducts(o.wc_order_items||[]).products.some(p=>!this.production.unitsForOrder(o).some(v=>v.mainItem.id===p.item.id))))).map(o=>orderCostingView(o,this.s.costs().filter(c=>c.order_id===o.id),this.production.unitsForOrder(o),this.s.parts?.().filter(p=>p.order_id===o.id)||[]));}
+ productSales(o:any){const delivery=deliveryCents(o);return o.total==null||delivery==null?null:Math.round(Number(o.total)*100-delivery)/100;}
+ pansTotal(o:any){const items=(o.wc_order_items||[]).filter((i:any)=>partnerPans(i).choices.length);if(!items.length)return 0;const saved=this.s.pans?.().find(p=>p.order_id===o.id);if(!saved||saved.snapshot.length!==items.length||items.some((i:any)=>!saved.snapshot.some((x:any)=>x.item_id===i.id&&Number(x.quantity)===Number(i.quantity)&&this.s.parts?.().some(p=>p.item_id===i.id&&p.variant_key===x.variant_key))))return null;return saved.total_gst;}
+ productLessPans(o:any){const a=this.productSales(o),b=this.pansTotal(o);return a==null||b==null?null:Math.round((a-Number(b))*100)/100;}
+ costParts(itemId:string){return this.s.parts?.().filter(p=>p.main_item_id===itemId)||[];}
+
  visibleOrders(){const q=this.search.trim().replace(/^#/,'').toLowerCase();return this.views().filter(v=>[v.order.order_number,v.order.customer_name,...v.products.map(p=>p.item.product_name)].join(' ').toLowerCase().includes(q)&&(this.filter==='all'||(this.filter==='changed'?v.issues.length>0:this.filter==='calculated'?!v.partial:!v.issues.length&&v.costs.some(c=>c.state===this.filter))));}
  activeOrder(){return this.orderId?this.views().find(v=>v.order.id===this.orderId):null;}
  openOrder(id:string){this.selected=null;this.orderId=id;}

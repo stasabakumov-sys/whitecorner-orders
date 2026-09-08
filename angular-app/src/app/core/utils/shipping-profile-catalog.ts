@@ -8,7 +8,7 @@ export function shippingProfileCatalog(products:any[],profiles:any[]){
   const sources=[...new Map<string,any>(components.filter((c:any)=>!c.component_key||c.component_key==='main').map((c:any)=>[String(c.wix_product_id||componentNormal(c.product_name||'')),c])).values()];
   for(const source of sources){
    const identity=String(source.wix_product_id||componentNormal(source.product_name||''));if(!identity)continue;
-   let matches=rows.filter(p=>source.wix_product_id?p.wix_product_id===source.wix_product_id:!p.wix_product_id&&componentNormal(p.product_name)===componentNormal(source.product_name));
+   let matches=rows.filter(p=>source.wix_product_id?p.wix_product_id===source.wix_product_id:componentNormal(p.product_name)===componentNormal(source.product_name));
    if(!matches.length)matches=rows.filter(p=>!p.wix_product_id&&componentNormal(p.product_name)===componentNormal(source.product_name));
    let row=matches.length===1?matches[0]:rows.find(p=>p.id==='saved:'+identity);
    if(!row){row={id:'saved:'+identity,product_name:source.product_name,wix_product_id:source.wix_product_id||null,saved_only:true,active:true,saved_profiles:[]};rows.push(row);}
