@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { courierReviewCall, processDeliveryQueue } from '../_shared/delivery-review-worker.ts';
 import { syncShippingFulfillment } from "./shipping-fulfillment.ts";
+import { queryContactsPage } from './contacts.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,6 +88,14 @@ Deno.serve(async (req) => {
       "Authorization": wixApiKey,
       "wix-site-id": wixSiteId,
     };
+
+    if (requestBody?.action === 'queryContacts') {
+      const jwt=req.headers.get('Authorization')?.replace(/^Bearer\s+/i,'')||'';
+      const {data:user,error:authError}=await db.auth.getUser(jwt);
+      if(authError||!user.user)return new Response(JSON.stringify({error:'Authentication required'}),{status:401,headers:jsonHeaders});
+      try{return new Response(JSON.stringify(await queryContactsPage(requestBody,wixHeaders)),{headers:jsonHeaders});}
+      catch(error){return new Response(JSON.stringify({error:error instanceof Error?error.message:'Contacts could not be loaded'}),{status:502,headers:jsonHeaders});}
+    }
 
     if (requestBody?.action === "fulfillShipping") {
       // Gateway JWT verification remains enabled; also require a user session.
