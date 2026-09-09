@@ -58,6 +58,7 @@ export class DeliveryReviewService {
   if(!boxes.length)throw Error('No complete profile matches this Size and the other options. Configure it in Shipping Data.');
   return boxes;
  }
+ async requotePackages(row:any,packages:ReviewPackage[],saveProfile:boolean){return this.perform({action:'requote-packages',orderId:row.order_id,expectedVersion:row.updated_at,confirmRequote:true,packages,saveProfile});}
  async savePackages(orderId:string,packages:ReviewPackage[],saveProfile:boolean){return this.perform({action:'packages',orderId,packages,saveProfile});}
  async approve(orderId:string,reason:string){return this.perform({action:'approve',orderId,reason});}
  async approveWithoutQuote(orderId:string,reason:string){return this.perform({action:'approve-without-quote',orderId,reason});}

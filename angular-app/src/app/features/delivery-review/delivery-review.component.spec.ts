@@ -5,6 +5,21 @@ import {DeliveryReviewService} from '../../core/services/delivery-review.service
 import {buildReviewRequest,evaluateQuotes,insuranceFor,reviewComponents,reviewInputKey} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 describe('Delivery review UI',()=>{
+ it('opens a correction without quoting, preserves old packaging, and submits once with its original version',async()=>{
+  const service=new DeliveryReviewService({} as any);const requote=vi.spyOn(service,'requotePackages').mockResolvedValue(true);
+  const order={wc_order_items:[{id:'i',product_name:'Stand',quantity:1}]};
+  const row:any={order_id:'r',state:'failed',updated_at:'version1',quote_attempted_at:'date',wc_orders:order,packages:[{package_name:'Stand',length_mm:880,width_mm:730,height_mm:10,weight_kg:21,contents:reviewComponents(order)}]};
+  const c=new DeliveryReviewComponent(service);c.open(row);expect(c.editable(row)).toBe(false);
+  const boxes=c.packages(row);expect(c.packageNumber(row,boxes[0])).toBe(1);
+  c.startRevision(row);expect(c.editable(row)).toBe(true);expect(requote).not.toHaveBeenCalled();
+  c.draft[0].height_mm=100;expect(row.packages[0].height_mm).toBe(10);
+  await c.save(row);expect(requote).not.toHaveBeenCalled();c.confirmed=true;
+  await c.save({...row,updated_at:'version2'});
+  expect(requote).toHaveBeenCalledExactlyOnceWith({...row,updated_at:'version1'},c.draft,true);expect(c.revising).toBe(false);
+  expect(c.canRequote({...row,token:'active'})).toBe(false);
+  expect(c.canRequote({...row,state:'calculating'})).toBe(false);
+  c.startRevision(row);c.draft[0].height_mm=100;c.cancelRevision(row);expect(c.draft[0].height_mm).toBe(10);
+ });
  it('requires reason and risk acknowledgement for unquoted approval',async()=>{
   const s=new DeliveryReviewService({} as any);vi.spyOn(s,'load').mockResolvedValue();
   const approve=vi.spyOn(s,'approveWithoutQuote').mockResolvedValue(true);
