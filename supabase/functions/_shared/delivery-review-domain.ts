@@ -214,7 +214,7 @@ export function buildReviewRequest(order:any,packages:ReviewPackage[]){
  if(!d.suburb||!['QLD','NSW','VIC','TAS','SA','WA','NT','ACT'].includes(d.state)||!/^\d{4}$/.test(d.postcode)||!['AU','Australia','AUS'].includes(d.country))throw Error('Complete Australian delivery suburb, state and postcode are required.');
  return {pickupSuburb:'BURLEIGH HEADS',pickupState:'QLD',pickupPostcode:4220,pickupBuildingType:'commercial',isPickupTailLift:false,
  destinationSuburb:d.suburb,destinationState:d.state,destinationPostcode:Number(d.postcode),destinationBuildingType:'residential',isDropOffTailLift:false,isDropOffPOBox:false,
- items:packages.map(p=>({type:'box',weight:Number(p.weight_kg),length:Number(p.length_mm)/10,width:Number(p.width_mm)/10,height:Number(p.height_mm)/10,quantity:1,contents:'General/Others'}))};
+ items:packages.map(p=>({type:'box',weight:Number(p.weight_kg),length:Number(p.length_mm)/10,width:Number(p.width_mm)/10,height:Number(p.height_mm)/10,quantity:1,contents:'General'}))};
 }
 export function allowedCarrier(name:unknown){
  // Exact normalized aliases only; TNT is not implicitly FedEx.

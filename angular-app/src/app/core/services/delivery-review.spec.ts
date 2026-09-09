@@ -45,7 +45,7 @@ describe('Delivery cost policy and durable snapshots',()=>{
   expect(packagingError([packages[0]],c)).toContain('Not assigned');
   expect(packagingError([box([c[0],c[0]])],c)).toContain('duplicate');
   expect(packagingError([{...box(c),weight_kg:0}],c)).toContain('positive');
-  const request=buildReviewRequest(order(),packages);expect(request.items).toHaveLength(3);expect(request.items.every(x=>x.contents==='General/Others')).toBe(true);expect(request.items[0].length).toBe(120);
+  const request=buildReviewRequest(order(),packages);expect(request.items).toHaveLength(3);expect(request.items.every(x=>x.contents==='General')).toBe(true);expect(request.items[0].length).toBe(120);
  });
  it('restores exact profile on the next identical order and detects composition/address/goods changes',()=>{
   const o=order(),c=reviewComponents(o,rules),templates=[box(c)];

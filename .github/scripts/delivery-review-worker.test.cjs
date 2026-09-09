@@ -20,7 +20,7 @@ function setup(){
 }
 test('one concurrent claimant; all carriers and complete response persist; re-entry never quotes again',async()=>{
  const s=setup();await Promise.all([processDeliveryReview(s.db,'order',s.call),processDeliveryReview(s.db,'order',s.call)]);await processDeliveryReview(s.db,'order',s.call);
- assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);assert.equal(s.review.state,'quoted');assert.equal(s.review.response.body.orderId,'saved-draft');assert.equal(s.review.evaluated_quotes.length,2);assert.equal(s.review.evaluated_quotes[0].eligible,false);assert.equal(s.calls.find(c=>c.route==='quotes').payload.items[0].contents,'General/Others');
+ assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);assert.equal(s.review.state,'quoted');assert.equal(s.review.response.body.orderId,'saved-draft');assert.equal(s.review.evaluated_quotes.length,2);assert.equal(s.review.evaluated_quotes[0].eligible,false);assert.equal(s.calls.find(c=>c.route==='quotes').payload.items[0].contents,'General');
 });
 test('timeout after POST remains uncertain and cannot cause a second POST',async()=>{
  const s=setup();const call=async(route,p)=>{if(route==='quotes'){s.calls.push({route});throw Error('timeout');}return s.call(route,p);};
@@ -36,8 +36,8 @@ test('HTTP rejection response is retained with no repeat quote',async()=>{
  await processDeliveryReview(s.db,'order',call);await processDeliveryReview(s.db,'order',call);assert.equal(s.review.response.http_status,422);assert.equal(s.review.response.body.code,'TEST');assert.equal(s.review.state,'failed');assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);
 });
 test('transport uses only insurance-list and quotes with a fixed-category payload',async()=>{
- const seen=[];await courierReviewCall('quotes',{items:[{contents:'General/Others'}]},'fixture','http://fixture.invalid',async(url,init)=>{seen.push([url,init]);return new Response(JSON.stringify({status:true,data:[]}),{status:200});});
- assert.equal(seen[0][0],'http://fixture.invalid/api/quotes');assert.equal(seen[0][1].method,'POST');assert.equal(JSON.parse(seen[0][1].body).items[0].contents,'General/Others');
+ const seen=[];await courierReviewCall('quotes',{items:[{contents:'General'}]},'fixture','http://fixture.invalid',async(url,init)=>{seen.push([url,init]);return new Response(JSON.stringify({status:true,data:[]}),{status:200});});
+ assert.equal(seen[0][0],'http://fixture.invalid/api/quotes');assert.equal(seen[0][1].method,'POST');assert.equal(JSON.parse(seen[0][1].body).items[0].contents,'General');
 });
 
 const {assertDeliveryBookingAllowed}=moduleAt(path.resolve('supabase/functions/_shared/delivery-booking-gate.ts'));
