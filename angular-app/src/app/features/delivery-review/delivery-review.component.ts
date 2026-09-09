@@ -9,7 +9,7 @@ import {orderProducts} from '../../core/utils/order-products';
 @Component({
  selector:'app-delivery-review',standalone:true,imports:[CommonModule,FormsModule],
  template:`
- <header><div><h1>Delivery Cost Review</h1><p>One saved estimate per order. Target: delivery including insurance ≤ 90% of the invoice delivery charge. Amounts include GST.</p></div>
+ <header><div><h1>Delivery Cost Review</h1><p>Saved estimates per order, with explicit recalculation after packaging corrections. Target: delivery including insurance ≤ 90% of the invoice delivery charge. Amounts include GST.</p></div>
  <button (click)="reload()" [disabled]="s.loading()||s.busy()">Refresh saved data</button></header>
  <div class="notice">All courier quotes are saved. Only Aramex, Couriers Please and FedEx count toward the target. Opening this report never requests a new quote.</div>
  @if(s.error()){<p class="error" role="alert">{{s.error()}}</p>}
@@ -29,7 +29,7 @@ import {orderProducts} from '../../core/utils/order-products';
  <header><div><h2 id="review-title">Delivery estimate · #{{row.wc_orders?.order_number}}</h2><span class="badge" [attr.data-status]="result.status">{{label(result.status)}}</span></div><button (click)="selectedId.set(null)" [disabled]="s.busy()">Close</button></header>
  @if(row.error){<p class="error">{{row.error}}</p>}
  @if(s.error()){<p class="error" role="alert">{{s.error()}}</p>}
- @if(result.status==='data_changed'){<p class="error">Order inputs changed after the saved estimate. Review manually; a second quote will not be requested by this report.</p>}
+ @if(result.status==='data_changed'){<p class="error">Order inputs changed after the saved estimate. Correct the packaging and explicitly request a new estimate when needed.</p>}
  @if(result.status==='address_required'){<p>Complete the delivery address in Wix and synchronize Orders. The estimate has not been requested yet.</p>}
  @if(result.status==='approved_without_quote'){
  <p class="notice">Production approved without a quote. Actual packaging and a valid insured quote are still required before booking.</p>
@@ -45,6 +45,8 @@ import {orderProducts} from '../../core/utils/order-products';
  @if(row.approval_history?.length){<h3>Approval history</h3>@for(a of row.approval_history;track $index){<p>{{a.at|date:'dd MMM yyyy, HH:mm'}} · {{a.kind==='without_quote'?'Approved without quote':'Price exception'}} · {{a.reason}}<small>Approved by {{a.actor}}</small></p>}}
  <div class="address"><b>Delivery address:</b> {{address(row.wc_orders?.delivery_address)}}</div>
  <h3>Order composition &amp; packaging</h3>
+ @if(canRequote(row)&&!revising){<button (click)="startRevision(row)" [disabled]="s.busy()">Edit packaging and recalculate</button>}
+ @if(revising){<p class="notice">Correct the boxes below. Saving requests one new estimate and archives the previous result. It does not book a shipment.</p><button (click)="cancelRevision(row)" [disabled]="s.busy()">Cancel changes</button>}
  <p>Assign packaging under each product. All {{packages(row).length}} boxes are sent together in one delivery quote for this order.</p>
  @for(item of composition(row).unresolved;track item.id){<p role="alert">Composition review required: cannot assign {{item.product_name}} to a product. Its packaging components remain available below.</p>}
  @for(group of productGroups(row);track group.id){
@@ -84,24 +86,25 @@ import {orderProducts} from '../../core/utils/order-products';
  @if(editable(row)){
  @if(packagingIssue(row)){<p class="error">{{packagingIssue(row)}}</p>}
  <label class="check"><input type="checkbox" [(ngModel)]="saveProfile" />Save packaging for the next identical order</label>
- <label class="check"><input type="checkbox" [(ngModel)]="confirmed" />I confirm all {{draft.length}} boxes and component assignments for this order's one-time estimate.</label>
- <button class="primary" (click)="save(row)" [disabled]="s.busy()||!!packagingIssue(row)||!confirmed">{{s.busy()?'Saving and calculating…':'Save packaging and calculate once'}}</button>
+ <label class="check"><input type="checkbox" [(ngModel)]="confirmed" />I confirm all {{draft.length}} boxes and component assignments for this order's {{revising?'new':'initial'}} estimate.</label>
+ <button class="primary" (click)="save(row)" [disabled]="s.busy()||!!packagingIssue(row)||!confirmed">{{s.busy()?'Saving and calculating…':(revising?'Save packaging and recalculate':'Save packaging and calculate once')}}</button>
  }
  @if(row.quote_attempted_at){
  <div class="summary"><div>Invoice delivery incl. GST<b>{{money(invoice(row))}}</b></div><div>Lowest eligible total<b>{{money(result.best?.total_cents)}}</b></div><div>Minimum invoice delivery incl. GST<b>{{money(result.minimum_invoice_cents)}}</b></div><div>Margin<b>{{margin(row)}}</b></div></div>
- <p>Requested {{row.quote_attempted_at|date:'dd MMM yyyy, HH:mm'}}. This snapshot is kept for reference and never triggers another request. Actual booking prices must be checked in Fulfilment.</p>
- <h3>All saved courier quotes</h3>
+ <p>Requested {{row.quote_attempted_at|date:'dd MMM yyyy, HH:mm'}}. This snapshot is kept for reference. Only an explicit packaging correction can request another estimate. Actual booking prices must be checked in Fulfilment.</p>
+ <h3>Current courier quotes</h3>
  <div class="table-wrap"><table><thead><tr><th>Carrier / Service</th><th>Quote incl. GST</th><th>Insurance</th><th>Total</th><th>Assessment</th></tr></thead><tbody>
  @for(q of row.evaluated_quotes;track $index){<tr><td>{{q.quote.courierName||'Unknown'}}<small>{{q.quote.name}}</small></td><td>{{money(q.price_cents)}}</td><td>{{money(q.insurance_fee_cents)}}</td><td>{{money(q.total_cents)}}</td><td>{{q.eligible?'Eligible':q.reason}}@if(q.quote.notice?.body){<details><summary>Carrier conditions</summary><p>{{q.quote.notice.body}}</p></details>}</td></tr>}
  @empty{<tr><td colspan="5">No quotes were returned or the response could not be saved. No automatic retry.</td></tr>}
  </tbody></table></div>
  <details><summary>Saved request, full response and insurance options</summary><pre>{{ {request:row.request,response:row.response,insurance:row.insurance_response,assumptions:row.snapshot?.assumptions}|json }}</pre></details>
- @if(result.status==='price_review_required'){
+ @if(result.status==='price_review_required'&&!revising){
  <div class="notice">Increase delivery in Wix by at least {{money(increase(row))}}, or approve an exception below. A Wix price update reuses this saved quote.</div>
  <label>Reason for accepting the current price<textarea [(ngModel)]="reason" maxlength="2000"></textarea></label>
  <button (click)="approve(row)" [disabled]="s.busy()||reason.trim().length<3">{{s.busy()?'Saving…':'Approve current delivery price'}}</button>
  }
  }
+ @if(row.attempt_history?.length){<h3>Previous estimates</h3>@for(attempt of row.attempt_history;track $index){<details><summary>Attempt {{$index+1}} · {{attempt.quote_attempted_at||attempt.updated_at|date:'dd MMM yyyy, HH:mm'}} · {{label(attempt.state)}}</summary><p>Superseded {{attempt.superseded_at|date:'dd MMM yyyy, HH:mm'}}</p><pre>{{{packages:attempt.packages,request:attempt.request,response:attempt.response,error:attempt.error}|json}}</pre></details>}}
  </section></div>}
  `,
  styleUrl:'./delivery-review.component.css',
@@ -142,11 +145,16 @@ export class DeliveryReviewComponent implements OnInit {
   }).sort((a,b)=>Number(resolved(a))-Number(resolved(b)));
  }
  async reload(){this.s.error.set('');await this.s.load();}
- open(row:any){this.acceptUnknownCost=false;this.selectedId.set(row.order_id);this.draft=structuredClone(row.packages||[]).map((p:ReviewPackage)=>({...p,contents:p.contents.filter(c=>!isNonPackagingComponent(c))}));this.boxOwners=new WeakMap();for(const p of this.draft)this.boxOwners.set(p,p.contents[0]?.order_item_id||'');this.reason='';this.confirmed=false;this.s.error.set('');}
- editable(row:any){return !row.quote_attempted_at&&['pending','packaging_required','legacy_packaging_required','address_required','approved_without_quote'].includes(row.state);}
- canApproveWithoutQuote(row:any){return !row.quote_attempted_at&&!row.token&&['pending','packaging_required','legacy_packaging_required','address_required','failed','approved_without_quote'].includes(row.state);}
+ revising=false;revisionVersion='';
+ canRequote(row:any){return !row.token&&['failed','quoted','uncertain'].includes(row.state);}
+ startRevision(row:any){if(!this.canRequote(row)||this.s.busy())return;this.open(row);this.revising=true;this.revisionVersion=row.updated_at;}
+ cancelRevision(row:any){this.open(row);}
+ open(row:any){this.revising=false;this.revisionVersion='';this.acceptUnknownCost=false;this.selectedId.set(row.order_id);this.draft=structuredClone(row.packages||[]).map((p:ReviewPackage)=>({...p,contents:p.contents.filter(c=>!isNonPackagingComponent(c))}));this.boxOwners=new WeakMap();for(const p of this.draft)this.boxOwners.set(p,p.contents[0]?.order_item_id||'');this.reason='';this.confirmed=false;this.s.error.set('');}
+ editable(row:any){return (this.revising&&this.canRequote(row))||!row.quote_attempted_at&&['pending','packaging_required','legacy_packaging_required','address_required','approved_without_quote'].includes(row.state);}
+ canApproveWithoutQuote(row:any){return !this.revising&&!row.quote_attempted_at&&!row.token&&['pending','packaging_required','legacy_packaging_required','address_required','failed','approved_without_quote'].includes(row.state);}
  async approveWithoutQuote(row:any){if(this.canApproveWithoutQuote(row)&&this.acceptUnknownCost&&this.reason.trim().length>=3&&!this.s.busy())await this.s.approveWithoutQuote(row.order_id,this.reason);}
- packages(row:any):ReviewPackage[]{return this.editable(row)?this.draft:(row.packages||[]).map((p:ReviewPackage)=>({...p,contents:(p.contents||[]).filter(c=>!isNonPackagingComponent(c))}));}
+ packageNumbers=new WeakMap<ReviewPackage,number>();
+ packages(row:any):ReviewPackage[]{const boxes=this.editable(row)?this.draft:(row.packages||[]).map((p:ReviewPackage)=>({...p,contents:(p.contents||[]).filter(c=>!isNonPackagingComponent(c))}));boxes.forEach((p:ReviewPackage,i:number)=>this.packageNumbers.set(p,i+1));return boxes;}
  owner(p:ReviewPackage){return this.boxOwners.get(p)||p.contents[0]?.order_item_id||'';}
  composition(row:any){return orderProducts(row.wc_orders?.wc_order_items||[]);}
  productGroups(row:any){
@@ -160,7 +168,7 @@ export class DeliveryReviewComponent implements OnInit {
  }
  linkedBoxes(row:any,id:string){const group=this.productGroups(row).find(g=>g.id===id);return group?this.packages(row).filter(p=>!group.sources.some(s=>s.id===this.owner(p))&&p.contents.some(c=>group.sources.some(s=>s.id===c.order_item_id))):[];}
  sharedBox(p:ReviewPackage){return new Set(p.contents.map(c=>c.order_item_id)).size>1;}
- packageNumber(row:any,p:ReviewPackage){return this.packages(row).indexOf(p)+1;}
+ packageNumber(row:any,p:ReviewPackage){return this.packageNumbers.get(p)||(this.draft.indexOf(p)+1);}
  componentProduct(row:any,c:PackageComponent){return row.wc_orders?.wc_order_items?.find((i:any)=>i.id===c.order_item_id)?.product_name||'';}
  options(item:any){return orderItemOptionLabels(item);}
  image(item:any){const x=item.image||{},r=item.raw_item||{};return x.url||x.imageUrl||x.imageInfo?.url||r.media?.url||r.image?.url||r.image?.imageInfo?.url||'';}
@@ -178,6 +186,6 @@ export class DeliveryReviewComponent implements OnInit {
  margin(row:any){const invoice=this.invoice(row),best=this.s.outcome(row).best;return invoice&&best?`${((invoice-best.total_cents)/invoice*100).toFixed(1)}% (${this.money(invoice-best.total_cents)})`:'—';}
  money(value:number|null|undefined){return value==null?'—':new Intl.NumberFormat('en-AU',{style:'currency',currency:'AUD'}).format(value/100);}
  label(status:string){return ({importing:'Awaiting import',pending:'Awaiting calculation',packaging_required:'Packaging required',legacy_packaging_required:'Packaging required',address_required:'Address required',calculating:'Calculating',within_target:'Within target',price_review_required:'Price review required',approved_exception:'Approved exception',approved_without_quote:'Approved without quote',no_eligible_quotes:'No eligible quotes',failed:'Calculation failed',uncertain:'Response uncertain',data_changed:'Inputs changed — manual review',invoice_required:'Invoice delivery required'} as Record<string,string>)[status]||status;}
- async save(row:any){if(!this.confirmed||this.packagingIssue(row))return;await this.s.savePackages(row.order_id,this.draft,this.saveProfile);}
+ async save(row:any){if(!this.confirmed||this.packagingIssue(row))return;if(this.s.busy())return;const ok=this.revising?await this.s.requotePackages({...row,updated_at:this.revisionVersion},this.draft,this.saveProfile):await this.s.savePackages(row.order_id,this.draft,this.saveProfile);if(ok)this.revising=false;}
  async approve(row:any){await this.s.approve(row.order_id,this.reason);}
 }

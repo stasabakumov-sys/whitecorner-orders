@@ -54,9 +54,11 @@ Deno.serve(async(req)=>{
    });
    return error?json({error:'Review changed or approval is unavailable. Reload before approving.'},409):json({ok:true});
   }
-  if(body.action==='packages'){
+  if(body.action==='packages'||body.action==='requote-packages'){
+   const requote=body.action==='requote-packages';
+   if(requote&&(!['failed','quoted','uncertain'].includes(review.state)||review.token||body.expectedVersion!==review.updated_at||body.confirmRequote!==true))return json({error:'Review changed or recalculation not confirmed. Reload before retrying.'},409);
    if(Deno.env.get('DELIVERY_REVIEW_ENABLED')!=='true')return json({error:'Delivery estimates are not enabled yet.'},503);
-   if(review.quote_attempted_at)return json({error:'The one-time quote has already been requested. Saved packaging is locked.'},409);
+   if(!requote&&review.quote_attempted_at)return json({error:'The one-time quote has already been requested. Saved packaging is locked.'},409);
    const issue=packagingError(body.packages,reviewComponents(order,rules));
    if(issue)return json({error:issue},422);
    // Canonical component records prevent client-supplied labels or identities
@@ -64,7 +66,7 @@ Deno.serve(async(req)=>{
    const components=reviewComponents(order,rules);
    const packages=body.packages.map((p:any)=>({package_name:String(p.package_name||'Package').slice(0,150),length_mm:Number(p.length_mm),width_mm:Number(p.width_mm),height_mm:Number(p.height_mm),weight_kg:Number(p.weight_kg),
     contents:p.contents.map((c:any)=>components.find(x=>x.order_item_id===c.order_item_id&&x.component_key===(c.component_key||'main')&&x.unit_index===(c.unit_index||1)))}));
-   const {error}=await db.rpc('wc_save_delivery_packages',{p_order_id:body.orderId,p_packages:packages,p_signature:reviewSignature(order,rules),p_actor:user.id,p_save_profile:body.saveProfile===true,p_order_updated_at:order.updated_at,p_items:order.wc_order_items});
+   const {error}=await db.rpc(requote?'wc_requote_delivery_packages':'wc_save_delivery_packages',{...(requote?{p_review_updated_at:body.expectedVersion}:{}),p_order_id:body.orderId,p_packages:packages,p_signature:reviewSignature(order,rules),p_actor:user.id,p_save_profile:body.saveProfile===true,p_order_updated_at:order.updated_at,p_items:order.wc_order_items});
    if(error)return json({error:'Packaging could not be saved; reload the review.'},409);
    const apiKey=Deno.env.get('FAST_COURIER_API_KEY');
    if(!apiKey)return json({error:'Packaging saved. Fast Courier credentials are not configured; the automatic worker will process this later.'},503);
