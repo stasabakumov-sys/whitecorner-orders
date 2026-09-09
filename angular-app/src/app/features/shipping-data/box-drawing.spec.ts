@@ -8,6 +8,12 @@ function setup(){
 }
 const event=(size=25*1024)=>({target:{files:[new File([new Uint8Array(size)],'box.cdr',{type:'application/x-coreldraw'})],value:'chosen'}} as unknown as Event);
 describe('Private saved box drawings',()=>{
+ it('links a product drawing to its product and variant, independently from packaging',async()=>{
+  const {c,rpc}=setup();c.productId='product';c.variantKey='size-190';
+  await c.upload(event());
+  expect(rpc).toHaveBeenCalledWith('wc_save_product_drawing',expect.objectContaining({p_product:'product',p_variant:'size-190',p_filename:'box.cdr',p_expected:null}));
+  c.box={length_mm:123};expect(c.current.filename).toBe('box.cdr');
+ });
  it('uploads CDR unchanged and links it only after successful storage upload',async()=>{
   const {c,bucket,rpc}=setup();await c.upload(event());
   expect(bucket.upload.mock.calls[0][1].name).toBe('box.cdr');expect(bucket.upload.mock.calls[0][2]).toEqual({contentType:'application/octet-stream',upsert:false});

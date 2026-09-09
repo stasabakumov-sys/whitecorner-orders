@@ -15,3 +15,8 @@ The page is a searchable product table with available product sizes and row numb
 Apply 20260909000200_backdrop_drawing_library.sql after the base drawing migration. Backdrops use one shared CDR per exact size of the product, independently of product name and packaging dimensions. 190cm x 95cm and 950 x 1900 mm normalize to the same key. Unknown or ambiguous dimensions never auto-match. The library supports adding sizes, uploading and replacing files. Carts and other products retain individual drawings per box/profile. Both tables use the same private storage bucket with protection against deleting linked files.
 
 Local verification: 143 Angular tests, build, SQL/RLS tests and browser review of the Products list, modal card and shared library. Production has not been updated for these changes.
+## Product drawings
+
+Apply 20260909000300_product_drawings.sql before publishing the product-drawing controls. Product drawing stores one original file for the product; each existing cost variant also has an independent drawing slot. Metadata belongs to the same wc_shipping_products catalogue, with an optional variant key. Product drawings never reuse a backdrop box drawing just because dimensions match. Upload/download limits and privacy are the same as packaging drawings. Replacement uses revision checks and linked-file deletion protection now covers all three attachment tables. No new production migration was applied during implementation.
+
+The product list numbering is now the first column on the left.
