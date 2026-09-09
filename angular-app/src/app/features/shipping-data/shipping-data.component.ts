@@ -1,5 +1,6 @@
 import { Component, OnInit, computed, signal, Optional } from '@angular/core';
 import {DialogModule} from 'primeng/dialog';
+import {DrawerModule} from 'primeng/drawer';
 import {FormsModule} from '@angular/forms';
 import {backdropSizeKey,optionSizes,packagingSizes,sizeKeyLabel} from './product-sizes';
 import {ActivatedRoute} from '@angular/router';
@@ -49,7 +50,7 @@ type ShippingRule = {
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[PackagingVariantsComponent,CatalogCostEditorComponent,BoxDrawingComponent,ProductDetailsComponent,DialogModule,FormsModule],
+  imports:[PackagingVariantsComponent,CatalogCostEditorComponent,BoxDrawingComponent,ProductDetailsComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -78,17 +79,18 @@ type ShippingRule = {
        @empty{<tr><td colspan="2">Add a backdrop size to upload its first drawing.</td></tr>}
        </tbody></table>
       </p-dialog>
-      <p-dialog [visible]="!!selectedId()" (visibleChange)="!$event&&selectedId.set(null)" header="Product" [modal]="true" [style]="{width:'min(1260px,96vw)'}" [draggable]="false">
+      <p-drawer [visible]="!!selectedId()" (visibleChange)="!$event&&selectedId.set(null)" header="Product" position="right" [modal]="true" [dismissible]="true" [blockScroll]="true" [style]="{width:'min(1260px,96vw)'}">
         <div class="shipdetail">          @if (selectedProduct(); as p) {
             <div class="detailhead">
               <div>
-                <h2>{{ p.product_name }}</h2>
-                <div class="small">{{ p.product_type }}</div>
+                <h2>{{ p.short_name || p.product_name }}</h2>
+                @if(p.short_name){<div class="product-full-name">{{p.product_name}}</div>}
+                @if(productSizes(p).length){<div class="small product-header-size">{{productSizes(p).join(' · ')}}</div>}
               </div>
               <span class="badge">{{p.saved_profiles?.length||0}} reusable profile(s)</span>
             </div>
 
-            <section class="shipsection"><app-product-details [product]="p" (saved)="updateDetails($event)" /></section>
+            <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" (saved)="updateDetails($event)" /></section>
             <section class="shipsection"><h3>Product drawing</h3>
             <p class="small">Original product drawing, stored online. For a specific size or design, upload its drawing under the matching variant below.</p>
             <app-box-drawing [productId]="p.id" />
@@ -101,8 +103,8 @@ type ShippingRule = {
             @for(profile of p.saved_profiles||[];track profile.signature){
              <section class="shipsection"><h3>Saved packaging · {{profileOptions(profile)}}</h3>
              <p class="small">Used automatically for an identical composition and quantity. This is the saved profile, not a second copy.</p>
-             <div class="tablewrap"><table class="shiptable"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th><th>Drawing</th></tr></thead><tbody>
-             @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{c.product_name}} · {{c.component_name}} · Unit {{c.unit_index}}</div>}</td><td>@if(isBackdrop(p)){@if(sharedSize(profile,p);as size){<small>Shared · {{sizeLabel(size)}}</small><app-box-drawing [sharedSize]="size" />}@else{<small>Product size is missing or ambiguous. Add its exact dimensions before linking a shared drawing.</small>}}@else{<app-box-drawing [signature]="profile.signature" [index]="$index" [box]="box" />}</td></tr>}
+             <div class="tablewrap"><table class="shiptable packaging-table"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th><th>Drawing</th></tr></thead><tbody>
+             @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{contentLabel(c)}} · Unit {{c.unit_index}}</div>}</td><td>@if(isBackdrop(p)){@if(sharedSize(profile,p);as size){<small class="shared-drawing-size">Shared · {{sizeLabel(size)}}</small><app-box-drawing [sharedSize]="size" />}@else{<small>Product size is missing or ambiguous. Add its exact dimensions before linking a shared drawing.</small>}}@else{<app-box-drawing [signature]="profile.signature" [index]="$index" [box]="box" />}</td></tr>}
              </tbody></table></div></section>
             }
             @if(!p.saved_only){
@@ -157,7 +159,7 @@ type ShippingRule = {
             <div class="mut">No products in this filter.</div>
           }
         </div>
-      </p-dialog>
+      </p-drawer>
     </section>
   `,
   styleUrl: './shipping-data.component.css',
@@ -166,8 +168,10 @@ export class ShippingDataComponent implements OnInit {
   search='';libraryOpen=false;libraryError='';newSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
   openProduct(id:string){this.requestedVariant='';this.selectedId.set(id);}
   isBackdrop(p:ShippingProduct){return /backdrop/i.test(p.product_name);}
+  contentLabel(c:any){return [...new Set([c.product_name,c.component_name].filter(Boolean).map((s:string)=>s.trim()))].join(' · ');}
   updateDetails(details:any){this.products.update(rows=>rows.map(p=>p.id===details.id?{...p,...details}:p));}
-  productSizes(p:ShippingProduct){return [...new Set([...(p.manual_sizes||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean),...(p.saved_profiles||[]).flatMap(profile=>packagingSizes(profile,p.product_name)),...this.costing.parts().filter(part=>part.shipping_product_id===p.id).flatMap(part=>optionSizes(part.options))])];}
+  wixSizes(p:ShippingProduct){return [...new Set([...(p.saved_profiles||[]).flatMap(profile=>packagingSizes(profile,p.product_name)),...this.costing.parts().filter(part=>part.shipping_product_id===p.id).flatMap(part=>optionSizes(part.options))])];}
+  productSizes(p:ShippingProduct){const imported=this.wixSizes(p);return imported.length?imported:[...new Set((p.manual_sizes||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean))];}
   sharedSize(profile:any,p:ShippingProduct){const sizes=packagingSizes(profile,p.product_name).map(backdropSizeKey);const keys=[...new Set(sizes)];return sizes.length&&keys.length===1&&keys[0]?keys[0]:'';}
   librarySizes(){return [...new Set([...this.extraSizes(),...this.products().filter(p=>this.isBackdrop(p)).flatMap(p=>this.productSizes(p).map(backdropSizeKey).filter(Boolean))])].sort();}
   addLibrarySize(){const key=backdropSizeKey(this.newSize);if(key){this.extraSizes.update(s=>[...s,key]);this.newSize='';}}

@@ -8,6 +8,9 @@ function setup(){
 }
 const event=(size=25*1024)=>({target:{files:[new File([new Uint8Array(size)],'box.cdr',{type:'application/x-coreldraw'})],value:'chosen'}} as unknown as Event);
 describe('Private saved box drawings',()=>{
+ it('accepts a 1.7 MB CDR and confirms persistence',async()=>{const {c,bucket}=setup();await c.upload(event(Math.ceil(1.7*1048576)));expect(bucket.upload).toHaveBeenCalled();expect(c.success).toContain('uploaded and saved');});
+ it('reports the filename, actual size and limit for oversized drawings',async()=>{const {c,bucket}=setup();await c.upload(event(21*1048576));expect(c.error).toContain('box.cdr (21.0 MB)');expect(c.error).toContain('20 MB limit');expect(bucket.upload).not.toHaveBeenCalled();});
+ it('does not claim success when the server returns no attachment',async()=>{const {c,rpc}=setup();rpc.mockResolvedValue({data:null,error:null} as any);await c.upload(event());expect(c.success).toBe('');expect(c.error).toContain('did not confirm');});
  it('links a product drawing to its product and variant, independently from packaging',async()=>{
   const {c,rpc}=setup();c.productId='product';c.variantKey='size-190';
   await c.upload(event());
@@ -24,10 +27,10 @@ describe('Private saved box drawings',()=>{
   await c.upload(event());expect(c.current.filename).toBe('old.cdr');expect(rpc).not.toHaveBeenCalled();expect(bucket.remove).not.toHaveBeenCalled();expect(c.busy).toBe(false);
  });
  it('does not delete a file after an uncertain attachment response',async()=>{
-  const {c,bucket,rpc}=setup();rpc.mockRejectedValue(new Error('Network interrupted'));await c.upload(event());expect(bucket.remove).not.toHaveBeenCalled();expect(c.error).toBe('Network interrupted');
+  const {c,bucket,rpc}=setup();rpc.mockRejectedValue(new Error('Network interrupted'));await c.upload(event());expect(bucket.remove).not.toHaveBeenCalled();expect(c.error).toContain('Network interrupted');
  });
  it('rejects oversized files before uploading and hides a drawing after box changes',async()=>{
-  const {c,bucket}=setup();await c.upload(event(1048577));expect(bucket.upload).not.toHaveBeenCalled();c.record={box_snapshot:{length_mm:900}};expect(c.current).toBeNull();expect(c.stale).toBe(true);
+  const {c,bucket}=setup();await c.upload(event(20971521));expect(bucket.upload).not.toHaveBeenCalled();c.record={box_snapshot:{length_mm:900}};expect(c.current).toBeNull();expect(c.stale).toBe(true);
   expect(sameDrawingBox({a:1,b:[{x:2,y:3}]},{b:[{y:3,x:2}],a:1})).toBe(true);
  });
  it('downloads through a short lived attachment URL, without public storage',async()=>{

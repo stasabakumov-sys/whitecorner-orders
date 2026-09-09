@@ -54,5 +54,12 @@ try{
  await db.query('update wc_shipping_products set short_name=$1,manual_sizes=$2 where id=$3',['Classic','Size II: 1400 x 600 mm',user]);
  await assert.rejects(db.query('update wc_shipping_products set short_name=$1',['x'.repeat(101)]),/check constraint/);
  assert.equal((await db.query('select manual_sizes from wc_shipping_products')).rows[0].manual_sizes,'Size II: 1400 x 600 mm');
- console.log('PASS: private drawings, product details defaults and constraints, product and variant isolation, linked-file protection, stale revision guards, replacement, anonymous isolation, packaging unchanged');
+ await db.exec(await readFile('supabase/migrations/20260909000500_drawing_upload_limit.sql','utf8'));
+ assert.equal((await db.query("select file_size_limit from storage.buckets where id='box-drawings'")).rows[0].file_size_limit,20971520);
+ await db.exec('set role authenticated');
+ await db.query("insert into storage.objects values('box-drawings',$1,jsonb_build_object('size',1782579))",[user+'/large']);
+ await db.query("select wc_save_product_drawing($1,'large',$2,'large.cdr',1782579,null)",[user,user+'/large']);
+ await db.query("insert into storage.objects values('box-drawings',$1,jsonb_build_object('size',20971521))",[user+'/too-large']);
+ await assert.rejects(db.query("select wc_save_product_drawing($1,'oversized',$2,'large.cdr',20971521,null)",[user,user+'/too-large']),/check constraint/);
+ console.log('PASS: 20 MiB limit, 1.7 MB CDR persistence, oversized rejection, private drawings and product details');
 }finally{await db.close();}
