@@ -14,6 +14,7 @@ export const routes:Routes=[
   {path:'',pathMatch:'full',redirectTo:'home'},
   {path:'home',component:HomeComponent},
   {path:'orders',component:OrdersComponent},
+  {path:'customers',loadComponent:()=>import('./features/customers/customers.component').then(m=>m.CustomersComponent)},
   {path:'delivery-cost-review',component:DeliveryReviewComponent},
   {path:'partner-pans',component:PartnerPansComponent},
   {path:'materials',loadComponent:()=>import('./features/costing/materials.component').then(m=>m.MaterialsComponent)},
