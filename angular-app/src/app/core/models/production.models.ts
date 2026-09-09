@@ -1,6 +1,6 @@
 import { OrderItemRow, OrderRow, ProductionUnitRow } from './order.models';
 
-export type ProductionStatus = 'New' | 'CNC' | 'Assembly' | 'Painting' | 'Packing' | 'Ready';
+export type ProductionStatus = 'New' | 'CNC' | 'Assembly' | 'Sanding' | 'Painting' | 'Packing' | 'Ready';
 export type ProductKind = 'backdrops' | 'carts' | 'others';
 
 export interface UnitAddonView {

@@ -7,7 +7,7 @@ import { OrderActivityRow, OrderItemRow, OrderRow, ProductionUnitRow } from '../
 import { ProductKind, ProductionStatus, ProductionUnitView, UnitAddonView } from '../models/production.models';
 import { orderItemOptionLabels } from '../utils/order-item-display';
 
-const STATUSES: ProductionStatus[] = ['New','CNC','Assembly','Painting','Packing','Ready'];
+const STATUSES: ProductionStatus[] = ['New','CNC','Assembly','Sanding','Painting','Packing','Ready'];
 import {orderProducts} from '../utils/order-products';
 
 @Injectable({ providedIn: 'root' })
