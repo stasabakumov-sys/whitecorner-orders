@@ -15,12 +15,42 @@ function setup(){
    return {data:review};
   }return q;
  }};
- let calls=[];const call=async(route,payload)=>{calls.push({route,payload});return route==='insurance-list'?{http_status:200,body:{status:true,data:['Free up to $500']}}:{http_status:200,body:{status:true,orderId:'saved-draft',data:[{courierName:'TNT',priceIncludingGst:5},{courierName:'Aramex',priceIncludingGst:100}]}};};
+ let calls=[];const call=async(route,payload)=>{calls.push({route,payload});return route==='package-contents-list'?{http_status:200,body:{status:true,data:['general']}}:route==='insurance-list'?{http_status:200,body:{status:true,data:['Free up to $500']}}:{http_status:200,body:{status:true,orderId:'saved-draft',data:[{courierName:'TNT',priceIncludingGst:5},{courierName:'Aramex',priceIncludingGst:100}]}};};
  return {order,review,db,calls,call};
 }
 test('one concurrent claimant; all carriers and complete response persist; re-entry never quotes again',async()=>{
  const s=setup();await Promise.all([processDeliveryReview(s.db,'order',s.call),processDeliveryReview(s.db,'order',s.call)]);await processDeliveryReview(s.db,'order',s.call);
- assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);assert.equal(s.review.state,'quoted');assert.equal(s.review.response.body.orderId,'saved-draft');assert.equal(s.review.evaluated_quotes.length,2);assert.equal(s.review.evaluated_quotes[0].eligible,false);assert.equal(s.calls.find(c=>c.route==='quotes').payload.items[0].contents,'General');
+ assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);assert.equal(s.review.state,'quoted');assert.equal(s.review.response.body.orderId,'saved-draft');assert.equal(s.review.evaluated_quotes.length,2);assert.equal(s.review.evaluated_quotes[0].eligible,false);assert.equal(s.calls.find(c=>c.route==='quotes').payload.items[0].contents,'general');
+});
+test('backdrop resolves stale contents from live reference data and persists the exact value without changing packaging',async()=>{
+ const {resolveCourierContents}=moduleAt(path.resolve('supabase/functions/_shared/courier-contents.ts'));
+ const reference={http_status:200,body:{status:true,data:['alcohol','general']}};
+ for(const old of ['General','General/Others','Other','Backdrop']) {
+  const input={items:[{contents:old,length:103,width:103,height:9,weight:24,quantity:1,type:'box'}]};
+  const resolved=resolveCourierContents(input,reference);
+  assert.equal(resolved.items[0].contents,'general');assert.equal(input.items[0].contents,old);
+  assert.equal(resolved.items[0].height,9);
+ }
+ const s=setup();s.order.wc_order_items[0].product_name='Event Full Arch Backdrop';
+ s.review.packages=[{package_name:'Backdrop',length_mm:1030,width_mm:1030,height_mm:90,weight_kg:24,contents:domain.reviewComponents(s.order)}];
+ await processDeliveryReview(s.db,'order',s.call);
+ assert.equal(s.review.request.items[0].contents,'general');
+ assert.equal(s.review.request.items[0].height,9);assert.equal(s.review.packages[0].package_name,'Backdrop');
+ assert.deepEqual(s.calls.map(c=>c.route),['package-contents-list','insurance-list','quotes']);
+ let handler;const sent=[];const file=path.resolve('supabase/functions/fast-courier-api/index.ts');
+ const output=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+ vm.runInNewContext(output,{exports:{},require:p=>p.includes('http/server')?{serve:f=>handler=f}:p.includes('esm.sh')?{}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{env:{get:()=> 'fixture'}},Response,Request,AbortController,AbortSignal,DOMException,setTimeout,clearTimeout,console,
+  fetch:async(url,init)=>{sent.push({url,init});return new Response(JSON.stringify(url.endsWith('/package-contents-list')?reference.body:{status:true,orderId:'fixture',data:[]}),{status:200});}});
+ const response=await handler(new Request('http://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'},body:JSON.stringify({action:'quotes',payload:{...s.review.request,items:[{...s.review.request.items[0],contents:'Backdrop'}]}})}));
+ assert.equal(response.status,200);assert.equal(sent[0].init.method,'GET');
+ assert.equal(sent[0].init.headers['Secret-Key'],'fixture');assert.equal(sent.length,2);
+ assert.equal(JSON.parse(sent[1].init.body).items[0].contents,'general');
+ assert.equal((await response.json()).quoteRequest.items[0].contents,'general');
+ for(const bad of [{http_status:401}, {http_status:200,body:{status:true,data:['alcohol']}}]) {
+  const blocked=setup();await processDeliveryReview(blocked.db,'order',async(route,payload)=>route==='package-contents-list'?bad:blocked.call(route,payload));
+  assert.equal(blocked.review.state,'failed');assert.equal(blocked.review.quote_attempted_at,null);
+  assert.equal(blocked.calls.length,0);assert.match(blocked.review.error,/No quote requested/);
+ }
 });
 test('timeout after POST remains uncertain and cannot cause a second POST',async()=>{
  const s=setup();const call=async(route,p)=>{if(route==='quotes'){s.calls.push({route});throw Error('timeout');}return s.call(route,p);};

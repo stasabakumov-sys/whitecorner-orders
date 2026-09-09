@@ -1,3 +1,4 @@
+import {resolveCourierContents} from './courier-contents.ts';
 import { buildReviewRequest, componentNormal, eligibleOrder, evaluateQuotes, goodsCents, insuranceFor, packagingError, productId, restoreReviewPackages, reviewComponents, reviewInputKey, reviewItems, reviewSignature } from './delivery-review-domain.ts';
 import {expandVariant, hasSizeOption, variantSignature} from './delivery-review-domain.ts';
 
@@ -9,7 +10,7 @@ export async function reviewContext(db:any,orderId:string){
  ]);
  return {order:checked(order),rules:checked(rules)||[]};
 }
-export async function courierReviewCall(route:'quotes'|'insurance-list',payload:any,apiKey:string,baseUrl:string,fetcher:typeof fetch=fetch){
+export async function courierReviewCall(route:'quotes'|'insurance-list'|'package-contents-list',payload:any,apiKey:string,baseUrl:string,fetcher:typeof fetch=fetch){
  const response=await fetcher(`${baseUrl.replace(/\/$/,'')}/api/${route}`,{
   method:route==='quotes'?'POST':'GET',headers:{Accept:'application/json','Content-Type':'application/json','Secret-Key':apiKey},
   ...(route==='quotes'?{body:JSON.stringify(payload)}:{}),signal:AbortSignal.timeout(90000),
@@ -21,7 +22,7 @@ export async function courierReviewCall(route:'quotes'|'insurance-list',payload:
 
 // The durable attempted_at guard is committed BEFORE the one permitted POST.
 // Even a timeout or failure to persist the response never reopens this guard.
-export async function processDeliveryReview(db:any,orderId:string,call:(route:'quotes'|'insurance-list',payload:any)=>Promise<any>){
+export async function processDeliveryReview(db:any,orderId:string,call:(route:'quotes'|'insurance-list'|'package-contents-list',payload:any)=>Promise<any>){
  const token=crypto.randomUUID();
  const claimed=checked(await db.rpc('wc_claim_delivery_review',{p_order_id:orderId,p_token:token}));
  if(!claimed)return;
@@ -78,6 +79,11 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
   if(error){await save({state:'packaging_required',error,token:null});return;}
   let request:any;
   try{request=buildReviewRequest(order,packages);}catch{await save({state:'address_required',error:'Complete the Australian delivery address in Wix. No quote has been requested.',packages,token:null});return;}
+  try {
+   request=resolveCourierContents(request,await call('package-contents-list',null));
+  } catch(error) {
+   await save({state:'failed',error:error instanceof Error?error.message:'Fast Courier package content types unavailable. No quote requested.',token:null});return;
+  }
   const insuranceResponse=await call('insurance-list',null);
   if(insuranceResponse.http_status<200||insuranceResponse.http_status>=300||insuranceResponse.body?.status!==true||!Array.isArray(insuranceResponse.body.data)){
    await save({state:'failed',error:'Insurance options unavailable. No quote requested.',insurance_response:insuranceResponse,token:null});return;
@@ -105,7 +111,7 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
  }
 }
 
-export async function processDeliveryQueue(db:any,call:(route:'quotes'|'insurance-list',payload:any)=>Promise<any>){
+export async function processDeliveryQueue(db:any,call:(route:'quotes'|'insurance-list'|'package-contents-list',payload:any)=>Promise<any>){
  const rows=checked(await db.from('wc_delivery_reviews').select('order_id').in('state',['pending','packaging_required','address_required','calculating']).is('quote_attempted_at',null).order('updated_at').limit(5))||[];
  // Parallel independent orders; each has its own durable claim. A slow quote
  // cannot consume the entire worker lifetime before another order starts.

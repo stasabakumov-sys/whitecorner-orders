@@ -497,7 +497,11 @@ export class FulfilmentService {
       return;
     }
     this.error.set('');
-    const sameRequest=JSON.stringify(shipment.quote_request??null)===JSON.stringify(request);
+    // The server resolves the general category label to its current API value.
+    // That spelling difference alone must not trigger another quote.
+    const requestKey=(value:FastCourierQuoteRequest|null|undefined)=>value
+      ? JSON.stringify({...value,items:value.items.map(({contents,...item})=>item)}) : 'null';
+    const sameRequest=requestKey(shipment.quote_request)===requestKey(request);
     if(sameRequest&&shipment.courier_order_id&&this.quotesFor(shipment).length)return;
 
     this.quotingShipmentId.set(shipment.id);
@@ -508,7 +512,7 @@ export class FulfilmentService {
         status:'Quoted' as const,
         courier_provider:'Fast Courier',
         courier_order_id:result.orderId,
-        quote_request:request,
+        quote_request:result.quoteRequest ?? request,
         courier_quotes:result.data,
         quoted_at:now,
         selected_quote_id:null,
