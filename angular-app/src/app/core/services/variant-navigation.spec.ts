@@ -34,7 +34,7 @@ describe('Safe packaging variant navigation',()=>{
    const client={from:(table:string)=>{const q:any={select:()=>q,eq:()=>q,order:()=>table==='wc_delivery_packaging_profiles'?q:Promise.resolve({data:table==='wc_shipping_products'?products:[]}),range:async()=>({data:[]})};return q;}};
    const route={snapshot:{queryParamMap:{get:(key:string)=>(params as any)[key]??null}}};
    const c=new ShippingDataComponent({client} as any,route as any);await c.load();
-   expect(c.selectedId()).toBe((params as any).productId==='second'?'second':Object.keys(params).length?null:'first');
+   expect(c.selectedId()).toBe((params as any).productId==='second'?'second':null);
   }
  });
 });

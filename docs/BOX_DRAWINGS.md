@@ -1,0 +1,17 @@
+# Saved box drawings
+
+Products (formerly Shipping Data) adds a Drawing column to each saved packaging row. One file per row can be uploaded, downloaded or replaced. CDR and other formats are kept unchanged; files must be non-empty and at most 1 MiB. There is no inline rendering or execution of uploaded files.
+
+Apply `20260909000100_box_drawings.sql` before publishing the UI. It creates a private `box-drawings` Storage bucket and separate attachment metadata. Existing packaging JSON, quote signatures, order costs and courier bookings are unchanged. Authenticated Hub users upload files and receive 60-second attachment download links; anonymous access is denied.
+
+For Cart and other-product drawings, the saved box snapshot and row index must still match when attaching or displaying a drawing. Changed/reordered boxes hide an old drawing until a matching file is uploaded. Concurrent replacements require the current revision. Storage paths are unique and cannot be overwritten; linked files cannot be deleted through Storage policies. A failed/uncertain metadata request may leave an unlinked private upload rather than risk deleting a committed attachment. No production migration was performed during local testing.
+
+Checks: isolated PostgreSQL migration/RLS and replacement tests, Angular CDR upload/download/failure tests, required Angular suite/build, and a synthetic-data browser review.
+
+## Products page and shared Backdrop library
+
+The page is a searchable product table with available product sizes and row numbers on the right. Product cards open in a centered modal. Existing /shipping-data links stay valid.
+
+Apply 20260909000200_backdrop_drawing_library.sql after the base drawing migration. Backdrops use one shared CDR per exact size of the product, independently of product name and packaging dimensions. 190cm x 95cm and 950 x 1900 mm normalize to the same key. Unknown or ambiguous dimensions never auto-match. The library supports adding sizes, uploading and replacing files. Carts and other products retain individual drawings per box/profile. Both tables use the same private storage bucket with protection against deleting linked files.
+
+Local verification: 143 Angular tests, build, SQL/RLS tests and browser review of the Products list, modal card and shared library. Production has not been updated for these changes.

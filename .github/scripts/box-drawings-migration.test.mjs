@@ -1,0 +1,35 @@
+import {readFile} from 'node:fs/promises';import {pathToFileURL} from 'node:url';import path from 'node:path';import assert from 'node:assert/strict';
+const {PGlite}=await import(pathToFileURL(path.resolve(process.argv[2])).href);const db=new PGlite();
+try{
+ await db.exec(`create role anon;create role authenticated;create schema auth;create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
+ create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+ create table storage.objects(bucket_id text,name text,metadata jsonb);alter table storage.objects enable row level security;
+ create function storage.foldername(text) returns text[] language sql as $$select string_to_array($1,'/')$$;
+ grant usage on schema storage,auth to authenticated,anon;grant select,insert,delete on storage.objects to authenticated,anon;
+ create table wc_delivery_packaging_profiles(signature text primary key,packages jsonb);
+ insert into wc_delivery_packaging_profiles values('profile','[{"package_name":"Box","length_mm":970}]');`);
+ await db.exec(await readFile('supabase/migrations/20260909000100_box_drawings.sql','utf8'));
+ assert.equal((await db.query("select public from storage.buckets where id='box-drawings'")).rows[0].public,false);
+ const user='00000000-0000-4000-8000-000000000001';await db.query("select set_config('test.actor',$1,false)",[user]);await db.exec('set role authenticated');
+ await db.query("insert into storage.objects values('box-drawings',$1,'{"+'"size":25600'+"}')",[user+'/first']);
+ const box={package_name:'Box',length_mm:970};const attach=async(file,revision=null,b=box)=>db.query('select wc_attach_box_drawing($1,0,$2,$3,$4,25600,$5) d',['profile',b,user+'/'+file,'box.cdr',revision]);
+ const original=(await attach('first')).rows[0].d;assert.equal(original.filename,'box.cdr');
+ await db.query("delete from storage.objects where name=$1",[user+'/first']);assert.equal((await db.query('select count(*)::int n from storage.objects')).rows[0].n,1);
+ await db.query("insert into storage.objects values('box-drawings',$1,'{"+'"size":25600'+"}')",[user+'/second']);
+ await assert.rejects(attach('second'),/Drawing changed/);await assert.rejects(attach('second',original.revision,{...box,length_mm:900}),/Box changed/);
+ const replacement=(await attach('second',original.revision)).rows[0].d;assert.notEqual(replacement.revision,original.revision);
+ await db.query('delete from storage.objects where name=$1',[user+'/first']);assert.equal((await db.query('select count(*)::int n from storage.objects')).rows[0].n,1);
+ await assert.rejects(db.exec("update wc_box_drawings set filename='bad'"),/permission denied/);
+ await db.exec('reset role;set role anon');assert.equal((await db.query('select count(*)::int n from storage.objects')).rows[0].n,0);await assert.rejects(attach('second'),/permission denied/);
+ await db.exec('reset role');assert.deepEqual((await db.query('select packages from wc_delivery_packaging_profiles')).rows[0].packages,[box]);
+ await db.exec(await readFile('supabase/migrations/20260909000200_backdrop_drawing_library.sql','utf8'));
+ await db.exec('set role authenticated');
+ await db.query("insert into storage.objects values('box-drawings',$1,jsonb_build_object('size',25600))",[user+'/backdrop']);
+ const library=(await db.query("select wc_save_backdrop_box_drawing('1900x950',$1,'backdrop.cdr',25600,null) d",[user+'/backdrop'])).rows[0].d;
+ assert.equal(library.size_key,'1900x950');
+ await db.query('delete from storage.objects where name=$1',[user+'/backdrop']);
+ assert.equal((await db.query('select count(*)::int n from storage.objects where name=$1',[user+'/backdrop'])).rows[0].n,1);
+ await assert.rejects(db.query("select wc_save_backdrop_box_drawing('1900x950',$1,'backdrop.cdr',25600,null)",[user+'/backdrop']),/Drawing changed/);
+ await db.exec('reset role;set role anon');await assert.rejects(db.query('select * from wc_backdrop_box_drawings'),/permission denied/);await db.exec('reset role');
+ console.log('PASS: private bucket, CDR metadata, linked-file protection, stale box/revision guards, replacement, anonymous isolation, shared backdrop size library, packaging unchanged');
+}finally{await db.close();}
