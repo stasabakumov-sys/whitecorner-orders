@@ -1,6 +1,10 @@
 import { Component, OnInit, computed, signal, Optional } from '@angular/core';
+import {DialogModule} from 'primeng/dialog';
+import {FormsModule} from '@angular/forms';
+import {backdropSizeKey,optionSizes,packagingSizes,sizeKeyLabel} from './product-sizes';
 import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
+import {BoxDrawingComponent} from './box-drawing.component';
 import {PackagingVariantsComponent} from './packaging-variants.component';
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
 import {CostingService} from '../costing/costing.service';
@@ -42,12 +46,12 @@ type ShippingRule = {
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[PackagingVariantsComponent,CatalogCostEditorComponent],
+  imports:[PackagingVariantsComponent,CatalogCostEditorComponent,BoxDrawingComponent,DialogModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
       <div class="shiphead">
-        <b>Shipping Data</b>
+        <b>Products</b>
         <span>{{ visibleProducts().length }} products</span>
         <div class="typefilter">
           @for (k of filters; track k.key) {
@@ -57,18 +61,22 @@ type ShippingRule = {
         <span class="mut push">Shared product catalogue · packaging, materials, work and Pans</span>
       </div>
 
-      <div class="shipgrid">
-        <div class="shiplist">
-          @for (p of visibleProducts(); track p.id) {
-            <button class="shipitem" [class.on]="selectedId()===p.id" [attr.aria-pressed]="selectedId()===p.id" (click)="selectedId.set(p.id);requestedVariant=''">
-              <div class="pn">{{ p.product_name }}</div>
-              <div class="pm">{{p.saved_profiles?.length||0}} saved profile(s) · {{ basePackages(p.id).length }} base boxes</div>
-            </button>
-          }
-        </div>
-
-        <div class="shipdetail">
-          @if (selectedProduct(); as p) {
+      <div class="product-tools"><input aria-label="Search products" placeholder="Search products" [(ngModel)]="search"><button (click)="openLibrary()">Backdrop box drawings</button></div>
+      <div class="tablewrap"><table class="shiptable product-list"><thead><tr><th>Product</th><th>Product size</th><th>Packaging profiles</th><th class="number">#</th></tr></thead><tbody>
+      @for(p of visibleProducts();track p.id){<tr><td><button class="product-link" (click)="openProduct(p.id)">{{p.product_name}}</button></td><td>{{productSizes(p).join(' · ')||'—'}}</td><td>{{p.saved_profiles?.length||0}}</td><td class="number">{{$index+1}}</td></tr>}
+      @empty{<tr><td colspan="4">No products found.</td></tr>}
+      </tbody></table></div>
+      <p-dialog header="Backdrop box drawings" [(visible)]="libraryOpen" [modal]="true" [style]="{width:'min(760px,95vw)'}" [draggable]="false">
+       <p>One CDR drawing per backdrop size, shared by all matching Backdrops.</p>
+       @if(libraryError){<p role="alert">{{libraryError}}</p>}
+       <div class="product-tools"><input aria-label="New backdrop size" placeholder="e.g. 190cm x 95cm" [(ngModel)]="newSize"><button (click)="addLibrarySize()" [disabled]="!parseSize(newSize)">Add size</button></div>
+       <table class="shiptable"><thead><tr><th>Backdrop size</th><th>Drawing</th></tr></thead><tbody>
+       @for(key of librarySizes();track key){<tr><td>{{sizeLabel(key)}}</td><td><app-box-drawing [sharedSize]="key" /></td></tr>}
+       @empty{<tr><td colspan="2">Add a backdrop size to upload its first drawing.</td></tr>}
+       </tbody></table>
+      </p-dialog>
+      <p-dialog [visible]="!!selectedId()" (visibleChange)="!$event&&selectedId.set(null)" header="Product" [modal]="true" [style]="{width:'min(1260px,96vw)'}" [draggable]="false">
+        <div class="shipdetail">          @if (selectedProduct(); as p) {
             <div class="detailhead">
               <div>
                 <h2>{{ p.product_name }}</h2>
@@ -85,8 +93,8 @@ type ShippingRule = {
             @for(profile of p.saved_profiles||[];track profile.signature){
              <section class="shipsection"><h3>Saved packaging · {{profileOptions(profile)}}</h3>
              <p class="small">Used automatically for an identical composition and quantity. This is the saved profile, not a second copy.</p>
-             <div class="tablewrap"><table class="shiptable"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th></tr></thead><tbody>
-             @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{c.product_name}} · {{c.component_name}} · Unit {{c.unit_index}}</div>}</td></tr>}
+             <div class="tablewrap"><table class="shiptable"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th><th>Drawing</th></tr></thead><tbody>
+             @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{c.product_name}} · {{c.component_name}} · Unit {{c.unit_index}}</div>}</td><td>@if(isBackdrop(p)){@if(sharedSize(profile,p);as size){<small>Shared · {{sizeLabel(size)}}</small><app-box-drawing [sharedSize]="size" />}@else{<small>Product size is missing or ambiguous. Add its exact dimensions before linking a shared drawing.</small>}}@else{<app-box-drawing [signature]="profile.signature" [index]="$index" [box]="box" />}</td></tr>}
              </tbody></table></div></section>
             }
             @if(!p.saved_only){
@@ -141,12 +149,20 @@ type ShippingRule = {
             <div class="mut">No products in this filter.</div>
           }
         </div>
-      </div>
+      </p-dialog>
     </section>
   `,
   styleUrl: './shipping-data.component.css',
 })
 export class ShippingDataComponent implements OnInit {
+  search='';libraryOpen=false;libraryError='';newSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
+  openProduct(id:string){this.requestedVariant='';this.selectedId.set(id);}
+  isBackdrop(p:ShippingProduct){return /backdrop/i.test(p.product_name);}
+  productSizes(p:ShippingProduct){return [...new Set([...(p.saved_profiles||[]).flatMap(profile=>packagingSizes(profile,p.product_name)),...this.costing.parts().filter(part=>part.shipping_product_id===p.id).flatMap(part=>optionSizes(part.options))])];}
+  sharedSize(profile:any,p:ShippingProduct){const sizes=packagingSizes(profile,p.product_name).map(backdropSizeKey);const keys=[...new Set(sizes)];return sizes.length&&keys.length===1&&keys[0]?keys[0]:'';}
+  librarySizes(){return [...new Set([...this.extraSizes(),...this.products().filter(p=>this.isBackdrop(p)).flatMap(p=>this.productSizes(p).map(backdropSizeKey).filter(Boolean))])].sort();}
+  addLibrarySize(){const key=backdropSizeKey(this.newSize);if(key){this.extraSizes.update(s=>[...s,key]);this.newSize='';}}
+  async openLibrary(){this.libraryOpen=true;this.libraryError='';const {data,error}=await this.supabase.client.from('wc_backdrop_box_drawings').select('size_key');if(error){this.libraryError='Could not load the drawing library. Please reopen to retry.';return;}this.extraSizes.update(s=>[...new Set([...s,...(data||[]).map(d=>d.size_key)])]);}
   profileOptions=savedProfileOptions;
   products = signal<ShippingProduct[]>([]);
   packages = signal<ShippingPackage[]>([]);
@@ -165,7 +181,7 @@ export class ShippingDataComponent implements OnInit {
     {key:'others' as const,label:'Others'}
   ];
 
-  visibleProducts = computed(() => this.products().filter(p => this.kindFilter()==='all' || this.kind(p.product_name)===this.kindFilter()));
+  visibleProducts = (() => this.products().filter(p => (this.kindFilter()==='all' || this.kind(p.product_name)===this.kindFilter())&&p.product_name.toLowerCase().includes(this.search.toLowerCase())));
   selectedProduct = computed(() => this.products().find(p => p.id===this.selectedId()) ?? null);
 
   constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute,@Optional() public costing:CostingService=new CostingService(supabase)) {}
@@ -203,7 +219,7 @@ export class ShippingDataComponent implements OnInit {
       if(matches.length!==1)this.error.set('No matching shipping product is available. Return to the order and add boxes there.');
       return; // An explicit, missing target must never fall back to the first product.
     }
-    if (!this.selectedId() && this.products().length) this.selectedId.set(this.products()[0].id);
+
   }
 
   kind(name: string) {
@@ -216,7 +232,7 @@ export class ShippingDataComponent implements OnInit {
   setFilter(k: 'all'|'backdrops'|'carts'|'others') {
     this.kindFilter.set(k);
     const visible = this.visibleProducts();
-    if (!visible.some(p => p.id===this.selectedId())) this.selectedId.set(visible[0]?.id ?? null);
+    if (!visible.some(p => p.id===this.selectedId())) this.selectedId.set(null);
   }
 
   productPackages(id: string) { return this.packages().filter(x => x.shipping_product_id===id).sort((a,b)=>(a.package_no??0)-(b.package_no??0)); }

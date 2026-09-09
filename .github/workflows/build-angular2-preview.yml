@@ -13,6 +13,9 @@ on:
       - 'supabase/migrations/*_partner_pans_report.sql'
       - 'supabase/migrations/*_packaging_variant_editor.sql'
       - '.github/scripts/packaging-variant*'
+      - '.github/scripts/box-drawings*'
+      - 'supabase/migrations/*_box_drawings.sql'
+      - 'supabase/migrations/*_backdrop_drawing_library.sql'
       - '.github/scripts/partner-pans*'
       - '.github/scripts/material-costing*'
       - 'supabase/migrations/*_material_costing.sql'
@@ -28,6 +31,9 @@ on:
       - 'supabase/migrations/*_partner_pans_report.sql'
       - 'supabase/migrations/*_packaging_variant_editor.sql'
       - '.github/scripts/packaging-variant*'
+      - '.github/scripts/box-drawings*'
+      - 'supabase/migrations/*_box_drawings.sql'
+      - 'supabase/migrations/*_backdrop_drawing_library.sql'
       - '.github/scripts/partner-pans*'
       - '.github/scripts/material-costing*'
       - 'supabase/migrations/*_material_costing.sql'
@@ -72,6 +78,7 @@ jobs:
           node .github/scripts/material-costing-catalog.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/partner-pans-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/packaging-variant-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+          node .github/scripts/box-drawings-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Publish clean preview path
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
