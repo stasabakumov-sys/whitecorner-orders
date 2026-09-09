@@ -4,13 +4,13 @@ import {SupabaseService} from '../../core/services/supabase.service';
 @Component({selector:'app-product-details',standalone:true,imports:[FormsModule],template:`
  <h3>Product details</h3>
  <div class="fields">
- <div class="field"><label for="product-short-name">Short name</label>
+ <div class="field short-name-field"><label for="product-short-name">Short name</label>
  <div class="actions"><input id="product-short-name" [(ngModel)]="shortName" maxlength="100" [readOnly]="!editingName" [disabled]="busy" placeholder="Not set">
  @if(!editingName){<button (click)="editName()" [disabled]="busy||product.saved_only">{{product.short_name?'Edit':'Add'}}</button>}
  @else{<button (click)="save('name')" [disabled]="busy">Save</button><button (click)="cancelName()" [disabled]="busy">Cancel</button>}
  </div></div>
  <div class="field">
- @if(wixSizes.length){<label for="product-size">Product size · Wix</label><textarea id="product-size" [value]="wixSizes.join('\n')" rows="3" readonly></textarea><p>Size from Wix is read-only.</p>}
+ @if(wixSizes.length){<label for="product-size">Product size · Wix</label><input id="product-size" class="wix-size" [value]="wixSizes.join(' · ')" [title]="wixSizes.join(' · ')" readonly><p>Size from Wix is read-only.</p>}
  @else{<label for="product-size">Manual product sizes</label><textarea id="product-size" [(ngModel)]="sizes" maxlength="2000" rows="3" [disabled]="busy" placeholder="Size II: W1400 × D600 × H1000 mm"></textarea>
  <p>Enter one size per line, including units. Packaging dimensions remain unchanged.</p>
  <button (click)="save('sizes')" [disabled]="busy||product.saved_only">Save sizes</button>}
@@ -18,7 +18,7 @@ import {SupabaseService} from '../../core/services/supabase.service';
  @if(product.saved_only){<p>This packaging-only entry needs a saved product record before details can be edited.</p>}
  @if(error){<p role="alert">{{error}}</p>}
  @if(done){<p role="status">Saved</p>}
- `,styles:[`.fields{display:flex;gap:16px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:220px}.actions{display:flex;gap:8px;align-items:center}input,textarea{width:100%;box-sizing:border-box}input{min-width:0}.actions button{flex-shrink:0}p{font-size:.875rem;color:var(--wc-muted)}[role=alert]{color:var(--p-red-600)}`]})
+ `,styles:[`.fields{display:flex;gap:16px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:220px}.field.short-name-field{flex:0 1 400px}.short-name-field input{max-width:320px}.field .wix-size{width:220px;max-width:100%;text-overflow:ellipsis}.actions{display:flex;gap:8px;align-items:center}input,textarea{width:100%;box-sizing:border-box}input{min-width:0}.actions button{flex-shrink:0}p{font-size:.875rem;color:var(--wc-muted)}[role=alert]{color:var(--p-red-600)}`]})
 export class ProductDetailsComponent implements OnChanges {
  @Input() product:any;@Input() wixSizes:string[]=[];@Output() saved=new EventEmitter<any>();shortName='';sizes='';busy=false;error='';done=false;editingName=false;
  constructor(private db:SupabaseService){}

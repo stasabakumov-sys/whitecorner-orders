@@ -10,11 +10,13 @@ import {ProductDetailsComponent} from './product-details.component';
 import {PackagingVariantsComponent} from './packaging-variants.component';
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
 import {CostingService} from '../costing/costing.service';
+import {productId,componentNormal} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {shippingProfileCatalog,savedProfileOptions} from '../../core/utils/shipping-profile-catalog';
 
 type ShippingProduct = {
   id: string;
   product_name: string;
+  wix_product_id?: string | null;
   short_name?: string;
   manual_sizes?: string;
   product_type?: string | null;
@@ -54,9 +56,9 @@ type ShippingRule = {
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
+      <div class="product-filters">
       <div class="shiphead">
-        <b>Products</b>
-        <span>{{ visibleProducts().length }} products</span>
+        <div class="products-title"><h1>Products</h1><small>{{ visibleProducts().length }} products</small></div>
         <div class="typefilter">
           @for (k of filters; track k.key) {
             <button [class.on]="kindFilter()===k.key" (click)="setFilter(k.key)">{{ k.label }}</button>
@@ -66,7 +68,8 @@ type ShippingRule = {
       </div>
 
       <div class="product-tools"><input aria-label="Search products" placeholder="Search products" [(ngModel)]="search"><button (click)="openLibrary()">Backdrop box drawings</button></div>
-      <div class="tablewrap"><table class="shiptable product-list"><thead><tr><th class="number">#</th><th>Product</th><th>Short name</th><th>Product size</th><th>Packaging profiles</th></tr></thead><tbody>
+      </div>
+      <div class="tablewrap product-tablewrap"><table class="shiptable product-list"><thead><tr><th class="number">#</th><th>Product</th><th>Short name</th><th>Product size</th><th>Packaging profiles</th></tr></thead><tbody>
       @for(p of visibleProducts();track p.id){<tr><td class="number">{{$index+1}}</td><td><button class="product-link" (click)="openProduct(p.id)">{{p.product_name}}</button></td><td>{{p.short_name||'—'}}</td><td>{{productSizes(p).join(' · ')||'—'}}</td><td>{{p.saved_profiles?.length||0}}</td></tr>}
       @empty{<tr><td colspan="5">No products found.</td></tr>}
       </tbody></table></div>
@@ -79,9 +82,10 @@ type ShippingRule = {
        @empty{<tr><td colspan="2">Add a backdrop size to upload its first drawing.</td></tr>}
        </tbody></table>
       </p-dialog>
-      <p-drawer [visible]="!!selectedId()" (visibleChange)="!$event&&selectedId.set(null)" header="Product" position="right" [modal]="true" [dismissible]="true" [blockScroll]="true" [style]="{width:'min(1260px,96vw)'}">
+      <p-drawer [visible]="!!selectedId()" (visibleChange)="!$event&&selectedId.set(null)" header="Product" position="right" [modal]="true" [dismissible]="true" [blockScroll]="true" styleClass="products-drawer">
         <div class="shipdetail">          @if (selectedProduct(); as p) {
             <div class="detailhead">
+              <span class="product-thumbnail">@if(productImage(p);as src){<img [src]="src" [alt]="p.short_name||p.product_name" (error)="failedImages.add(src)">}@else{<span class="pi pi-image" aria-label="No product image"></span>}</span>
               <div>
                 <h2>{{ p.short_name || p.product_name }}</h2>
                 @if(p.short_name){<div class="product-full-name">{{p.product_name}}</div>}
@@ -199,6 +203,17 @@ export class ShippingDataComponent implements OnInit {
 
   constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute,@Optional() public costing:CostingService=new CostingService(supabase)) {}
   costProfiles(id:string){const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile}));return [...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()];}
+  failedImages=new Set<string>();
+  productImage(p:ShippingProduct){
+    const items=this.costing.orders().flatMap(o=>o.wc_order_items||[]);
+    const matches=items.filter(item=>p.wix_product_id?productId(item)===p.wix_product_id:componentNormal(item.product_name||'')===componentNormal(p.product_name));
+    for(const item of matches){
+      const x=item.image||{},r=item.raw_item||{};
+      const src=x.url||x.imageUrl||x.imageInfo?.url||r.media?.url||r.image?.url||r.image?.imageInfo?.url||'';
+      if(src&&!this.failedImages.has(src))return src;
+    }
+    return '';
+  }
   costProfileLabel(p:any){return `${p.kind} · ${Object.entries(p.options||{}).map(([k,v])=>k+': '+v).join(' · ')||'No options'}${p.standard_top_excluded?' · Standard top excluded':''}`;}
 
   async ngOnInit() {
