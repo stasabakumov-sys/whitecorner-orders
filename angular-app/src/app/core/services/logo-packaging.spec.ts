@@ -3,6 +3,16 @@ import {orderItemOptionLabels,packageComponents,packagingSignature,packagingErro
 const prompt='Please email us a ready-to-use SVG format file only, in black and white, featuring your company name';
 const answer='I would like to add a logo but I dont have it in that file type.';
 describe('Logo presentation and packaging exclusions',()=>{
+ it('excludes the Email us SVG prompt without Please from new and saved packaging',()=>{
+  const instruction='Email us a ready-to-use SVG format file only in black and white featuring your company name or logo';
+  const item={id:'i',product_name:'Foldable High Arch Display Stand',quantity:1,custom_text_fields:{[instruction]:'We will email the same file'},wix_options:{'Removable shelves':'Yes'}};
+  const components=packageComponents([item]);
+  expect(components.map(c=>c.component_key)).toEqual(['main','option:removable shelves']);
+  expect(packagingSignature([item])).toBe(packagingSignature([{...item,custom_text_fields:{}}]));
+  expect(isNonPackagingComponent({component_key:'option:'+instruction.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()})).toBe(true);
+  expect(isNonPackagingComponent({component_name:instruction+': We will email the same file'})).toBe(true);
+  expect(isNonPackagingComponent({component_key:'option:removable shelves'})).toBe(false);
+ });
  it('hides only the SVG instruction across Wix option sources; keeps Logo and real options',()=>{
   for(const source of [{wix_options:{[prompt]:answer}},{custom_text_fields:{[prompt]:answer}},{description_lines:[{name:prompt,plainText:{original:answer}}]},{raw_item:{catalogReference:{options:{options:{[prompt]:answer}}}}}]){
    const item={id:'i',...source,wix_options:{...(source as any).wix_options,'Logo or Personalization':'Yes',Size:'Size II'}};

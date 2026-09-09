@@ -98,7 +98,7 @@ export interface PackageComponent {
   unit_index:number; quantity:number; profile_item_key:string; wix_product_id:string|null;
 }
 export const componentNormal=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
-export const isLogoFileInstruction=(text:string)=>/^please email us (?:a )?ready to use svg\b/.test(componentNormal(text));
+export const isLogoFileInstruction=(text:string)=>/^(?:please )?email us (?:a )?ready to use svg\b/.test(componentNormal(text));
 export const isLogoOption=(name:string)=>/^(?:add )?logo(?: or personali[sz]ation)?$/.test(componentNormal(name));
 export function productId(item:OrderItemRow){const c=item.catalog_reference as any,r=item.raw_item as any;return String(c?.catalogItemId||c?.productId||r?.catalogReference?.catalogItemId||r?.productId||'');}
 const attribute=/^(colou?r|size|dimensions?|width|height|length|finish|foldable|material|tabletop(?: design)?|personalisation|personalization|engraving|notes?|message)$/i;

@@ -27,8 +27,8 @@ type AddressIssue = {
   template: `
     <section class="panel">
       <header class="issuehead">
-        <b>Address Review</b>
-        <span>{{ openIssues().length }} issue{{ openIssues().length === 1 ? '' : 's' }}</span>
+        <div><h1>Address Review</h1>
+        <small>{{ openIssues().length }} issue{{ openIssues().length === 1 ? '' : 's' }}</small></div>
         <span class="mut">Only Shipping orders are checked</span>
       </header>
 
@@ -84,13 +84,13 @@ type AddressIssue = {
   `,
   styles: [`@layer hub-layout {
 
-    .panel{background:#fff;border:1px solid #e4e7ec;border-radius:12px;overflow:hidden}
-    .issuehead{padding:14px 16px;border-bottom:1px solid #e4e7ec;display:flex;gap:12px;align-items:center}
+    .panel{min-width:0;background:transparent;border:0}
+    .issuehead{padding:0 0 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.issuehead h1{margin:0}.issuehead small{display:block;margin-top:8px;color:var(--wc-muted)}
     .issuehead .mut{margin-left:auto}
     .mut,.empty{font-size:12px;color:#758198}
     .empty{padding:28px}
     .error{margin:14px;background:#fff1f1;color:#8c2f2f;border:1px solid #f0caca;padding:12px;border-radius:8px}
-    .tablewrap{overflow:auto}
+    .tablewrap,.empty{background:var(--wc-surface);border:1px solid var(--wc-border);border-radius:12px;overflow:auto}
     table{width:100%;border-collapse:collapse;min-width:1080px}
     th{background:#fafbfc;text-align:left;font-size:11px;text-transform:uppercase;color:#758198;padding:12px 14px;border-bottom:1px solid #e4e7ec}
     td{padding:13px 14px;border-bottom:1px solid #edf0f3;vertical-align:top}
