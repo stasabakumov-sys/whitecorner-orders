@@ -19,6 +19,7 @@ try{
  await db.exec('grant all on wc_orders,wc_order_items,wc_production_units,wc_order_activity to authenticated;');
  const before=(await db.query('select to_jsonb(o) v from wc_orders o')).rows;
  await db.exec(await readFile('supabase/migrations/20260907000300_delivery_production_gate.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20260909000700_production_sanding.sql','utf8'));
  assert.deepEqual((await db.query('select to_jsonb(o) v from wc_orders o')).rows,before);
  const context=async()=>{
   const o=(await db.query('select updated_at from wc_orders where id=$1',[order])).rows[0];
@@ -61,5 +62,11 @@ try{
  assert.equal((await db.query('select state from wc_delivery_reviews where order_id=$1',[order])).rows[0].state,'pending');
  await db.query('update wc_delivery_reviews set quote_attempted_at=now() where order_id=$1',[order]);await assert.rejects(approve(),/Unquoted/);
  assert.equal((await db.query('select count(*)::int n from wc_delivery_booking_exemptions')).rows[0].n,0);
- console.log('PASS: no order changes on migration; direct production writes denied; approval audit/idempotency; no queue claim; atomic status+note; stale items/rules/review and wrong-unit guards; packaging resumes one estimate.');
+ await db.query('select wc_set_reviewed_production_status($1,$2,$3,$4,$5,$6,$7,$8,$9)',[order,unit,'Sanding',actor,'within_target',...await context()]);
+ assert.equal((await db.query('select production_status from wc_production_units where id=$1',[unit])).rows[0].production_status,'Sanding');
+ assert.equal((await db.query("select count(*)::int n from wc_order_activity where new_status='Sanding'")).rows[0].n,1);
+ await assert.rejects(db.query("update wc_production_units set production_status='Unknown'"),/check/);
+ await db.exec('set role authenticated');
+ await assert.rejects(db.query('select wc_set_reviewed_production_status($1,$2,$3,$4,$5,$6,$7,$8,$9)',[order,unit,'Sanding',actor,'within_target',...await context()]),/permission denied/);
+ console.log('PASS: Sanding persists with audit; status constraints and service-only permissions preserved; existing delivery guards passed.');
 }finally{await db.close();}

@@ -14,7 +14,7 @@ export async function productionDecision(db:any,order:any,rules:any[],review:any
 }
 
 export async function setReviewedProductionStatus(db:any,order:any,rules:any[],review:any,body:any,actor:string){
- if(!['New','CNC','Assembly','Painting','Packing','Ready'].includes(body.next)||!/^[\da-f-]{36}$/i.test(body.unitId||''))throw Error('Valid production unit and status required.');
+ if(!['New','CNC','Assembly','Sanding','Painting','Packing','Ready'].includes(body.next)||!/^[\da-f-]{36}$/i.test(body.unitId||''))throw Error('Valid production unit and status required.');
  const decision=await productionDecision(db,order,rules,review);
  if(!decision.allowed)throw Error('Production blocked: add packaging and resolve Delivery Cost Review, or approve without a quote.');
  const {data,error}=await db.rpc('wc_set_reviewed_production_status',{
