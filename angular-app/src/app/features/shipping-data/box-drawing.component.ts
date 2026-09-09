@@ -12,7 +12,7 @@ export function sameDrawingBox(a:any,b:any):boolean {
  @if(current){<button class="download" (click)="download()" [disabled]="busy" [title]="current.filename">{{current.filename}}</button><small>{{sizeLabel(current.size_bytes)}}</small>}
  @if(stale){<small>Box changed. Upload a matching drawing.</small>}
  <label class="upload">{{busy?'Uploading…':current?'Replace drawing':'Upload drawing'}}
- <input type="file" [attr.aria-label]="'Upload drawing for '+(box?.package_name||'box')" [disabled]="busy||loading||!!loadError" (change)="upload($event)">
+ <input type="file" [attr.aria-label]="'Upload drawing for '+(productId?'product':box?.package_name||'box')" [disabled]="busy||loading||!!loadError" (change)="upload($event)">
  </label>
  <small>Up to 1 MB</small>
  }
@@ -27,21 +27,22 @@ export function sameDrawingBox(a:any,b:any):boolean {
  `]})
 export class BoxDrawingComponent implements OnChanges {
  @Input() signature='';@Input() index=0;@Input() box:any;@Input() sharedSize='';
+ @Input() productId='';@Input() variantKey='';
  record:any=null;busy=false;loading=false;error='';loadError=false;private generation=0;
  constructor(private db:SupabaseService){}
- get current(){return this.record&&(this.sharedSize||sameDrawingBox(this.record.box_snapshot,this.box))?this.record:null;}
+ get current(){return this.record&&(this.productId||this.sharedSize||sameDrawingBox(this.record.box_snapshot,this.box))?this.record:null;}
  get stale(){return !!this.record&&!this.current;}
  sizeLabel(bytes:number){return `${Math.max(1,Math.ceil(bytes/1024))} KB`;}
  ngOnChanges(){void this.load();}
  async load(){const generation=++this.generation;this.loading=true;this.error='';this.loadError=false;this.record=null;
-  try{const query=this.sharedSize?this.db.client.from('wc_backdrop_box_drawings').select('*').eq('size_key',this.sharedSize):this.db.client.from('wc_box_drawings').select('*').eq('profile_signature',this.signature).eq('box_index',this.index);
+  try{const query=this.productId?this.db.client.from('wc_product_drawings').select('*').eq('product_id',this.productId).eq('variant_key',this.variantKey):this.sharedSize?this.db.client.from('wc_backdrop_box_drawings').select('*').eq('size_key',this.sharedSize):this.db.client.from('wc_box_drawings').select('*').eq('profile_signature',this.signature).eq('box_index',this.index);
    const {data,error}=await query.maybeSingle();if(error)throw error;if(generation===this.generation)this.record=data;}
   catch{if(generation===this.generation){this.loadError=true;this.error='Could not load drawing. Please retry.';}}
   finally{if(generation===this.generation)this.loading=false;}
  }
  async upload(event:Event){const input=event.target as HTMLInputElement;const file=input.files?.[0];input.value='';if(!file||this.busy||this.loading||this.loadError)return;
   if(!file.size||file.size>1048576||file.name.length>255){this.error='Choose a non-empty file up to 1 MB (filename up to 255 characters).';return;}
-  const generation=this.generation,signature=this.signature,index=this.index,box=structuredClone(this.box),previous=this.record,sharedSize=this.sharedSize;
+  const generation=this.generation,signature=this.signature,index=this.index,box=structuredClone(this.box),previous=this.record,sharedSize=this.sharedSize,productId=this.productId,variantKey=this.variantKey;
   this.busy=true;this.error='';let path='';let uploaded=false;let attaching=false;
   try{
    const {data,error:authError}=await this.db.client.auth.getUser();if(authError||!data.user)throw new Error('Please sign in again.');
@@ -49,7 +50,9 @@ export class BoxDrawingComponent implements OnChanges {
    const binary=new File([file],file.name,{type:'application/octet-stream'});
    const {error:uploadError}=await this.db.client.storage.from('box-drawings').upload(path,binary,{contentType:'application/octet-stream',upsert:false});if(uploadError)throw uploadError;uploaded=true;
    attaching=true;
-   const {data:drawing,error:saveError}=sharedSize
+   const {data:drawing,error:saveError}=productId
+    ?await this.db.client.rpc('wc_save_product_drawing',{p_product:productId,p_variant:variantKey,p_path:path,p_filename:file.name,p_bytes:file.size,p_expected:previous?.revision??null})
+    :sharedSize
     ?await this.db.client.rpc('wc_save_backdrop_box_drawing',{p_size:sharedSize,p_path:path,p_filename:file.name,p_bytes:file.size,p_expected:previous?.revision??null})
     :await this.db.client.rpc('wc_attach_box_drawing',{p_signature:signature,p_index:index,p_box:box,p_path:path,p_filename:file.name,p_size:file.size,p_expected:previous?.revision??null});
    if(saveError)throw saveError;
