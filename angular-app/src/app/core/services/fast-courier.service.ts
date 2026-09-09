@@ -55,6 +55,7 @@ export interface FastCourierQuote {
 }
 
 export interface FastCourierQuoteResponse {
+  quoteRequest?: FastCourierQuoteRequest;
   status: boolean;
   message: string;
   orderId: string;

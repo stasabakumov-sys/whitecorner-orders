@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { assertDeliveryBookingAllowed } from '../_shared/delivery-booking-gate.ts';
+import { resolveCourierContents } from '../_shared/courier-contents.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -179,6 +180,14 @@ serve(async (req) => {
     const validationError = validateQuote(body.payload);
     if (validationError) return json({ status: false, message: validationError }, 422);
 
+    let quoteRequest: any;
+    try {
+      const {response: referenceResponse, result: referenceData} = await courierJson(`${baseUrl}/api/package-contents-list`, apiKey, {method:'GET', signal:AbortSignal.timeout(30000)});
+      quoteRequest = resolveCourierContents(body.payload, {http_status:referenceResponse.status, body:referenceData});
+    } catch (error) {
+      return json({status:false,message:error instanceof Error?error.message:'Fast Courier package content types unavailable. No quote requested.'}, 422);
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 90000);
     let response: Response;
@@ -190,7 +199,7 @@ serve(async (req) => {
           'Content-Type': 'application/json',
           'Secret-Key': apiKey,
         },
-        body: JSON.stringify(body.payload),
+        body: JSON.stringify(quoteRequest),
         signal: controller.signal,
       });
     } finally {
@@ -201,7 +210,7 @@ serve(async (req) => {
     let result: any;
     try { result = raw ? JSON.parse(raw) : {}; } catch { result = { status: false, message: raw || 'Invalid response from Fast Courier.' }; }
     if (!response.ok) return json({ ...result, status: false, upstreamStatus: response.status }, response.status);
-    return json(result);
+    return json({...result, quoteRequest});
   } catch (error) {
     const message = error instanceof DOMException && error.name === 'AbortError'
       ? 'Fast Courier did not respond within 90 seconds.'
