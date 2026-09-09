@@ -20,3 +20,7 @@ Local verification: 143 Angular tests, build, SQL/RLS tests and browser review o
 Apply 20260909000300_product_drawings.sql before publishing the product-drawing controls. Product drawing stores one original file for the product; each existing cost variant also has an independent drawing slot. Metadata belongs to the same wc_shipping_products catalogue, with an optional variant key. Product drawings never reuse a backdrop box drawing just because dimensions match. Upload/download limits and privacy are the same as packaging drawings. Replacement uses revision checks and linked-file deletion protection now covers all three attachment tables. No new production migration was applied during implementation.
 
 The product list numbering is now the first column on the left.
+
+Apply 20260909000500_drawing_upload_limit.sql before publishing the 20 MiB drawing limit (all drawing types). File validation displays filename, actual size and limit; failures use a persistent alert, and success requires confirmed attachment metadata. Replacement is an accessible icon beside the saved filename. Hub-wide error-feedback requirements are recorded in AGENTS.md.
+
+Product cards now use the same right-aligned, full-height PrimeNG Drawer interaction as Fulfilment (dismissible backdrop, scroll lock), with width min(1260px, 96vw). The backdrop drawing library remains a centered dialog.
