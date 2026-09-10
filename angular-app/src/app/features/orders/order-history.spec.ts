@@ -1,5 +1,12 @@
 import {historyOrder,mergeOrderHistory,OrderHistoryService} from './order-history.service';
 describe('Full Wix history',()=>{
+  it('reloads saved pages after an import error and retains the failure message',async()=>{
+    let calls=0;
+    const service=new OrderHistoryService({client:{functions:{invoke:async()=>++calls===1?{data:{ok:true,imported:100,complete:false,nextCursor:'next'}}:{data:{error:'Could not save (22P05)'}}},from:()=>({select:()=>({order:()=>({range:async()=>({data:[{raw_order:{id:'saved',number:1}}],error:null})})})})}} as any);
+    await service.sync();
+    expect(service.orders().length).toBe(1);expect(service.progress()).toBe(100);
+    expect(service.error()).toContain('22P05');expect(service.importing()).toBe(false);
+  });
   it('maps fulfilled and cancelled history without units and keeps the operational row for duplicates',()=>{
     const order=historyOrder({synced_at:'2026-09-09',raw_order:{id:'wix-id',number:100,fulfillmentStatus:'FULFILLED',status:'CANCELED',archived:true,priceSummary:{total:{amount:'110'}},lineItems:[{id:'line',quantity:1,price:{amount:'110'},productName:{original:'Backdrop'}}]}});
     expect(order.is_history).toBe(true);expect(order.wc_order_items?.[0].wc_production_units).toBeUndefined();expect(order.total).toBe(110);
