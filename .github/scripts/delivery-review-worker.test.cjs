@@ -9,7 +9,7 @@ function setup(){
  const components=domain.reviewComponents(order);
  const review={order_id:'order',state:'pending',packages:[{package_name:'Cart',length_mm:1000,width_mm:500,height_mm:100,weight_kg:10,contents:components}],quote_attempted_at:null,token:null};
  const db={rpc:async(_name,args)=>{if(review.quote_attempted_at||review.token)return {data:false};review.token=args.p_token;return {data:true};},from:table=>{
-  let patch=null,checks=[];const q={select:()=>q,eq:(k,v)=>{checks.push([k,v]);return q;},is:(k,v)=>{checks.push([k,v]);return q;},order:()=>q,update:p=>{patch=p;return q;},single:async()=>result(),maybeSingle:async()=>result(),then:resolve=>resolve(result())};
+  let patch=null,checks=[];const q={select:()=>q,eq:(k,v)=>{checks.push([k,v]);return q;},is:(k,v)=>{checks.push([k,v]);return q;},order:()=>q,range:async()=>({data:[]}),update:p=>{patch=p;return q;},single:async()=>result(),maybeSingle:async()=>result(),then:resolve=>resolve(result())};
   function result(){if(table==='wc_orders')return {data:order};if(table==='wc_shipping_rules')return {data:[]};if(table==='wc_shipping_packages'||table==='wc_shipping_products')return {data:[]};if(table==='wc_delivery_packaging_profiles')return {data:null};
    if(patch){if(checks.some(([k,v])=>review[k]!==v))return {error:{message:'CAS failed'}};Object.assign(review,patch);}
    return {data:review};

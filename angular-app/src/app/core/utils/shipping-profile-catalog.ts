@@ -1,4 +1,4 @@
-import {componentNormal} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {componentNormal,canonicalPackagingItemKey} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 // One catalogue over the persisted profiles, without duplicating or migrating boxes.
 export function shippingProfileCatalog(products:any[],profiles:any[]){
@@ -20,7 +20,7 @@ export function shippingProfileCatalog(products:any[],profiles:any[]){
 export function savedProfileOptions(profile:any){
  const values=new Set<string>();
  for(const c of (profile.packages||[]).flatMap((p:any)=>p.contents||[])){
-  try{const key=String(c.profile_item_key||'');const parsed=JSON.parse(key.slice(0,key.lastIndexOf(':')));for(const option of parsed[1]||[])values.add(option);}catch{/* Older profiles may not have option metadata. */}
+  try{const key=canonicalPackagingItemKey(String(c.profile_item_key||''));const parsed=JSON.parse(key.slice(0,key.lastIndexOf(':')));for(const option of parsed[1]||[])values.add(option);}catch{/* Older profiles may not have option metadata. */}
  }
  return [...values].join(' · ')||'Saved exact composition';
 }

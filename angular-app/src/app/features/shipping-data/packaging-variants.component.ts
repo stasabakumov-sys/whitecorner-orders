@@ -1,11 +1,11 @@
 import {Component,Input,OnChanges,signal} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {SupabaseService} from '../../core/services/supabase.service';
-import {orderItemOptionLabels,packagingError,reviewComponents,variantSignature,productId} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {packagingOptionLabels,orderItemOptionLabels,packagingError,reviewComponents,variantSignature,productId} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 @Component({selector:'app-packaging-variants',standalone:true,imports:[FormsModule],template:`
  <h3>Packaging variants</h3>
- <p>One product per template. Size and all other options must match the order. Quantities are expanded automatically.</p>
+ <p>One product per template. Size, Foldable and structural options must match. Colour (including Raw) shares the same packaging. Quantities are expanded automatically.</p>
  @if(error()){<p role="alert">{{error()}}</p>}
  <div class="tools">
  <select aria-label="Saved packaging variant" [disabled]="busy()" [(ngModel)]="selectedKey" (ngModelChange)="open($event)"><option value="">New variant</option>@for(v of variants();track v.signature){<option [value]="v.signature">{{label(v.template_item)}}</option>}</select>
@@ -49,7 +49,7 @@ export class PackagingVariantsComponent implements OnChanges {
  reset(){this.selectedKey='';this.sourceItemId='';this.catalogId='';this.options=[{name:'Size',value:''}];this.boxes=[];this.confirmed=false;this.saved.set(false);this.error.set('');}
  item(){return {id:this.product.id,product_name:this.product.product_name,quantity:1,catalog_reference:(this.product.wix_product_id||this.catalogId)?{catalogItemId:this.product.wix_product_id||this.catalogId}:{},wix_options:Object.fromEntries(this.options.map(o=>[o.name,o.value]))};}
  components(){return reviewComponents({wc_order_items:[this.item()]},this.rules);}
- label(item:any){return orderItemOptionLabels(item,100).join(' · ')||'No options';}
+ label(item:any){return packagingOptionLabels(item).join(' · ')||'All colours · no structural options';}
  open(key:string){this.reset();const v=this.variants().find(v=>v.signature===key);if(!v)return;this.selectedKey=key;this.sourceItemId=v.template_item.source_item_id||'';this.catalogId=productId(v.template_item);this.options=Object.entries(v.template_item.wix_options).map(([name,value])=>({name,value:String(value)}));this.boxes=structuredClone(v.packages);this.remap();}
  useExample(id:string){const item=this.examples().find(e=>e.id===id);if(!item)return;this.sourceItemId=item.id;this.catalogId=productId(item);this.options=orderItemOptionLabels(item,100).flatMap(label=>{const n=label.indexOf(':');return n<0?[]:[{name:label.slice(0,n).trim(),value:label.slice(n+1).trim()}];});this.remap();}
  copy(){this.selectedKey='';const size=this.options.find(o=>o.name.trim().toLowerCase()==='size');if(size)size.value='';else this.options.push({name:'Size',value:''});this.remap();}

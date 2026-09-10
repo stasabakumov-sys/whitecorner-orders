@@ -11,14 +11,14 @@ import {SupabaseService} from '../../core/services/supabase.service';
  </div></div>
  <div class="field">
  @if(wixSizes.length){<label for="product-size">Product size · Wix</label><input id="product-size" class="wix-size" [value]="wixSizes.join(' · ')" [title]="wixSizes.join(' · ')" readonly><p>Size from Wix is read-only.</p>}
- @else{<label for="product-size">Manual product sizes</label><textarea id="product-size" [(ngModel)]="sizes" maxlength="2000" rows="3" [disabled]="busy" placeholder="Size II: W1400 × D600 × H1000 mm"></textarea>
+ @else{<label for="product-size">Manual product sizes</label><textarea id="product-size" [(ngModel)]="sizes" maxlength="2000" rows="1" [disabled]="busy" placeholder="Size II: W1400 × D600 × H1000 mm"></textarea>
  <p>Enter one size per line, including units. Packaging dimensions remain unchanged.</p>
  <button (click)="save('sizes')" [disabled]="busy||product.saved_only">Save sizes</button>}
  </div></div>
  @if(product.saved_only){<p>This packaging-only entry needs a saved product record before details can be edited.</p>}
  @if(error){<p role="alert">{{error}}</p>}
  @if(done){<p role="status">Saved</p>}
- `,styles:[`.fields{display:flex;gap:16px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:220px}.field.short-name-field{flex:0 1 400px}.short-name-field input{max-width:320px}.field .wix-size{width:220px;max-width:100%;text-overflow:ellipsis}.actions{display:flex;gap:8px;align-items:center}input,textarea{width:100%;box-sizing:border-box}input{min-width:0}.actions button{flex-shrink:0}p{font-size:.875rem;color:var(--wc-muted)}[role=alert]{color:var(--p-red-600)}`]})
+ `,styles:[`.fields{display:flex;gap:16px;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:220px}.field.short-name-field{flex:0 1 400px}.short-name-field input{max-width:320px}.field:has(#product-size){flex:0 1 320px}.field textarea{height:36px;min-height:36px;max-height:120px;resize:vertical}.field:has(#product-size)>button{align-self:flex-start}.field .wix-size{width:220px;max-width:100%;text-overflow:ellipsis}.actions{display:flex;gap:8px;align-items:center}input,textarea{width:100%;box-sizing:border-box}input{min-width:0}.actions button{flex-shrink:0}p{font-size:.875rem;color:var(--wc-muted)}[role=alert]{color:var(--p-red-600)}`]})
 export class ProductDetailsComponent implements OnChanges {
  @Input() product:any;@Input() wixSizes:string[]=[];@Output() saved=new EventEmitter<any>();shortName='';sizes='';busy=false;error='';done=false;editingName=false;
  constructor(private db:SupabaseService){}
