@@ -1,3 +1,4 @@
+import {ProductLinkComponent} from '../product-link/product-link.component';
 import { CurrencyPipe, DatePipe, NgFor, NgIf } from '@angular/common';
 import { Component, EventEmitter, Input, Output, signal, OnChanges } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -13,7 +14,7 @@ import { OrderActivityComponent } from '../order-activity/order-activity.compone
 @Component({
   selector: 'app-production-unit-drawer',
   standalone: true,
-  imports: [CurrencyPipe, DatePipe, NgFor, NgIf, FormsModule, ButtonModule, DrawerModule, SelectModule, TagModule, OrderActivityComponent],
+  imports: [ProductLinkComponent,CurrencyPipe, DatePipe, NgFor, NgIf, FormsModule, ButtonModule, DrawerModule, SelectModule, TagModule, OrderActivityComponent],
   templateUrl: './production-unit-drawer.component.html',
   styleUrl: './production-unit-drawer.component.css',
 })

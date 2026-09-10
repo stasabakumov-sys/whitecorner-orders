@@ -33,7 +33,7 @@
       <div class="line-item">
         <div class="visual"><img *ngIf="production.imageUrl(view.mainItem) as src" [src]="src" alt="" /></div>
         <div class="details">
-          <b>{{ view.mainItem.product_name }}</b>
+          <b><app-product-link [item]="view.mainItem" /></b>
           <div class="options"><span *ngFor="let option of production.optionLabels(view.mainItem)">{{ option }}</span></div>
         </div>
         <div class="unit-price">{{ view.mainUnitPrice | currency:(view.order.currency || 'AUD') }}</div>
@@ -46,7 +46,7 @@
         <div class="line-item" *ngFor="let addon of view.addons">
           <div class="visual"><img *ngIf="production.imageUrl(addon.item) as src" [src]="src" alt="" /></div>
           <div class="details">
-            <div class="item-name-row"><b>{{ addon.item.product_name }}</b><p-tag value="Add-on" severity="secondary" /></div>
+            <div class="item-name-row"><b><app-product-link [item]="addon.item" /></b><p-tag value="Add-on" severity="secondary" /></div>
             <div class="options"><span *ngFor="let option of production.optionLabels(addon.item)">{{ option }}</span></div>
           </div>
           <div class="unit-price">{{ addon.unitPrice | currency:(view.order.currency || 'AUD') }}</div>

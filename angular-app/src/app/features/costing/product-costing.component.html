@@ -9,13 +9,13 @@
 @if(s.error()){<p role="alert">{{s.error()}}</p>}
 <section class="cost-summary"><b>Recorded production cost: {{v.total==null?'—':(v.total|currency:'AUD')}}</b><small>Materials + CNC + assembly + sanding + painting. Pans are separate.</small></section>
 @if(v.issues.length){<section class="composition-alert" role="alert"><b>Composition review required</b><p>These order lines need review before new costs can be saved.</p><ul>@for(issue of v.issues;track issue){<li>{{issue}}</li>}</ul></section>}
-@for(p of v.products;track p.item.id){<section class="editor"><header><div><h3>{{p.item.product_name}}</h3><small>Quantity: {{p.item.quantity}}</small><small>{{options({options:p.item.wix_options})}}</small></div><b>Recorded product cost: {{p.costs.some(hasCost)?(productTotal(p.item.id)|currency:'AUD'):'—'}}</b></header>
-@if(p.replacement){<p><b>Replacement tabletop:</b> {{p.replacement.product_name}} · replaces the standard tabletop.</p>}
+@for(p of v.products;track p.item.id){<section class="editor"><header><div><h3><app-product-link [item]="p.item" /></h3><small>Quantity: {{p.item.quantity}}</small><small>{{options({options:p.item.wix_options})}}</small></div><b>Recorded product cost: {{p.costs.some(hasCost)?(productTotal(p.item.id)|currency:'AUD'):'—'}}</b></header>
+@if(p.replacement){<p><b>Replacement tabletop:</b> <app-product-link [item]="p.replacement" /> · replaces the standard tabletop.</p>}
 <div class="table-wrap"><table><thead><tr><th>Unit</th><th>Production</th><th>Recorded cost</th></tr></thead><tbody>@for(u of p.units;track u.id){<tr><td>{{u.unit_index}}</td><td>{{u.production_status}}</td><td>{{unitCost(u.id)==null?'—':(unitCost(u.id)|currency:'AUD')}}@if(u.production_status==='Ready'&&unitCost(u.id)==null){<small>Ready · excluded</small>}</td></tr>}</tbody></table></div>
 @for(c of p.costs;track c.unit_id){@if(c.snapshot){<details><summary>Unit {{c.unit_index}} · Saved cost breakdown</summary>
-@if(c.snapshot.components){@for(part of c.snapshot.components;track $index){<h4>{{part.product_name}} × {{part.multiplier}}</h4><p>Materials {{part.materials_gst|currency:'AUD'}} · Work {{part.work_gst|currency:'AUD'}} · Pans {{part.pans_gst|currency:'AUD'}}</p><table><tbody>@for(l of part.lines;track $index){<tr><td>{{l.name}}</td><td>{{l.quantity}} {{l.unit}}</td><td>{{l.total_gst|currency:'AUD'}}</td></tr>}</tbody></table>}}
+@if(c.snapshot.components){@for(part of c.snapshot.components;track $index){<h4><app-product-link [item]="part" /> × {{part.multiplier}}</h4><p>Materials {{part.materials_gst|currency:'AUD'}} · Work {{part.work_gst|currency:'AUD'}} · Pans {{part.pans_gst|currency:'AUD'}}</p><table><tbody>@for(l of part.lines;track $index){<tr><td>{{l.name}}</td><td>{{l.quantity}} {{l.unit}}</td><td>{{l.total_gst|currency:'AUD'}}</td></tr>}</tbody></table>}}
 @else{<p>Legacy materials-only calculation · unchanged.</p><table><tbody>@for(l of c.snapshot.lines;track $index){<tr><td>{{l.name}}</td><td>{{l.quantity}} {{l.unit}}</td><td>{{l.total_gst|currency:'AUD'}}</td></tr>}</tbody></table>}
 <small>Saved {{c.calculated_at|date:'dd MMM yyyy, HH:mm'}} · Locked</small></details>}}
-@if(!v.issues.length){@for(part of costParts(p.item.id);track part.item_id){<app-catalog-cost-editor [part]="part" />}}
+@if(!v.issues.length){@for(part of costParts(p.item.id);track part.item_id){<app-catalog-cost-editor [linkProduct]="true" [part]="part" />}}
 </section>}
 </p-drawer>}

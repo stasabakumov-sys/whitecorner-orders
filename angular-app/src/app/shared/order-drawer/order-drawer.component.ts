@@ -1,3 +1,4 @@
+import {ProductLinkComponent} from '../product-link/product-link.component';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { DrawerModule } from 'primeng/drawer';
@@ -11,7 +12,7 @@ import {OrderPrintComponent} from './order-print.component';
 @Component({
   selector:'app-order-drawer',
   standalone:true,
-  imports:[CurrencyPipe,DatePipe,DrawerModule,DialogModule,TagModule,OrderActivityComponent,OrderPrintComponent],
+  imports:[ProductLinkComponent,CurrencyPipe,DatePipe,DrawerModule,DialogModule,TagModule,OrderActivityComponent,OrderPrintComponent],
   template:`
     <p-drawer [visible]="true" position="right" [modal]="true" [dismissible]="true" [style]="{width:'min(1160px,90vw)'}" (onHide)="closed.emit()">
       <ng-template pTemplate="header">
@@ -49,7 +50,7 @@ import {OrderPrintComponent} from './order-print.component';
               @for(item of allItems();track item.id){
                 <div class="line-item edit-line">
                   <div class="media">@if(mediaUrl(item)){<img [src]="mediaUrl(item)" alt="">}@else{<div class="placeholder"></div>}</div>
-                  <div class="item-main"><b>{{item.product_name}}</b><div>{{item.unit_price||0|currency:(order.currency||'AUD')}}</div>
+                  <div class="item-main"><b><app-product-link [item]="item" /></b><div>{{item.unit_price||0|currency:(order.currency||'AUD')}}</div>
                     <div class="options">@for(option of optionLabels(item);track option){<span>{{option}}</span>}</div>
                   </div>
                   <input type="number" [value]="item.quantity??1" disabled [attr.aria-label]="'Quantity for '+item.product_name">
@@ -96,7 +97,7 @@ import {OrderPrintComponent} from './order-print.component';
               <div class="line-item">
                 <div class="media">@if(mediaUrl(item)){<img [src]="mediaUrl(item)" alt="">}@else{<div class="placeholder"></div>}</div>
                 <div class="item-main">
-                  <b>{{item.product_name}}</b>
+                  <b><app-product-link [item]="item" /></b>
                   <div class="options">
                     @for(option of optionLabels(item);track option){<span>{{option}}</span>}
                   </div>
@@ -113,7 +114,7 @@ import {OrderPrintComponent} from './order-print.component';
                 <div class="line-item">
                   <div class="media">@if(mediaUrl(item)){<img [src]="mediaUrl(item)" alt="">}@else{<div class="placeholder"></div>}</div>
                   <div class="item-main">
-                    <div class="item-name-row"><b>{{item.product_name}}</b><p-tag value="Add-on" severity="secondary"></p-tag></div>
+                    <div class="item-name-row"><b><app-product-link [item]="item" /></b><p-tag value="Add-on" severity="secondary"></p-tag></div>
                     <div class="options">
                       @for(option of optionLabels(item);track option){<span>{{option}}</span>}
                     </div>

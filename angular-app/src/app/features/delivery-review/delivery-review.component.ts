@@ -1,3 +1,4 @@
+import {ProductLinkComponent} from '../../shared/product-link/product-link.component';
 import { Component, computed, OnInit, signal, Optional } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
@@ -7,7 +8,7 @@ import { isNonPackagingComponent, cents, deliveryCents, orderItemOptionLabels, r
 import {orderProducts} from '../../core/utils/order-products';
 
 @Component({
- selector:'app-delivery-review',standalone:true,imports:[CommonModule,FormsModule],
+ selector:'app-delivery-review',standalone:true,imports:[ProductLinkComponent,CommonModule,FormsModule],
  template:`
  <header><div><h1>Delivery Cost Review</h1><p>Saved estimates per order, with explicit recalculation after packaging corrections. Target: delivery including insurance ≤ 90% of the invoice delivery charge. Amounts include GST.</p></div>
  <button (click)="reload()" [disabled]="s.loading()||s.busy()">Refresh saved data</button></header>
@@ -54,13 +55,13 @@ import {orderProducts} from '../../core/utils/order-products';
  <div class="product-card">
  @if(group.item;as item){
  @if(image(item)){<img [src]="image(item)" [alt]="item.product_name||'Product'" loading="lazy" />}
- <div class="product-description"><b>{{item.product_name||'Unnamed product'}}</b><div class="chips"><span>qty: {{item.quantity||1}}</span>@for(option of options(item);track option){<span>{{option}}</span>}</div></div>
+ <div class="product-description"><b><app-product-link [item]="item" /></b><div class="chips"><span>qty: {{item.quantity||1}}</span>@for(option of options(item);track option){<span>{{option}}</span>}</div></div>
  <span class="product-price">{{money(productTotal(item))}}</span>
  }@else{<b>Unassigned packaging — select its contents</b>}
  </div>
  <div class="product-packages"><h4>{{group.boxes.length}} package(s)</h4>
  @for(source of group.sources;track source.id){
- @if(group.sources.length>1){<p><b>{{source.product_name}}</b> · qty: {{source.quantity}}</p>}
+ @if(group.sources.length>1){<p><b><app-product-link [item]="source" /></b> · qty: {{source.quantity}}</p>}
  @if(editable(row)){<button [disabled]="s.busy()||variantLoading" (click)="configureVariant(source)">Configure packaging variant</button> <button [disabled]="s.busy()||variantLoading" (click)="loadVariant(source)">Load saved variant</button>
  @if(variantNotices()[source.id]){<p role="status">{{variantNotices()[source.id]}}</p>}}}
  @for(p of group.boxes;track p){

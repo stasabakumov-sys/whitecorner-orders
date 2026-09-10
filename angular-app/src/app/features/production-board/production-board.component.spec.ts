@@ -21,6 +21,7 @@ describe('Production board stage movement',()=>{
   }
   it('renders Sanding between Assembly and Painting and saves one move',async()=>{
     const {fixture,board,unit,changeStatus}=await setup();
+    expect(fixture.nativeElement.querySelector('.card .product a')).toBeNull();
     expect(Array.from(fixture.nativeElement.querySelectorAll('.stage-title b')).map((x:any)=>x.textContent)).toEqual(['New','CNC','Assembly','Sanding','Painting','Packing','Ready']);
     let finish!:()=>void;changeStatus.mockImplementation(()=>new Promise<void>(resolve=>finish=resolve));
     board.dragStart(event(),unit);const pending=board.drop(event(),'Sanding');
