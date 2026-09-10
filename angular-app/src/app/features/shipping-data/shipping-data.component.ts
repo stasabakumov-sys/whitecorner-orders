@@ -1,6 +1,7 @@
 import {productNavigationMatches} from '../../core/utils/product-navigation';
 import {WixCatalogReviewComponent} from './wix-catalog-review.component';
 import {WixProductSnapshotComponent} from './wix-product-snapshot.component';
+import {PackageDrawingsComponent} from './package-drawings.component';
 import { Component, OnInit, computed, signal, Optional } from '@angular/core';
 import {DialogModule} from 'primeng/dialog';
 import {DrawerModule} from 'primeng/drawer';
@@ -55,7 +56,7 @@ type ShippingRule = {
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CatalogCostEditorComponent,BoxDrawingComponent,ProductDetailsComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CatalogCostEditorComponent,BoxDrawingComponent,ProductDetailsComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -97,21 +98,22 @@ type ShippingRule = {
               <span class="badge">{{p.saved_profiles?.length||0}} reusable profile(s)</span>
             </div>
 
-            <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" (saved)="updateDetails($event)" /><app-wix-product-snapshot [productId]="p.id" /></section>
+            <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" (saved)="updateDetails($event)" /></section>
             <section class="shipsection"><h3>Product drawing</h3>
             <p class="small">Original product drawing, stored online. For a specific size or design, upload its drawing under the matching variant below.</p>
             <app-box-drawing [productId]="p.id" />
             </section>
-            <section class="shipsection"><h3>Product cost profiles · incl. GST</h3>
+            <section class="shipsection"><h3>Production costs · incl. GST</h3>
+            <p class="small">Enter materials and work costs here: CNC, Assembly, Sanding and Painting. Costs are saved for the selected product variant.</p>
             @if(costing.error()){<p role="alert">{{costing.error()}}</p>}
-            @for(part of costProfiles(p.id);track part.variant_key){<details><summary>{{costProfileLabel(part)}}</summary><h4>Variant product drawing</h4><app-box-drawing [productId]="p.id" [variantKey]="part.variant_key" /><app-catalog-cost-editor [part]="part" /></details>}
+            @for(part of costProfiles(p.id);track part.variant_key){<details><summary>Edit production costs · {{costProfileLabel(part)}}</summary><app-catalog-cost-editor [part]="part" /><h4>Variant product drawing</h4><app-box-drawing [productId]="p.id" [variantKey]="part.variant_key" /></details>}
             @empty{<p class="mut">No order variant available yet. Open Add materials on an order to define its costs.</p>}
             </section>
             @for(profile of p.saved_profiles||[];track profile.signature){
-             <section class="shipsection"><h3>Saved packaging · {{profileOptions(profile)}}</h3>
+             <section class="shipsection"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3>
              <p class="small">Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.</p>
              <div class="tablewrap"><table class="shiptable packaging-table"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th><th>Drawing</th></tr></thead><tbody>
-             @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{contentLabel(c)}} · Unit {{c.unit_index}}</div>}</td><td>@if(isBackdrop(p)){@if(sharedSize(profile,p);as size){<small class="shared-drawing-size">Shared · {{sizeLabel(size)}}</small><app-box-drawing [sharedSize]="size" />}@else{<small>Product size is missing or ambiguous. Add its exact dimensions before linking a shared drawing.</small>}}@else{<app-box-drawing [signature]="profile.signature" [index]="$index" [box]="box" />}</td></tr>}
+             @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{contentLabel(c)}} · Unit {{c.unit_index}}</div>}</td><td><app-package-drawings [signature]="profile.signature" [index]="$index" [box]="box" [backdrop]="isBackdrop(p)" [sharedSize]="isBackdrop(p)?sharedSize(profile,p):''" [sizeLabel]="sizeLabel(sharedSize(profile,p))" /></td></tr>}
              </tbody></table></div></section>
             }
             @if(!p.saved_only){
@@ -162,6 +164,7 @@ type ShippingRule = {
               }
             </div>
             }
+            <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" /></section>
           } @else {
             <div class="mut">No products in this filter.</div>
           }

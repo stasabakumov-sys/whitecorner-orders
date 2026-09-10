@@ -1,4 +1,4 @@
-import {Component,Input,OnChanges} from '@angular/core';
+import {Component,Input,OnChanges,ChangeDetectorRef,Optional} from '@angular/core';
 import {SupabaseService} from '../../core/services/supabase.service';
 
 export function sameDrawingBox(a:any,b:any):boolean {
@@ -37,7 +37,7 @@ export class BoxDrawingComponent implements OnChanges {
  @Input() signature='';@Input() index=0;@Input() box:any;@Input() sharedSize='';
  @Input() productId='';@Input() variantKey='';
  record:any=null;busy=false;loading=false;error='';success='';loadError=false;private generation=0;
- constructor(private db:SupabaseService){}
+ constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
  get current(){return this.record&&(this.productId||this.sharedSize||sameDrawingBox(this.record.box_snapshot,this.box))?this.record:null;}
  get stale(){return !!this.record&&!this.current;}
  sizeLabel(bytes:number){return bytes>=1048576?`${(bytes/1048576).toFixed(1)} MB`:`${Math.ceil(bytes/1024)} KB`;}
@@ -46,7 +46,7 @@ export class BoxDrawingComponent implements OnChanges {
   try{const query=this.productId?this.db.client.from('wc_product_drawings').select('*').eq('product_id',this.productId).eq('variant_key',this.variantKey):this.sharedSize?this.db.client.from('wc_backdrop_box_drawings').select('*').eq('size_key',this.sharedSize):this.db.client.from('wc_box_drawings').select('*').eq('profile_signature',this.signature).eq('box_index',this.index);
    const {data,error}=await query.maybeSingle();if(error)throw error;if(generation===this.generation)this.record=data;}
   catch{if(generation===this.generation){this.loadError=true;this.error='Could not load drawing. Please retry.';}}
-  finally{if(generation===this.generation)this.loading=false;}
+  finally{if(generation===this.generation){this.loading=false;this.cdr?.markForCheck();}}
  }
  async upload(event:Event){const input=event.target as HTMLInputElement;const file=input.files?.[0];input.value='';if(!file||this.busy||this.loading||this.loadError)return;
   this.success='';
