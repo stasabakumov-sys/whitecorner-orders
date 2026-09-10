@@ -1,4 +1,5 @@
 import {describe, it, expect} from 'vitest';
+import {TestBed} from '@angular/core/testing';
 import {WixCatalogReviewComponent} from './wix-catalog-review.component';
 import {reconcileCatalogue} from './wix-catalog-review';
 const p = (id: string, name: string) => ({id,name,visible:true,variantCount:2});
@@ -23,7 +24,7 @@ describe('Wix catalogue identity review', () => {
       if (calls === 2) return {error:{context:{json:async()=>({error:'Permission denied'})}}};
       return {data:{version:'V1_CATALOG',products:[p('a','Backdrop')],total:2,complete:false,nextOffset:1,nextCursor:null}};
     }}}};
-    const c = new WixCatalogReviewComponent(db); await c.review();
+    const c = TestBed.runInInjectionContext(() => new WixCatalogReviewComponent(db)); await c.review();
     expect(c.report()).toBeNull(); expect(c.error()).toBe('Permission denied'); expect(c.busy()).toBe(false);
     db.client.functions.invoke = async () => ({data:{version:'V1_CATALOG',products:[p('a','Backdrop')],total:1,complete:true,nextOffset:null,nextCursor:null}});
     await c.review(); expect(c.report()?.newCount).toBe(1); expect(c.progress()).toBe(1);

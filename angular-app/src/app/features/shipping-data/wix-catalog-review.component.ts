@@ -1,13 +1,14 @@
-import {Component, signal} from '@angular/core';
+import {Component, signal, output} from '@angular/core';
+import {WixCatalogImportComponent} from './wix-catalog-import.component';
 import {DialogModule} from 'primeng/dialog';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {environment} from '../../../environments/environment';
 import {HubCatalogProduct, WixCatalogProduct, reconcileCatalogue} from './wix-catalog-review';
 
-@Component({selector: 'app-wix-catalog-review', standalone: true, imports: [DialogModule], template: `
+@Component({selector: 'app-wix-catalog-review', standalone: true, imports: [DialogModule,WixCatalogImportComponent], template: `
   <button (click)="open = true">Review Wix catalogue</button>
   <p-dialog header="Review Wix catalogue" [(visible)]="open" [modal]="true" [style]="{width:'880px',maxWidth:'95vw'}" [draggable]="false">
-    <p>Compare Wix products with the existing Hub catalogue. Products, packaging and drawings will not be changed.</p>
+    <p>Read and compare checks Wix identities without changing products. Use Import below to save product cards and variants.</p>
     <button (click)="review()" [disabled]="busy()">{{busy() ? 'Reading Wix…' : 'Read and compare'}}</button>
     @if(busy()){<p role="status">{{progress()}} product identities read. This is not an import.</p>}
     @if(error()){<p role="alert" class="error">{{error()}}</p>}
@@ -21,9 +22,11 @@ import {HubCatalogProduct, WixCatalogProduct, reconcileCatalogue} from './wix-ca
       @for(p of r.rows;track p.id){<tr><td>{{p.name}}<small>{{p.id}}</small></td><td>{{p.status}}</td><td>{{p.variantCount ?? 'Not read'}}</td></tr>}
       </tbody></table></div>
     }
+    <app-wix-catalog-import (saved)="report.set(null);saved.emit()" />
   </p-dialog>
 `, styles: [`button{font:inherit;padding:8px 12px;border:1px solid #dce5ef;border-radius:8px;background:white;color:#344054;cursor:pointer}button:disabled{opacity:.5}p{line-height:1.5}.notice{background:#f1f5fa;padding:12px;border-radius:8px}.error{color:#b42318}.table-wrap{max-height:45vh;overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:10px;border-bottom:1px solid #e7edf5}small{display:block;color:#758198;font-size:11px;overflow-wrap:anywhere}`]})
 export class WixCatalogReviewComponent {
+  readonly saved=output<void>();
   open = false;
   readonly busy = signal(false); readonly error = signal(''); readonly progress = signal(0); readonly version = signal('');
   readonly report = signal<ReturnType<typeof reconcileCatalogue> | null>(null);
