@@ -1,0 +1,18 @@
+import {readFile} from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const {PGlite}=await import(pathToFileURL(path.resolve(process.argv[2])).href);
+const db=new PGlite();
+try{
+ await db.exec('create role anon;create role authenticated;create role service_role bypassrls;create table wc_orders(wix_order_id text,order_number text,is_hidden boolean);grant select on wc_orders to authenticated;');
+ await db.exec("insert into wc_orders values('hidden','2',true),('active','1',false)");
+ await db.exec(await readFile('supabase/migrations/20260909000800_wix_order_history.sql','utf8'));
+ await db.exec(`set role service_role;insert into wc_wix_order_history(wix_order_id,order_number,raw_order) values('hidden','2','{}'),('active','1','{}'),('old','3','{}');reset role;`);
+ await db.exec('set role authenticated');
+ assert.equal((await db.query('select * from wc_wix_order_history')).rows.length,2);
+ await assert.rejects(()=>db.exec("insert into wc_wix_order_history values('bad','4',null,'{}',now())"));
+ await db.exec('reset role;set role anon');await assert.rejects(()=>db.query('select * from wc_wix_order_history'));
+ await db.exec('reset role');assert.equal((await db.query('select * from wc_orders')).rows.length,2);
+ console.log('History migration: RLS, write isolation and existing operational rows verified');
+}finally{await db.close();}

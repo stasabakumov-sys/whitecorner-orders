@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { courierReviewCall, processDeliveryQueue } from '../_shared/delivery-review-worker.ts';
 import { syncShippingFulfillment } from "./shipping-fulfillment.ts";
 import { queryContactsPage } from './contacts.ts';
+import { importOrderHistory } from './order-history.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -88,6 +89,16 @@ Deno.serve(async (req) => {
       "Authorization": wixApiKey,
       "wix-site-id": wixSiteId,
     };
+
+    if(requestBody?.action==='importOrderHistory'){
+      const jwt=req.headers.get('Authorization')?.replace(/^Bearer\s+/i,'')||'';
+      if(jwt!==serviceRole){
+        const {data:user,error:authError}=await db.auth.getUser(jwt);
+        if(authError||!user.user)return new Response(JSON.stringify({error:'Authentication required'}),{status:401,headers:jsonHeaders});
+      }
+      try{return new Response(JSON.stringify(await importOrderHistory(db,wixHeaders,requestBody)),{headers:jsonHeaders});}
+      catch(error){return new Response(JSON.stringify({error:error instanceof Error?error.message:'History import failed'}),{status:502,headers:jsonHeaders});}
+    }
 
     if (requestBody?.action === 'queryContacts') {
       const jwt=req.headers.get('Authorization')?.replace(/^Bearer\s+/i,'')||'';

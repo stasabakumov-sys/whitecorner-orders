@@ -8,6 +8,7 @@ import { TagModule } from 'primeng/tag';
 import { OrderRow } from '../../core/models/order.models';
 import { OrdersService } from '../../core/services/orders.service';
 import { isDeliveryLine } from '../../core/utils/order-products';
+import {OrderHistoryService,mergeOrderHistory} from './order-history.service';
 import {orderMetrics,MetricsPeriod} from './order-metrics';
 import { OrderDrawerComponent } from '../../shared/order-drawer/order-drawer.component';
 
@@ -29,15 +30,19 @@ import { OrderDrawerComponent } from '../../shared/order-drawer/order-drawer.com
         </select>
       </div>
       <div class="head">
-        <div class="title-block"><h1>Orders</h1><small>{{orders.orders().length}} orders</small></div>
+        <div class="title-block"><h1>Orders</h1><small>{{allOrders().length}} orders</small></div>
         <div class="actions">
           @if(orders.lastSync()){<small class="sync-note">Wix synced {{orders.lastSync()|date:'dd/MM/yyyy, h:mm a'}}</small>}
           <button pButton type="button" label="Sync Wix" icon="pi pi-refresh" [loading]="syncing()" (click)="sync()"></button>
+          <button pButton type="button" label="Load all Wix orders" [loading]="history.importing()" (click)="history.sync()"></button>
           <div class="search-box"><i class="pi pi-search"></i><input pInputText placeholder="Search orders" (input)="search.set($any($event.target).value)"></div>
         </div>
       </div>
       @if(orders.error()){<div class="error">{{orders.error()}}</div>}
-      <div class="list-table"><p-table [value]="filtered()" [rowHover]="true" [tableStyle]="{'min-width':'900px'}">
+      @if(history.error()){<div class="error">{{history.error()}}</div>}
+      @if(history.importing()){<p role="status">Loading Wix history… {{history.progress()}} orders</p>}
+      @if(history.message()){<p role="status">{{history.message()}}</p>}
+      <div class="list-table"><p-table [value]="filtered()" [rowHover]="true" [paginator]="true" [rows]="50" [tableStyle]="{'min-width':'900px'}">
         <ng-template pTemplate="header"><tr><th>Order</th><th>Date</th><th>Customer</th><th class="items-count">Items</th><th>Payment</th><th>Fulfilment</th><th class="total-head">Total</th></tr></ng-template>
         <ng-template pTemplate="body" let-order>
           <tr class="row" (click)="selected.set(order)">
@@ -66,15 +71,17 @@ import { OrderDrawerComponent } from '../../shared/order-drawer/order-drawer.com
 export class OrdersComponent implements OnInit{
   search=signal('');selected=signal<OrderRow|null>(null);syncing=signal(false);
   period=signal<MetricsPeriod>('30');
-  metrics=computed(()=>orderMetrics(this.orders.orders(),this.period()));
+  allOrders=computed(()=>mergeOrderHistory(this.orders.orders(),this.history.orders()));
+  metrics=computed(()=>orderMetrics(this.allOrders(),this.period()));
   abs=Math.abs;
-  filtered=computed(()=>{const q=this.search().toLowerCase();return this.orders.orders().filter(o=>!q||JSON.stringify(o).toLowerCase().includes(q));});
-  constructor(readonly orders:OrdersService,private readonly route:ActivatedRoute){}
+  filtered=computed(()=>{const q=this.search().toLowerCase();return this.allOrders().filter(o=>!q||JSON.stringify(o).toLowerCase().includes(q));});
+  constructor(readonly orders:OrdersService,readonly history:OrderHistoryService,private readonly route:ActivatedRoute){}
   async ngOnInit(){
     if(!this.orders.orders().length) await this.orders.load();
+    await this.history.load();
     const requested=this.route.snapshot.queryParamMap.get('order');
     if(requested){
-      const order=this.orders.orders().find(o=>String(o.order_number)===String(requested));
+      const order=this.allOrders().find(o=>String(o.order_number)===String(requested));
       if(order)this.selected.set(order);
     }
   }
