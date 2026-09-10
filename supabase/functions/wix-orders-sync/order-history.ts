@@ -1,3 +1,20 @@
+// PostgreSQL JSONB rejects NUL and unpaired UTF-16 surrogates. Keep an exact
+// serialized source when replacing these characters in the display snapshot.
+export function historySnapshot(order:unknown){
+  const source=JSON.stringify(order);
+  const clean=(value:any):any=>{
+    if(typeof value==='string')return Array.from(value,char=>{
+      const code=char.codePointAt(0)!;
+      return code===0||(code>=0xd800&&code<=0xdfff)?'\ufffd':char;
+    }).join('');
+    if(Array.isArray(value))return value.map(clean);
+    if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,item])=>[clean(key),clean(item)]));
+    return value;
+  };
+  const raw_order=clean(order);
+  return{raw_order,source_json:JSON.stringify(raw_order)===source?null:source};
+}
+
 export async function importOrderHistory(db:any,headers:Record<string,string>,body:Record<string,unknown>,call:typeof fetch=fetch){
   let cursor=body.cursor;
   if(cursor!=null&&(typeof cursor!=='string'||cursor.length>16000))throw new Error('Invalid history cursor');
@@ -14,9 +31,12 @@ export async function importOrderHistory(db:any,headers:Record<string,string>,bo
     const next=data.pagingMetadata?.cursors?.next||data.metadata?.cursors?.next||null;
     if(next&&(typeof next!=='string'||seen.has(next)||!data.orders.length))throw new Error('Wix order history pagination stalled');
     if(data.orders.length){
-      const rows=[...new Map(data.orders.map((o:any)=>[o.id,{wix_order_id:o.id,order_number:String(o.number??''),wix_created_at:o.createdDate||null,raw_order:o,synced_at:new Date().toISOString()}])).values()];
+      const rows=[...new Map(data.orders.map((o:any)=>[o.id,{wix_order_id:o.id,order_number:String(o.number??''),wix_created_at:o.createdDate||null,...historySnapshot(o),synced_at:new Date().toISOString()}])).values()];
       const {error}=await db.from('wc_wix_order_history').upsert(rows,{onConflict:'wix_order_id'});
-      if(error)throw new Error('Could not save Wix order history. Check that the history migration is installed.');
+      if(error){
+        const code=/^[A-Z0-9]{5,10}$/.test(error.code||'')?` (${error.code})`:'';
+        throw new Error(`Could not save Wix order history${code}`);
+      }
       imported+=rows.length;
     }
     if(!next)return{ok:true,imported,nextCursor:null,complete:true};

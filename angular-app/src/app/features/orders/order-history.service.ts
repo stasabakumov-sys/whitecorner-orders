@@ -24,7 +24,7 @@ export class OrderHistoryService{
     if(this.loading())return;this.loading.set(true);this.error.set('');
     const rows:OrderRow[]=[];
     try{for(let offset=0;;offset+=500){
-      const {data,error}=await this.supabase.client.from('wc_wix_order_history').select('*').order('wix_order_id').range(offset,offset+499);
+      const {data,error}=await this.supabase.client.from('wc_wix_order_history').select('wix_order_id,order_number,wix_created_at,raw_order,synced_at').order('wix_order_id').range(offset,offset+499);
       if(error)throw new Error('Order history is unavailable. Please refresh after deployment.');
       rows.push(...(data||[]).map(historyOrder));if((data||[]).length<500)break;
     }this.orders.set(rows);}catch(error){this.error.set(error instanceof Error?error.message:'Could not load history');}finally{this.loading.set(false);}
@@ -42,7 +42,11 @@ export class OrderHistoryService{
       cursor=data.nextCursor;seen.add(cursor!);
     }
     await this.load();if(!this.error())this.message.set(`Wix history loaded: ${this.progress()} orders processed.`);
-    }catch(error){this.error.set((error instanceof Error?error.message:'History import failed')+'. Imported pages are saved; retrying is safe.');}
+    }catch(error){
+      const failure=(error instanceof Error?error.message:'History import failed')+'. Imported pages are saved; retrying is safe.';
+      await this.load();
+      this.error.set(failure+(this.error()?` ${this.error()}`:''));
+    }
     finally{this.importing.set(false);}
   }
 }
