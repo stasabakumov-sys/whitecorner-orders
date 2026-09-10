@@ -14,8 +14,8 @@ describe('Safe packaging variant navigation',()=>{
  });
  it('does not guess a product when no variant exists, without a saved profile',async()=>{
   for(const profile of [null]){
-   const from=vi.fn(()=>{const q:any={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:profile})};return q;});
-   const s=new DeliveryReviewService({client:{from}} as any);await expect(s.variantTarget(item)).rejects.toThrow('No packaging variant');expect(from).toHaveBeenCalledTimes(1);
+   const from=vi.fn(()=>{const q:any={select:()=>q,eq:()=>q,order:()=>q,range:async()=>({data:[]}),maybeSingle:async()=>({data:profile})};return q;});
+   const s=new DeliveryReviewService({client:{from}} as any);await expect(s.variantTarget(item)).rejects.toThrow('No packaging variant');expect(from).toHaveBeenCalledTimes(2);
   }
  });
  it('keeps the order and draft open on failure and suppresses repeated clicks',async()=>{

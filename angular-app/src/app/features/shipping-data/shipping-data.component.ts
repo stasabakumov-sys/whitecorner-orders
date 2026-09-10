@@ -106,7 +106,7 @@ type ShippingRule = {
             </section>
             @for(profile of p.saved_profiles||[];track profile.signature){
              <section class="shipsection"><h3>Saved packaging · {{profileOptions(profile)}}</h3>
-             <p class="small">Used automatically for an identical composition and quantity. This is the saved profile, not a second copy.</p>
+             <p class="small">Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.</p>
              <div class="tablewrap"><table class="shiptable packaging-table"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th><th>Drawing</th></tr></thead><tbody>
              @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{contentLabel(c)}} · Unit {{c.unit_index}}</div>}</td><td>@if(isBackdrop(p)){@if(sharedSize(profile,p);as size){<small class="shared-drawing-size">Shared · {{sizeLabel(size)}}</small><app-box-drawing [sharedSize]="size" />}@else{<small>Product size is missing or ambiguous. Add its exact dimensions before linking a shared drawing.</small>}}@else{<app-box-drawing [signature]="profile.signature" [index]="$index" [box]="box" />}</td></tr>}
              </tbody></table></div></section>

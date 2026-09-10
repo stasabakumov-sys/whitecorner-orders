@@ -100,6 +100,35 @@ export interface PackageComponent {
 export const componentNormal=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 export const isLogoFileInstruction=(text:string)=>/^(?:please )?email us (?:a )?ready to use svg\b/.test(componentNormal(text));
 export const isLogoOption=(name:string)=>/^(?:add )?logo(?: or personali[sz]ation)?$/.test(componentNormal(name));
+export const isPackagingColourOption=(name:string)=>/^colou?r$/.test(componentNormal(name));
+export const packagingOptionLabels=(item:OrderItemRow)=>orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).filter(label=>!isLogoOption(label.split(':')[0])&&!isPackagingColourOption(label.split(':')[0]));
+export function canonicalPackagingItemKey(key:string):string{
+ try{
+  const split=key.lastIndexOf(':'),parsed=JSON.parse(key.slice(0,split));
+  if(!Array.isArray(parsed)||!Array.isArray(parsed[1]))return key;
+  parsed[1]=parsed[1].filter((label:string)=>!/^colou?r\s/.test(label));
+  return JSON.stringify(parsed)+key.slice(split);
+ }catch{return key;}
+}
+export function canonicalPackagingSignature(signature:string):string{
+ try{return JSON.stringify(JSON.parse(signature).map((entry:any[])=>[canonicalPackagingItemKey(entry[0]),...entry.slice(1)]).sort());}
+ catch{return signature;}
+}
+// Canonical profiles take precedence. Legacy colour-specific records are retained,
+// including their drawing links; ambiguous legacy matches require manual review.
+export async function findPackagingProfile(db:any,signature:string){
+ const direct=await db.from('wc_delivery_packaging_profiles').select('*').eq('signature',signature).maybeSingle();
+ if(direct.error||direct.data)return direct;
+ const matches:any[]=[];
+ for(let start=0;;start+=250){
+  const page=await db.from('wc_delivery_packaging_profiles').select('*').order('signature').range(start,start+249);
+  if(page.error)return page;
+  matches.push(...(page.data||[]).filter((p:any)=>canonicalPackagingSignature(p.signature)===signature));
+  if((page.data||[]).length<250)break;
+ }
+ if(matches.length>1)return {data:null,error:{message:'Multiple saved packaging profiles differ only by colour. Save one shared profile before using it.'}};
+ return{data:matches[0]||null,error:null};
+}
 export function productId(item:OrderItemRow){const c=item.catalog_reference as any,r=item.raw_item as any;return String(c?.catalogItemId||c?.productId||r?.catalogReference?.catalogItemId||r?.productId||'');}
 const attribute=/^(colou?r|size|dimensions?|width|height|length|finish|foldable|material|tabletop(?: design)?|personalisation|personalization|engraving|notes?|message)$/i;
 // Pans are supplied directly by a partner, never packed with our cart.
@@ -117,10 +146,10 @@ export function partnerPans(item:OrderItemRow){
  const quantity=Math.max(1,Math.floor(Number(item.quantity)||1));
  return {choices,quantity,key:JSON.stringify([choices.map(componentNormal).sort(),quantity])};
 }
-export function packageComponents(items:OrderItemRow[],ignored:(name:string,value:string)=>boolean=()=>false):PackageComponent[]{
+export function packageComponents(items:OrderItemRow[],ignored:(name:string,value:string)=>boolean=()=>false,includeColour=false):PackageComponent[]{
  const occurrences=new Map<string,number>();
  return items.flatMap(item=>{
-  const labels=orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).filter(label=>!isLogoOption(label.split(':')[0]));
+  const labels=includeColour?orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).filter(label=>!isLogoOption(label.split(':')[0])):packagingOptionLabels(item);
   const signature=JSON.stringify([productId(item)||componentNormal(item.product_name||''),[...new Set(labels.map(componentNormal))].sort()]);
   const occurrence=occurrences.get(signature)||0;occurrences.set(signature,occurrence+1);
   const profile_item_key=signature+':'+occurrence;
@@ -183,8 +212,8 @@ export function packagingError(packages:ReviewPackage[],components:PackageCompon
 }
 export function restoreReviewPackages(templates:any[],components:PackageComponent[]):ReviewPackage[]{
  return templates.map(p=>({...p,contents:(p.contents||[]).flatMap((c:any)=>{
-  const match=components.find(x=>x.profile_item_key===c.profile_item_key&&x.component_key===c.component_key&&x.unit_index===c.unit_index);
-  return match?[match]:[];
+  const matches=components.filter(x=>x.profile_item_key===canonicalPackagingItemKey(c.profile_item_key||'')&&x.component_key===c.component_key&&x.unit_index===c.unit_index);
+  return matches.length===1?matches:[];
  })}));
 }
 function addressScalar(v:any){return String(typeof v==='object'&&v?v.code||v.shortName||v.name||'':v||'').trim();}
@@ -207,7 +236,9 @@ export function goodsCents(order:any){
 }
 export function reviewInputKey(order:any,rules:any[]=[]){
  const stable=(value:any):any=>Array.isArray(value)?value.map(stable):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(k=>[k,stable(value[k])])):value;
- return JSON.stringify([reviewSignature(order,rules),stable(order.delivery_address||{}),destination(order),order.currency,goodsCents(order),reviewComponents(order,rules).map(c=>c.id).sort()]);
+ // Quote validity still covers every original option, including colour and price.
+ const quoteSignature=JSON.stringify(packageComponents(reviewItems(order,rules),()=>false,true).map(c=>[c.profile_item_key,c.component_key,c.unit_index]).sort());
+ return JSON.stringify([quoteSignature,stable(order.delivery_address||{}),destination(order),order.currency,goodsCents(order),reviewComponents(order,rules).map(c=>c.id).sort()]);
 }
 export function buildReviewRequest(order:any,packages:ReviewPackage[]){
  const d=destination(order);

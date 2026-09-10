@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import {expandVariant,hasSizeOption,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import { packageComponents, componentIdentity, packagingSignature } from '../utils/package-components';
-import { isNonPackagingComponent, packagingError, restoreReviewPackages, reviewInputKey, reviewOutcome } from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import { findPackagingProfile, canonicalPackagingSignature, canonicalPackagingItemKey, isNonPackagingComponent, packagingError, restoreReviewPackages, reviewInputKey, reviewOutcome } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import { OrderItemRow, OrderRow } from '../models/order.models';
 import { OrdersService } from './orders.service';
 import { ActivityService } from './activity.service';
@@ -171,9 +171,9 @@ export class FulfilmentService {
   private restoreProfileContents(value:unknown,order:OrderRow){
     if(!Array.isArray(value))return [];
     if(value.some(x=>x?.profile_signature)){
-      if(value.some(x=>x.profile_signature!==packagingSignature(this.packageItems(order))))return [];
+      if(value.some(x=>canonicalPackagingSignature(x.profile_signature||'')!==packagingSignature(this.packageItems(order))))return [];
       const components=this.packageComponents(order);
-      return value.flatMap(x=>{const c=components.find(c=>c.profile_item_key===x.profile_item_key&&c.component_key===x.component_key&&c.unit_index===x.unit_index);return c?[{...c,profile_signature:x.profile_signature}]:[];});
+      return value.flatMap(x=>{const c=components.find(c=>c.profile_item_key===canonicalPackagingItemKey(x.profile_item_key||'')&&c.component_key===x.component_key&&c.unit_index===x.unit_index);return c?[{...c,profile_signature:x.profile_signature}]:[];});
     }
     const items=this.packageItems(order);
     return value.map((x:any)=>{
@@ -288,7 +288,7 @@ export class FulfilmentService {
     }
     const out:any[]=[]; let no=1;
     for(const item of this.packageItems(order)){
-      const {data:variant,error:variantError}=await this.supabase.client.from('wc_delivery_packaging_profiles').select('packages').eq('signature',variantSignature(item)).maybeSingle();
+      const {data:variant,error:variantError}=await findPackagingProfile(this.supabase.client,variantSignature(item));
       if(variantError){this.error.set('Packaging variants could not be loaded.');return;}
       if(variant){
         const boxes=expandVariant(variant.packages,item,this.noPackageRules());
@@ -300,7 +300,7 @@ export class FulfilmentService {
       if(!base.length)continue;
       if(base.some(p=>Array.isArray(p.contents)&&p.contents.some((c:any)=>c.profile_signature))){
         const signature=packagingSignature(this.packageItems(order));
-        if(base.every(p=>Array.isArray(p.contents)&&p.contents.length&&p.contents.every((c:any)=>c.profile_signature===signature))){
+        if(base.every(p=>Array.isArray(p.contents)&&p.contents.length&&p.contents.every((c:any)=>canonicalPackagingSignature(c.profile_signature||'')===signature))){
           out.length=0; no=1;
           for(const p of base)out.push({shipment_id:shipment.id,package_no:no++,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,contents:this.restoreProfileContents(p.contents,order),source_type:'Profile',shipping_product_id:match.id});
           break; // Component profiles describe the entire matching order, including quantity.

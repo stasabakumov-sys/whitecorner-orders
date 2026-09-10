@@ -1,6 +1,6 @@
 import {resolveCourierContents} from './courier-contents.ts';
 import { buildReviewRequest, componentNormal, eligibleOrder, evaluateQuotes, goodsCents, insuranceFor, packagingError, productId, restoreReviewPackages, reviewComponents, reviewInputKey, reviewItems, reviewSignature } from './delivery-review-domain.ts';
-import {expandVariant, hasSizeOption, variantSignature} from './delivery-review-domain.ts';
+import {expandVariant, hasSizeOption, variantSignature, findPackagingProfile, canonicalPackagingSignature} from './delivery-review-domain.ts';
 
 function checked(result:any){if(result.error)throw Error(result.error.message);return result.data;}
 export async function reviewContext(db:any,orderId:string){
@@ -36,12 +36,12 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
   const components=reviewComponents(order,rules),signature=reviewSignature(order,rules);
   let packages=review.packages||[];
   if(!packages.length){
-   const profile=checked(await db.from('wc_delivery_packaging_profiles').select('packages').eq('signature',signature).maybeSingle());
+   const profile=checked(await findPackagingProfile(db,signature));
    if(profile)packages=restoreReviewPackages(profile.packages,components);
    else {
     const variantPackages:any[]=[];
     for(const item of reviewItems(order,rules)){
-     const variant=checked(await db.from('wc_delivery_packaging_profiles').select('packages').eq('signature',variantSignature(item)).maybeSingle());
+     const variant=checked(await findPackagingProfile(db,variantSignature(item)));
      if(variant)variantPackages.push(...expandVariant(variant.packages,item,rules));
     }
     if(!packagingError(variantPackages,components))packages=variantPackages;
@@ -51,7 +51,7 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
     const groups=new Map<string,any[]>();
     for(const p of templates)groups.set(p.shipping_product_id,[...(groups.get(p.shipping_product_id)||[]),p]);
     for(const group of groups.values()){
-     if(group.every(p=>p.contents?.length&&p.contents.every((c:any)=>c.profile_signature===signature))){
+     if(group.every(p=>p.contents?.length&&p.contents.every((c:any)=>canonicalPackagingSignature(c.profile_signature||'')===signature))){
       const candidate=restoreReviewPackages(group,components);
       if(!packagingError(candidate,components)){packages=candidate;break;}
      }

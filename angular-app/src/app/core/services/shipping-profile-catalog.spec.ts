@@ -16,5 +16,5 @@ describe('Unified persisted packaging catalogue',()=>{
  it('retains whole shared-box profiles instead of splitting them into unsafe product templates',()=>{
   const p=profile();p.packages[0].contents.push({component_key:'main',product_name:'Other',wix_product_id:'other',profile_item_key:'["other",[]]:0'});const rows=shippingProfileCatalog([],[p]);expect(rows).toHaveLength(2);for(const row of rows)expect(row.saved_profiles[0].packages[0].contents).toHaveLength(2);
  });
- it('displays saved variant options',()=>expect(savedProfileOptions(profile())).toBe('size ii · colour white'));
+ it('displays structural options without colour',()=>expect(savedProfileOptions(profile())).toBe('size ii'));
 });
