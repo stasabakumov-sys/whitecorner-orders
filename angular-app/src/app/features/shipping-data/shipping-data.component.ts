@@ -1,3 +1,4 @@
+import {productNavigationMatches} from '../../core/utils/product-navigation';
 import { Component, OnInit, computed, signal, Optional } from '@angular/core';
 import {DialogModule} from 'primeng/dialog';
 import {DrawerModule} from 'primeng/drawer';
@@ -238,13 +239,12 @@ export class ShippingDataComponent implements OnInit {
     this.packages.set((pk.data ?? []) as ShippingPackage[]);
     this.rules.set((rr.data ?? []) as ShippingRule[]);
     const params=this.route?.snapshot.queryParamMap;
-    const requested=params?.get('product'),requestedId=params?.get('productId');
+    const requested=params?.get('product'),requestedId=params?.get('productId'),requestedWixId=params?.get('wixProductId');
     this.requestedVariant=params?.get('variant')||'';
-    if(requestedId!==null&&requestedId!==undefined||requested!==null&&requested!==undefined){
-      const saved=params?.get('savedProfile');
-      const matches=this.products().filter(p=>(requestedId!==null&&requestedId!==undefined?p.id===requestedId:p.product_name===requested)&&(!saved||p.saved_profiles?.some(x=>x.signature===saved)));
+    if(requestedId!=null||requested!=null||requestedWixId!=null){
+      const matches=productNavigationMatches(this.products(),params!);
       this.selectedId.set(matches.length===1?matches[0].id:null);
-      if(matches.length!==1)this.error.set('No matching shipping product is available. Return to the order and add boxes there.');
+      if(matches.length!==1)this.error.set('The product could not be identified uniquely in Products. Check its catalogue record.');
       return; // An explicit, missing target must never fall back to the first product.
     }
 

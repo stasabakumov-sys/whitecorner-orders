@@ -1,3 +1,4 @@
+import {ProductLinkComponent} from '../../shared/product-link/product-link.component';
 import {orderItemOptionLabels} from '../../core/utils/order-item-display';
 import {orderProducts} from '../../core/utils/order-products';
 import { PackageComponent, componentIdentity } from '../../core/utils/package-components';
@@ -23,7 +24,7 @@ type BookingDraft = {
 @Component({
   selector: 'app-fulfilment',
   standalone: true,
-  imports: [DatePipe, RouterLink, ButtonModule, DialogModule, DrawerModule, InputTextModule, TableModule, TagModule],
+  imports: [ProductLinkComponent,DatePipe, RouterLink, ButtonModule, DialogModule, DrawerModule, InputTextModule, TableModule, TagModule],
   template: `
     <section class="page-card">
       <div class="page-head">
@@ -86,7 +87,7 @@ type BookingDraft = {
               @for (item of product.components; track item.id) {
                 <div class="item-card">
                   @if (image(item)) { <img [src]="image(item)" alt="" /> } @else { <div class="image-placeholder"></div> }
-                  <div>@if(item.id!==product.item.id){<small>Component of {{product.item.product_name}}</small>}<b>{{ item.product_name || 'Unnamed item' }}</b><div class="chips"><span>qty: {{ item.quantity || 1 }}</span>@for (opt of options(item); track opt) { <span>{{ opt }}</span> }</div></div>
+                  <div>@if(item.id!==product.item.id){<small>Component of {{product.item.product_name}}</small>}<b><app-product-link [item]="item" /></b><div class="chips"><span>qty: {{ item.quantity || 1 }}</span>@for (opt of options(item); track opt) { <span>{{ opt }}</span> }</div></div>
                   <div class="price">{{ item.unit_price != null ? 'A$' + item.unit_price.toFixed(2) : '' }}</div>
                 </div>
               }

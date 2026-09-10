@@ -1,11 +1,12 @@
+import {ProductLinkComponent} from '../../shared/product-link/product-link.component';
 import {Component,Input,OnChanges} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {CostingService} from './costing.service';
 
-@Component({selector:'app-catalog-cost-editor',standalone:true,imports:[CommonModule,FormsModule],styleUrl:'./costing.css',template:`
+@Component({selector:'app-catalog-cost-editor',standalone:true,imports:[ProductLinkComponent,CommonModule,FormsModule],styleUrl:'./costing.css',template:`
 <section class="editor">
-<h3>{{part.product_name}}</h3><small>{{part.kind==='main'?'Main product':part.kind==='processing'?'Processing of addon':part.kind==='replacement'?'Replacement tabletop':'Addon'}} · {{part.multiplier}} per finished product</small>
+<h3>@if(linkProduct){<app-product-link [item]="part" />}@else{ {{part.product_name}} }</h3><small>{{part.kind==='main'?'Main product':part.kind==='processing'?'Processing of addon':part.kind==='replacement'?'Replacement tabletop':'Addon'}} · {{part.multiplier}} per finished product</small>
 <p>{{options()}}</p>
 @if(part.standard_top_excluded){<p><b>Exclude the standard tabletop materials.</b> The replacement tabletop has its own profile below.</p>}
 @if(!part.profile){<p>No complete saved cost profile yet. Add the missing information.</p>}
@@ -24,6 +25,7 @@ import {CostingService} from './costing.service';
 `})
 export class CatalogCostEditorComponent implements OnChanges {
  @Input({required:true}) part:any;
+ @Input() linkProduct=false;
  lines:any[]=[];work:Record<string,number|null>={};pans:number|null=null;confirmed=false;version:string|null=null;saved=false;
  categories=[{key:'cnc',label:'CNC'},{key:'assembly',label:'Assembly'},{key:'sanding',label:'Sanding'},{key:'painting',label:'Painting'}];
  private openedKey='';

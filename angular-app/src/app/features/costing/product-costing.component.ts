@@ -1,3 +1,4 @@
+import {ProductLinkComponent} from '../../shared/product-link/product-link.component';
 import {Component,OnInit} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
@@ -9,7 +10,7 @@ import {orderProducts} from '../../core/utils/order-products';
 import {CatalogCostEditorComponent} from './catalog-cost-editor.component';
 import {deliveryCents,partnerPans} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {CostingService} from './costing.service';
-@Component({selector:'app-product-costing',standalone:true,imports:[CommonModule,FormsModule,RouterLink,DrawerModule,CatalogCostEditorComponent],styleUrl:'./costing.css',templateUrl:'./product-costing.component.html'})
+@Component({selector:'app-product-costing',standalone:true,imports:[ProductLinkComponent,CommonModule,FormsModule,RouterLink,DrawerModule,CatalogCostEditorComponent],styleUrl:'./costing.css',templateUrl:'./product-costing.component.html'})
 export class ProductCostingComponent implements OnInit {
  orderId:string|null=null;
  readonly hasCost=(c:any)=>c.total_gst!=null;
