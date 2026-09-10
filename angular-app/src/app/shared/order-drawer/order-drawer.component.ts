@@ -138,7 +138,8 @@ import {OrderPrintComponent} from './order-print.component';
             </div>
           </section>
 
-          <app-order-activity [order]="order" />
+          @if(!order.is_history){<app-order-activity [order]="order" />}
+          @else{<p class="edit-notice">Historical Wix order · read only.</p>}
         </main>
 
         <aside class="side-column">

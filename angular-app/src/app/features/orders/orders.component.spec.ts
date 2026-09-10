@@ -5,6 +5,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderRow } from '../../core/models/order.models';
 import { OrdersService } from '../../core/services/orders.service';
+import { OrderHistoryService } from './order-history.service';
 import { OrdersComponent } from './orders.component';
 
 const order: OrderRow = {
@@ -38,6 +39,7 @@ describe('OrdersComponent', () => {
       providers: [
         provideNoopAnimations(),
         { provide: OrdersService, useValue: service },
+        { provide: OrderHistoryService, useValue: {orders:signal([]),loading:signal(false),importing:signal(false),error:signal(''),message:signal(''),progress:signal(0),load:vi.fn(async()=>undefined)} },
         {
           provide: ActivatedRoute,
           useValue: { snapshot: { queryParamMap: { get: () => null } } },
