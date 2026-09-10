@@ -3,6 +3,7 @@ import { courierReviewCall, processDeliveryQueue } from '../_shared/delivery-rev
 import { syncShippingFulfillment } from "./shipping-fulfillment.ts";
 import { queryContactsPage } from './contacts.ts';
 import { queryCatalogPage } from './catalog.ts';
+import { importCatalogPage } from './catalog-import.ts';
 import { importOrderHistory } from './order-history.ts';
 
 const corsHeaders = {
@@ -99,6 +100,14 @@ Deno.serve(async (req) => {
       }
       try{return new Response(JSON.stringify(await importOrderHistory(db,wixHeaders,requestBody)),{headers:jsonHeaders});}
       catch(error){return new Response(JSON.stringify({error:error instanceof Error?error.message:'History import failed'}),{status:502,headers:jsonHeaders});}
+    }
+
+    if (requestBody?.action === 'importCatalog') {
+      const jwt = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') || '';
+      const {data:user,error:authError} = await db.auth.getUser(jwt);
+      if(authError||!user.user)return new Response(JSON.stringify({error:'Authentication required'}),{status:401,headers:jsonHeaders});
+      try{return new Response(JSON.stringify(await importCatalogPage(db,wixHeaders,wixSiteId,requestBody)),{headers:jsonHeaders});}
+      catch(error){return new Response(JSON.stringify({error:error instanceof Error?error.message:'Catalogue import failed'}),{status:502,headers:jsonHeaders});}
     }
 
     if (requestBody?.action === 'queryCatalog') {

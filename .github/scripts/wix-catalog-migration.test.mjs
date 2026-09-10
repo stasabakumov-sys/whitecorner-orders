@@ -1,0 +1,37 @@
+import {readFile} from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const {PGlite}=await import(pathToFileURL(path.resolve(process.argv[2])).href);
+const db=new PGlite();
+try{
+ await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+ create table wc_shipping_products(id uuid primary key default gen_random_uuid(),wix_product_id text unique,product_name text,product_type text default 'Other',active boolean default true,notes text,short_name text,updated_at timestamptz default now());
+ create table drawings(product_id uuid references wc_shipping_products(id),filename text);
+ insert into wc_shipping_products(wix_product_id,product_name,notes,short_name,active) values('backdrop','Old name','keep notes','Keep short',false),(null,'Local only','keep',null,true);
+ insert into drawings select id,'keep.cdr' from wc_shipping_products where wix_product_id='backdrop';`);
+ await db.exec(await readFile('supabase/migrations/20260910000200_wix_product_catalog.sql','utf8'));
+ const original=(await db.query("select * from wc_shipping_products where wix_product_id='backdrop'")).rows[0];
+ const begin=async(restart=false)=>(await db.query('select * from wc_wix_catalog_begin($1,$2)',['site',restart])).rows[0];
+ const commit=async(j,offset,total,rows)=>(await db.query('select * from wc_wix_catalog_page($1,$2,$3,$4,$5::jsonb)',['site',j.run_id,offset,total,JSON.stringify(rows)])).rows[0];
+ const p=(id,name)=>({product:{id,name,variants:[{id:'raw',choices:{Colour:'Raw'}},{id:'white',choices:{Colour:'White'}}]}});
+ let j=await begin();j=await commit(j,0,3,[p('backdrop','New name')]);assert.equal(j.next_offset,1);
+ const replay=await commit(j,0,3,[p('backdrop','New name')]);assert.equal(replay.next_offset,1);
+ await assert.rejects(()=>commit(j,1,3,[p('new','New item'),p('candidate','Local only')]),/requires review/);
+ assert.equal((await db.query("select count(*)::int n from wc_shipping_products where wix_product_id='new'")).rows[0].n,0);
+ assert.equal((await begin()).next_offset,1);
+ await assert.rejects(()=>commit(j,1,4,[p('x','x')]),/total changed/);
+ j=await commit(j,1,3,[p('new','New item'),p('second','New item')]);assert.equal(j.complete,true);
+ const updated=(await db.query("select * from wc_shipping_products where wix_product_id='backdrop'")).rows[0];
+ assert.equal(updated.id,original.id);assert.equal(updated.notes,'keep notes');assert.equal(updated.short_name,'Keep short');assert.equal(updated.active,false);
+ assert.equal((await db.query('select filename from drawings')).rows[0].filename,'keep.cdr');
+ assert.equal((await db.query('select source_product from wc_wix_catalog_products where wix_product_id=$1',['backdrop'])).rows[0].source_product.variants.length,2);
+ const old=j;j=await begin(true);await assert.rejects(()=>commit(old,3,3,[]),/run changed/);
+ j=await commit(j,0,3,[p('backdrop','New name'),p('new','New item'),p('second','New item')]);
+ assert.equal((await db.query('select count(*)::int n from wc_shipping_products')).rows[0].n,4);
+ await db.exec('set role authenticated');assert.equal((await db.query('select * from wc_wix_catalog_products')).rows.length,3);
+ await assert.rejects(()=>db.query("select * from wc_wix_catalog_begin('site',true)"),/permission denied/);
+ await assert.rejects(()=>db.exec('delete from wc_wix_catalog_products'),/permission denied/);
+ await db.exec('reset role;set role anon');await assert.rejects(()=>db.query('select * from wc_wix_catalog_products'),/permission denied/);
+ console.log('Catalogue migration: stable UUIDs, local fields, drawings, variants, atomic rollback, resume, restart fencing, idempotency and RLS passed');
+}finally{await db.close();}
