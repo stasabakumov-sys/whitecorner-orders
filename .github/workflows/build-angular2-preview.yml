@@ -68,6 +68,8 @@ jobs:
         run: node --test .github/scripts/delivery-review-worker.test.cjs
       - name: Test Wix history import with mocks
         run: node --test supabase/functions/wix-orders-sync/order-history.test.cjs
+      - name: Test Wix catalogue review with mocks
+        run: node --test supabase/functions/wix-orders-sync/catalog.test.cjs
       - name: Test Email AI handler with mocks
         run: node --test supabase/functions/email-ai/handler.test.cjs
       - uses: denoland/setup-deno@v2

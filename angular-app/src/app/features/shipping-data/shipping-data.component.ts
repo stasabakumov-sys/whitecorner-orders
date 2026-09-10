@@ -1,4 +1,5 @@
 import {productNavigationMatches} from '../../core/utils/product-navigation';
+import {WixCatalogReviewComponent} from './wix-catalog-review.component';
 import { Component, OnInit, computed, signal, Optional } from '@angular/core';
 import {DialogModule} from 'primeng/dialog';
 import {DrawerModule} from 'primeng/drawer';
@@ -53,7 +54,7 @@ type ShippingRule = {
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[PackagingVariantsComponent,CatalogCostEditorComponent,BoxDrawingComponent,ProductDetailsComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[WixCatalogReviewComponent,PackagingVariantsComponent,CatalogCostEditorComponent,BoxDrawingComponent,ProductDetailsComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -68,7 +69,7 @@ type ShippingRule = {
         <span class="mut push">Shared product catalogue · packaging, materials, work and Pans</span>
       </div>
 
-      <div class="product-tools"><input aria-label="Search products" placeholder="Search products" [(ngModel)]="search"><button (click)="openLibrary()">Backdrop box drawings</button></div>
+      <div class="product-tools"><input aria-label="Search products" placeholder="Search products" [(ngModel)]="search"><app-wix-catalog-review /><button (click)="openLibrary()">Backdrop box drawings</button></div>
       </div>
       <div class="tablewrap product-tablewrap"><table class="shiptable product-list"><thead><tr><th class="number">#</th><th>Product</th><th>Short name</th><th>Product size</th><th>Packaging profiles</th></tr></thead><tbody>
       @for(p of visibleProducts();track p.id){<tr><td class="number">{{$index+1}}</td><td><button class="product-link" (click)="openProduct(p.id)">{{p.product_name}}</button></td><td>{{p.short_name||'—'}}</td><td>{{productSizes(p).join(' · ')||'—'}}</td><td>{{p.saved_profiles?.length||0}}</td></tr>}
