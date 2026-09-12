@@ -134,6 +134,12 @@ export class FastCourierService {
   private insuranceOptionsRequest: Promise<string[]> | null = null;
   constructor(private supabase: SupabaseService) {}
 
+  async getGeneralContents(): Promise<string> {
+    const data=await this.invoke({action:'contents-preview'});
+    if(!data?.status||typeof data.contents!=='string'||!data.contents.trim())throw new Error(data?.message||'Fast Courier contents are unavailable. Reopen the booking form to retry.');
+    return data.contents;
+  }
+
   async getQuotes(request: FastCourierQuoteRequest): Promise<FastCourierQuoteResponse> {
     const { data, error } = await this.supabase.client.functions.invoke(environment.fastCourierFunction, {
       body: { action: 'quotes', payload: request },

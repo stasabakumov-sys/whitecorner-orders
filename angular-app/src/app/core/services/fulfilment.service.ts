@@ -84,6 +84,7 @@ export class FulfilmentService {
   readonly loading = signal(false);
   readonly quotingShipmentId = signal<string|null>(null);
   readonly bookingShipmentId = signal<string|null>(null);
+  getGeneralContents(){return this.fastCourier.getGeneralContents();}
   readonly syncingOrderIds = signal<string[]>([]);
   readonly shippingSync = signal<ShippingFulfillmentSync[]>([]);
   readonly checkingBookingShipmentId = signal<string|null>(null);

@@ -4,6 +4,23 @@ function moduleAt(file){const exports={};const result=ts.transpileModule(fs.read
 const domain=moduleAt(path.resolve('supabase/functions/_shared/delivery-review-domain.ts'));
 const production=moduleAt(path.resolve('supabase/functions/_shared/delivery-production-gate.ts'));
 const {processDeliveryReview,courierReviewCall}=moduleAt(path.resolve('supabase/functions/_shared/delivery-review-worker.ts'));
+test('booking details require the exact previewed general category and fail closed on stale contents or reference failure',async()=>{
+ let handler;const sent=[];let reference={status:true,data:['other','fragile']};
+ const file=path.resolve('supabase/functions/fast-courier-api/index.ts');
+ const output=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+ vm.runInNewContext(output,{exports:{},require:p=>p.includes('http/server')?{serve:f=>handler=f}:p.includes('esm.sh')?{}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{env:{get:()=> 'fixture'}},Response,Request,AbortController,AbortSignal,DOMException,setTimeout,clearTimeout,console,
+ fetch:async(url,init)=>{sent.push({url,init});return new Response(JSON.stringify(url.endsWith('/package-contents-list')?reference:{status:true}),{status:200});}});
+ const call=body=>handler(new Request('http://fixture.invalid',{method:'POST',body:JSON.stringify(body)}));
+ assert.equal((await (await call({action:'contents-preview'})).json()).contents,'other');
+ sent.length=0;
+ for(const parcelContent of ['Front/Sides, Shelves','General',''])assert.equal((await call({action:'save-order-details',orderId:'fixture',payload:{parcelContent}})).status,422);
+ assert.equal(sent.filter(s=>s.url.includes('/save-order-details')).length,0);
+ assert.equal((await call({action:'save-order-details',orderId:'fixture',payload:{parcelContent:'other',quoteId:'q'}})).status,200);
+ assert.deepEqual(JSON.parse(sent.at(-1).init.body),{parcelContent:'other',quoteId:'q'});
+ reference={status:false,data:[]};sent.length=0;
+ assert.equal((await call({action:'save-order-details',orderId:'fixture',payload:{parcelContent:'other'}})).status,500);
+ assert.equal(sent.length,1);assert.ok(sent[0].url.endsWith('/package-contents-list'));
+});
 function setup(){
  const order={id:'order',currency:'AUD',shipping:300,subtotal:110,fulfillment_status:'NOT_FULFILLED',delivery_type:'Shipping',delivery_address:{city:'Test',state:'VIC',postalCode:'3000'},wc_order_items:[{id:'item',product_name:'Cart',unit_price:110,quantity:1}]};
  const components=domain.reviewComponents(order);

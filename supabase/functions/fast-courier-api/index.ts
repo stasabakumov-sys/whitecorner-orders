@@ -131,7 +131,7 @@ serve(async (req) => {
   try {
     const body = await req.json();
     if (body?.action === 'address-type') return await detectAddressType(body.payload);
-    if (!['quotes', 'insurance-list', 'save-order-details', 'booking', 'order-status', 'document-url'].includes(body?.action)) return json({ status: false, message: 'Unsupported Fast Courier action.' }, 400);
+    if (!['quotes', 'contents-preview', 'insurance-list', 'save-order-details', 'booking', 'order-status', 'document-url'].includes(body?.action)) return json({ status: false, message: 'Unsupported Fast Courier action.' }, 400);
     if (body.action === 'document-url') return json({ status: true, url: await signedDocumentUrl(text(body.path)) });
     // Fast Courier credentials are loaded from Supabase runtime secrets.
     const apiKey = Deno.env.get('FAST_COURIER_API_KEY');
@@ -139,6 +139,11 @@ serve(async (req) => {
 
     // Keep the host configurable because Fast Courier can issue account-specific API hosts.
     const baseUrl = (Deno.env.get('FAST_COURIER_API_BASE_URL') || 'https://enterprise-api.fastcourier.com.au').replace(/\/$/, '');
+    async function generalContents() {
+      const {response,result}=await courierJson(`${baseUrl}/api/package-contents-list`,apiKey,{method:'GET',signal:AbortSignal.timeout(30000)});
+      return resolveCourierContents({items:[{contents:'General/Others'}]},{http_status:response.status,body:result}).items[0].contents;
+    }
+    if(body.action==='contents-preview') return json({status:true,contents:await generalContents()});
     if (body.action === 'insurance-list') {
       const response = await fetch(`${baseUrl}/api/insurance-list`, {
         headers: { Accept: 'application/json', 'Secret-Key': apiKey },
@@ -165,6 +170,10 @@ serve(async (req) => {
         : body.action === 'booking'
           ? `/api/order-booking/${encodeURIComponent(orderId)}`
           : `/api/order-status/${encodeURIComponent(orderId)}`;
+      if(body.action==='save-order-details') {
+        const contents=await generalContents();
+        if(body.payload?.parcelContent!==contents) return json({status:false,message:'Parcel contents must match the current Fast Courier category. Reopen the booking form to review it. No booking created.'},422);
+      }
       const init: RequestInit = body.action === 'order-status'
         ? { method: 'GET' }
         : { method: 'POST', ...(body.action === 'save-order-details' ? { body: JSON.stringify(body.payload || {}) } : {}) };

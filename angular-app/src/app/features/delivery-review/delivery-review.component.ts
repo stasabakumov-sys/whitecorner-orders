@@ -143,7 +143,7 @@ export class DeliveryReviewComponent implements OnInit {
    if(this.filter==='attention')return !resolved(r);
    if(this.filter==='packaging_required')return ['packaging_required','legacy_packaging_required'].includes(status);
    return status===this.filter;
-  }).sort((a,b)=>Number(resolved(a))-Number(resolved(b)));
+  }).sort((a,b)=>String(b.wc_orders?.order_number||'').localeCompare(String(a.wc_orders?.order_number||''),'en',{numeric:true})||String(a.order_id).localeCompare(String(b.order_id)));
  }
  async reload(){this.s.error.set('');await this.s.load();}
  revising=false;revisionVersion='';
