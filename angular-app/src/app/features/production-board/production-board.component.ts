@@ -95,4 +95,8 @@ export class ProductionBoardComponent {
     event.stopPropagation();
     void this.router.navigate(['/orders'], { queryParams: { order: unit.order.order_number } });
   }
+  openTimer(unit: ProductionUnitView, event: Event): void {
+    event.stopPropagation();
+    void this.router.navigate(['/shop-floor'], { queryParams: { unit: unit.unit.id } });
+  }
 }

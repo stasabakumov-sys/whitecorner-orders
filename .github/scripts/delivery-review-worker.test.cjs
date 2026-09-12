@@ -169,3 +169,11 @@ test('legacy product-only boxes cannot quote a Size variant',async()=>{
  const original=s.db.from.bind(s.db);s.db.from=table=>{if(!['wc_shipping_products','wc_shipping_packages'].includes(table))return original(table);const data=table==='wc_shipping_products'?[{id:'p',product_name:'Cart'}]:[{shipping_product_id:'p',package_name:'Old size unknown',length_mm:1000,width_mm:500,height_mm:100,weight_kg:10,contents:[]}];const q={select(){return q},eq(){return q},order(){return q},then:resolve=>resolve({data})};return q;};
  await processDeliveryReview(s.db,'order',s.call);assert.equal(s.calls.length,0);assert.equal(s.review.state,'packaging_required');
 });
+test('production explains Shop Floor refusals without exposing other database errors',async()=>{
+ const s=productionFixture();s.order.delivery_type='Pickup';
+ const request={unitId:'00000000-0000-4000-8000-000000000001',next:'CNC'};
+ s.db.rpc=async()=>({error:{message:'Add and assign product parts in Shop Floor before CNC'}});
+ await assert.rejects(production.setReviewedProductionStatus(s.db,s.order,[],null,request,'actor'),/Add and assign product parts/);
+ s.db.rpc=async()=>({error:{message:'private database detail'}});
+ await assert.rejects(production.setReviewedProductionStatus(s.db,s.order,[],null,request,'actor'),/Order or delivery review changed/);
+});

@@ -20,6 +20,7 @@ export const routes:Routes=[
   {path:'materials',loadComponent:()=>import('./features/costing/materials.component').then(m=>m.MaterialsComponent)},
   {path:'product-costing',loadComponent:()=>import('./features/costing/product-costing.component').then(m=>m.ProductCostingComponent)},
   {path:'production',component:ProductionBoardComponent},
+  {path:'shop-floor',loadComponent:()=>import('./features/shop-floor/shop-floor.component').then(m=>m.ShopFloorComponent)},
   {path:'fulfilment',pathMatch:'full',redirectTo:'fulfilment/delivery'},
   {path:'fulfilment/:tab',component:FulfilmentComponent},
   {path:'email',component:EmailComponent},

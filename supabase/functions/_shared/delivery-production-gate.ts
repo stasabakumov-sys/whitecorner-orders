@@ -21,6 +21,10 @@ export async function setReviewedProductionStatus(db:any,order:any,rules:any[],r
   p_order_id:order.id,p_unit_id:body.unitId,p_next:body.next,p_actor:actor,p_decision:decision.status,
   p_order_version:order.updated_at,p_items:order.wc_order_items,p_rules:rules,p_review_version:review?.updated_at||null,
  });
- if(error)throw Error('Order or delivery review changed. Reload before changing production status.');
+ if(error){
+  const message=String(error.message||'');
+  if(/^(Add and assign product parts in Shop Floor|Finish the current stage in Shop Floor|Complete the next production stage in order|RAW skips Painting)/.test(message))throw Error(message);
+  throw Error('Order or delivery review changed. Reload before changing production status.');
+ }
  return data;
 }
