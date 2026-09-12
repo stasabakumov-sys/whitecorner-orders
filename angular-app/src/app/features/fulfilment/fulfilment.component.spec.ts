@@ -27,6 +27,7 @@ describe('FulfilmentComponent', () => {
   const rows = signal<FulfilmentRow[]>([]);
   const service = {
     rows,
+    getGeneralContents: vi.fn(async()=> 'other'),
     bookShipment: vi.fn(async (_row:any,_details:any) => true),
     error: signal(''),
     bookingShipmentId: signal<string | null>(null),
@@ -85,10 +86,20 @@ describe('FulfilmentComponent', () => {
     const shipment:any={id:'shipment',status:'Quote Selected',selected_quote_id:'quote-123',selected_quote:{priceIncludingGst:30},quote_request:{destinationSuburb:'TEST',destinationState:'QLD',destinationPostcode:4000}};
     c.bookingContext.set({row:delivery,shipment,order:{...order,subtotal:110}});
     c.bookingDialogOpen.set(true);
-    c.bookingDraft.update(d=>({...d,destinationFirstName:'Test',destinationLastName:'Recipient',destinationEmail:'test@example.invalid',destinationPhone:'0400000000',destinationAddress1:'1 Test St',collectionDate:c.today(),parcelContent:'Cart and shelves',accepted:true}));
+    c.bookingDraft.update(d=>({...d,destinationFirstName:'Test',destinationLastName:'Recipient',destinationEmail:'test@example.invalid',destinationPhone:'0400000000',destinationAddress1:'1 Test St',collectionDate:c.today(),parcelContent:'other',accepted:true}));
     vi.spyOn(c,'insuranceSelection').mockReturnValue({tier:1,required:false,goodsValue:100,extendedLiability:false,insuranceValue:500,insuranceFee:0,label:'Test cover'});
     return c;
   }
+  it('loads the API category for booking and keeps booking unavailable after reference failure',async()=>{
+    const c=bookingSetup(),context=c.bookingContext()!;
+    service.getGeneralContents.mockResolvedValueOnce('other');
+    await c.openBooking(context.row,context.shipment,context.order);
+    expect(c.bookingDraft().parcelContent).toBe('other');expect(c.bookingDraft().accepted).toBe(false);
+    service.getGeneralContents.mockRejectedValueOnce(new Error('Reference unavailable. Reopen to retry.'));
+    await c.openBooking(context.row,context.shipment,context.order);
+    expect(c.bookingDraft().parcelContent).toBe('');expect(c.bookingFormValid()).toBe(false);expect(c.bookingError()).toContain('Reference unavailable');
+    expect(service.bookShipment).not.toHaveBeenCalled();
+  });
   it('submits from the explicit charge consent without a suppressible native dialog, showing progress and blocking duplicates',async()=>{
     const c=bookingSetup(),native=vi.spyOn(window,'confirm').mockReturnValue(false);
     let done!:(value:boolean)=>void;service.bookShipment.mockImplementationOnce(()=>new Promise(resolve=>done=resolve));
@@ -99,7 +110,7 @@ describe('FulfilmentComponent', () => {
     expect(button.disabled).toBe(true);
     await c.confirmBooking();expect(service.bookShipment).toHaveBeenCalledOnce();expect(native).not.toHaveBeenCalled();
     const details=service.bookShipment.mock.calls[0][1];
-    expect(details).toMatchObject({quoteId:'quote-123',senderType:'sender',collectionDate:c.today(),parcelContent:'Cart and shelves',valueOfContent:110,insuranceValue:'$500',insuranceFee:'$0.00',acceptNoDangerousGoods:true,acceptTermConditions:true});
+    expect(details).toMatchObject({quoteId:'quote-123',senderType:'sender',collectionDate:c.today(),parcelContent:'other',valueOfContent:110,insuranceValue:'$500',insuranceFee:'$0.00',acceptNoDangerousGoods:true,acceptTermConditions:true});
     // Verify the actual Edge Function transport contract using a mock only.
     const invoke=vi.fn(async()=>({data:{status:true},error:null})),courier=new FastCourierService({client:{functions:{invoke}}} as any);
     await courier.saveOrderDetails('courier-order',details);await courier.bookOrder('courier-order');

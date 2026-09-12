@@ -5,6 +5,12 @@ import {DeliveryReviewService} from '../../core/services/delivery-review.service
 import {buildReviewRequest,evaluateQuotes,insuranceFor,reviewComponents,reviewInputKey} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 describe('Delivery review UI',()=>{
+ it('sorts order numbers descending regardless of outcome and retains that order after filtering',()=>{
+  const s=new DeliveryReviewService({} as any),c=new DeliveryReviewComponent(s);
+  const rows=[{order_id:'a',wc_orders:{order_number:'10825'},status:'failed'},{order_id:'b',wc_orders:{order_number:'10839'},status:'within_target'},{order_id:'c',wc_orders:{order_number:'10838'},status:'failed'}];
+  s.rows.set(rows);vi.spyOn(s,'outcome').mockImplementation((r:any)=>({status:r.status}) as any);
+  expect(c.visible().map(r=>r.order_id)).toEqual(['b','c','a']);c.filter='attention';expect(c.visible().map(r=>r.order_id)).toEqual(['c','a']);expect(s.rows()).toEqual(rows);
+ });
  it('opens a correction without quoting, preserves old packaging, and submits once with its original version',async()=>{
   const service=new DeliveryReviewService({} as any);const requote=vi.spyOn(service,'requotePackages').mockResolvedValue(true);
   const order={wc_order_items:[{id:'i',product_name:'Stand',quantity:1}]};

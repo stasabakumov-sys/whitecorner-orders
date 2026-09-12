@@ -313,7 +313,7 @@ type BookingDraft = {
           <legend>Collection and shipment</legend>
           <label>Collection date *<input pInputText type="date" [min]="today()" [value]="bookingDraft().collectionDate" (input)="setBookingField('collectionDate',$any($event.target).value)" /></label>
           <label>Pickup time window *<select [value]="bookingDraft().pickupTimeWindow" (change)="setBookingField('pickupTimeWindow',$any($event.target).value)"><option>9am to 5pm</option></select></label>
-          <label class="wide">Parcel contents *<input pInputText [value]="bookingDraft().parcelContent" (input)="setBookingField('parcelContent',$any($event.target).value)" /></label>
+          <label class="wide">Contents sent to Fast Courier<input pInputText [value]="bookingDraft().parcelContent" readonly /><span>{{ bookingDraft().parcelContent ? 'Current General/Others API category. This exact value will be sent when booking.' : bookingError() ? 'Category unavailable. Close and reopen this form to retry.' : 'Loading Fast Courier category…' }}</span></label>
           <label class="wide">Special instructions<textarea [value]="bookingDraft().specialInstructions" (input)="setBookingField('specialInstructions',$any($event.target).value)"></textarea></label>
           <label class="booking-check"><input type="checkbox" [checked]="bookingDraft().authorityToLeave" (change)="setBookingBoolean('authorityToLeave',$any($event.target).checked)" /> Authority to leave</label>
           <label class="booking-check"><input type="checkbox" [checked]="bookingDraft().noPrinter" (change)="setBookingBoolean('noPrinter',$any($event.target).checked)" /> No printer available</label>
@@ -463,20 +463,18 @@ export class FulfilmentComponent implements OnInit {
   bookingDestinationSuburb(shipment:ShipmentRow){return String(shipment.quote_request?.destinationSuburb||this.destination().suburb||'');}
   bookingDestinationState(shipment:ShipmentRow){return String(shipment.quote_request?.destinationState||this.destination().state||'');}
   bookingDestinationPostcode(shipment:ShipmentRow){return String(shipment.quote_request?.destinationPostcode||this.destination().postcode||'');}
-  private parcelContents(shipment:ShipmentRow){
-    const packages=this.f.packagesFor(shipment.id);
-    const packageNames=packages.map(pkg=>String(pkg.package_name||'').trim()).filter(name=>name&&!/^package\s*\d+$/i.test(name));
-    const assignedProducts=packages.flatMap(pkg=>this.f.packageContents(pkg).map(item=>String(item.product_name||'').trim())).filter(Boolean);
-    return [...new Set(packageNames.length?packageNames:assignedProducts)].join(', ').slice(0,250)||'Event display equipment';
-  }
-  openBooking(row:FulfilmentRow,shipment:ShipmentRow,order:OrderRow){
+  async openBooking(row:FulfilmentRow,shipment:ShipmentRow,order:OrderRow){
     if(shipment.status!=='Quote Selected'||!shipment.selected_quote_id)return;
     const address:any=order.delivery_address||{},name=this.splitName(order.customer_name);
     const destination=this.courierAddressLines(String(address.addressLine||address.addressLine1||address.streetAddress||''),String(address.addressLine2||address.addressLineSecondary||''));
     this.bookingError.set('');
-    this.bookingContext.set({row,shipment,order});
-    this.bookingDraft.set({...this.emptyBookingDraft(),destinationFirstName:name.firstName,destinationLastName:name.lastName,destinationCompanyName:String(order.company||'').trim().slice(0,19),destinationEmail:String(order.buyer_email||''),destinationAddress1:destination.address1,destinationAddress2:destination.address2,destinationPhone:this.cleanPhone(order.phone),collectionDate:this.nextCollectionDate(),parcelContent:this.parcelContents(shipment)});
+    const context={row,shipment,order};this.bookingContext.set(context);
+    this.bookingDraft.set({...this.emptyBookingDraft(),destinationFirstName:name.firstName,destinationLastName:name.lastName,destinationCompanyName:String(order.company||'').trim().slice(0,19),destinationEmail:String(order.buyer_email||''),destinationAddress1:destination.address1,destinationAddress2:destination.address2,destinationPhone:this.cleanPhone(order.phone),collectionDate:this.nextCollectionDate()});
     this.bookingDialogOpen.set(true);
+    try {
+      const contents=await this.f.getGeneralContents();
+      if(this.bookingContext()===context)this.bookingDraft.update(d=>({...d,parcelContent:contents,accepted:false}));
+    }catch(error:any){if(this.bookingContext()===context)this.bookingError.set(error?.message||'Could not load Fast Courier contents. Reopen the form to retry.');}
   }
   onBookingVisible(visible:boolean){if(!visible&&!this.bookingBusy()){this.bookingDialogOpen.set(false);this.bookingContext.set(null);}}
   setBookingField(key:keyof BookingDraft,value:string){this.bookingDraft.update(draft=>({...draft,[key]:value}));}
