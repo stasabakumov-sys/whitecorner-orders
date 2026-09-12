@@ -139,7 +139,7 @@ serve(async (req) => {
 
     // Keep the host configurable because Fast Courier can issue account-specific API hosts.
     const baseUrl = (Deno.env.get('FAST_COURIER_API_BASE_URL') || 'https://enterprise-api.fastcourier.com.au').replace(/\/$/, '');
-    async function generalContents() {
+    const generalContents = async () => {
       const {response,result}=await courierJson(`${baseUrl}/api/package-contents-list`,apiKey,{method:'GET',signal:AbortSignal.timeout(30000)});
       return resolveCourierContents({items:[{contents:'General/Others'}]},{http_status:response.status,body:result}).items[0].contents;
     }
