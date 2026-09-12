@@ -5,13 +5,13 @@ const migration=await readFile(`supabase/migrations/${version}_work_rates.sql`,'
 const literal="'"+migration.replaceAll("'","''")+"'";
 console.log(`begin;
 select pg_advisory_xact_lock(${version});
-do $release$ begin
+do $preflight$ begin
  if not exists(select 1 from supabase_migrations.schema_migrations where version='20260912000400') then raise exception 'Product parts prerequisite missing';end if;
- if not exists(select 1 from supabase_migrations.schema_migrations where version='${version}') then
-  execute ${literal};
-  insert into supabase_migrations.schema_migrations(version,statements,name) values('${version}',array[${literal}],'work_rates');
- end if;
-end $release$;
+ if exists(select 1 from supabase_migrations.schema_migrations where version='${version}') then raise exception 'Work rates migration already applied';end if;
+ if to_regclass('public.wc_work_rates') is not null then raise exception 'Unexpected existing work rates table';end if;
+end $preflight$;
+${migration}
+insert into supabase_migrations.schema_migrations(version,statements,name) values('${version}',array[${literal}],'work_rates');
 do $verify$ begin
  if (select count(*) from wc_work_rates)<>4 then raise exception 'Work rate directory verification failed';end if;
  if has_function_privilege('anon','public.wc_save_work_rate(text,numeric,timestamptz)','EXECUTE') then raise exception 'Anonymous work rate write access';end if;
