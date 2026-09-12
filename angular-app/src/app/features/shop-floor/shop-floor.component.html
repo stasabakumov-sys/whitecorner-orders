@@ -6,7 +6,7 @@
 @if(!phone.online()){<p class="warning" role="status">Offline · using products saved on this device. Timer actions will sync when the connection returns. Reconnect to edit or move products.</p>}
 @if(phone.error()){<p class="error" role="alert">{{phone.error()}}</p>}
 @if(phone.updateReady()){<p class="warning">An update is ready. Sync your actions before reloading. <button (click)="phone.reload()" [disabled]="s.busy()||!!s.pending().length||!phone.online()">Reload update</button></p>}
-<nav class="controls"><button (click)="tab='timer'" [class.selected]="tab==='timer'">Timer</button><button (click)="tab='journal'" [class.selected]="tab==='journal'">Shift & analytics</button><button (click)="tab='templates'" [class.selected]="tab==='templates'">Parts directory</button><a routerLink="/production">Production Board</a><button (click)="refresh()" [disabled]="s.busy()">{{s.busy()?'Saving / loading…':'Refresh / retry sync'}}</button></nav>
+<nav class="controls"><button (click)="tab='timer'" [class.selected]="tab==='timer'">Timer</button><button (click)="tab='journal'" [class.selected]="tab==='journal'">Shift & analytics</button><a routerLink="/production">Production Board</a><button (click)="refresh()" [disabled]="s.busy()">{{s.busy()?'Saving / loading…':'Refresh / retry sync'}}</button></nav>
 @if(s.error()||localError){<div class="error" role="alert">{{localError||s.error()}}</div>}
 @if(notice){<p role="status">{{notice}}</p>}
 @if(s.pending().length){<div class="warning">{{s.pending().length}} action(s) stored on this device, awaiting server confirmation. Timer actions can continue offline; board transitions and edits wait for sync. <button (click)="s.discardPending()" [disabled]="s.busy()">Reload server state and discard queued actions</button></div>}
@@ -33,8 +33,8 @@
  }@else{
   <div class="controls"><label>Stage<select [(ngModel)]="stageFilter"><option value="">All stages</option>@for(stage of production.statuses;track stage){<option>{{stage}}</option>}</select></label><label class="wide">Product<select [(ngModel)]="unitId" (ngModelChange)="selectUnit()"><option value="">Select a product</option>@for(v of choices();track v.unit.id){<option [value]="v.unit.id">{{v.code}} · {{v.mainItem.product_name}} · {{v.status}}</option>}</select></label></div>
   @if(selected();as v){<section class="panel"><h2>{{v.code}} · {{v.mainItem.product_name}}</h2><p>Current stage: <b>{{v.status}}</b></p>
-   @if(!snapshot()) {<p class="warning">Add and assign a parts template before CNC. Estimated times are optional.</p>}
-   <div class="controls"><label>Parts template<select [(ngModel)]="templateId"><option value="">Select template</option>@for(t of s.data().templates;track t.id){<option [value]="t.id">{{t.name}}</option>}</select></label><label>Finish type<select [(ngModel)]="finish"><option value="">Choose finish</option><option value="raw">RAW</option><option value="painted">Painted</option></select></label><button (click)="assign()" [disabled]="blocked()||!templateId||!finish">Save product composition</button><button (click)="editTemplate()">New parts template</button></div>
+   @if(!snapshot()) {<p class="warning">Configure parts in the Product card and assign a template before CNC. Estimated times are optional.</p>}
+   <div class="controls"><label>Parts template<select [(ngModel)]="templateId"><option value="">Select template</option>@for(t of productTemplates();track t.id){<option [value]="t.id">{{t.name}}</option>}</select></label><label>Finish type<select [(ngModel)]="finish"><option value="">Choose finish</option><option value="raw">RAW</option><option value="painted">Painted</option></select></label><button (click)="assign()" [disabled]="blocked()||!templateId||!finish">Save product composition</button>@if(selectedProductId()){<a routerLink="/shipping-data" [queryParams]="{productId:selectedProductId()}">Open Product card</a>}</div>
    @if(snapshot();as u){
     <p>Saved parts: @for(p of u.parts;track p.id){<span>{{p.name}} · </span>} Finish: {{u.finish}}</p>
     <p>Recorded work on this stage: <b>{{format(productTime(v.status))}}</b> · all work sessions combined</p>
@@ -56,13 +56,6 @@
    }
   </section>}
  }
-}
-@if(tab==='templates'){
- <div class="controls"><button (click)="editTemplate()">New template</button>@for(t of s.data().templates;track t.id){<button (click)="editTemplate(t)">{{t.name}}</button>}</div>
- <section class="panel"><h2>Parts & estimated minutes</h2><label>Template name<input [(ngModel)]="templateName" maxlength="150" placeholder="Product / size / version"></label><p>Use a separate template for each different composition. Sides is one part. Blank minutes never block production. Existing started products retain their snapshot.</p>
- <div class="table-wrap"><table><thead><tr><th>Part</th><th>Assembly (min)</th><th>Sanding (min)</th><th></th></tr></thead><tbody>@for(p of parts;track p.id){<tr><td><input [(ngModel)]="p.name" aria-label="Part name"></td><td><input type="number" min="0" [ngModel]="estimates['Assembly:'+p.id]" (ngModelChange)="setEstimate('Assembly:'+p.id,$event)" aria-label="Assembly minutes"></td><td><input type="number" min="0" [ngModel]="estimates['Sanding:'+p.id]" (ngModelChange)="setEstimate('Sanding:'+p.id,$event)" aria-label="Sanding minutes"></td><td><button (click)="removePart(p.id)">Remove</button></td></tr>}</tbody></table></div>
- <button (click)="addPart()">Add part</button><div class="estimate-grid"><label>CNC (min)<input type="number" min="0" [ngModel]="estimates['CNC']" (ngModelChange)="setEstimate('CNC',$event)"></label>@for(op of paint.concat(['Repaint']);track op){<label>{{op}} (min)<input type="number" min="0" [ngModel]="estimates['Painting:'+op]" (ngModelChange)="setEstimate('Painting:'+op,$event)"></label>}</div>
- <button class="primary" (click)="saveTemplate()" [disabled]="blocked()">Save template</button></section>
 }
 @if(tab==='journal'){
  <div class="controls"><label>Employee<select><option>{{auth.userEmail()}}</option></select></label><label>Date<input type="date" [(ngModel)]="date"></label><label>Period<select [(ngModel)]="period"><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label><button (click)="export('csv')">Export CSV</button><button (click)="export('json')">Export JSON</button></div>

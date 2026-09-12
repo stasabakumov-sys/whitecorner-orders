@@ -8,13 +8,13 @@ import {ProductionService} from '../../core/services/production.service';
 import {ShopPhoneService} from '../../core/services/shop-phone.service';
 import {ProductionStatus} from '../../core/models/production.models';
 import {ShopFloorService} from './shop-floor.service';
-import {ShopInterval,ShopShift,ShopTemplate,ShopPart,PAINT_OPERATIONS,OTHER_OPERATIONS,availablePaint,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
+import {ShopInterval,ShopShift,PAINT_OPERATIONS,OTHER_OPERATIONS,availablePaint,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
 
 @Component({selector:'app-shop-floor',standalone:true,imports:[FormsModule,DatePipe,RouterLink],templateUrl:'./shop-floor.component.html',styleUrl:'./shop-floor.component.css'})
 export class ShopFloorComponent implements OnDestroy {
  now=signal(Date.now());private tick=setInterval(()=>this.now.set(Date.now()),1000);
  tab='timer';unitId='';stageFilter='';partId='';operation='';other='Cleaning';mode='product';
- templateId='';finish='';templateName='';templateVersion=0;editingTemplateId='';parts:ShopPart[]=[];estimates:Record<string,number>={};
+ templateId='';finish='';
  date=brisbaneDate();period='day';editId='';editType='interval';editStart='';editEnd='';notice='';localError='';moving=false;
  paint=PAINT_OPERATIONS;others=OTHER_OPERATIONS;format=duration;seconds=intervalSeconds;paintAvailable=availablePaint;
  private reconnect=()=>{void this.refresh();};
@@ -29,6 +29,11 @@ export class ShopFloorComponent implements OnDestroy {
  async refresh(){if(this.phone.online())await this.orders.load();await this.s.load();await this.cacheChoices();}
  choices(){return this.units().filter(v=>!this.stageFilter||v.status===this.stageFilter);}
  selected(){return this.units().find(v=>v.unit.id===this.unitId);}
+ selectedProductId(){const item=this.liveUnits().find(v=>v.unit.id===this.unitId)?.mainItem;if(!item)return '';
+  const external=String((item.catalog_reference as any)?.catalogItemId||(item.catalog_reference as any)?.productId||'');
+  return this.s.catalog().find(p=>(external&&p.wix_product_id===external)||(!p.wix_product_id&&p.product_name.trim().toLowerCase()===String(item.product_name||'').trim().toLowerCase()))?.id||'';
+ }
+ productTemplates(){const productId=this.selectedProductId();return this.s.data().templates.filter(t=>t.product_id===productId);}
  snapshot(){return this.s.data().units.find(v=>v.unit_id===this.unitId);}
  shift(){return this.s.data().shifts.find(v=>!v.ended_at);}
  active(){return this.s.data().intervals.find(v=>!v.ended_at);}
@@ -39,7 +44,7 @@ export class ShopFloorComponent implements OnDestroy {
  blocked(){return !this.phone.online()||this.s.busy()||this.moving||this.s.pending().length>0;}
  timerBlocked(){return this.s.busy()||this.moving||this.s.conflict()||!this.s.loaded();}
  oldShift(){return this.shift()&&brisbaneDate(this.shift()!.started_at)!==brisbaneDate();}
- selectUnit(){this.partId='';this.operation='';this.templateId=this.snapshot()?.template_id||'';this.finish=this.snapshot()?.finish||'';}
+ selectUnit(){this.partId='';this.operation='';const candidates=this.productTemplates();this.templateId=this.snapshot()?.template_id||(candidates.length===1?candidates[0].id:'');this.finish=this.snapshot()?.finish||'';}
  label(id:string|null){const unit=this.units().find(v=>v.unit.id===id);return unit?`${unit.code} · ${unit.mainItem.product_name}`:id?'Production unit '+id.slice(0,8):'';}
  partName(row:ShopInterval){return this.s.data().units.find(u=>u.unit_id===row.unit_id)?.parts.find(p=>p.id===row.part_id)?.name||'';}
  done(key:string){return this.snapshot()?.completed.includes(key)||false;}
@@ -66,13 +71,6 @@ export class ShopFloorComponent implements OnDestroy {
  }
  async enterCnc(){const v=this.liveUnits().find(x=>x.unit.id===this.unitId);if(!v||!this.phone.online())return;this.moving=true;this.localError='';try{await this.production.changeStatus(v,'CNC');await this.cacheChoices();}catch(e){this.localError=e instanceof Error?e.message:'Could not move to CNC';}finally{this.moving=false;}}
  async assign(){await this.action('assign',{unitId:this.unitId,templateId:this.templateId,finish:this.finish});}
- editTemplate(t?:ShopTemplate){this.editingTemplateId=t?.id||'';this.templateVersion=t?.version||0;this.templateName=t?.name||'';this.parts=structuredClone(t?.parts||[]);this.estimates={...t?.estimates};this.tab='templates';}
- addPart(){this.parts=[...this.parts,{id:crypto.randomUUID(),name:''}];}
- removePart(id:string){this.parts=this.parts.filter(p=>p.id!==id);}
- setEstimate(key:string,value:string|number|null){if(value===''||value===null)delete this.estimates[key];else this.estimates[key]=Number(value);}
- async saveTemplate(){this.notice='';if(!this.templateName.trim()||!this.parts.length||this.parts.some(p=>!p.name.trim())){this.localError='Enter a template name and at least one named part.';return;}
-  if(await this.action('template',{...(this.editingTemplateId?{id:this.editingTemplateId,version:this.templateVersion}:{}),name:this.templateName.trim(),parts:this.parts.map(p=>({...p,name:p.name.trim()})),estimates:this.estimates})){const saved=this.s.data().templates.find(t=>t.id===this.editingTemplateId||(!this.editingTemplateId&&t.name===this.templateName.trim()));if(saved)this.editTemplate(saved);}
- }
  bounds(){return rangeBounds(this.date,this.period);}
  logs(){const [a,b]=this.bounds();return this.s.data().intervals.filter(r=>Date.parse(r.started_at)<b&&(r.ended_at?Date.parse(r.ended_at):this.now())>=a).sort((x,y)=>y.started_at.localeCompare(x.started_at));}
  summary(){const totals=new Map<string,number>();for(const r of this.logs()){const key=r.stage==='Other'?r.operation:r.stage;totals.set(key,(totals.get(key)||0)+intervalSeconds(r,this.now(),this.bounds()));}return [...totals].map(([name,seconds])=>({name,seconds}));}

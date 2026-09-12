@@ -16,7 +16,7 @@ Implementation uses SQL RPC transactions and RLS, independent production templat
 
 ## Pilot operation
 
-Open **Shop Floor → Parts directory**, save a named parts template (including Sides as one part). Leave any unavailable estimated minutes blank. Open a product using **Timer / parts** on Production Board, explicitly assign its template and RAW/Painted finish, then move it to CNC. Templates are explicitly selected, never matched by product-name similarity. Existing units already beyond New remain operable until enrolled, avoiding a retrospective change to production history.
+Open **Products → Product card → Parts & estimated minutes** and save a named template (including Sides as one part). Assign every row to the main Product or a known Add-on. Leave unavailable estimated minutes blank. In Shop Floor select the product-specific template and RAW/Painted finish, then move it to CNC. The saved unit snapshot contains only parts for components present in that order. Existing started products retain their earlier snapshot.
 
 Start shift, select a product/activity, then start work. Pause is always global. Finish CNC and Finish Painting are explicit. Finishing all Assembly/Sanding parts makes the stage eligible for the next board transition; a failed delivery approval leaves work saved and shows a retry action. Existing delivery approval is still required: missing estimated minutes add no restriction.
 

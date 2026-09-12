@@ -11,6 +11,7 @@ import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
 import {BoxDrawingComponent} from './box-drawing.component';
 import {ProductDetailsComponent} from './product-details.component';
+import {ProductPartsComponent} from './product-parts.component';
 import {PackagingVariantsComponent} from './packaging-variants.component';
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
 import {CostingService} from '../costing/costing.service';
@@ -27,6 +28,7 @@ type ShippingProduct = {
   active?: boolean;
   saved_profiles?:any[];
   saved_only?:boolean;
+  product_source?:'catalog'|'hub_test';
 };
 
 type ShippingPackage = {
@@ -56,7 +58,7 @@ type ShippingRule = {
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CatalogCostEditorComponent,BoxDrawingComponent,ProductDetailsComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CatalogCostEditorComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -99,14 +101,15 @@ type ShippingRule = {
             </div>
 
             <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" (saved)="updateDetails($event)" /></section>
+            <section class="shipsection"><app-product-parts [product]="p" /></section>
             <section class="shipsection"><h3>Product drawing</h3>
             <p class="small">Original product drawing, stored online. For a specific size or design, upload its drawing under the matching variant below.</p>
             <app-box-drawing [productId]="p.id" />
             </section>
-            <section class="shipsection"><h3>Production costs · incl. GST</h3>
-            <p class="small">Enter materials and work costs here: CNC, Assembly, Sanding and Painting. Costs are saved for the selected product variant.</p>
+            <section class="shipsection"><h3>Product cost · incl. GST</h3>
+            <p class="small">Calculate this product's materials and work costs here: CNC, Assembly, Sanding and Painting. Order Costing shows the combined order summary.</p>
             @if(costing.error()){<p role="alert">{{costing.error()}}</p>}
-            @for(part of costProfiles(p.id);track part.variant_key){<details><summary>Edit production costs · {{costProfileLabel(part)}}</summary><app-catalog-cost-editor [part]="part" /><h4>Variant product drawing</h4><app-box-drawing [productId]="p.id" [variantKey]="part.variant_key" /></details>}
+            @for(part of costProfiles(p.id);track part.variant_key){<details><summary>Edit production costs · {{costProfileLabel(part,p.id)}}</summary><app-catalog-cost-editor [part]="part" /><h4>Variant product drawing</h4><app-box-drawing [productId]="p.id" [variantKey]="part.variant_key" /></details>}
             @empty{<p class="mut">No order variant available yet. Open Add materials on an order to define its costs.</p>}
             </section>
             @for(profile of p.saved_profiles||[];track profile.signature){
@@ -220,7 +223,11 @@ export class ShippingDataComponent implements OnInit {
     }
     return '';
   }
-  costProfileLabel(p:any){return `${p.kind} · ${Object.entries(p.options||{}).map(([k,v])=>k+': '+v).join(' · ')||'No options'}${p.standard_top_excluded?' · Standard top excluded':''}`;}
+  costProfileLabel(p:any,productId:string){
+    const options=Object.entries(p.options||{}).map(([k,v])=>k+': '+v).join(' · ');
+    const hasRecordedOptions=this.costProfiles(productId).some(profile=>Object.keys(profile.options||{}).length>0);
+    return `${p.kind} · ${options||(hasRecordedOptions?'Options not recorded · legacy order':'No options')}${p.standard_top_excluded?' · Standard top excluded':''}`;
+  }
 
   async ngOnInit() {
     await Promise.all([this.load(),this.costing.load()]);

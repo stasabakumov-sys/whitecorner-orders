@@ -8,6 +8,7 @@ export class ShopFloorService {
  private readonly serverData=signal<ShopData>({templates:[],units:[],shifts:[],intervals:[]});
  readonly data=computed(()=>projectCommands(this.serverData(),this.pending(),this.auth.session()?.user.id||''));
  readonly conflict=signal(false);
+ readonly catalog=signal<{id:string;wix_product_id?:string|null;product_name:string}[]>([]);
  readonly products=signal<ShopProductChoice[]>([]);
  readonly busy=signal(false);readonly error=signal('');readonly pending=signal<ShopCommand[]>([]);readonly loaded=signal(false);
  private owner=''; private syncing=false;
@@ -46,8 +47,9 @@ export class ShopFloorService {
  }
  async refresh(){
   const owner=this.owner;
-  const [templates,units,shifts,intervals]=await Promise.all(['wc_shop_templates','wc_shop_units','wc_shop_shifts','wc_shop_intervals'].map(x=>this.rows(x)));
+  const [templates,units,shifts,intervals,catalog]=await Promise.all(['wc_shop_templates','wc_shop_units','wc_shop_shifts','wc_shop_intervals','wc_shipping_products'].map(x=>this.rows(x)));
   if(owner!==this.auth.session()?.user.id)return;
+  this.catalog.set(catalog);
   this.serverData.set({templates,units,shifts,intervals});this.loaded.set(true);await this.save();
  }
  async sync(){
