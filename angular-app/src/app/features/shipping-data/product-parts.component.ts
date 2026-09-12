@@ -19,7 +19,7 @@ type AssignedPart=ShopPart&{component_product_id:string};
    @empty{<tr><td colspan="5">Add the first product part.</td></tr>}
   </tbody></table></div>
   <button type="button" (click)="addPart()" [disabled]="busy||!components.length">Add part</button>
-  <div class="estimate-grid"><label>CNC (min)<input type="number" min="0" [ngModel]="estimates['CNC']" (ngModelChange)="setEstimate('CNC',$event)" [disabled]="busy"></label>@for(op of paint.concat(['Repaint']);track op){<label>{{op}} (min)<input type="number" min="0" [ngModel]="estimates['Painting:'+op]" (ngModelChange)="setEstimate('Painting:'+op,$event)" [disabled]="busy"></label>}</div>
+  <div class="estimate-grid"><label>CNC (min)<input type="number" min="0" [ngModel]="estimates['CNC']" (ngModelChange)="setEstimate('CNC',$event)" [disabled]="busy"></label>@for(op of paint;track op){<label>{{op}} (min)<input type="number" min="0" [ngModel]="estimates['Painting:'+op]" (ngModelChange)="setEstimate('Painting:'+op,$event)" [disabled]="busy"></label>}</div>
   <button class="primary" type="button" (click)="save()" [disabled]="busy||product.saved_only">{{busy?'Saving…':'Save parts template'}}</button>
  }
  @if(error){<p class="error" role="alert">{{error}}</p>}@if(done){<p class="success" role="status">Parts template saved.</p>}
@@ -44,7 +44,7 @@ export class ProductPartsComponent implements OnChanges{
   const selected=this.templates.find(t=>t.id===this.editingId);selected?this.editTemplate(selected):this.newTemplate();
  }
  newTemplate(){this.editingId='';this.version=0;this.templateName=this.product?.short_name||this.product?.product_name||'';this.parts=[];this.estimates={};this.done=false;}
- editTemplate(t:ShopTemplate){this.editingId=t.id;this.version=t.version;this.templateName=t.name;this.parts=structuredClone(t.parts) as AssignedPart[];this.estimates={...t.estimates};this.done=false;this.error='';}
+ editTemplate(t:ShopTemplate){this.editingId=t.id;this.version=t.version;this.templateName=t.name;this.parts=structuredClone(t.parts) as AssignedPart[];this.estimates={...t.estimates};delete this.estimates['Painting:Repaint'];this.done=false;this.error='';}
  addPart(){this.parts=[...this.parts,{id:crypto.randomUUID(),name:'',component_product_id:this.product.id}];}
  removePart(id:string){this.parts=this.parts.filter(p=>p.id!==id);for(const stage of ['Assembly','Sanding'])delete this.estimates[stage+':'+id];}
  setEstimate(key:string,value:string|number|null){if(value===''||value===null)delete this.estimates[key];else this.estimates[key]=Number(value);}

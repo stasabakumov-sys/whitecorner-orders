@@ -27,7 +27,8 @@ try {
  assert.equal(Number((await db.query("select rate_gst_hour from wc_work_rates where work_type='sanding'")).rows[0].rate_gst_hour),45);
  const testCart=(await db.query("select id from wc_shipping_products where product_name='TEST Cart'")).rows[0].id;
  assert.deepEqual((await db.query('select product_name,component_role from wc_shop_product_components($1)',[testCart])).rows,[{product_name:'TEST Cart',component_role:'Product'}]);
- const template=(await db.query("select wc_shop_save_product_template(null,$1,'Cart standard',$2,$3,null) saved",[testCart,[{id:'body',name:'Body',component_product_id:testCart}],{}])).rows[0].saved;
+ const template=(await db.query("select wc_shop_save_product_template(null,$1,'Cart standard',$2,$3,null) saved",[testCart,[{id:'body',name:'Body',component_product_id:testCart}],{'Painting:Repaint':30}])).rows[0].saved;
+ assert.equal(Object.hasOwn(template.estimates,'Painting:Repaint'),false);
  const command=async(action,p)=>(await db.query('select wc_shop_command($1,$2,$3) result',[randomUUID(),action,p])).rows[0].result;
  await command('assign',{unitId:'f076f530-6be8-458b-9606-693e0153c302',templateId:template.id,finish:'painted'});
  assert.equal((await db.query("select parts->0->>'name' name from wc_shop_units where unit_id='f076f530-6be8-458b-9606-693e0153c302'")).rows[0].name,'Body');

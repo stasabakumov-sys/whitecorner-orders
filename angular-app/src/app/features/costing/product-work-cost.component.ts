@@ -5,10 +5,10 @@ import {ShopTemplate} from '../shop-floor/shop-floor.models';
 import {PlannedWorkRow,WorkRate,plannedTotal,plannedWorkRows} from './planned-work-cost';
 
 @Component({selector:'app-product-work-cost',standalone:true,imports:[CommonModule],template:`
- <h3>Planned work cost · incl. GST</h3><p class="mut">Calculated from Parts & estimated minutes and the shared hourly rates. Repaint is optional and shown separately.</p>
+ <h3>Planned work cost · incl. GST</h3><p class="mut">Calculated from Estimated min and the shared hourly rates. Repaint is an unplanned actual operation and is excluded.</p>
  @if(loading){<p>Loading planned work cost…</p>}@else if(error){<p class="error" role="alert">{{error}}</p>}@else{
   @for(template of templates;track template.id){<section class="template"><h4>{{template.name}}</h4><div class="table-wrap"><table><thead><tr><th>Stage / operation</th><th>Minutes</th><th>Rate / hour</th><th>Cost</th></tr></thead><tbody>
-   @for(row of rows(template);track row.key){<tr><td>{{row.label}}{{row.optional?' · optional':''}}</td><td>{{row.minutes==null?'Not set':row.minutes}}</td><td>{{row.rate==null?'Rate required':(row.rate|currency:'AUD')}}</td><td>{{row.cost==null?'—':(row.cost|currency:'AUD')}}</td></tr>}
+   @for(row of rows(template);track row.key){<tr><td>{{row.label}}</td><td>{{row.minutes==null?'Not set':row.minutes}}</td><td>{{row.rate==null?'Rate required':(row.rate|currency:'AUD')}}</td><td>{{row.cost==null?'—':(row.cost|currency:'AUD')}}</td></tr>}
   </tbody></table></div><div class="totals"><span>Raw work <b>{{total(template,false)==null?'Incomplete':(total(template,false)|currency:'AUD')}}</b></span><span>Painted work <b>{{total(template,true)==null?'Incomplete':(total(template,true)|currency:'AUD')}}</b></span></div></section>}
   @empty{<p>No parts template yet. Add it in Estimated min.</p>}
  }

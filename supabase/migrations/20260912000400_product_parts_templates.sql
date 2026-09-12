@@ -27,20 +27,20 @@ $$;
 
 create function public.wc_shop_save_product_template(p_id uuid,p_product uuid,p_name text,p_parts jsonb,p_estimates jsonb,p_version integer)
 returns jsonb language plpgsql security definer set search_path=public as $$
-declare actor uuid:=auth.uid(); saved wc_shop_templates;
+declare actor uuid:=auth.uid(); saved wc_shop_templates; clean_estimates jsonb:=coalesce(p_estimates,'{}')-'Painting:Repaint';
 begin
  if actor is null then raise exception 'Sign in required';end if;
  if not exists(select 1 from wc_shipping_products where id=p_product and active) then raise exception 'Product not found';end if;
- perform wc_shop_validate_parts(p_parts,coalesce(p_estimates,'{}'));
+ perform wc_shop_validate_parts(p_parts,clean_estimates);
  if jsonb_array_length(p_parts)>100 then raise exception 'Use no more than 100 parts';end if;
  if exists(select 1 from jsonb_array_elements(p_parts) part
   where coalesce(part->>'component_product_id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
   or not exists(select 1 from wc_shop_product_components(p_product) c where c.id=(part->>'component_product_id')::uuid))
  then raise exception 'Choose the product or one of its add-ons for every part';end if;
  if p_id is null then
-  insert into wc_shop_templates(product_id,name,parts,estimates) values(p_product,btrim(p_name),p_parts,coalesce(p_estimates,'{}')) returning * into saved;
+  insert into wc_shop_templates(product_id,name,parts,estimates) values(p_product,btrim(p_name),p_parts,clean_estimates) returning * into saved;
  else
-  update wc_shop_templates set name=btrim(p_name),parts=p_parts,estimates=coalesce(p_estimates,'{}'),version=version+1
+  update wc_shop_templates set name=btrim(p_name),parts=p_parts,estimates=clean_estimates,version=version+1
   where id=p_id and product_id=p_product and version=p_version returning * into saved;
   if not found then raise exception 'Template changed. Reload before editing';end if;
  end if;
