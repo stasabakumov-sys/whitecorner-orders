@@ -11,7 +11,7 @@ try {
  await db.exec(`create table wc_shipping_products(id uuid primary key default gen_random_uuid(),wix_product_id text unique,product_name text not null,product_type text default 'Other',active boolean default true,notes text,updated_at timestamptz default now());
  create unique index wc_shipping_products_name_ci_uq on wc_shipping_products(lower(product_name));
  create table wc_fulfilment(order_id uuid references wc_orders(id));create table wc_shipments(order_id uuid references wc_orders(id));`);
- for(const name of ['20260907000800_material_costing','20260908000300_tabletop_material_costing','20260908000400_catalog_product_costing','20260912000100_shop_floor_tracker','20260912000200_hub_test_orders','20260912000300_hub_test_products_catalog','20260912000400_product_parts_templates'])
+ for(const name of ['20260907000800_material_costing','20260908000300_tabletop_material_costing','20260908000400_catalog_product_costing','20260912000100_shop_floor_tracker','20260912000200_hub_test_orders','20260912000300_hub_test_products_catalog','20260912000400_product_parts_templates','20260912000500_work_rates'])
   await db.exec(await readFile(`supabase/migrations/${name}.sql`,'utf8'));
  const seed=await readFile('supabase/seeds/shop-floor-test-orders.sql','utf8');await db.exec(seed);await db.exec(seed);
  const orders=(await db.query("select * from wc_orders where order_source='hub_test' order by order_number")).rows;
@@ -22,6 +22,9 @@ try {
   {product_name:'TEST Cart',product_type:'Cart',wix_product_id:null},
  ]);
  const actor='00000000-0000-4000-8000-000000000009';await db.query('insert into auth.users values($1)',[actor]);await db.query("select set_config('test.actor',$1,false)",[actor]);
+ assert.equal((await db.query('select count(*)::int n from wc_work_rates')).rows[0].n,4);
+ await db.query("select wc_save_work_rate('sanding',45,(select updated_at from wc_work_rates where work_type='sanding'))");
+ assert.equal(Number((await db.query("select rate_gst_hour from wc_work_rates where work_type='sanding'")).rows[0].rate_gst_hour),45);
  const testCart=(await db.query("select id from wc_shipping_products where product_name='TEST Cart'")).rows[0].id;
  assert.deepEqual((await db.query('select product_name,component_role from wc_shop_product_components($1)',[testCart])).rows,[{product_name:'TEST Cart',component_role:'Product'}]);
  const template=(await db.query("select wc_shop_save_product_template(null,$1,'Cart standard',$2,$3,null) saved",[testCart,[{id:'body',name:'Body',component_product_id:testCart}],{}])).rows[0].saved;

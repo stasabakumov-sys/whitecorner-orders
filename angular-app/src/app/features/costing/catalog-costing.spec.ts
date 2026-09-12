@@ -28,4 +28,5 @@ describe('Shared catalogue costing',()=>{
   e.part={variant_key:'v',profile:{lines:[{material_id:'m',quantity:2}],materials_confirmed:true,work_costs:{cnc:4},updated_at:'old'}};e.ngOnChanges();expect(e.materialTotal()).toBe(22);e.lines[0].quantity=3;
   e.part={...e.part,profile:{...e.part.profile,updated_at:'new'}};e.ngOnChanges();expect(e.lines[0].quantity).toBe(3);expect(e.version).toBe('old');
  });
+ it('saves one backdrop material edit to both paint variants while preserving their work snapshots',async()=>{const saveCatalogProfile=vi.fn().mockResolvedValue(true);const service:any={materials:signal([]),profiles:signal([]),saveCatalogProfile};const e=new CatalogCostEditorComponent(service);e.showWork=false;e.part={variant_key:'white',shared_parts:[{variant_key:'white',profile:{updated_at:'w',work_costs:{painting:10}}},{variant_key:'raw',profile:{updated_at:'r',work_costs:{painting:0}}}]};e.lines=[];e.confirmed=true;await e.save();expect(saveCatalogProfile).toHaveBeenNthCalledWith(1,e.part.shared_parts[0],[],{painting:10},null,true,'w');expect(saveCatalogProfile).toHaveBeenNthCalledWith(2,e.part.shared_parts[1],[],{painting:0},null,true,'r');});
 });

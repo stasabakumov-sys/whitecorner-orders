@@ -18,6 +18,7 @@ export const routes:Routes=[
   {path:'delivery-cost-review',component:DeliveryReviewComponent},
   {path:'partner-pans',component:PartnerPansComponent},
   {path:'materials',loadComponent:()=>import('./features/costing/materials.component').then(m=>m.MaterialsComponent)},
+  {path:'work-rates',loadComponent:()=>import('./features/costing/work-rates.component').then(m=>m.WorkRatesComponent)},
   {path:'product-costing',loadComponent:()=>import('./features/costing/product-costing.component').then(m=>m.ProductCostingComponent)},
   {path:'production',component:ProductionBoardComponent},
   {path:'shop-floor',loadComponent:()=>import('./features/shop-floor/shop-floor.component').then(m=>m.ShopFloorComponent)},

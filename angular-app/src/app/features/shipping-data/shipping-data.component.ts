@@ -14,6 +14,7 @@ import {ProductDetailsComponent} from './product-details.component';
 import {ProductPartsComponent} from './product-parts.component';
 import {PackagingVariantsComponent} from './packaging-variants.component';
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
+import {ProductWorkCostComponent} from '../costing/product-work-cost.component';
 import {CostingService} from '../costing/costing.service';
 import {productId,componentNormal} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {shippingProfileCatalog,savedProfileOptions} from '../../core/utils/shipping-profile-catalog';
@@ -58,7 +59,7 @@ type ShippingRule = {
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CatalogCostEditorComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -101,17 +102,22 @@ type ShippingRule = {
             </div>
 
             <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" (saved)="updateDetails($event)" /></section>
-            <section class="shipsection"><app-product-parts [product]="p" /></section>
             <section class="shipsection"><h3>Product drawing</h3>
             <p class="small">Original product drawing, stored online. For a specific size or design, upload its drawing under the matching variant below.</p>
             <app-box-drawing [productId]="p.id" />
             </section>
+            <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button></nav>
+            @if(detailTab==='cost'){
+            <section class="shipsection"><app-product-work-cost [product]="p" /></section>
             <section class="shipsection"><h3>Product cost · incl. GST</h3>
-            <p class="small">Calculate this product's materials and work costs here: CNC, Assembly, Sanding and Painting. Order Costing shows the combined order summary.</p>
+            <p class="small">Add materials here. Planned work is calculated above from Estimated min and Work Rates. Order Costing shows the combined order summary.</p>
             @if(costing.error()){<p role="alert">{{costing.error()}}</p>}
-            @for(part of costProfiles(p.id);track part.variant_key){<details><summary>Edit production costs · {{costProfileLabel(part,p.id)}}</summary><app-catalog-cost-editor [part]="part" /><h4>Variant product drawing</h4><app-box-drawing [productId]="p.id" [variantKey]="part.variant_key" /></details>}
+            @if(isBackdrop(p)){<p class="small">Raw and painted use one material profile. Painting changes only the calculated work cost above.</p>}
+            @for(part of costProfiles(p.id);track part.variant_key){<details><summary>Edit materials · {{costProfileLabel(part,p.id)}}</summary><app-catalog-cost-editor [part]="part" [showWork]="false" [hideColour]="isBackdrop(p)" /><h4>Variant product drawing</h4><app-box-drawing [productId]="p.id" [variantKey]="part.variant_key" /></details>}
             @empty{<p class="mut">No order variant available yet. Open Add materials on an order to define its costs.</p>}
             </section>
+            }
+            @if(detailTab==='packing'){
             @for(profile of p.saved_profiles||[];track profile.signature){
              <section class="shipsection"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3>
              <p class="small">Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.</p>
@@ -168,6 +174,10 @@ type ShippingRule = {
             </div>
             }
             <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" /></section>
+            }
+            @if(detailTab==='minutes'){
+             <section class="shipsection"><app-product-parts [product]="p" /></section>
+            }
           } @else {
             <div class="mut">No products in this filter.</div>
           }
@@ -178,9 +188,9 @@ type ShippingRule = {
   styleUrl: './shipping-data.component.css',
 })
 export class ShippingDataComponent implements OnInit {
-  search='';libraryOpen=false;libraryError='';newSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
-  openProduct(id:string){this.requestedVariant='';this.selectedId.set(id);}
-  isBackdrop(p:ShippingProduct){return /backdrop/i.test(p.product_name);}
+  search='';libraryOpen=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'='cost';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
+  openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedId.set(id);}
+  isBackdrop(p?:ShippingProduct){return /backdrop/i.test(p?.product_name||'');}
   contentLabel(c:any){return [...new Set([c.product_name,c.component_name].filter(Boolean).map((s:string)=>s.trim()))].join(' · ');}
   updateDetails(details:any){this.products.update(rows=>rows.map(p=>p.id===details.id?{...p,...details}:p));}
   wixSizes(p:ShippingProduct){return [...new Set([...(p.saved_profiles||[]).flatMap(profile=>packagingSizes(profile,p.product_name)),...this.costing.parts().filter(part=>part.shipping_product_id===p.id).flatMap(part=>optionSizes(part.options))])];}
@@ -211,7 +221,8 @@ export class ShippingDataComponent implements OnInit {
   selectedProduct = computed(() => this.products().find(p => p.id===this.selectedId()) ?? null);
 
   constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute,@Optional() public costing:CostingService=new CostingService(supabase)) {}
-  costProfiles(id:string){const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile}));return [...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()];}
+  costProfiles(id:string){const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile}));const rows=[...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()];if(!this.isBackdrop(this.products().find(p=>p.id===id) as ShippingProduct))return rows;const groups=new Map<string,any[]>();for(const row of rows){const key=this.costProfileGroup(row);groups.set(key,[...(groups.get(key)||[]),row]);}return [...groups.values()].map(parts=>({...parts[0],shared_parts:parts}));}
+  costProfileGroup(p:any){return `${p.kind}|${p.standard_top_excluded?'topless':'complete'}|${JSON.stringify(Object.fromEntries(Object.entries(p.options||{}).filter(([key])=>!['colour','color'].includes(key.toLowerCase())).sort(([a],[b])=>a.localeCompare(b))))}`;}
   failedImages=new Set<string>();
   productImage(p:ShippingProduct){
     const items=this.costing.orders().flatMap(o=>o.wc_order_items||[]);
@@ -224,7 +235,8 @@ export class ShippingDataComponent implements OnInit {
     return '';
   }
   costProfileLabel(p:any,productId:string){
-    const options=Object.entries(p.options||{}).map(([k,v])=>k+': '+v).join(' · ');
+    const backdrop=this.isBackdrop(this.products().find(row=>row.id===productId) as ShippingProduct);
+    const options=Object.entries(p.options||{}).filter(([key])=>!backdrop||!['colour','color'].includes(key.toLowerCase())).map(([k,v])=>k+': '+v).join(' · ');
     const hasRecordedOptions=this.costProfiles(productId).some(profile=>Object.keys(profile.options||{}).length>0);
     return `${p.kind} · ${options||(hasRecordedOptions?'Options not recorded · legacy order':'No options')}${p.standard_top_excluded?' · Standard top excluded':''}`;
   }
