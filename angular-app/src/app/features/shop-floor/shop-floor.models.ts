@@ -1,11 +1,11 @@
 export const PAINT_OPERATIONS = ['First primer', 'First sanding', 'Second primer', 'Second sanding', 'Finish coat'];
 export const OTHER_OPERATIONS = ['Cleaning', 'Design', 'Administration', 'Development', 'Rest'];
-export interface ShopPart { id: string; name: string }
+export interface ShopPart { id: string; name: string; component_product_id?: string }
 export interface ShopProductChoice { unit:{id:string}; order:{id:string}; mainItem:{product_name:string}; code:string; status:string }
 export function productChoice(view:ShopProductChoice):ShopProductChoice {
  return {unit:{id:view.unit.id},order:{id:view.order.id},mainItem:{product_name:view.mainItem.product_name||''},code:view.code,status:view.status};
 }
-export interface ShopTemplate { id: string; name: string; parts: ShopPart[]; estimates: Record<string, number>; version: number }
+export interface ShopTemplate { id: string; product_id?: string|null; name: string; parts: ShopPart[]; estimates: Record<string, number>; version: number }
 export interface ShopUnit { unit_id: string; template_id: string; parts: ShopPart[]; estimates: Record<string, number>; finish: 'raw'|'painted'; completed: string[] }
 export interface ShopShift { id: string; worker_id: string; started_at: string; ended_at: string|null }
 export interface ShopInterval extends ShopShift { shift_id: string; unit_id: string|null; stage: string; operation: string; part_id: string|null }
