@@ -1,0 +1,15 @@
+{
+  "id": "./?app=shop-floor",
+  "name": "White Corner Shop Floor",
+  "short_name": "Shop Floor",
+  "description": "Workshop tasks, shifts and time tracking for White Corner.",
+  "start_url": "./?app=shop-floor#/shop-floor",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#173b42",
+  "icons": [
+    {"src":"icons/shop-floor-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"icons/shop-floor-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}

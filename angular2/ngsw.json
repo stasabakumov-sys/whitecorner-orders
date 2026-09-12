@@ -1,0 +1,98 @@
+{
+  "configVersion": 1,
+  "timestamp": 1789211090238,
+  "index": "/whitecorner-orders/angular2/index.html",
+  "assetGroups": [
+    {
+      "name": "application-shell",
+      "installMode": "prefetch",
+      "updateMode": "prefetch",
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "urls": [
+        "/whitecorner-orders/angular2/aura-hub.css",
+        "/whitecorner-orders/angular2/chunk-5A6Y7D3L.js",
+        "/whitecorner-orders/angular2/chunk-5QL2QDD6.js",
+        "/whitecorner-orders/angular2/chunk-BNREAGWS.js",
+        "/whitecorner-orders/angular2/chunk-DMAGM65K.js",
+        "/whitecorner-orders/angular2/chunk-FK6H3RFT.js",
+        "/whitecorner-orders/angular2/chunk-I6XVV76L.js",
+        "/whitecorner-orders/angular2/chunk-IFGU66OU.js",
+        "/whitecorner-orders/angular2/chunk-JH4VA4L3.js",
+        "/whitecorner-orders/angular2/chunk-KBKK2F33.js",
+        "/whitecorner-orders/angular2/chunk-LIEVN66F.js",
+        "/whitecorner-orders/angular2/chunk-LO7VTEQP.js",
+        "/whitecorner-orders/angular2/chunk-M4FY3TPF.js",
+        "/whitecorner-orders/angular2/chunk-PYVGWS6E.js",
+        "/whitecorner-orders/angular2/chunk-QLLSFKUH.js",
+        "/whitecorner-orders/angular2/chunk-T6LXTYNU.js",
+        "/whitecorner-orders/angular2/chunk-UCIU76DK.js",
+        "/whitecorner-orders/angular2/chunk-VKPJK3JO.js",
+        "/whitecorner-orders/angular2/chunk-WHO2XHHE.js",
+        "/whitecorner-orders/angular2/chunk-X5UBBOL7.js",
+        "/whitecorner-orders/angular2/icons/shop-floor-180.png",
+        "/whitecorner-orders/angular2/icons/shop-floor-192.png",
+        "/whitecorner-orders/angular2/icons/shop-floor-512.png",
+        "/whitecorner-orders/angular2/index.html",
+        "/whitecorner-orders/angular2/main-37JFNHMD.js",
+        "/whitecorner-orders/angular2/manifest.webmanifest",
+        "/whitecorner-orders/angular2/styles-FOU4VRG6.css"
+      ],
+      "patterns": []
+    }
+  ],
+  "dataGroups": [],
+  "hashTable": {
+    "/whitecorner-orders/angular2/aura-hub.css": "0a94ca79f286abfdb3dfbe13dc6225737c61f1fb",
+    "/whitecorner-orders/angular2/chunk-5A6Y7D3L.js": "feb1d2873dd7681f15def70d7351b4c118729c2e",
+    "/whitecorner-orders/angular2/chunk-5QL2QDD6.js": "bea600db929c9e28174eac6e73baefee79db6c78",
+    "/whitecorner-orders/angular2/chunk-BNREAGWS.js": "d32992563a00f0429201c423545284bc06287980",
+    "/whitecorner-orders/angular2/chunk-DMAGM65K.js": "a7e8091e775b78025f6714b03b97e45be67bb8c1",
+    "/whitecorner-orders/angular2/chunk-FK6H3RFT.js": "3c538698719f1cf34410542b8c702bc484e025ee",
+    "/whitecorner-orders/angular2/chunk-I6XVV76L.js": "f53b14da048589ac7155a7a6dce1b55b40ab4cac",
+    "/whitecorner-orders/angular2/chunk-IFGU66OU.js": "99b79b2d59bdef9eaf68be6e1bfbce786994fc54",
+    "/whitecorner-orders/angular2/chunk-JH4VA4L3.js": "37824394506940ca13dbf083f7e02593d3298d0e",
+    "/whitecorner-orders/angular2/chunk-KBKK2F33.js": "28291888b4641e638bbf9ede9896cacff6799f44",
+    "/whitecorner-orders/angular2/chunk-LIEVN66F.js": "4c231307af6ab53bf607e6fd443787383db16c1d",
+    "/whitecorner-orders/angular2/chunk-LO7VTEQP.js": "56479f6e3ed4f1b6e6361ba1284187f7c2d21977",
+    "/whitecorner-orders/angular2/chunk-M4FY3TPF.js": "7ba1ba9eb683e452e6563582c7c0e4ea3e09da84",
+    "/whitecorner-orders/angular2/chunk-PYVGWS6E.js": "0f9289cfb63fc9c2173503052d21d7e58e3ccc1d",
+    "/whitecorner-orders/angular2/chunk-QLLSFKUH.js": "2f6341f66cc8dd5a0d9d2cd0e5a739f6ed9f7070",
+    "/whitecorner-orders/angular2/chunk-T6LXTYNU.js": "05a2ed885d1595dce43b568b0ed30c816aeac171",
+    "/whitecorner-orders/angular2/chunk-UCIU76DK.js": "a1ce572e258fe04282e4c6fdb7d6e5545c1f88f0",
+    "/whitecorner-orders/angular2/chunk-VKPJK3JO.js": "0ffa3733055cfb1a125103ac0a591b7dfcfb1286",
+    "/whitecorner-orders/angular2/chunk-WHO2XHHE.js": "f7acabb65f87f728db02e49920cec355f22b26a6",
+    "/whitecorner-orders/angular2/chunk-X5UBBOL7.js": "2cc5de9e3a3088ca66a7a84854313dafb7e6fdce",
+    "/whitecorner-orders/angular2/icons/shop-floor-180.png": "4edf6ae16a6952a9dede30f48cafe74e6090facf",
+    "/whitecorner-orders/angular2/icons/shop-floor-192.png": "62f14130c0fe1ec7a6297116e53ca796ee760b96",
+    "/whitecorner-orders/angular2/icons/shop-floor-512.png": "1da90b9f76817259e80313c796ee4c476f849578",
+    "/whitecorner-orders/angular2/index.html": "ae134f05411e4aaae56776e58224dc6798d299d8",
+    "/whitecorner-orders/angular2/main-37JFNHMD.js": "d88a9a41235438bb038b27784a60b2742c8e0ead",
+    "/whitecorner-orders/angular2/manifest.webmanifest": "b10211c029db79496e5bdb52036c4591c89ccd60",
+    "/whitecorner-orders/angular2/styles-FOU4VRG6.css": "0b4c8c3600955a3918f165b94932e4ebf0aadc11"
+  },
+  "navigationUrls": [
+    {
+      "positive": true,
+      "regex": "^\\/.*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*\\.[^/]*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?__[^/]*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?__[^/]*\\/.*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/finance\\/.*$"
+    }
+  ],
+  "navigationRequestStrategy": "performance"
+}
