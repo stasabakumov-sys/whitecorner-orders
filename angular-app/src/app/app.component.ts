@@ -24,6 +24,7 @@ import { LoginComponent } from './shared/login/login.component';
         <a routerLink="/orders" routerLinkActive="active"><span>▤</span>Orders</a>
         <a routerLink="/customers" routerLinkActive="active"><span>♙</span>Customers</a>
         <a routerLink="/production" routerLinkActive="active"><span>▦</span>Production Board</a>
+        <a routerLink="/shop-floor" routerLinkActive="active"><span>◷</span>Shop Floor</a>
         <a routerLink="/delivery-cost-review" routerLinkActive="active"><span>↗</span>Delivery Cost Review</a>
         <a routerLink="/partner-pans" routerLinkActive="active"><span>▤</span>Partner Pans</a>
         <a routerLink="/fulfilment" routerLinkActive="active"><span>✓</span>Fulfilment</a>
@@ -69,6 +70,7 @@ import { LoginComponent } from './shared/login/login.component';
     :host ::ng-deep app-fulfilment .head{align-items:flex-start!important;flex-direction:column!important;gap:12px!important}
     :host ::ng-deep app-fulfilment .tabs{margin-left:0!important}
     @media(max-width:760px){.gmail-title{width:100%}.gmail-account{flex:1 1 100%}}
+    @media(max-width:600px){aside{position:relative;width:100%;height:auto;display:flex;overflow-x:auto;align-items:center;padding:6px;gap:4px}.brand{display:none}aside a{white-space:nowrap;min-height:44px}aside button{position:static;min-height:44px;white-space:nowrap}main{margin-left:0;height:calc(100dvh - 60px)}.content{height:100%;padding:12px}}
 
 }`],
 })

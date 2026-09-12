@@ -47,6 +47,7 @@
         </div>
 
         <div class="card-footer">
+          <button type="button" (click)="openTimer(unit,$event)" style="min-height:44px">Timer / parts</button>
           <span class="method" [class.pickup]="(unit.order.delivery_type || '').toLowerCase().includes('pickup') || (unit.order.delivery_title || '').toLowerCase().includes('pick')">
             <i [class]="((unit.order.delivery_type || '').toLowerCase().includes('pickup') || (unit.order.delivery_title || '').toLowerCase().includes('pick')) ? 'pi pi-map-marker' : 'pi pi-truck'"></i>
             {{ ((unit.order.delivery_type || '').toLowerCase().includes('pickup') || (unit.order.delivery_title || '').toLowerCase().includes('pick')) ? 'Pickup' : 'Delivery' }}

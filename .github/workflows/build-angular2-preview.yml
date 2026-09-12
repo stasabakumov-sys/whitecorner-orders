@@ -94,6 +94,18 @@ jobs:
           node .github/scripts/partner-pans-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/packaging-variant-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/box-drawings-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Rehearse Shop Floor migration
+        run: node .github/scripts/shop-floor.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Check Shop Floor production prerequisites
+        if: github.event_name == 'push'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/apply-shop-floor.mjs --check
+      - name: Apply approved Shop Floor schema before publishing
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/apply-shop-floor.mjs
       - name: Publish clean preview path
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash

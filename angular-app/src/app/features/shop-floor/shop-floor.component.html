@@ -1,0 +1,66 @@
+<header><h1>Shop Floor</h1><p>One task at a time · {{auth.userEmail()}} · Brisbane time</p></header>
+<nav class="controls"><button (click)="tab='timer'" [class.selected]="tab==='timer'">Timer</button><button (click)="tab='journal'" [class.selected]="tab==='journal'">Shift & analytics</button><button (click)="tab='templates'" [class.selected]="tab==='templates'">Parts directory</button><a routerLink="/production">Production Board</a><button (click)="s.sync()" [disabled]="s.busy()">{{s.busy()?'Saving / loading…':'Refresh / retry sync'}}</button></nav>
+@if(s.error()||localError){<div class="error" role="alert">{{localError||s.error()}}</div>}
+@if(notice){<p role="status">{{notice}}</p>}
+@if(s.pending().length){<div class="warning">{{s.pending().length}} action(s) stored on this device, awaiting server confirmation. Timer actions can continue offline; board transitions and edits wait for sync. <button (click)="s.discardPending()" [disabled]="s.busy()">Reload server state and discard queued actions</button></div>}
+@if(oldShift()){<div class="warning">Your previous shift is still open. Correct its actual end before starting more work. <button (click)="edit(shift()!,'shift')">Correct previous shift</button></div>}
+@if(tab==='timer'){
+ <section class="panel live">
+  <div><small>{{shift()?'SHIFT OPEN':'SHIFT CLOSED'}}</small><h2>{{active()?.stage==='Pause'?'Pause':active()?.operation||'Ready to start'}}</h2><p>{{label(active()?.unit_id||null)}} {{active()?partName(active()!):''}}</p><strong class="clock">{{format(active()?seconds(active()!,now()):0)}}</strong></div>
+  <div class="controls">
+   @if(!shift()){<button class="primary" (click)="action('shift-start')" [disabled]="timerBlocked()">Start shift</button>}
+   @else {
+    @if(active()?.stage!=='Pause'){<button (click)="action('pause')" [disabled]="timerBlocked()">Pause</button>}
+    @else {<button (click)="resume()" [disabled]="timerBlocked()||!previous()||!!oldShift()">Resume previous task</button>}
+    @if(active()&&active()?.stage!=='Pause'){
+     @if(active()?.stage==='CNC'){<button class="primary" (click)="finishWork(true)" [disabled]="timerBlocked()">Finish CNC</button>}
+     @else {<button class="primary" (click)="finishWork()" [disabled]="timerBlocked()">{{active()?.part_id?'Finish part':'Finish operation'}}</button>}
+    }
+    <button (click)="action('shift-end')" [disabled]="timerBlocked()">End shift</button>
+   }
+  </div>
+ </section>
+ <div class="controls"><button (click)="mode='product'" [class.selected]="mode==='product'">Product</button><button (click)="mode='other'" [class.selected]="mode==='other'">Other</button></div>
+ @if(mode==='other'){
+  <section class="panel"><h2>Other activity</h2><label>Activity<select [(ngModel)]="other">@for(op of others;track op){<option [value]="op">{{op}}</option>}</select></label><p>Rest is reported separately from work and pauses.</p><button class="primary" (click)="start()" [disabled]="!canStart()">Start activity</button></section>
+ }@else{
+  <div class="controls"><label>Stage<select [(ngModel)]="stageFilter"><option value="">All stages</option>@for(stage of production.statuses;track stage){<option>{{stage}}</option>}</select></label><label class="wide">Product<select [(ngModel)]="unitId" (ngModelChange)="selectUnit()"><option value="">Select a product</option>@for(v of choices();track v.unit.id){<option [value]="v.unit.id">{{v.code}} · {{v.mainItem.product_name}} · {{v.status}}</option>}</select></label></div>
+  @if(selected();as v){<section class="panel"><h2>{{v.code}} · {{v.mainItem.product_name}}</h2><p>Current stage: <b>{{v.status}}</b></p>
+   @if(!snapshot()) {<p class="warning">Add and assign a parts template before CNC. Estimated times are optional.</p>}
+   <div class="controls"><label>Parts template<select [(ngModel)]="templateId"><option value="">Select template</option>@for(t of s.data().templates;track t.id){<option [value]="t.id">{{t.name}}</option>}</select></label><label>Finish type<select [(ngModel)]="finish"><option value="">Choose finish</option><option value="raw">RAW</option><option value="painted">Painted</option></select></label><button (click)="assign()" [disabled]="blocked()||!templateId||!finish">Save product composition</button><button (click)="editTemplate()">New parts template</button></div>
+   @if(snapshot();as u){
+    <p>Saved parts: @for(p of u.parts;track p.id){<span>{{p.name}} · </span>} Finish: {{u.finish}}</p>
+    <p>Recorded work on this stage: <b>{{format(productTime(v.status))}}</b> · all work sessions combined</p>
+    @if(v.status==='New'){<button class="primary" (click)="enterCnc()" [disabled]="blocked()">Move to CNC</button>}
+    @if(v.status==='Assembly'||v.status==='Sanding'){
+     <label>Part<select [(ngModel)]="partId"><option value="">Choose a part</option>@for(p of u.parts;track p.id){<option [value]="p.id" [disabled]="done(v.status+':'+p.id)">{{done(v.status+':'+p.id)?'✓ ':''}}{{p.name}}</option>}</select></label>
+     <table><thead><tr><th>Part</th><th>Recorded time</th><th>Status</th></tr></thead><tbody>@for(p of u.parts;track p.id){<tr><td>{{p.name}}</td><td>{{format(productTime(v.status,p.id))}}</td><td>{{done(v.status+':'+p.id)?'✓ Complete':'In progress / not started'}}</td></tr>}</tbody></table>
+    }
+    @if(v.status==='Painting'){
+     <label>Painting operation<select [(ngModel)]="operation"><option value="">Choose operation</option>@for(op of paint;track op){<option [value]="op" [disabled]="!paintAvailable(op,u.completed)">{{done('Painting:'+op)?'✓ ':''}}{{op}}</option>}<option value="Repaint">Repaint (optional)</option></select></label>
+     <p>Finish each operation to unlock the next. Repaint is available outside the sequence.</p>
+     @if(operation){<p>{{operation}}: {{format(productTime('Painting',undefined,operation))}} recorded</p>}
+     <button (click)="finishPainting()" [disabled]="blocked()||!done('Painting:Finish coat')||done('Painting:finished')">Finish Painting</button>
+    }
+    @if(['CNC','Assembly','Sanding','Painting'].includes(v.status)){
+     <p>Estimated time: {{estimate()===undefined?'Not set':estimate()+' min'}}</p><button class="primary" (click)="start()" [disabled]="!canStart()">Start / continue task</button>
+    }
+    @if(done(v.status+':finished')){<p>Stage complete. If the board has not advanced, retry below.</p><button (click)="advance()" [disabled]="blocked()">Move to next stage</button>}
+   }
+  </section>}
+ }
+}
+@if(tab==='templates'){
+ <div class="controls"><button (click)="editTemplate()">New template</button>@for(t of s.data().templates;track t.id){<button (click)="editTemplate(t)">{{t.name}}</button>}</div>
+ <section class="panel"><h2>Parts & estimated minutes</h2><label>Template name<input [(ngModel)]="templateName" maxlength="150" placeholder="Product / size / version"></label><p>Use a separate template for each different composition. Sides is one part. Blank minutes never block production. Existing started products retain their snapshot.</p>
+ <div class="table-wrap"><table><thead><tr><th>Part</th><th>Assembly (min)</th><th>Sanding (min)</th><th></th></tr></thead><tbody>@for(p of parts;track p.id){<tr><td><input [(ngModel)]="p.name" aria-label="Part name"></td><td><input type="number" min="0" [ngModel]="estimates['Assembly:'+p.id]" (ngModelChange)="setEstimate('Assembly:'+p.id,$event)" aria-label="Assembly minutes"></td><td><input type="number" min="0" [ngModel]="estimates['Sanding:'+p.id]" (ngModelChange)="setEstimate('Sanding:'+p.id,$event)" aria-label="Sanding minutes"></td><td><button (click)="removePart(p.id)">Remove</button></td></tr>}</tbody></table></div>
+ <button (click)="addPart()">Add part</button><div class="estimate-grid"><label>CNC (min)<input type="number" min="0" [ngModel]="estimates['CNC']" (ngModelChange)="setEstimate('CNC',$event)"></label>@for(op of paint.concat(['Repaint']);track op){<label>{{op}} (min)<input type="number" min="0" [ngModel]="estimates['Painting:'+op]" (ngModelChange)="setEstimate('Painting:'+op,$event)"></label>}</div>
+ <button class="primary" (click)="saveTemplate()" [disabled]="blocked()">Save template</button></section>
+}
+@if(tab==='journal'){
+ <div class="controls"><label>Employee<select><option>{{auth.userEmail()}}</option></select></label><label>Date<input type="date" [(ngModel)]="date"></label><label>Period<select [(ngModel)]="period"><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label><button (click)="export('csv')">Export CSV</button><button (click)="export('json')">Export JSON</button></div>
+ <section class="panel"><div class="totals"><div>Work<strong>{{format(total('work'))}}</strong></div><div>Pause<strong>{{format(total('Pause'))}}</strong></div><div>Rest<strong>{{format(total('Rest'))}}</strong></div></div><table><thead><tr><th>Stage / activity</th><th>Time</th></tr></thead><tbody>@for(r of summary();track r.name){<tr><td>{{r.name}}</td><td>{{format(r.seconds)}}</td></tr>}@empty{<tr><td colspan="2">No recorded time for this period.</td></tr>}</tbody></table></section>
+ <section class="panel"><h2>Shifts</h2>@for(row of shifts();track row.id){<div class="shift-row"><span>{{row.started_at|date:'dd MMM HH:mm':'+1000'}} → {{row.ended_at?(row.ended_at|date:'dd MMM HH:mm':'+1000'):'Open'}}</span><button (click)="edit(row,'shift')">Edit shift</button></div>}</section>
+ <section class="panel table-wrap"><h2>Activity timeline</h2><table><thead><tr><th>Start · Brisbane</th><th>Task</th><th>Time in period</th><th></th></tr></thead><tbody>@for(row of logs();track row.id){<tr><td>{{row.started_at|date:'dd MMM HH:mm':'+1000'}}<small>{{row.ended_at?(row.ended_at|date:'HH:mm':'+1000'):'Running'}}</small></td><td>{{row.stage}} · {{row.operation}}<small>{{label(row.unit_id)}} {{partName(row)}}</small></td><td>{{format(seconds(row,now(),bounds()))}}</td><td><button (click)="edit(row,'interval')">Edit time</button></td></tr>}</tbody></table></section>
+}
+@if(editId){<div class="modal-backdrop"><section class="panel modal" role="dialog" aria-modal="true" aria-labelledby="edit-title"><h2 id="edit-title">Correct {{editType}} time</h2><p>Brisbane time. Changes are recorded in the audit history. To close a forgotten task and shift together, edit the shift end.</p><label>Start<input type="datetime-local" step="0.001" [(ngModel)]="editStart"></label><label>End<input type="datetime-local" step="0.001" [(ngModel)]="editEnd"></label>@if(s.error()||localError){<p class="error" role="alert">{{localError||s.error()}}</p>}<div class="controls"><button class="primary" (click)="saveEdit()" [disabled]="blocked()">Save correction</button><button (click)="editId=''">Cancel</button></div></section></div>}
