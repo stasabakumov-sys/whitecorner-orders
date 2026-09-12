@@ -1,13 +1,14 @@
 import {Injectable, signal, computed} from '@angular/core';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {AuthService} from '../../core/services/auth.service';
-import {ShopData,ShopCommand,projectCommands,OFFLINE_ACTIONS} from './shop-floor.models';
+import {ShopData,ShopCommand,ShopProductChoice,productChoice,projectCommands,OFFLINE_ACTIONS} from './shop-floor.models';
 
 @Injectable({providedIn:'root'})
 export class ShopFloorService {
  private readonly serverData=signal<ShopData>({templates:[],units:[],shifts:[],intervals:[]});
  readonly data=computed(()=>projectCommands(this.serverData(),this.pending(),this.auth.session()?.user.id||''));
  readonly conflict=signal(false);
+ readonly products=signal<ShopProductChoice[]>([]);
  readonly busy=signal(false);readonly error=signal('');readonly pending=signal<ShopCommand[]>([]);readonly loaded=signal(false);
  private owner=''; private syncing=false;
  private confirmed=new Set<string>();
@@ -27,11 +28,16 @@ export class ShopFloorService {
    };
   });
  }
- private save(){return this.storage({data:this.serverData(),pending:this.pending()});}
+ private save(){return this.storage({data:this.serverData(),pending:this.pending(),products:this.products()});}
+ async cacheProducts(products:ShopProductChoice[]){
+  if(this.owner!==this.auth.session()?.user.id)return;
+  this.products.set(products.map(productChoice));
+  try{await this.save();}catch(e){this.error.set(this.message(e));}
+ }
  async load(){
   const owner=this.auth.session()?.user.id;if(!owner)return;
-  if(this.owner!==owner){this.serverData.set({templates:[],units:[],shifts:[],intervals:[]});this.pending.set([]);this.loaded.set(false);this.owner=owner;
-   try{const cache=await this.storage();if(cache){this.serverData.set(cache.data);this.pending.set(cache.pending||[]);this.loaded.set(true);}}catch(e){this.error.set(this.message(e));}
+  if(this.owner!==owner){this.serverData.set({templates:[],units:[],shifts:[],intervals:[]});this.pending.set([]);this.products.set([]);this.loaded.set(false);this.owner=owner;
+   try{const cache=await this.storage();if(cache){this.serverData.set(cache.data);this.pending.set(cache.pending||[]);this.products.set((cache.products||[]).map(productChoice));this.loaded.set(true);}}catch(e){this.error.set(this.message(e));}
   }
   await this.sync();
  }

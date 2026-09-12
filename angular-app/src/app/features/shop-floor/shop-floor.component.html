@@ -1,5 +1,12 @@
 <header><h1>Shop Floor</h1><p>One task at a time · {{auth.userEmail()}} · Brisbane time</p></header>
-<nav class="controls"><button (click)="tab='timer'" [class.selected]="tab==='timer'">Timer</button><button (click)="tab='journal'" [class.selected]="tab==='journal'">Shift & analytics</button><button (click)="tab='templates'" [class.selected]="tab==='templates'">Parts directory</button><a routerLink="/production">Production Board</a><button (click)="s.sync()" [disabled]="s.busy()">{{s.busy()?'Saving / loading…':'Refresh / retry sync'}}</button></nav>
+@if(!phone.installed()){
+ <div class="controls">@if(phone.canInstall()){<button (click)="phone.install()" [disabled]="phone.installing()">Install Shop Floor</button>}
+ <details><summary>Use on your phone</summary><p>Open this page in Safari on iPhone: Share → Add to Home Screen. On Android, open Chrome: menu → Install app / Add to Home screen.</p><p>Sign in and load your products while online before working offline. Keep this device until queued actions are synchronized.</p></details></div>
+}
+@if(!phone.online()){<p class="warning" role="status">Offline · using products saved on this device. Timer actions will sync when the connection returns. Reconnect to edit or move products.</p>}
+@if(phone.error()){<p class="error" role="alert">{{phone.error()}}</p>}
+@if(phone.updateReady()){<p class="warning">An update is ready. Sync your actions before reloading. <button (click)="phone.reload()" [disabled]="s.busy()||!!s.pending().length||!phone.online()">Reload update</button></p>}
+<nav class="controls"><button (click)="tab='timer'" [class.selected]="tab==='timer'">Timer</button><button (click)="tab='journal'" [class.selected]="tab==='journal'">Shift & analytics</button><button (click)="tab='templates'" [class.selected]="tab==='templates'">Parts directory</button><a routerLink="/production">Production Board</a><button (click)="refresh()" [disabled]="s.busy()">{{s.busy()?'Saving / loading…':'Refresh / retry sync'}}</button></nav>
 @if(s.error()||localError){<div class="error" role="alert">{{localError||s.error()}}</div>}
 @if(notice){<p role="status">{{notice}}</p>}
 @if(s.pending().length){<div class="warning">{{s.pending().length}} action(s) stored on this device, awaiting server confirmation. Timer actions can continue offline; board transitions and edits wait for sync. <button (click)="s.discardPending()" [disabled]="s.busy()">Reload server state and discard queued actions</button></div>}

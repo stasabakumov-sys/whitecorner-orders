@@ -224,6 +224,7 @@ export function destination(order:any){
  return {suburb:addressScalar(a.city||a.suburb||a.locality).toUpperCase(),state:states[state]||state,postcode:addressScalar(a.postalCode||a.postcode||a.zipCode),country:addressScalar(a.country)||'AU'};
 }
 export function eligibleOrder(order:any){
+ if(order.order_source==='hub_test')return false;
  const declared=`${order.delivery_type||''} ${order.delivery_title||''}`;
  return !order.is_hidden&&!order.archived&&!/cancel/i.test(order.wix_status||'')&&String(order.fulfillment_status||'').toUpperCase()!=='FULFILLED'
  && !/pick[ -]?up/i.test(declared)&&!((order.wc_order_items||[]).some(deliveryLine)&&deliveryCents(order)===0);

@@ -5,6 +5,7 @@ import { OrdersService } from './core/services/orders.service';
 import { ActivityService } from './core/services/activity.service';
 import { EmailService } from './core/services/email.service';
 import { LoginComponent } from './shared/login/login.component';
+import { ShopPhoneService } from './core/services/shop-phone.service';
 
 @Component({
   selector: 'app-root',
@@ -84,6 +85,7 @@ export class AppComponent {
     private readonly activity: ActivityService,
     readonly email: EmailService,
     readonly router: Router,
+    readonly phone: ShopPhoneService,
   ) {
     void auth.initialize();
     effect(() => {
@@ -94,6 +96,7 @@ export class AppComponent {
         return;
       }
       if (this.workspaceReady() || this.preloading) return;
+      if (!this.phone.online()) { this.workspaceReady.set(true); return; }
       this.preloading = true;
       void Promise.allSettled([
         this.orders.load(),
