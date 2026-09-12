@@ -102,6 +102,7 @@ export class FulfilmentService {
   ) {}
 
   private isReady(order:OrderRow){
+    if(order.order_source==='hub_test')return false;
     // Use the exact same logical production units that are shown on Production Board.
     // Add-on rows can contain legacy/raw wc_production_units and must not block fulfilment.
     const units=this.production.unitsForOrder(order);

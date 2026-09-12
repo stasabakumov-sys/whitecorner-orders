@@ -5,6 +5,7 @@ import {ActivatedRoute,RouterLink} from '@angular/router';
 import {AuthService} from '../../core/services/auth.service';
 import {OrdersService} from '../../core/services/orders.service';
 import {ProductionService} from '../../core/services/production.service';
+import {ShopPhoneService} from '../../core/services/shop-phone.service';
 import {ProductionStatus} from '../../core/models/production.models';
 import {ShopFloorService} from './shop-floor.service';
 import {ShopInterval,ShopShift,ShopTemplate,ShopPart,PAINT_OPERATIONS,OTHER_OPERATIONS,availablePaint,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
@@ -16,11 +17,16 @@ export class ShopFloorComponent implements OnDestroy {
  templateId='';finish='';templateName='';templateVersion=0;editingTemplateId='';parts:ShopPart[]=[];estimates:Record<string,number>={};
  date=brisbaneDate();period='day';editId='';editType='interval';editStart='';editEnd='';notice='';localError='';moving=false;
  paint=PAINT_OPERATIONS;others=OTHER_OPERATIONS;format=duration;seconds=intervalSeconds;paintAvailable=availablePaint;
- constructor(readonly s:ShopFloorService,readonly auth:AuthService,readonly orders:OrdersService,readonly production:ProductionService,route:ActivatedRoute){
-  this.unitId=route.snapshot.queryParamMap.get('unit')||'';void s.load().then(()=>this.selectUnit());
+ private reconnect=()=>{void this.refresh();};
+ constructor(readonly s:ShopFloorService,readonly auth:AuthService,readonly orders:OrdersService,readonly production:ProductionService,route:ActivatedRoute,readonly phone:ShopPhoneService){
+  this.unitId=route.snapshot.queryParamMap.get('unit')||'';void s.load().then(async()=>{await this.cacheChoices();this.selectUnit();});
+  window.addEventListener('online',this.reconnect);
  }
- ngOnDestroy(){clearInterval(this.tick);}
- units(){return this.production.unitsForOrders(this.orders.orders()).filter(v=>!['FULFILLED','CANCELED','CANCELLED'].includes(String(v.order.fulfillment_status).toUpperCase()));}
+ ngOnDestroy(){clearInterval(this.tick);window.removeEventListener('online',this.reconnect);}
+ liveUnits(){return this.production.unitsForOrders(this.orders.orders()).filter(v=>!['FULFILLED','CANCELED','CANCELLED'].includes(String(v.order.fulfillment_status).toUpperCase()));}
+ units(){return this.phone.online()&&!this.orders.error()?this.liveUnits():this.s.products();}
+ async cacheChoices(){if(this.phone.online()&&!this.orders.error()&&!this.orders.loading())await this.s.cacheProducts(this.liveUnits().map(v=>({unit:{id:v.unit.id},order:{id:v.order.id},mainItem:{product_name:v.mainItem.product_name||''},code:v.code,status:v.status})));}
+ async refresh(){if(this.phone.online())await this.orders.load();await this.s.load();await this.cacheChoices();}
  choices(){return this.units().filter(v=>!this.stageFilter||v.status===this.stageFilter);}
  selected(){return this.units().find(v=>v.unit.id===this.unitId);}
  snapshot(){return this.s.data().units.find(v=>v.unit_id===this.unitId);}
@@ -30,7 +36,7 @@ export class ShopFloorComponent implements OnDestroy {
   if(!r.unit_id)return true;const u=this.s.data().units.find(u=>u.unit_id===r.unit_id),v=this.units().find(v=>v.unit.id===r.unit_id);
   return v?.status===r.stage&&!u?.completed.includes(r.stage+':finished')&&(r.operation==='Repaint'||!u?.completed.includes(r.stage+':'+(r.part_id||r.operation)));
  });}
- blocked(){return this.s.busy()||this.moving||this.s.pending().length>0;}
+ blocked(){return !this.phone.online()||this.s.busy()||this.moving||this.s.pending().length>0;}
  timerBlocked(){return this.s.busy()||this.moving||this.s.conflict()||!this.s.loaded();}
  oldShift(){return this.shift()&&brisbaneDate(this.shift()!.started_at)!==brisbaneDate();}
  selectUnit(){this.partId='';this.operation='';this.templateId=this.snapshot()?.template_id||'';this.finish=this.snapshot()?.finish||'';}
@@ -55,10 +61,10 @@ export class ShopFloorComponent implements OnDestroy {
  async advance(){const v=this.selected(),u=this.snapshot();if(!v||!u||!u.completed.includes(v.status+':finished'))return;
   const next:Record<string,ProductionStatus>={CNC:'Assembly',Assembly:'Sanding',Sanding:u.finish==='raw'?'Packing':'Painting',Painting:'Packing'};
   if(!next[v.status])return;this.moving=true;
-  try{await this.production.changeStatus(v,next[v.status]);this.notice='Stage completed and board updated';this.partId='';this.operation='';}
+  try{const live=this.liveUnits().find(x=>x.unit.id===v.unit.id);if(!this.phone.online()||!live)throw Error('Reconnect and refresh products before changing the board.');await this.production.changeStatus(live,next[v.status]);await this.cacheChoices();this.notice='Stage completed and board updated';this.partId='';this.operation='';}
   catch(e){this.localError='Work is saved, but the board could not advance. '+(e instanceof Error?e.message:'Retry the transition.');}finally{this.moving=false;}
  }
- async enterCnc(){const v=this.selected();if(!v)return;this.moving=true;this.localError='';try{await this.production.changeStatus(v,'CNC');}catch(e){this.localError=e instanceof Error?e.message:'Could not move to CNC';}finally{this.moving=false;}}
+ async enterCnc(){const v=this.liveUnits().find(x=>x.unit.id===this.unitId);if(!v||!this.phone.online())return;this.moving=true;this.localError='';try{await this.production.changeStatus(v,'CNC');await this.cacheChoices();}catch(e){this.localError=e instanceof Error?e.message:'Could not move to CNC';}finally{this.moving=false;}}
  async assign(){await this.action('assign',{unitId:this.unitId,templateId:this.templateId,finish:this.finish});}
  editTemplate(t?:ShopTemplate){this.editingTemplateId=t?.id||'';this.templateVersion=t?.version||0;this.templateName=t?.name||'';this.parts=structuredClone(t?.parts||[]);this.estimates={...t?.estimates};this.tab='templates';}
  addPart(){this.parts=[...this.parts,{id:crypto.randomUUID(),name:''}];}

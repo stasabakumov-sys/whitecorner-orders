@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/@angular/service-worker/config/schema.json",
+  "index": "/index.html",
+  "assetGroups": [{
+    "name": "application-shell",
+    "installMode": "prefetch",
+    "updateMode": "prefetch",
+    "resources": { "files": ["/index.html", "/manifest.webmanifest", "/*.css", "/*.js", "/icons/shop-floor-*.png"] }
+  }],
+  "dataGroups": [],
+  "navigationUrls": ["/**", "!/**/*.*", "!/**/__*", "!/**/__*/**", "!/finance/**"]
+}

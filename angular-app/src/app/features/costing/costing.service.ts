@@ -13,7 +13,7 @@ export class CostingService {
    this.pages(()=>this.db.client.from('wc_material_prices').select('*').order('created_at',{ascending:false}).order('id')),
    this.pages(()=>this.db.client.from('wc_material_profiles').select('*').order('variant_key')),
    this.pages(()=>this.db.client.rpc('wc_catalog_cost_report')),
-   this.pages(()=>this.db.client.from('wc_orders').select('id,order_number,customer_name,currency,total,shipping,raw_order,archived,fulfillment_status,wix_status,wc_order_items(*,wc_production_units(*))').eq('is_hidden',false).neq('order_number','10242').order('wix_created_at',{ascending:false}).order('id')),
+   this.pages(()=>this.db.client.from('wc_orders').select('id,order_number,customer_name,currency,total,shipping,raw_order,archived,fulfillment_status,wix_status,wc_order_items(*,wc_production_units(*))').eq('is_hidden',false).eq('order_source','wix').neq('order_number','10242').order('wix_created_at',{ascending:false}).order('id')),
    this.pages(()=>this.db.client.rpc('wc_catalog_cost_parts')),
    this.pages(()=>this.db.client.from('wc_order_pans_costs').select('*').order('order_id'))]);
   this.materials.set(materials);this.groups.set(groups);this.prices.set(prices);this.profiles.set(profiles);this.costs.set(costs);this.orders.set(orders);this.parts.set(parts);this.pans.set(pans);

@@ -28,7 +28,7 @@ SQL tables: templates, unit snapshots, shifts, intervals, correction audit and i
 
 IndexedDB stores server data and pending commands per authenticated user. Loaded-page timer actions can continue during network loss; the UI marks them pending rather than reporting server success. Replay retains command UUIDs and checks the previously active timer to reject conflicting device changes. Board transitions and edits require synchronization. Rejected configuration inputs stay in the form; uncertain writes are retained for retry.
 
-Full offline application-shell installation/PWA, automatic realtime board subscriptions, and app-store packaging are **not implemented in this pilot**. A cold browser launch still needs the existing Hub application/authentication and order loading. Refresh/re-entry synchronizes saved data. These hosting-dependent features require a separate follow-up before promising full offline startup.
+The phone follow-up adds an installable PWA, cached application shell and a minimal per-user product list (IDs, names, codes, stages). Sign in and load products online first. Offline startup requires a usable existing session and browser storage; expired sessions still require an online sign-in. API/customer/email responses are not cached by the service worker. Queued actions stay visibly pending until confirmed. Automatic realtime board subscriptions and app-store packaging are not included. See [phone and test-order release notes](SHOP_FLOOR_PHONE.md).
 
 ## Validation / deployment
 

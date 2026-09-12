@@ -23,7 +23,8 @@ export interface OrderItemRow {
 
 export interface OrderRow {
   id: string;
-  wix_order_id?: string;
+  wix_order_id?: string | null;
+  order_source?: 'wix' | 'hub_test';
   is_history?: boolean;
   order_number: string;
   wix_created_at?: string | null;
