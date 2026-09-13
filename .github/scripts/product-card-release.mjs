@@ -1,5 +1,5 @@
 // Targeted, owner-authorised release. No db push and no customer payload logging.
-import {readFile} from 'node:fs/promises';
+import {readFile,writeFile} from 'node:fs/promises';
 const names=['20260913000100_backdrop_drawing_folding','20260913000200_backdrop_paint_operations'];
 const literal=value=>"'"+value.replaceAll("'","''")+"'";
 const sources=await Promise.all(names.map(name=>readFile(`supabase/migrations/${name}.sql`,'utf8').then(s=>s.replace(/^\uFEFF/,'').replaceAll('\r',''))));
@@ -40,5 +40,6 @@ if(process.argv.includes('--print-sql')){process.stdout.write(sql);process.exit(
 if(process.argv.includes('--print-preflight')){process.stdout.write(verify);process.exit(0);}
 const token=process.env.SUPABASE_ACCESS_TOKEN;if(!token)throw Error('SUPABASE_ACCESS_TOKEN is required');
 async function request(query,read_only){const response=await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/database/query',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({query,read_only})});if(!response.ok)throw Error(`Supabase database access failed (HTTP ${response.status}); no release completion claimed.`);return response.json();}
+if(process.argv.includes('--inspect')){const result=await request("select prosrc,prosecdef,proconfig from pg_proc where oid='public.wc_shop_command(uuid,text,jsonb)'::regprocedure",true);await writeFile('production-shop-function.json',JSON.stringify(result));console.log('Read-only production function inspection saved.');process.exit(0);}
 console.log('Preflight:',JSON.stringify(await request(verify,true)));
 if(process.argv.includes('--apply')){await request(sql,false);const result=await request(verify,true);const r=result[0];if(r?.registered!==2||!r.paint_routes||!r.classification||r.rls_tables!==2||r.anon_shop_write)throw Error('Production verification failed');console.log('Verified:',JSON.stringify(result));}

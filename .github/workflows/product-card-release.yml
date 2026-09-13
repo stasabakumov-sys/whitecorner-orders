@@ -30,7 +30,12 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/product-card-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
           node .github/scripts/box-drawings-migration.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/hub-test-orders.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
-      - name: Apply owner-approved product card migrations
+      - name: Inspect production function before migration
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: node .github/scripts/product-card-release.mjs --apply
+        run: node .github/scripts/product-card-release.mjs --inspect
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-shop-function
+          path: production-shop-function.json
+          retention-days: 1
