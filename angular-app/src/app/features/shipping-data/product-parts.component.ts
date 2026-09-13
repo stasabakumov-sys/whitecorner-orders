@@ -74,7 +74,7 @@ export class ProductPartsComponent implements OnChanges{
   finally{if(token===this.loadToken){this.loading=false;this.cdr?.markForCheck();}}
  }
  newTemplate(){this.editingId='';this.version=0;this.templateName=this.product?.short_name||this.product?.product_name||'';this.parts=[];this.estimates={};this.folding='';this.sizeKey=this.sizeKeys().length===1?this.sizeKeys()[0]:'';this.done=false;}
- editTemplate(t:ShopTemplate){this.editingId=t.id;this.version=t.version;this.templateName=t.name;this.parts=structuredClone(t.parts) as AssignedPart[];this.estimates={...t.estimates};this.folding=t.folding||'';this.sizeKey=t.size_key||(this.sizeKeys().length===1?this.sizeKeys()[0]:'');delete this.estimates['Painting:Repaint'];this.done=false;this.error='';}
+ editTemplate(t:ShopTemplate){const selectedFolding=this.folding,selectedSize=this.sizeKey;this.editingId=t.id;this.version=t.version;this.templateName=t.name;this.parts=structuredClone(t.parts) as AssignedPart[];this.estimates={...t.estimates};this.folding=t.folding||(this.hasFolding?selectedFolding:'');this.sizeKey=t.size_key||(this.hasFolding&&selectedSize?selectedSize:(this.sizeKeys().length===1?this.sizeKeys()[0]:''));delete this.estimates['Painting:Repaint'];this.done=false;this.error='';}
  addPart(){this.parts=[...this.parts,{id:crypto.randomUUID(),name:'',component_product_id:this.product.id}];}
  removePart(id:string){this.parts=this.parts.filter(p=>p.id!==id);for(const stage of ['Assembly','Sanding'])delete this.estimates[stage+':'+id];}
  setEstimate(key:string,value:string|number|null){if(value===''||value===null)delete this.estimates[key];else this.estimates[key]=Number(value);}
