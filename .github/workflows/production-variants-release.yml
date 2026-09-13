@@ -1,0 +1,35 @@
+name: Production estimate variants release
+on:
+  push:
+    branches: [codex/production-cost-variants]
+    paths: ['.github/workflows/production-variants-release.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: production-estimate-variants-release
+  cancel-in-progress: false
+jobs:
+  verify-and-migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Angular
+        working-directory: angular-app
+        run: |
+          npm ci
+          npm test -- --watch=false
+          npm run build
+      - name: Verify migration and preserved snapshots
+        run: |
+          npm install --prefix "$RUNNER_TEMP/variants-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/hub-test-orders.test.mjs "$RUNNER_TEMP/variants-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Apply production estimate variant schema
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/production-variants-release.mjs --apply

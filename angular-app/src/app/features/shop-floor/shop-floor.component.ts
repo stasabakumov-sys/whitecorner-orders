@@ -8,6 +8,7 @@ import {ProductionService} from '../../core/services/production.service';
 import {ShopPhoneService} from '../../core/services/shop-phone.service';
 import {ProductionStatus} from '../../core/models/production.models';
 import {ShopFloorService} from './shop-floor.service';
+import {foldingOption,productionSize} from '../costing/production-cost';
 import {ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
 
 @Component({selector:'app-shop-floor',standalone:true,imports:[FormsModule,DatePipe,RouterLink],templateUrl:'./shop-floor.component.html',styleUrl:'./shop-floor.component.css'})
@@ -33,7 +34,7 @@ export class ShopFloorComponent implements OnDestroy {
   const external=String((item.catalog_reference as any)?.catalogItemId||(item.catalog_reference as any)?.productId||'');
   return this.s.catalog().find(p=>(external&&p.wix_product_id===external)||(!p.wix_product_id&&p.product_name.trim().toLowerCase()===String(item.product_name||'').trim().toLowerCase()))?.id||'';
  }
- productTemplates(){const productId=this.selectedProductId();return this.s.data().templates.filter(t=>t.product_id===productId);}
+ productTemplates(){const productId=this.selectedProductId(),item=this.liveUnits().find(v=>v.unit.id===this.unitId)?.mainItem;return this.s.data().templates.filter(t=>t.product_id===productId&&(t.size_key?t.size_key===productionSize(item?.wix_options)&&t.folding===foldingOption(item?.wix_options):!/backdrop/i.test(item?.product_name||'')));}
  snapshot(){return this.s.data().units.find(v=>v.unit_id===this.unitId);}
  shift(){return this.s.data().shifts.find(v=>!v.ended_at);}
  active(){return this.s.data().intervals.find(v=>!v.ended_at);}
