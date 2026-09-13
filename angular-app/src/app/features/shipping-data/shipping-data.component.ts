@@ -112,7 +112,7 @@ export function currentProductCostProfiles(rows:any[]){
             <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" (saved)="updateDetails($event)">
             <span class="product-drawing-label">Product drawing</span>
             <app-box-drawing [productId]="p.id" />
-            <p class="small product-drawing-help">For size-specific drawings, use the matching variant below.</p>
+            <p class="small product-drawing-help">Product drawing shared by all variants.</p>
             </app-product-details></section>
             <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button></nav>
             @if(detailTab==='cost'){
@@ -121,7 +121,7 @@ export function currentProductCostProfiles(rows:any[]){
             <p class="small">Add materials here. Planned work is calculated above from Estimated min and Work Rates. Order Costing shows the combined order summary.</p>
             @if(costing.error()){<p role="alert">{{costing.error()}}</p>}
             @if(isBackdrop(p)){<p class="small">Raw and painted use one material profile. Painting changes only the calculated work cost above.</p>}
-            @for(part of costProfiles(p.id);track part.variant_key){<details><summary>Edit materials · {{costProfileLabel(part,p.id)}}</summary><app-catalog-cost-editor [part]="part" [showWork]="false" [hideColour]="isBackdrop(p)" /><h4>Variant product drawing</h4><app-box-drawing [productId]="p.id" [variantKey]="part.variant_key" /></details>}
+            @for(part of costProfiles(p.id);track part.variant_key){<details><summary>Edit materials · {{costProfileLabel(part,p.id)}}</summary><app-catalog-cost-editor [part]="part" [showWork]="false" [hideColour]="isBackdrop(p)" /></details>}
             @empty{<p class="mut">No order variant available yet. Open Add materials on an order to define its costs.</p>}
             </section>
             }
