@@ -1,4 +1,4 @@
-import {availablePaint,PAINT_OPERATIONS,rangeBounds,intervalSeconds,brisbaneDate,localInput,fromLocalInput,csvCell,ShopInterval,projectCommands,ShopData} from './shop-floor.models';
+import {availablePaint,PAINT_OPERATIONS,BACKDROP_PAINT_OPERATIONS,paintOperations,paintLabel,rangeBounds,intervalSeconds,brisbaneDate,localInput,fromLocalInput,csvCell,ShopInterval,projectCommands,ShopData} from './shop-floor.models';
 describe('Shop Floor timing rules',()=>{
  it('unlocks Painting in order but permits optional Repaint',()=>{
   expect(availablePaint('Second primer',[])).toBe(false);
@@ -33,5 +33,16 @@ describe('Shop Floor timing rules',()=>{
   expect(state.intervals.filter(r=>r.stage==='Pause').every(r=>r.unit_id===null)).toBe(true);
   expect(state.intervals.filter(r=>r.stage==='CNC').reduce((s,r)=>s+intervalSeconds(r,Date.now()),0)).toBe(60);
   expect(state.intervals.filter(r=>r.stage==='Pause').reduce((s,r)=>s+intervalSeconds(r,Date.now()),0)).toBe(120);
+ });
+});
+
+describe('Backdrop painting route',()=>{
+ it('uses Primer, Sanding and Finish coat for backdrops and retains the standard route elsewhere',()=>{
+  expect(paintOperations('Arch Backdrop')).toEqual(BACKDROP_PAINT_OPERATIONS);
+  expect(BACKDROP_PAINT_OPERATIONS.map(op=>paintLabel(op,BACKDROP_PAINT_OPERATIONS))).toEqual(['Primer','Sanding','Finish coat']);
+  expect(paintOperations('Cart')).toEqual(PAINT_OPERATIONS);
+  expect(availablePaint('Finish coat',['Painting:First primer','Painting:First sanding'],BACKDROP_PAINT_OPERATIONS)).toBe(true);
+  expect(availablePaint('Finish coat',['Painting:First primer'],BACKDROP_PAINT_OPERATIONS)).toBe(false);
+  expect(availablePaint('Second primer',[],BACKDROP_PAINT_OPERATIONS)).toBe(false);
  });
 });
