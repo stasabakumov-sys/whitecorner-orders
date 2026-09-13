@@ -68,7 +68,10 @@ try {
  create schema supabase_migrations;create table supabase_migrations.schema_migrations(version text primary key,name text,statements text[]);`);
  for(const name of ['20260909000100_box_drawings','20260909000200_backdrop_drawing_library','20260909000300_product_drawings','20260909000500_drawing_upload_limit'])await db.exec(await readFile(`supabase/migrations/${name}.sql`,'utf8'));
  const releaseSql=execFileSync(process.execPath,['.github/scripts/product-card-release.mjs','--print-sql'],{encoding:'utf8'});
- await db.exec(releaseSql);await db.exec(releaseSql);
+ await assert.rejects(db.exec(releaseSql.replace('Sign in required','Changed production contract')),/Shop Floor command differs/);
+ await db.exec('rollback');
+ // Pasting through Windows SQL Editor changes line endings inside SQL literals too.
+ await db.exec(releaseSql.replace(/\r?\n/g,'\r\n'));await db.exec(releaseSql);await db.exec(releaseSql.replace(/\r?\n/g,'\r\n'));
  assert.equal((await db.query('select count(*)::int n from supabase_migrations.schema_migrations')).rows[0].n,2);
  assert.deepEqual((await db.query('select paint_operations from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0].paint_operations,['First primer','First sanding','Finish coat']);
  assert.equal((await db.query('select cardinality(paint_operations) n from wc_shop_units where unit_id=$1',[startedBackdrop])).rows[0].n,5);
