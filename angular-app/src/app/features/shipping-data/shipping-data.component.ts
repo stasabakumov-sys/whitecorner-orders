@@ -116,7 +116,7 @@ export function currentProductCostProfiles(rows:any[]){
             </app-product-details></section>
             <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button></nav>
             @if(detailTab==='cost'){
-            <section class="shipsection"><app-product-work-cost [product]="p" /></section>
+            <section class="shipsection"><app-product-work-cost [product]="p" [sizes]="productSizes(p)" [materialProfiles]="costProfiles(p.id)" [materials]="costing.materials()" /></section>
             <section class="shipsection"><h3>Product cost · incl. GST</h3>
             <p class="small">Add materials here. Planned work is calculated above from Estimated min and Work Rates. Order Costing shows the combined order summary.</p>
             @if(costing.error()){<p role="alert">{{costing.error()}}</p>}
@@ -184,7 +184,7 @@ export function currentProductCostProfiles(rows:any[]){
             <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" /></section>
             }
             @if(detailTab==='minutes'){
-             <section class="shipsection"><app-product-parts [product]="p" /></section>
+             <section class="shipsection"><app-product-parts [product]="p" [sizes]="productSizes(p)" /></section>
             }
           } @else {
             <div class="mut">No products in this filter.</div>

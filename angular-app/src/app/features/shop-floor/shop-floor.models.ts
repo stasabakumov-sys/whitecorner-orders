@@ -8,7 +8,7 @@ export interface ShopProductChoice { unit:{id:string}; order:{id:string}; mainIt
 export function productChoice(view:ShopProductChoice):ShopProductChoice {
  return {unit:{id:view.unit.id},order:{id:view.order.id},mainItem:{product_name:view.mainItem.product_name||''},code:view.code,status:view.status};
 }
-export interface ShopTemplate { id: string; product_id?: string|null; name: string; parts: ShopPart[]; estimates: Record<string, number>; version: number }
+export interface ShopTemplate { id: string; product_id?: string|null; name: string; parts: ShopPart[]; estimates: Record<string, number>; version: number; size_key?:string|null; folding?:'foldable'|'nonfoldable'|null }
 export interface ShopUnit { unit_id: string; template_id: string; parts: ShopPart[]; estimates: Record<string, number>; finish: 'raw'|'painted'; completed: string[]; paint_operations?:string[] }
 export interface ShopShift { id: string; worker_id: string; started_at: string; ended_at: string|null }
 export interface ShopInterval extends ShopShift { shift_id: string; unit_id: string|null; stage: string; operation: string; part_id: string|null }

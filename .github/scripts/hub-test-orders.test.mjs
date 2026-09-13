@@ -91,5 +91,27 @@ try {
  for(const operation of ['First primer','First sanding','Finish coat']){await command('start',{unitId:backdropUnit,stage:'Painting',operation,at:at()});await command('finish-operation',{at:at()});}
  await command('finish-painting',{unitId:backdropUnit,at:at()});
  assert.ok((await db.query('select completed from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0].completed.includes('Painting:finished'));
- console.log('PASS: Hub fixtures, templates, RLS and backdrop three-step painting with server sequencing');
+ await db.exec('reset role');
+ const beforeSnapshot=(await db.query('select * from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0];
+ const variantRelease=execFileSync(process.execPath,['.github/scripts/production-variants-release.mjs','--print-sql'],{encoding:'utf8'});
+ await db.exec(variantRelease);await db.exec(variantRelease.replace(/\r?\n/g,'\r\n'));
+ assert.deepEqual((await db.query('select * from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0],beforeSnapshot);
+ assert.equal((await db.query('select size_key from wc_shop_templates where id=$1',[backdropTemplate.id])).rows[0].size_key,null);
+ const saveVariant=async(id,folding,minutes,version)=>{return (await db.query("select wc_shop_save_variant_template($1,$2,'Arch',$3,$4,$5,'2000x1000',$6) saved",[id,backdropProduct,backdropTemplate.parts,{CNC:minutes},version,folding])).rows[0].saved;};
+ await db.exec('set role anon');await assert.rejects(saveVariant(null,'foldable',10,null),/permission denied/);await db.exec('reset role;set role authenticated');
+ const folded=await saveVariant(backdropTemplate.id,'foldable',10,backdropTemplate.version),flat=await saveVariant(null,'nonfoldable',20,null);
+ assert.equal(folded.id,backdropTemplate.id);assert.equal(flat.estimates.CNC,20);
+ await assert.rejects(saveVariant(null,'foldable',99,null),/already exists/);
+ await assert.rejects(saveVariant(folded.id,'foldable',99,backdropTemplate.version),/Template changed/);
+ await db.exec('reset role');
+ await db.query("update wc_order_items set wix_options=jsonb_build_object('Size','1000 × 2000 mm','Foldable','NO') where id=(select order_item_id from wc_production_units where id=$1)",[freshBackdrop]);
+ await assert.rejects(command('assign',{unitId:freshBackdrop,templateId:folded.id,finish:'raw'}),/does not match/);
+ await command('assign',{unitId:freshBackdrop,templateId:flat.id,finish:'raw'});
+ assert.equal((await db.query('select estimates from wc_shop_units where unit_id=$1',[freshBackdrop])).rows[0].estimates.CNC,20);
+ await saveVariant(flat.id,'nonfoldable',35,flat.version);
+ assert.equal((await db.query('select estimates from wc_shop_units where unit_id=$1',[freshBackdrop])).rows[0].estimates.CNC,20);
+ assert.deepEqual((await db.query('select * from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0],beforeSnapshot);
+ await assert.rejects(db.query("update wc_shop_templates set folding=null where id=$1",[flat.id]),/check constraint/);
+ assert.equal((await db.query("select wc_shop_variant_size('{\"Size\":\"Size II\"}') value")).rows[0].value,null);
+ console.log('PASS: template variants, independent estimates, stale/duplicate guards, matching assignments, preserved snapshots, RLS and paint sequence');
 }finally{await db.close();}
