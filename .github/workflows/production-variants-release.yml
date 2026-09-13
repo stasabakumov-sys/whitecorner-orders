@@ -30,7 +30,6 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/variants-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
           node .github/scripts/hub-test-orders.test.mjs "$RUNNER_TEMP/variants-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Apply production estimate variant schema
-        if: github.event_name == 'workflow_dispatch'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/production-variants-release.mjs --apply
