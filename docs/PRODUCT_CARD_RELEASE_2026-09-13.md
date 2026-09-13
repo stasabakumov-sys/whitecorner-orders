@@ -15,3 +15,9 @@ Angular unit tests and the production build are required before release. Isolate
 ## Deployment
 
 Run only the two `20260913000*` migrations via the guarded product-card release helper; never run a blanket `db push`. Publish the Angular app through the existing main-branch workflow after database verification. No Wix writes, courier bookings or email sends are part of this release.
+
+## Production database verification
+
+Applied on 13 September 2026 through GitHub Actions run 34758105413 after renewing the owner's Management API token. Both release migrations are registered; paint routes and the classification RPC exist, both affected tables retain RLS, and anonymous Shop Floor writes remain denied. Plane Arch has one saved nonempty parts template. One legacy shared drawing remains available for explicit folding classification.
+
+The initial SQL Editor preflight failure was caused solely by CRLF versus LF line endings inside the pasted SQL literal. A read-only production function inspection confirmed exact source equality after CR normalization. The release helper now normalizes both operands; tests cover Windows paste, repeated execution across line-ending styles, and rejection of actual source changes. Final checks passed: 214 Angular tests, production build, SQL/RLS/paint sequence rehearsals, and browser review with synthetic data.
