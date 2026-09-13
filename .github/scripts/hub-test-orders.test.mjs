@@ -113,5 +113,17 @@ try {
  assert.deepEqual((await db.query('select * from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0],beforeSnapshot);
  await assert.rejects(db.query("update wc_shop_templates set folding=null where id=$1",[flat.id]),/check constraint/);
  assert.equal((await db.query("select wc_shop_variant_size('{\"Size\":\"Size II\"}') value")).rows[0].value,null);
- console.log('PASS: template variants, independent estimates, stale/duplicate guards, matching assignments, preserved snapshots, RLS and paint sequence');
+ const materialRelease=execFileSync(process.execPath,['.github/scripts/backdrop-materials-release.mjs','--print-sql'],{encoding:'utf8'});
+ await db.exec(materialRelease);await db.exec(materialRelease.replace(/\r?\n/g,'\r\n'));
+ assert.equal((await db.query("select count(*)::int n from supabase_migrations.schema_migrations where version='20260914000200'")).rows[0].n,1);
+ const material=(await db.query("select wc_save_material(null,'Backdrop MDF','sheet',50,true,null) saved")).rows[0].saved;
+ await db.exec('reset role;set role anon');await assert.rejects(db.query("select wc_save_backdrop_material_profile($1,'2000x1000','nonfoldable',$2,true,null)",[backdropProduct,[{material_id:material.id,quantity:2}]]),/permission denied/);
+ await db.exec('reset role;set role authenticated');
+ await db.query("select wc_save_backdrop_material_profile($1,'2000x1000','foldable',$2,true,null)",[backdropProduct,[{material_id:material.id,quantity:1}]]);
+ await db.query("select wc_save_backdrop_material_profile($1,'2000x1000','nonfoldable',$2,true,null)",[backdropProduct,[{material_id:material.id,quantity:2}]]);
+ assert.equal((await db.query("select count(*)::int n from wc_material_profiles where shipping_product_id=$1 and template_item->>'profile_scope'='backdrop-structure'",[backdropProduct])).rows[0].n,2);
+ const nonfold=(await db.query("select * from wc_material_profiles where shipping_product_id=$1 and template_item->>'folding'='nonfoldable'",[backdropProduct])).rows[0];
+ assert.equal(nonfold.lines[0].quantity,2);assert.equal(nonfold.options.Foldable,'NO');
+ await assert.rejects(db.query("select wc_save_backdrop_material_profile($1,'2000x1000','nonfoldable',$2,true,null)",[backdropProduct,[{material_id:material.id,quantity:3}]]),/Profile changed/);
+ console.log('PASS: template and material folding variants, independent estimates, stale/duplicate guards, matching assignments, preserved snapshots, RLS and paint sequence');
 }finally{await db.close();}
