@@ -56,6 +56,10 @@ type ShippingRule = {
   active?: boolean;
 };
 
+export function currentProductCostProfiles(rows:any[]){
+  return rows.filter(row=>Object.keys(row.options||{}).length>0||!rows.some(other=>other!==row&&other.kind===row.kind&&Boolean(other.standard_top_excluded)===Boolean(row.standard_top_excluded)&&Object.keys(other.options||{}).length>0));
+}
+
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
@@ -221,7 +225,7 @@ export class ShippingDataComponent implements OnInit {
   selectedProduct = computed(() => this.products().find(p => p.id===this.selectedId()) ?? null);
 
   constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute,@Optional() public costing:CostingService=new CostingService(supabase)) {}
-  costProfiles(id:string){const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile}));const rows=[...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()];if(!this.isBackdrop(this.products().find(p=>p.id===id) as ShippingProduct))return rows;const groups=new Map<string,any[]>();for(const row of rows){const key=this.costProfileGroup(row);groups.set(key,[...(groups.get(key)||[]),row]);}return [...groups.values()].map(parts=>({...parts[0],shared_parts:parts}));}
+  costProfiles(id:string){const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile}));const rows=currentProductCostProfiles([...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()]);if(!this.isBackdrop(this.products().find(p=>p.id===id) as ShippingProduct))return rows;const groups=new Map<string,any[]>();for(const row of rows){const key=this.costProfileGroup(row);groups.set(key,[...(groups.get(key)||[]),row]);}return [...groups.values()].map(parts=>({...parts[0],shared_parts:parts}));}
   costProfileGroup(p:any){return `${p.kind}|${p.standard_top_excluded?'topless':'complete'}|${JSON.stringify(Object.fromEntries(Object.entries(p.options||{}).filter(([key])=>!['colour','color'].includes(key.toLowerCase())).sort(([a],[b])=>a.localeCompare(b))))}`;}
   failedImages=new Set<string>();
   productImage(p:ShippingProduct){
@@ -237,8 +241,7 @@ export class ShippingDataComponent implements OnInit {
   costProfileLabel(p:any,productId:string){
     const backdrop=this.isBackdrop(this.products().find(row=>row.id===productId) as ShippingProduct);
     const options=Object.entries(p.options||{}).filter(([key])=>!backdrop||!['colour','color'].includes(key.toLowerCase())).map(([k,v])=>k+': '+v).join(' · ');
-    const hasRecordedOptions=this.costProfiles(productId).some(profile=>Object.keys(profile.options||{}).length>0);
-    return `${p.kind} · ${options||(hasRecordedOptions?'Options not recorded · legacy order':'No options')}${p.standard_top_excluded?' · Standard top excluded':''}`;
+    return `${p.kind} · ${options||'No options'}${p.standard_top_excluded?' · Standard top excluded':''}`;
   }
 
   async ngOnInit() {
