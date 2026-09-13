@@ -1,4 +1,7 @@
 export const PAINT_OPERATIONS = ['First primer', 'First sanding', 'Second primer', 'Second sanding', 'Finish coat'];
+export const BACKDROP_PAINT_OPERATIONS = ['First primer', 'First sanding', 'Finish coat'];
+export function paintOperations(productName:string){return /backdrop/i.test(productName||'')?BACKDROP_PAINT_OPERATIONS:PAINT_OPERATIONS;}
+export function paintLabel(operation:string,operations:string[]){return operations.length===3?({'First primer':'Primer','First sanding':'Sanding'} as Record<string,string>)[operation]||operation:operation;}
 export const OTHER_OPERATIONS = ['Cleaning', 'Design', 'Administration', 'Development', 'Rest'];
 export interface ShopPart { id: string; name: string; component_product_id?: string }
 export interface ShopProductChoice { unit:{id:string}; order:{id:string}; mainItem:{product_name:string}; code:string; status:string }
@@ -6,7 +9,7 @@ export function productChoice(view:ShopProductChoice):ShopProductChoice {
  return {unit:{id:view.unit.id},order:{id:view.order.id},mainItem:{product_name:view.mainItem.product_name||''},code:view.code,status:view.status};
 }
 export interface ShopTemplate { id: string; product_id?: string|null; name: string; parts: ShopPart[]; estimates: Record<string, number>; version: number }
-export interface ShopUnit { unit_id: string; template_id: string; parts: ShopPart[]; estimates: Record<string, number>; finish: 'raw'|'painted'; completed: string[] }
+export interface ShopUnit { unit_id: string; template_id: string; parts: ShopPart[]; estimates: Record<string, number>; finish: 'raw'|'painted'; completed: string[]; paint_operations?:string[] }
 export interface ShopShift { id: string; worker_id: string; started_at: string; ended_at: string|null }
 export interface ShopInterval extends ShopShift { shift_id: string; unit_id: string|null; stage: string; operation: string; part_id: string|null }
 export interface ShopData { templates: ShopTemplate[]; units: ShopUnit[]; shifts: ShopShift[]; intervals: ShopInterval[] }
@@ -25,8 +28,8 @@ export function rangeBounds(date: string, period: string): [number,number] {
 export function intervalSeconds(row: ShopInterval, now: number, bounds?: [number,number]): number {
  return Math.max(0, (Math.min(Date.parse(row.ended_at||'')||now,bounds?.[1]??Infinity)-Math.max(Date.parse(row.started_at),bounds?.[0]??-Infinity))/1000);
 }
-export function availablePaint(op: string, completed: string[]): boolean {
- return op==='Repaint'||(PAINT_OPERATIONS.includes(op)&&!completed.includes('Painting:'+op)&&PAINT_OPERATIONS.slice(0,PAINT_OPERATIONS.indexOf(op)).every(x=>completed.includes('Painting:'+x)));
+export function availablePaint(op: string, completed: string[],operations:string[]=PAINT_OPERATIONS): boolean {
+ return op==='Repaint'||(operations.includes(op)&&!completed.includes('Painting:'+op)&&operations.slice(0,operations.indexOf(op)).every(x=>completed.includes('Painting:'+x)));
 }
 export function duration(seconds: number): string {
  const s=Math.floor(seconds);return `${Math.floor(s/3600)}:${String(Math.floor(s/60)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;

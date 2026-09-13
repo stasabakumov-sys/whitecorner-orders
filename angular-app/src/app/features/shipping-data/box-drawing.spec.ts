@@ -37,3 +37,24 @@ describe('Private saved box drawings',()=>{
   const {c,bucket}=setup();c.record={box_snapshot:c.box,object_path:'user/file',filename:'box.cdr'};const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{});await c.download();expect(bucket.createSignedUrl).toHaveBeenCalledWith('user/file',60,{download:'box.cdr'});expect(click).toHaveBeenCalled();click.mockRestore();
  });
 });
+
+describe('Qualified shared drawing uploads',()=>{
+ it('saves and replaces only the selected folding variant',async()=>{
+  const {c,rpc}=setup();c.sharedSize='2000x1000:nonfoldable';c.record={filename:'flat.cdr',revision:'flat-revision'};
+  await c.upload(event());expect(rpc).toHaveBeenCalledWith('wc_save_backdrop_box_drawing',expect.objectContaining({p_size:'2000x1000:nonfoldable',p_expected:'flat-revision'}));
+ });
+ it('blocks unclassified and read-only slots before any storage upload',async()=>{
+  const {c,bucket}=setup();c.sharedSize='2000x1000';await c.upload(event());expect(c.error).toContain('Foldable');expect(bucket.upload).not.toHaveBeenCalled();
+  c.sharedSize='2000x1000:foldable';c.legacySizeDrawing=true;await c.upload(event());expect(bucket.upload).not.toHaveBeenCalled();
+  c.legacySizeDrawing=false;c.readOnly=true;await c.upload(event());expect(bucket.upload).not.toHaveBeenCalled();
+ });
+ it('keeps the known shared file and reports a concurrent replacement without claiming success',async()=>{
+  const {c,rpc}=setup();c.sharedSize='2000x1000:foldable';c.record={filename:'original.cdr',revision:'r1'};rpc.mockResolvedValue({data:null,error:Error('Packaging drawing already exists or changed. Refresh before replacing it.')} as any);
+  await c.upload(event());expect(c.current.filename).toBe('original.cdr');expect(c.success).toBe('');expect(c.error).toContain('already exists');
+ });
+ it('fails closed when looking for a legacy drawing fails and recovers on retry',async()=>{
+  const {c}=setup();c.sharedSize='2000x1000:foldable';let fail=true;
+  (c as any).db.client.from=()=>{let key='';const q:any={select:()=>q,eq:(_field:string,value:string)=>{key=value;return q;},maybeSingle:async()=>({data:null,error:!key.includes(':')&&fail?Error('offline'):null})};return q;};
+  await c.load();expect(c.loadError).toBe(true);fail=false;await c.load();expect(c.loadError).toBe(false);expect(c.current).toBeNull();
+ });
+});
