@@ -8,7 +8,7 @@ import {ProductionService} from '../../core/services/production.service';
 import {ShopPhoneService} from '../../core/services/shop-phone.service';
 import {ProductionStatus} from '../../core/models/production.models';
 import {ShopFloorService} from './shop-floor.service';
-import {ShopInterval,ShopShift,PAINT_OPERATIONS,OTHER_OPERATIONS,availablePaint,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
+import {ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
 
 @Component({selector:'app-shop-floor',standalone:true,imports:[FormsModule,DatePipe,RouterLink],templateUrl:'./shop-floor.component.html',styleUrl:'./shop-floor.component.css'})
 export class ShopFloorComponent implements OnDestroy {
@@ -16,7 +16,7 @@ export class ShopFloorComponent implements OnDestroy {
  tab='timer';unitId='';stageFilter='';partId='';operation='';other='Cleaning';mode='product';
  templateId='';finish='';
  date=brisbaneDate();period='day';editId='';editType='interval';editStart='';editEnd='';notice='';localError='';moving=false;
- paint=PAINT_OPERATIONS;others=OTHER_OPERATIONS;format=duration;seconds=intervalSeconds;paintAvailable=availablePaint;
+ get paint(){return this.snapshot()?.paint_operations||PAINT_OPERATIONS;}paintLabel=paintLabel;others=OTHER_OPERATIONS;format=duration;seconds=intervalSeconds;paintAvailable=availablePaint;
  private reconnect=()=>{void this.refresh();};
  constructor(readonly s:ShopFloorService,readonly auth:AuthService,readonly orders:OrdersService,readonly production:ProductionService,route:ActivatedRoute,readonly phone:ShopPhoneService){
   this.unitId=route.snapshot.queryParamMap.get('unit')||'';void s.load().then(async()=>{await this.cacheChoices();this.selectUnit();});
@@ -54,7 +54,7 @@ export class ShopFloorComponent implements OnDestroy {
   if(!v||!u||u.completed.includes(v.status+':finished'))return false;
   if(v.status==='CNC')return true;
   if(v.status==='Assembly'||v.status==='Sanding')return !!this.partId&&!u.completed.includes(v.status+':'+this.partId);
-  return v.status==='Painting'&&availablePaint(this.operation,u.completed);
+  return v.status==='Painting'&&availablePaint(this.operation,u.completed,this.paint);
  }
  async action(action:string,payload:Record<string,unknown>={}){this.notice='';this.localError='';const ok=await this.s.command(action,payload);if(ok)this.notice='Saved';return ok;}
  async start(){if(!this.canStart())return;const stage=this.selected()?.status;

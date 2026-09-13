@@ -1,5 +1,15 @@
 # Saved box drawings
 
+## Current backdrop rule — 13 September 2026
+
+The shared packing drawing is keyed by the normalized product size **and** the explicit Foldable option: for example `2000x1000:foldable` and `2000x1000:nonfoldable`. Colour and product title do not distinguish drawings; package measurements are not the lookup key. Missing/conflicting size or folding options block uploading until the profile is corrected.
+
+The Packing table contains exactly one drawing control for a backdrop. An existing shared file is shown with “Packaging drawing already exists” and a replacement control. Individual backdrop uploads are blocked in the UI and by a database trigger, including older clients. Non-backdrop individual package drawings retain their existing contract.
+
+Migration `20260913000100_backdrop_drawing_folding.sql` keeps all size-only library entries and previously attached individual files. A size-only file remains downloadable but cannot be replaced or bypassed by another upload until the user classifies it as Foldable or Non-foldable in Backdrop box drawings. Classification retains its storage path, checks revision, and refuses to overwrite an existing qualified key. Old individual attachments remain stored for manual reconciliation; they are not silently promoted to the shared library.
+
+Use `.github/scripts/product-card-release.mjs --print-sql` for the exact targeted, transactional release of this migration and the backdrop paint-route migration. The wrapper checks the reviewed Shop Floor command body, registers each migration, refuses mismatched replay, and verifies RLS and function access. Earlier sections below document the previous rollout stages.
+
 Products (formerly Shipping Data) adds a Drawing column to each saved packaging row. One file per row can be uploaded, downloaded or replaced. CDR and other formats are kept unchanged; files must be non-empty and at most 1 MiB. There is no inline rendering or execution of uploaded files.
 
 Apply `20260909000100_box_drawings.sql` before publishing the UI. It creates a private `box-drawings` Storage bucket and separate attachment metadata. Existing packaging JSON, quote signatures, order costs and courier bookings are unchanged. Authenticated Hub users upload files and receive 60-second attachment download links; anonymous access is denied.

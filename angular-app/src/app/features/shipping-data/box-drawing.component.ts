@@ -1,5 +1,6 @@
 import {Component,Input,OnChanges,ChangeDetectorRef,Optional} from '@angular/core';
 import {SupabaseService} from '../../core/services/supabase.service';
+import {qualifiedDrawingKey} from './product-sizes';
 
 export function sameDrawingBox(a:any,b:any):boolean {
  const stable=(v:any):string=>JSON.stringify(v===null||typeof v!=='object'?v:Array.isArray(v)?v.map(x=>JSON.parse(stable(x))):Object.fromEntries(Object.keys(v).sort().map(k=>[k,JSON.parse(stable(v[k]))])));
@@ -9,18 +10,20 @@ export function sameDrawingBox(a:any,b:any):boolean {
  <div class="drawing">
  @if(loading){<small>Loading…</small>}
  @else {
+ @if(sharedSize&&current){<small>Packaging drawing already exists.</small>}
+ @if(legacySizeDrawing){<div role="alert">This saved drawing has no folding option. Open Backdrop box drawings and classify it as Foldable or Non-foldable before uploading another file.</div>}
  <div class="file-row">
  @if(current){<button class="download" (click)="download()" [disabled]="busy" [title]="current.filename">{{current.filename}}</button>}
- <label class="upload" [class.replace]="!!current" [title]="current?'Replace drawing':'Upload drawing'">
+ @if(!readOnly&&!legacySizeDrawing){<label class="upload" [class.replace]="!!current" [title]="current?'Replace drawing':'Upload drawing'">
  @if(current){<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9M17 4l3 3-3 3M4 17h9M7 14l-3 3 3 3"/></svg>}
  @else{ {{busy?'Uploading…':'Upload drawing'}} }
  <input type="file" [attr.aria-label]="(current?'Replace drawing for ':'Upload drawing for ')+(productId?'product':box?.package_name||'box')" [disabled]="busy||loading||!!loadError" (change)="upload($event)">
- </label>
+ </label>}
  </div>
  @if(current){<small>{{sizeLabel(current.size_bytes)}}</small>}
  @if(busy&&current){<small role="status">Uploading replacement…</small>}
  @if(stale){<small>Box changed. Upload a matching drawing.</small>}
- @if(!current){<small>Up to 20 MB</small>}
+ @if(!current&&!readOnly){<small>Up to 20 MB</small>}
  }
  @if(error){<div class="upload-error" role="alert"><strong>Drawing error</strong><div>{{error}}</div></div>}
  @if(success){<small role="status">{{success}}</small>}
@@ -36,19 +39,28 @@ export function sameDrawingBox(a:any,b:any):boolean {
 export class BoxDrawingComponent implements OnChanges {
  @Input() signature='';@Input() index=0;@Input() box:any;@Input() sharedSize='';
  @Input() productId='';@Input() variantKey='';
+ @Input() readOnly=false;
+ legacySizeDrawing=false;
  record:any=null;busy=false;loading=false;error='';success='';loadError=false;private generation=0;
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
  get current(){return this.record&&(this.productId||this.sharedSize||sameDrawingBox(this.record.box_snapshot,this.box))?this.record:null;}
  get stale(){return !!this.record&&!this.current;}
  sizeLabel(bytes:number){return bytes>=1048576?`${(bytes/1048576).toFixed(1)} MB`:`${Math.ceil(bytes/1024)} KB`;}
  ngOnChanges(){void this.load();}
- async load(){const generation=++this.generation;this.loading=true;this.error='';this.success='';this.loadError=false;this.record=null;
+ async load(){const generation=++this.generation;this.loading=true;this.error='';this.success='';this.loadError=false;this.record=null;this.legacySizeDrawing=false;
   try{const query=this.productId?this.db.client.from('wc_product_drawings').select('*').eq('product_id',this.productId).eq('variant_key',this.variantKey):this.sharedSize?this.db.client.from('wc_backdrop_box_drawings').select('*').eq('size_key',this.sharedSize):this.db.client.from('wc_box_drawings').select('*').eq('profile_signature',this.signature).eq('box_index',this.index);
-   const {data,error}=await query.maybeSingle();if(error)throw error;if(generation===this.generation)this.record=data;}
+   const {data,error}=await query.maybeSingle();if(error)throw error;if(generation!==this.generation)return;this.record=data;
+   if(!data&&qualifiedDrawingKey(this.sharedSize)){
+    const legacy=await this.db.client.from('wc_backdrop_box_drawings').select('*').eq('size_key',this.sharedSize.split(':')[0]).maybeSingle();
+    if(legacy.error)throw legacy.error;if(generation!==this.generation)return;
+    if(legacy.data){this.record=legacy.data;this.legacySizeDrawing=true;}
+   }
+  }
   catch{if(generation===this.generation){this.loadError=true;this.error='Could not load drawing. Please retry.';}}
   finally{if(generation===this.generation){this.loading=false;this.cdr?.markForCheck();}}
  }
- async upload(event:Event){const input=event.target as HTMLInputElement;const file=input.files?.[0];input.value='';if(!file||this.busy||this.loading||this.loadError)return;
+ async upload(event:Event){const input=event.target as HTMLInputElement;const file=input.files?.[0];input.value='';if(!file||this.readOnly||this.legacySizeDrawing||this.busy||this.loading||this.loadError)return;
+  if(this.sharedSize&&!qualifiedDrawingKey(this.sharedSize)){this.error='Choose Foldable or Non-foldable for this size in the drawing library before uploading.';return;}
   this.success='';
   if(!file.size){this.error=`${file.name}: the file is empty or unavailable locally. Download it to this computer and try again.`;return;}
   if(file.size>20971520){this.error=`${file.name} (${this.sizeLabel(file.size)}) exceeds the 20 MB limit. Choose a smaller file.`;return;}

@@ -44,7 +44,7 @@
      <table><thead><tr><th>Part</th><th>Recorded time</th><th>Status</th></tr></thead><tbody>@for(p of u.parts;track p.id){<tr><td>{{p.name}}</td><td>{{format(productTime(v.status,p.id))}}</td><td>{{done(v.status+':'+p.id)?'✓ Complete':'In progress / not started'}}</td></tr>}</tbody></table>
     }
     @if(v.status==='Painting'){
-     <label>Painting operation<select [(ngModel)]="operation"><option value="">Choose operation</option>@for(op of paint;track op){<option [value]="op" [disabled]="!paintAvailable(op,u.completed)">{{done('Painting:'+op)?'✓ ':''}}{{op}}</option>}<option value="Repaint">Repaint (optional)</option></select></label>
+     <label>Painting operation<select [(ngModel)]="operation"><option value="">Choose operation</option>@for(op of paint;track op){<option [value]="op" [disabled]="!paintAvailable(op,u.completed,paint)">{{done('Painting:'+op)?'✓ ':''}}{{paintLabel(op,paint)}}</option>}<option value="Repaint">Repaint (optional)</option></select></label>
      <p>Finish each operation to unlock the next. Repaint is available outside the sequence.</p>
      @if(operation){<p>{{operation}}: {{format(productTime('Painting',undefined,operation))}} recorded</p>}
      <button (click)="finishPainting()" [disabled]="blocked()||!done('Painting:Finish coat')||done('Painting:finished')">Finish Painting</button>
