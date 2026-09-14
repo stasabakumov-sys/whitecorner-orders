@@ -1,10 +1,16 @@
 import {describe,it,expect,vi} from 'vitest';
-import {backdropSizeKey,backdropDrawingKey,packagingSizes} from './product-sizes';
+import {backdropSizeKey,manualBackdropSizeKey,backdropDrawingKey,packagingSizes} from './product-sizes';
 import {BoxDrawingComponent} from './box-drawing.component';
 describe('Backdrop shared box library',()=>{
  it('matches equivalent metric dimensions without guessing sizes',()=>{
   expect(backdropSizeKey('190cm x 95cm')).toBe('1900x950');expect(backdropSizeKey('950 × 1900 mm')).toBe('1900x950');
   for(const s of ['Size II','190 x 95','190cm x 95cm x 3cm','0cm x 95cm'])expect(backdropSizeKey(s)).toBe('');
+ });
+ it('treats unitless dimensions as centimetres only for manually entered sizes',()=>{
+  expect(backdropSizeKey('190x100')).toBe('');
+  expect(manualBackdropSizeKey('190x100')).toBe('1900x1000');
+  expect(manualBackdropSizeKey('100 × 190')).toBe('1900x1000');
+  expect(manualBackdropSizeKey('1900mm x 1000mm')).toBe('1900x1000');
  });
  it('uses product options and not box measurements for size',()=>{
   expect(packagingSizes({template_item:{wix_options:{Size:'190cm x 95cm'}},packages:[{length_mm:970,width_mm:970,contents:[]}]},'Backdrop')).toEqual(['190cm x 95cm']);
