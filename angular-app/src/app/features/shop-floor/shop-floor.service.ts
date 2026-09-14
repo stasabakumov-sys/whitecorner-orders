@@ -2,13 +2,14 @@ import {Injectable, signal, computed} from '@angular/core';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {AuthService} from '../../core/services/auth.service';
 import {ShopData,ShopCommand,ShopProductChoice,productChoice,projectCommands,OFFLINE_ACTIONS} from './shop-floor.models';
+import type {ShopCatalogProduct} from './shop-floor-selection';
 
 @Injectable({providedIn:'root'})
 export class ShopFloorService {
  private readonly serverData=signal<ShopData>({templates:[],units:[],shifts:[],intervals:[]});
  readonly data=computed(()=>projectCommands(this.serverData(),this.pending(),this.auth.session()?.user.id||''));
  readonly conflict=signal(false);
- readonly catalog=signal<{id:string;wix_product_id?:string|null;product_name:string}[]>([]);
+ readonly catalog=signal<ShopCatalogProduct[]>([]);
  readonly products=signal<ShopProductChoice[]>([]);
  readonly busy=signal(false);readonly error=signal('');readonly pending=signal<ShopCommand[]>([]);readonly loaded=signal(false);
  private owner=''; private syncing=false;

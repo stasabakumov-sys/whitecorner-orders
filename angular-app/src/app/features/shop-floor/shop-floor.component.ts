@@ -8,14 +8,14 @@ import {ProductionService} from '../../core/services/production.service';
 import {ShopPhoneService} from '../../core/services/shop-phone.service';
 import {ProductionStatus} from '../../core/models/production.models';
 import {ShopFloorService} from './shop-floor.service';
-import {foldingOption,productionSize} from '../costing/production-cost';
 import {ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
+import {catalogProductForItem,matchingProductTemplates,orderedFinish} from './shop-floor-selection';
 
 @Component({selector:'app-shop-floor',standalone:true,imports:[FormsModule,DatePipe,RouterLink],templateUrl:'./shop-floor.component.html',styleUrl:'./shop-floor.component.css'})
 export class ShopFloorComponent implements OnDestroy {
  now=signal(Date.now());private tick=setInterval(()=>this.now.set(Date.now()),1000);
  tab='timer';unitId='';stageFilter='';partId='';operation='';other='Cleaning';mode='product';
- templateId='';finish='';
+ templateId='';finish='';assigning=false;
  date=brisbaneDate();period='day';editId='';editType='interval';editStart='';editEnd='';notice='';localError='';moving=false;
  get paint(){return this.snapshot()?.paint_operations||PAINT_OPERATIONS;}paintLabel=paintLabel;others=OTHER_OPERATIONS;format=duration;seconds=intervalSeconds;paintAvailable=availablePaint;
  private reconnect=()=>{void this.refresh();};
@@ -30,11 +30,10 @@ export class ShopFloorComponent implements OnDestroy {
  async refresh(){if(this.phone.online())await this.orders.load();await this.s.load();await this.cacheChoices();}
  choices(){return this.units().filter(v=>!this.stageFilter||v.status===this.stageFilter);}
  selected(){return this.units().find(v=>v.unit.id===this.unitId);}
- selectedProductId(){const item=this.liveUnits().find(v=>v.unit.id===this.unitId)?.mainItem;if(!item)return '';
-  const external=String((item.catalog_reference as any)?.catalogItemId||(item.catalog_reference as any)?.productId||'');
-  return this.s.catalog().find(p=>(external&&p.wix_product_id===external)||(!p.wix_product_id&&p.product_name.trim().toLowerCase()===String(item.product_name||'').trim().toLowerCase()))?.id||'';
- }
- productTemplates(){const productId=this.selectedProductId(),item=this.liveUnits().find(v=>v.unit.id===this.unitId)?.mainItem;return this.s.data().templates.filter(t=>t.product_id===productId&&(t.size_key?t.size_key===productionSize(item?.wix_options)&&t.folding===foldingOption(item?.wix_options):!/backdrop/i.test(item?.product_name||'')));}
+ selectedItem(){return this.liveUnits().find(v=>v.unit.id===this.unitId)?.mainItem;}
+ selectedCatalogProduct(){return catalogProductForItem(this.selectedItem(),this.s.catalog());}
+ selectedProductId(){return this.selectedCatalogProduct()?.id||'';}
+ productTemplates(){return matchingProductTemplates(this.s.data().templates,this.selectedCatalogProduct(),this.selectedItem());}
  snapshot(){return this.s.data().units.find(v=>v.unit_id===this.unitId);}
  shift(){return this.s.data().shifts.find(v=>!v.ended_at);}
  active(){return this.s.data().intervals.find(v=>!v.ended_at);}
@@ -42,10 +41,10 @@ export class ShopFloorComponent implements OnDestroy {
   if(!r.unit_id)return true;const u=this.s.data().units.find(u=>u.unit_id===r.unit_id),v=this.units().find(v=>v.unit.id===r.unit_id);
   return v?.status===r.stage&&!u?.completed.includes(r.stage+':finished')&&(r.operation==='Repaint'||!u?.completed.includes(r.stage+':'+(r.part_id||r.operation)));
  });}
- blocked(){return !this.phone.online()||this.s.busy()||this.moving||this.s.pending().length>0;}
+ blocked(){return !this.phone.online()||this.s.busy()||this.moving||this.assigning||this.s.pending().length>0;}
  timerBlocked(){return this.s.busy()||this.moving||this.s.conflict()||!this.s.loaded();}
  oldShift(){return this.shift()&&brisbaneDate(this.shift()!.started_at)!==brisbaneDate();}
- selectUnit(){this.partId='';this.operation='';const candidates=this.productTemplates();this.templateId=this.snapshot()?.template_id||(candidates.length===1?candidates[0].id:'');this.finish=this.snapshot()?.finish||'';}
+ async selectUnit(){this.partId='';this.operation='';const saved=this.snapshot(),candidates=this.productTemplates();this.templateId=saved?.template_id||(candidates.length===1?candidates[0].id:'');this.finish=saved?.finish||orderedFinish(this.selectedItem()?.wix_options);if(!saved&&this.templateId&&this.finish&&this.phone.online()&&!this.s.busy()&&!this.s.pending().length)await this.assign();}
  label(id:string|null){const unit=this.units().find(v=>v.unit.id===id);return unit?`${unit.code} · ${unit.mainItem.product_name}`:id?'Production unit '+id.slice(0,8):'';}
  partName(row:ShopInterval){return this.s.data().units.find(u=>u.unit_id===row.unit_id)?.parts.find(p=>p.id===row.part_id)?.name||'';}
  done(key:string){return this.snapshot()?.completed.includes(key)||false;}
@@ -71,7 +70,7 @@ export class ShopFloorComponent implements OnDestroy {
   catch(e){this.localError='Work is saved, but the board could not advance. '+(e instanceof Error?e.message:'Retry the transition.');}finally{this.moving=false;}
  }
  async enterCnc(){const v=this.liveUnits().find(x=>x.unit.id===this.unitId);if(!v||!this.phone.online())return;this.moving=true;this.localError='';try{await this.production.changeStatus(v,'CNC');await this.cacheChoices();}catch(e){this.localError=e instanceof Error?e.message:'Could not move to CNC';}finally{this.moving=false;}}
- async assign(){await this.action('assign',{unitId:this.unitId,templateId:this.templateId,finish:this.finish});}
+ async assign(){if(this.assigning||!this.unitId||!this.templateId||!this.finish)return;this.assigning=true;try{await this.action('assign',{unitId:this.unitId,templateId:this.templateId,finish:this.finish});}finally{this.assigning=false;}}
  bounds(){return rangeBounds(this.date,this.period);}
  logs(){const [a,b]=this.bounds();return this.s.data().intervals.filter(r=>Date.parse(r.started_at)<b&&(r.ended_at?Date.parse(r.ended_at):this.now())>=a).sort((x,y)=>y.started_at.localeCompare(x.started_at));}
  summary(){const totals=new Map<string,number>();for(const r of this.logs()){const key=r.stage==='Other'?r.operation:r.stage;totals.set(key,(totals.get(key)||0)+intervalSeconds(r,this.now(),this.bounds()));}return [...totals].map(([name,seconds])=>({name,seconds}));}
