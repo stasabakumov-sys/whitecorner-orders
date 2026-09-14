@@ -104,9 +104,9 @@ export interface FastCourierBookingDetails {
   valueOfContent: number;
   authorityToLeave: boolean;
   noPrinter: boolean;
-  extendedLiability: string;
-  insuranceValue: string;
-  insuranceFee: string;
+  extendedLiability?: string;
+  insuranceValue?: string;
+  insuranceFee?: string;
   acceptInsuranceConditions: boolean;
   acceptTermConditions: boolean;
   acceptAttachment: boolean;
