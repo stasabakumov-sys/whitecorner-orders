@@ -1,5 +1,24 @@
-import {availablePaint,PAINT_OPERATIONS,BACKDROP_PAINT_OPERATIONS,paintOperations,paintLabel,rangeBounds,intervalSeconds,brisbaneDate,localInput,fromLocalInput,csvCell,ShopInterval,projectCommands,ShopData} from './shop-floor.models';
+import {availablePaint,PAINT_OPERATIONS,BACKDROP_PAINT_OPERATIONS,paintOperations,paintLabel,rangeBounds,intervalSeconds,brisbaneDate,localInput,fromLocalInput,csvCell,isSameProductTask,ShopInterval,onlyRemainingPartId,projectCommands,requiresSanding,ShopData} from './shop-floor.models';
 describe('Shop Floor timing rules',()=>{
+ it('skips Sanding only when every saved part has an explicit zero estimate',()=>{
+  const parts=[{id:'body',name:'Body'},{id:'base',name:'Base'}];
+  expect(requiresSanding({parts,estimates:{'Sanding:body':0,'Sanding:base':0}})).toBe(false);
+  expect(requiresSanding({parts,estimates:{'Sanding:body':0}})).toBe(true);
+  expect(requiresSanding({parts,estimates:{'Sanding:body':0,'Sanding:base':1}})).toBe(true);
+ });
+ it('automatically selects exactly one unfinished Assembly or Sanding part',()=>{
+  const parts=[{id:'body',name:'Body'},{id:'base',name:'Base'}];
+  expect(onlyRemainingPartId({parts:[parts[0]],completed:[]},'Sanding')).toBe('body');
+  expect(onlyRemainingPartId({parts,completed:['Sanding:body']},'Sanding')).toBe('base');
+  expect(onlyRemainingPartId({parts,completed:[]},'Sanding')).toBe('');
+  expect(onlyRemainingPartId({parts:[parts[0]],completed:[]},'Painting')).toBe('');
+ });
+ it('recognizes the already running selected product task',()=>{
+  const row={unit_id:'unit',stage:'Sanding',part_id:'body',operation:'Sanding'} as ShopInterval;
+  expect(isSameProductTask(row,'unit','Sanding','body','')).toBe(true);
+  expect(isSameProductTask(row,'unit','Sanding','base','')).toBe(false);
+  expect(isSameProductTask({...row,stage:'Pause',unit_id:null},'unit','Sanding','body','')).toBe(false);
+ });
  it('unlocks Painting in order but permits optional Repaint',()=>{
   expect(availablePaint('Second primer',[])).toBe(false);
   expect(availablePaint('Repaint',[])).toBe(true);

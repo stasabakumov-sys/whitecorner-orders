@@ -27,6 +27,8 @@ on:
       - '.github/scripts/production-variants-release.mjs'
       - 'supabase/migrations/*_shop_floor_auto_assignment.sql'
       - '.github/scripts/shop-floor-auto-assignment*'
+      - 'supabase/migrations/*_shop_floor_skip_zero_sanding.sql'
+      - '.github/scripts/shop-floor-zero-sanding*'
       - '.github/scripts/partner-pans*'
       - '.github/scripts/material-costing*'
       - '.github/scripts/hub-test-orders*'
@@ -62,6 +64,8 @@ on:
       - '.github/scripts/production-variants-release.mjs'
       - 'supabase/migrations/*_shop_floor_auto_assignment.sql'
       - '.github/scripts/shop-floor-auto-assignment*'
+      - 'supabase/migrations/*_shop_floor_skip_zero_sanding.sql'
+      - '.github/scripts/shop-floor-zero-sanding*'
       - '.github/scripts/partner-pans*'
       - '.github/scripts/material-costing*'
       - '.github/scripts/hub-test-orders*'
@@ -126,6 +130,8 @@ jobs:
         run: node .github/scripts/shop-floor.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse Shop Floor automatic composition
         run: node .github/scripts/shop-floor-auto-assignment.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Rehearse Shop Floor zero-Sanding route
+        run: node .github/scripts/shop-floor-zero-sanding.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse Hub-only test orders
         run: node .github/scripts/hub-test-orders.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Publish clean preview path
