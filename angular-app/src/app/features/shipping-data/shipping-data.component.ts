@@ -16,6 +16,7 @@ import {PackagingVariantsComponent} from './packaging-variants.component';
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
 import {ProductWorkCostComponent} from '../costing/product-work-cost.component';
 import {CostingService} from '../costing/costing.service';
+import {Folding,foldingOption,productionSize} from '../costing/production-cost';
 import {productId,componentNormal} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {shippingProfileCatalog,savedProfileOptions} from '../../core/utils/shipping-profile-catalog';
 
@@ -58,6 +59,20 @@ type ShippingRule = {
 
 export function currentProductCostProfiles(rows:any[]){
   return rows.filter(row=>Object.keys(row.options||{}).length>0||!rows.some(other=>other!==row&&other.kind===row.kind&&Boolean(other.standard_top_excluded)===Boolean(row.standard_top_excluded)&&Object.keys(other.options||{}).length>0));
+}
+
+function costProfileGroupKey(p:any){return `${p.backdrop_material_scope?'structural':'order'}|${p.kind}|${p.standard_top_excluded?'topless':'complete'}|${JSON.stringify(Object.fromEntries(Object.entries(p.options||{}).filter(([key])=>!['colour','color'].includes(key.toLowerCase())).sort(([a],[b])=>a.localeCompare(b))))}`;}
+export function backdropCostProfiles(productId:string,productName:string,sizes:string[],rows:any[]){
+ const groups=new Map<string,any[]>();for(const row of rows){const key=costProfileGroupKey(row);groups.set(key,[...(groups.get(key)||[]),row]);}
+ const grouped=[...groups.values()].map(parts=>({...parts[0],shared_parts:parts}));
+ const main=grouped.filter(row=>row.kind==='main'&&!row.standard_top_excluded),other=grouped.filter(row=>row.kind!=='main'||row.standard_top_excluded);
+ const sizeKeys=[...new Set([...sizes.map(backdropSizeKey),...main.map(row=>productionSize(row.options))].filter(Boolean))];
+ const variants=sizeKeys.flatMap(size=>(['foldable','nonfoldable'] as Folding[]).map(folding=>{
+  const matching=main.filter(row=>productionSize(row.options)===size&&foldingOption(row.options)===folding);
+  const found=matching.find(row=>row.backdrop_material_scope)||matching.find(row=>!row.backdrop_material_scope);
+  return found?{...found,size_key:found.size_key||size,folding:found.folding||folding}:{variant_key:`backdrop-material:${productId}:${size}:${folding}`,shipping_product_id:productId,product_name:productName,kind:'main',multiplier:1,standard_top_excluded:false,options:{Size:size.split('x').map(value=>Number(value)/10+'cm').join(' x '),Foldable:folding==='foldable'?'YES':'NO'},backdrop_material_scope:true,size_key:size,folding};
+ }));
+ return [...variants,...other];
 }
 
 @Component({
@@ -231,8 +246,7 @@ export class ShippingDataComponent implements OnInit {
   selectedProduct = computed(() => this.products().find(p => p.id===this.selectedId()) ?? null);
 
   constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute,@Optional() public costing:CostingService=new CostingService(supabase),@Optional() private cdr?:ChangeDetectorRef) {}
-  costProfiles(id:string){const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile}));const rows=currentProductCostProfiles([...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()]);if(!this.isBackdrop(this.products().find(p=>p.id===id) as ShippingProduct))return rows;const groups=new Map<string,any[]>();for(const row of rows){const key=this.costProfileGroup(row);groups.set(key,[...(groups.get(key)||[]),row]);}return [...groups.values()].map(parts=>({...parts[0],shared_parts:parts}));}
-  costProfileGroup(p:any){return `${p.kind}|${p.standard_top_excluded?'topless':'complete'}|${JSON.stringify(Object.fromEntries(Object.entries(p.options||{}).filter(([key])=>!['colour','color'].includes(key.toLowerCase())).sort(([a],[b])=>a.localeCompare(b))))}`;}
+  costProfiles(id:string){const product=this.products().find(p=>p.id===id) as ShippingProduct;const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile,backdrop_material_scope:profile.template_item?.profile_scope==='backdrop-structure'}));const rows=currentProductCostProfiles([...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()]);return this.isBackdrop(product)?backdropCostProfiles(id,product.product_name,this.productSizes(product),rows):rows;}
   failedImages=new Set<string>();
   productImage(p:ShippingProduct){
     const items=this.costing.orders().flatMap(o=>o.wc_order_items||[]);
