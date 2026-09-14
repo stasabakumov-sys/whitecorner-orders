@@ -9,6 +9,16 @@ export function backdropSizeKey(value:string):string {
  if(!Number.isInteger(a)||!Number.isInteger(b)||a<=0||b<=0||a>10000||b>10000)return '';
  return [a,b].sort((x,y)=>y-x).join('x');
 }
+// Manual product dimensions use centimetres when the operator enters only W x H.
+// Keep backdropSizeKey strict because imported Wix values without units are ambiguous.
+export function manualBackdropSizeKey(value:string):string {
+ const explicit=backdropSizeKey(value);if(explicit)return explicit;
+ const match=value.trim().match(/^(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)$/i);
+ if(!match)return '';
+ const a=Number(match[1])*10,b=Number(match[2])*10;
+ if(!Number.isInteger(a)||!Number.isInteger(b)||a<=0||b<=0||a>10000||b>10000)return '';
+ return [a,b].sort((x,y)=>y-x).join('x');
+}
 export function sizeKeyLabel(key:string){const [size,fold]=key.split(':');return size.split('x').map(x=>Number(x)/10).join(' × ')+' cm'+(fold==='foldable'?' · Foldable':fold==='nonfoldable'?' · Non-foldable':'');}
 export function qualifiedDrawingKey(key:string){return /^[1-9]\d*x[1-9]\d*:(foldable|nonfoldable)$/.test(key);}
 export function backdropDrawingKey(profile:any,productName:string):string{

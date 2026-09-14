@@ -2,7 +2,7 @@ import {Component,Input,OnChanges,SimpleChanges,ChangeDetectorRef,Optional} from
 import {FormsModule} from '@angular/forms';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {paintOperations,paintLabel,ShopPart,ShopTemplate} from '../shop-floor/shop-floor.models';
-import {backdropSizeKey,sizeKeyLabel} from './product-sizes';
+import {manualBackdropSizeKey,sizeKeyLabel} from './product-sizes';
 import {Folding,foldingLabel} from '../costing/production-cost';
 
 type ProductComponent={id:string;product_name:string;component_role:string};
@@ -43,7 +43,7 @@ export class ProductPartsComponent implements OnChanges{
  get hasFolding(){return /backdrop/i.test(this.product?.product_name||'');}
  isAssignedEditing=(t:ShopTemplate)=>t.id===this.editingId&&!!t.folding;
  unassigned(){return this.templates.filter(t=>!t.folding||!t.size_key);}
- sizeKeys(){return [...new Set([...this.sizes.map(backdropSizeKey),...this.templates.map(t=>t.size_key||'')].filter(Boolean))];}
+ sizeKeys(){return [...new Set([...this.sizes.map(manualBackdropSizeKey),...this.templates.map(t=>t.size_key||'')].filter(Boolean))];}
  chooseSize(size:string){if(!this.folding){this.sizeKey=size;return;}this.chooseVariant(this.folding,size);}
  chooseVariant(fold:Folding|'',size=this.sizeKey){
   if(this.folding&&this.sizeKey)this.drafts.set(this.sizeKey+':'+this.folding,{id:this.editingId,version:this.version,name:this.templateName,parts:structuredClone(this.parts),estimates:{...this.estimates}});
