@@ -5,7 +5,7 @@ const source=(await readFile(`supabase/migrations/${version}_${name}.sql`,'utf8'
 const literal="'"+source.replaceAll("'","''")+"'";
 const verify=`select exists(select 1 from supabase_migrations.schema_migrations where version='${version}') registered,
  to_regprocedure('public.wc_shop_resolved_variant_size(jsonb,text)') is not null resolver,
- has_function_privilege('authenticated','public.wc_shop_resolved_variant_size(jsonb,text)','EXECUTE') resolver_public;`;
+ coalesce((select has_function_privilege('authenticated',p.oid,'EXECUTE') from pg_proc p where p.oid=to_regprocedure('public.wc_shop_resolved_variant_size(jsonb,text)')),false) resolver_public;`;
 const sql=`begin;select pg_advisory_xact_lock(${version});do $release$ begin
  if to_regprocedure('public.wc_shop_variant_size(jsonb)') is null then raise exception 'Production template variants prerequisite missing';end if;
  if exists(select 1 from supabase_migrations.schema_migrations where version='${version}') then
@@ -15,6 +15,6 @@ const sql=`begin;select pg_advisory_xact_lock(${version});do $release$ begin
 end $release$;commit;${verify}`;
 if(process.argv.includes('--print-sql')){process.stdout.write(sql);process.exit(0);}
 const token=process.env.SUPABASE_ACCESS_TOKEN;if(!token)throw Error('Supabase access token required');
-async function query(query,read_only){const response=await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/database/query',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({query,read_only})});if(!response.ok)throw Error(`Production query failed: HTTP ${response.status}`);return response.json();}
+async function query(query,read_only){const response=await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/database/query',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({query,read_only})});if(!response.ok)throw Error(`Production query failed: HTTP ${response.status}: ${(await response.text()).slice(0,500)}`);return response.json();}
 console.log('Preflight:',JSON.stringify(await query(verify,true)));
 if(process.argv.includes('--apply')){await query(sql,false);const rows=await query(verify,true);if(!rows[0]?.registered||!rows[0]?.resolver||rows[0]?.resolver_public)throw Error('Postflight failed');console.log('Verified:',JSON.stringify(rows));}
