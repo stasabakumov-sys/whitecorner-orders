@@ -25,6 +25,8 @@ on:
       - 'supabase/migrations/*_backdrop_material_variants.sql'
       - '.github/scripts/backdrop-materials-release.mjs'
       - '.github/scripts/production-variants-release.mjs'
+      - 'supabase/migrations/*_shop_floor_auto_assignment.sql'
+      - '.github/scripts/shop-floor-auto-assignment*'
       - '.github/scripts/partner-pans*'
       - '.github/scripts/material-costing*'
       - '.github/scripts/hub-test-orders*'
@@ -58,6 +60,8 @@ on:
       - 'supabase/migrations/*_backdrop_material_variants.sql'
       - '.github/scripts/backdrop-materials-release.mjs'
       - '.github/scripts/production-variants-release.mjs'
+      - 'supabase/migrations/*_shop_floor_auto_assignment.sql'
+      - '.github/scripts/shop-floor-auto-assignment*'
       - '.github/scripts/partner-pans*'
       - '.github/scripts/material-costing*'
       - '.github/scripts/hub-test-orders*'
@@ -120,6 +124,8 @@ jobs:
           node .github/scripts/box-drawings-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse Shop Floor migration
         run: node .github/scripts/shop-floor.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Rehearse Shop Floor automatic composition
+        run: node .github/scripts/shop-floor-auto-assignment.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse Hub-only test orders
         run: node .github/scripts/hub-test-orders.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Publish clean preview path
