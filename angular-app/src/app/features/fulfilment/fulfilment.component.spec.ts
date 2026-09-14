@@ -110,12 +110,21 @@ describe('FulfilmentComponent', () => {
     expect(button.disabled).toBe(true);
     await c.confirmBooking();expect(service.bookShipment).toHaveBeenCalledOnce();expect(native).not.toHaveBeenCalled();
     const details=service.bookShipment.mock.calls[0][1];
-    expect(details).toMatchObject({quoteId:'quote-123',senderType:'sender',collectionDate:c.today(),parcelContent:'other',valueOfContent:110,insuranceValue:'$500',insuranceFee:'$0.00',acceptNoDangerousGoods:true,acceptTermConditions:true});
+    expect(details).toMatchObject({quoteId:'quote-123',senderType:'sender',collectionDate:c.today(),parcelContent:'other',valueOfContent:110,acceptNoDangerousGoods:true,acceptTermConditions:true});
+    expect(details).not.toHaveProperty('extendedLiability');
+    expect(details).not.toHaveProperty('insuranceValue');
+    expect(details).not.toHaveProperty('insuranceFee');
     // Verify the actual Edge Function transport contract using a mock only.
     const invoke=vi.fn(async()=>({data:{status:true},error:null})),courier=new FastCourierService({client:{functions:{invoke}}} as any);
     await courier.saveOrderDetails('courier-order',details);await courier.bookOrder('courier-order');
     expect(invoke.mock.calls.map((call:any)=>call[1].body)).toEqual([{action:'save-order-details',orderId:'courier-order',payload:details},{action:'booking',orderId:'courier-order'}]);
     done(true);await pending;expect(c.bookingBusy()).toBe(false);expect(c.bookingDialogOpen()).toBe(false);native.mockRestore();
+  });
+  it('sends the exact paid insurance tier only when extended cover is required',async()=>{
+    const c=bookingSetup();
+    vi.mocked(c.insuranceSelection).mockReturnValue({tier:2,required:true,goodsValue:1200,extendedLiability:true,insuranceValue:1500,insuranceFee:17.57,label:'+$17.57 for upto $1500 extended liability'});
+    await c.confirmBooking();
+    expect(service.bookShipment.mock.calls[0][1]).toMatchObject({extendedLiability:'2',insuranceValue:'$1500',insuranceFee:'$17.57'});
   });
   it('shows service and unexpected errors inside the open confirmation dialog',async()=>{
     const c=bookingSetup();service.error.set('Collection date is unavailable.');service.bookShipment.mockResolvedValueOnce(false);
