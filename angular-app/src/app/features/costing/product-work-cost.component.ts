@@ -4,7 +4,7 @@ import {SupabaseService} from '../../core/services/supabase.service';
 import {ShopTemplate} from '../shop-floor/shop-floor.models';
 import {PlannedWorkRow,WorkRate,plannedTotal,plannedWorkRows} from './planned-work-cost';
 import {productionCostRows,foldingLabel,templateVariantLabel} from './production-cost';
-import {backdropSizeKey,sizeKeyLabel} from '../shipping-data/product-sizes';
+import {backdropSizeKey,manualBackdropSizeKey,sizeKeyLabel} from '../shipping-data/product-sizes';
 
 @Component({selector:'app-product-work-cost',standalone:true,imports:[CommonModule],template:`
  <h3>{{hasFolding?'Production cost':'Planned work cost'}} · incl. GST</h3><p class="mut">Calculated from @if(hasFolding){saved materials, }Estimated min and shared hourly rates. Raw excludes painting. Repaint is unplanned and excluded.</p>
@@ -23,10 +23,10 @@ import {backdropSizeKey,sizeKeyLabel} from '../shipping-data/product-sizes';
  }
  `,styles:[`:host{display:block}.mut{color:var(--wc-muted);font-size:.875rem}.template{border-top:1px solid var(--wc-border);margin-top:14px;padding-top:10px}.table-wrap{overflow:auto}.comparison{background:white;border:1px solid var(--wc-border);border-radius:12px;margin-top:14px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--wc-border)}.totals{display:flex;gap:18px;flex-wrap:wrap;padding:12px 0}.error{color:var(--p-red-600)}`]})
 export class ProductWorkCostComponent implements OnChanges{
- @Input() product:any;@Input() sizes:string[]=[];@Input() materialProfiles:any[]=[];@Input() materials:any[]=[];templates:ShopTemplate[]=[];rates:WorkRate[]=[];loading=false;error='';private token=0;
+ @Input() product:any;@Input() sizes:string[]=[];@Input() manualSizes=false;@Input() materialProfiles:any[]=[];@Input() materials:any[]=[];templates:ShopTemplate[]=[];rates:WorkRate[]=[];loading=false;error='';private token=0;
  foldingLabel=foldingLabel;sizeLabel=sizeKeyLabel;variantLabel=templateVariantLabel;
  get hasFolding(){return /backdrop/i.test(this.product?.product_name||'');}
- comparison(){const sizes=[...new Set([...this.sizes.map(backdropSizeKey),...this.templates.map(t=>t.size_key||'')].filter(Boolean))];return productionCostRows(sizes,this.templates,this.materialProfiles,this.materials,this.rates,this.product.product_name,this.product.id);}
+ comparison(){const parse=this.manualSizes?manualBackdropSizeKey:backdropSizeKey;const sizes=[...new Set([...this.sizes.map(parse),...this.templates.map(t=>t.size_key||'')].filter(Boolean))];return productionCostRows(sizes,this.templates,this.materialProfiles,this.materials,this.rates,this.product.product_name,this.product.id);}
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
  ngOnChanges(changes:SimpleChanges){const p=changes['product'];if(p&&(p.firstChange||p.previousValue?.id!==p.currentValue?.id||p.previousValue?.saved_only!==p.currentValue?.saved_only))void this.load();}
  async load(){const id=this.product?.id,token=++this.token;this.templates=[];this.rates=[];this.error='';this.loading=false;if(!id||this.product.saved_only)return;this.loading=true;
