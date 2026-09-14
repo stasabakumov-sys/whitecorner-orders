@@ -1,0 +1,25 @@
+name: Shop Floor zero Sanding release
+on: workflow_dispatch
+permissions:
+  contents: read
+concurrency:
+  group: shop-floor-zero-sanding-release
+  cancel-in-progress: false
+jobs:
+  verify-and-migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify migration
+        run: |
+          npm install --prefix "$RUNNER_TEMP/shop-zero-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/shop-floor-zero-sanding.test.mjs "$RUNNER_TEMP/shop-zero-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Apply zero-Sanding production route
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/shop-floor-zero-sanding-release.mjs --apply

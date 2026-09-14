@@ -8,7 +8,7 @@ import {ProductionService} from '../../core/services/production.service';
 import {ShopPhoneService} from '../../core/services/shop-phone.service';
 import {ProductionStatus} from '../../core/models/production.models';
 import {ShopFloorService} from './shop-floor.service';
-import {ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
+import {ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,isSameProductTask,onlyRemainingPartId,requiresSanding,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
 import {catalogProductForItem,matchingProductTemplates,orderedFinish} from './shop-floor-selection';
 
 @Component({selector:'app-shop-floor',standalone:true,imports:[FormsModule,DatePipe,RouterLink],templateUrl:'./shop-floor.component.html',styleUrl:'./shop-floor.component.css'})
@@ -44,14 +44,15 @@ export class ShopFloorComponent implements OnDestroy {
  blocked(){return !this.phone.online()||this.s.busy()||this.moving||this.assigning||this.s.pending().length>0;}
  timerBlocked(){return this.s.busy()||this.moving||this.s.conflict()||!this.s.loaded();}
  oldShift(){return this.shift()&&brisbaneDate(this.shift()!.started_at)!==brisbaneDate();}
- async selectUnit(){this.partId='';this.operation='';const saved=this.snapshot(),candidates=this.productTemplates();this.templateId=saved?.template_id||(candidates.length===1?candidates[0].id:'');this.finish=saved?.finish||orderedFinish(this.selectedItem()?.wix_options);if(!saved&&this.templateId&&this.finish&&this.phone.online()&&!this.s.busy()&&!this.s.pending().length)await this.assign();}
+ async selectUnit(){const saved=this.snapshot(),stage=this.selected()?.status;this.partId=onlyRemainingPartId(saved,stage);this.operation='';const candidates=this.productTemplates();this.templateId=saved?.template_id||(candidates.length===1?candidates[0].id:'');this.finish=saved?.finish||orderedFinish(this.selectedItem()?.wix_options);if(!saved&&this.templateId&&this.finish&&this.phone.online()&&!this.s.busy()&&!this.s.pending().length){await this.assign();this.partId=onlyRemainingPartId(this.snapshot(),stage);}}
  label(id:string|null){const unit=this.units().find(v=>v.unit.id===id);return unit?`${unit.code} · ${unit.mainItem.product_name}`:id?'Production unit '+id.slice(0,8):'';}
  partName(row:ShopInterval){return this.s.data().units.find(u=>u.unit_id===row.unit_id)?.parts.find(p=>p.id===row.part_id)?.name||'';}
  done(key:string){return this.snapshot()?.completed.includes(key)||false;}
  estimate(){const v=this.selected();const key=v?.status==='Painting'?'Painting:'+this.operation:v?.status==='Assembly'||v?.status==='Sanding'?v.status+':'+this.partId:v?.status;return key?this.snapshot()?.estimates[key]:undefined;}
  productTime(stage:string,part?:string,operation?:string){return this.s.data().intervals.filter(r=>r.unit_id===this.unitId&&r.stage===stage&&(!part||r.part_id===part)&&(!operation||r.operation===operation)).reduce((sum,r)=>sum+intervalSeconds(r,this.now()),0);}
+ selectedTaskActive(){return this.mode==='product'&&isSameProductTask(this.active(),this.unitId,this.selected()?.status,this.partId,this.operation);}
  canStart(){const v=this.selected(),u=this.snapshot();if(!this.shift()||this.oldShift()||this.timerBlocked())return false;if(this.mode==='other')return true;
-  if(!v||!u||u.completed.includes(v.status+':finished'))return false;
+  if(!v||!u||this.selectedTaskActive()||u.completed.includes(v.status+':finished'))return false;
   if(v.status==='CNC')return true;
   if(v.status==='Assembly'||v.status==='Sanding')return !!this.partId&&!u.completed.includes(v.status+':'+this.partId);
   return v.status==='Painting'&&availablePaint(this.operation,u.completed,this.paint);
@@ -61,10 +62,11 @@ export class ShopFloorComponent implements OnDestroy {
   await this.action('start',this.mode==='other'?{stage:'Other',operation:this.other}:{unitId:this.unitId,stage,partId:['Assembly','Sanding'].includes(stage||'')?this.partId:null,operation:stage==='Painting'?this.operation:stage});
  }
  async resume(){const row=this.previous();if(!row)return;this.unitId=row.unit_id||'';this.mode=row.stage==='Other'?'other':'product';this.partId=row.part_id||'';this.operation=row.operation;this.other=row.operation;await this.start();}
- async finishWork(stage=false){const unitId=this.active()?.unit_id;if(await this.action(stage?'finish-stage':'finish-operation')){if(unitId){this.unitId=unitId;await this.advance();}}}
+ async finishWork(stage=false){const unitId=this.active()?.unit_id;if(await this.action(stage?'finish-stage':'finish-operation')){if(unitId){this.unitId=unitId;this.partId=onlyRemainingPartId(this.snapshot(),this.selected()?.status);await this.advance();}}}
  async finishPainting(){if(await this.action('finish-painting',{unitId:this.unitId}))await this.advance();}
  async advance(){const v=this.selected(),u=this.snapshot();if(!v||!u||!u.completed.includes(v.status+':finished'))return;
-  const next:Record<string,ProductionStatus>={CNC:'Assembly',Assembly:'Sanding',Sanding:u.finish==='raw'?'Packing':'Painting',Painting:'Packing'};
+  const afterSanding:ProductionStatus=u.finish==='raw'?'Packing':'Painting';
+  const next:Record<string,ProductionStatus>={CNC:'Assembly',Assembly:requiresSanding(u)?'Sanding':afterSanding,Sanding:afterSanding,Painting:'Packing'};
   if(!next[v.status])return;this.moving=true;
   try{const live=this.liveUnits().find(x=>x.unit.id===v.unit.id);if(!this.phone.online()||!live)throw Error('Reconnect and refresh products before changing the board.');await this.production.changeStatus(live,next[v.status]);await this.cacheChoices();this.notice='Stage completed and board updated';this.partId='';this.operation='';}
   catch(e){this.localError='Work is saved, but the board could not advance. '+(e instanceof Error?e.message:'Retry the transition.');}finally{this.moving=false;}

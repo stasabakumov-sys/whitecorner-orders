@@ -3,14 +3,14 @@
 One authenticated owner operates the pilot. Existing Hub authentication remains required; no public data or Wix writes. Later roles are outside this pilot.
 
 * One physical `wc_production_units` per board card; existing IDs are preserved.
-* CNC and Painting track the whole unit. Assembly and Sanding track unique named parts; Sides is one part.
-* A saved parts snapshot is required before CNC. Estimated minutes are optional and never gate production.
+* CNC and Painting track the whole unit. Assembly and Sanding track unique named parts; Sides is one part. When exactly one unfinished part is available, the timer selects it automatically; multiple available parts still require an explicit choice.
+* A saved parts snapshot is required before CNC. Estimated minutes are optional. Sanding is skipped only when every saved part has an explicit Sanding estimate of `0`; a blank estimate does not skip the stage.
 * Painting: First primer → First sanding → Second primer → Second sanding → Finish coat. Repaint is optional, outside the sequence. Finish Painting is explicit.
 * One active interval per worker. Pause is global, unrelated to a unit. Starting/resuming any task ends that pause. Waiting units do not accumulate time.
 * Shift start/end bound all intervals. End shift stops time without completing the task. Forgotten ends are editable on a phone, with an audit trail.
 * Other: Cleaning, Design, Administration, Development, Rest. Rest is separate from productive work and pauses.
 * Analytics: worker/day/week/month, time per stage, separate pause/rest totals. No monetary costing.
-* RAW skips Painting, retains Packing. Finish/colour are distinct; unknown finish requires explicit choice.
+* RAW skips Painting, retains Packing. When every part has Sanding `0`, RAW moves from Assembly directly to Packing and painted products move from Assembly to Painting. Finish/colour are distinct; unknown finish requires explicit choice.
 
 Implementation uses SQL RPC transactions and RLS, independent production templates and unit snapshots. Existing reviewed production-status endpoint continues to own board transitions and delivery approval. Database guards apply to all status writers. New migrations require a separately authorised deployment; the baseline orders-schema.sql is not a current schema snapshot.
 
@@ -18,7 +18,7 @@ Implementation uses SQL RPC transactions and RLS, independent production templat
 
 Open **Products → Product card → Estimated min** and save a named template (including Sides as one part). Assign every row to the main Product or a known Add-on. Leave unavailable estimated minutes blank. Set shared hourly prices under **Work Rates**; Sanding is one rate for the product stage and both paint sanding operations. The Product cost tab combines those rates with the selected template minutes and shows Raw and Painted totals together. Repaint is recorded only as actual Shop Floor time and is excluded from Product forecasts. In Shop Floor select the product-specific template and RAW/Painted finish, then move it to CNC. The saved unit snapshot contains only parts for components present in that order. Existing started products retain their earlier snapshot.
 
-Start shift, select a product/activity, then start work. Pause is always global. Finish CNC and Finish Painting are explicit. Finishing all Assembly/Sanding parts makes the stage eligible for the next board transition; a failed delivery approval leaves work saved and shows a retry action. Existing delivery approval is still required: missing estimated minutes add no restriction.
+Start shift, select a product/activity, then start work. Pause is always global. While the selected task is already running, its duplicate Start/continue action is hidden; Pause, Finish and End shift remain in the live controls. Finish CNC and Finish Painting are explicit. Finishing all Assembly/Sanding parts makes the stage eligible for the next board transition; after Assembly, an explicitly zero-minute Sanding stage is skipped. A failed delivery approval leaves work saved and shows a retry action. Existing delivery approval is still required; a blank estimate keeps Sanding in the route.
 
 End shift closes its active interval. A forgotten overnight shift shows a correction prompt at next entry. Edit the shift end to close the last open interval too. Existing closed intervals must be corrected first if they extend beyond the proposed shift end. Corrections retain audit entries. Report weeks start Monday; all calendar filters use Australia/Brisbane and split intervals at period boundaries. CSV contains BOM and neutralizes formula-leading text.
 

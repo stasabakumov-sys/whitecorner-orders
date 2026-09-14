@@ -50,7 +50,9 @@
      <button (click)="finishPainting()" [disabled]="blocked()||!done('Painting:Finish coat')||done('Painting:finished')">Finish Painting</button>
     }
     @if(['CNC','Assembly','Sanding','Painting'].includes(v.status)){
-     <p>Estimated time: {{estimate()===undefined?'Not set':estimate()+' min'}}</p><button class="primary" (click)="start()" [disabled]="!canStart()">Start / continue task</button>
+     <p>Estimated time: {{estimate()===undefined?'Not set':estimate()+' min'}}</p>
+     @if(selectedTaskActive()){<p role="status">Task is running. Use Pause, {{active()?.part_id?'Finish part':'Finish operation'}}, or End shift above.</p>}
+     @else{<button class="primary" (click)="start()" [disabled]="!canStart()">Start / continue task</button>}
     }
     @if(done(v.status+':finished')){<p>Stage complete. If the board has not advanced, retry below.</p><button (click)="advance()" [disabled]="blocked()">Move to next stage</button>}
    }

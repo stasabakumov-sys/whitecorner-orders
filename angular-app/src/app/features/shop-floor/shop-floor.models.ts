@@ -14,6 +14,19 @@ export interface ShopShift { id: string; worker_id: string; started_at: string; 
 export interface ShopInterval extends ShopShift { shift_id: string; unit_id: string|null; stage: string; operation: string; part_id: string|null }
 export interface ShopData { templates: ShopTemplate[]; units: ShopUnit[]; shifts: ShopShift[]; intervals: ShopInterval[] }
 export interface ShopCommand { id: string; action: string; payload: Record<string, unknown> }
+export function requiresSanding(unit: Pick<ShopUnit,'parts'|'estimates'>): boolean {
+ return !unit.parts.length||unit.parts.some(part=>unit.estimates['Sanding:'+part.id]!==0);
+}
+export function onlyRemainingPartId(unit: Pick<ShopUnit,'parts'|'completed'>|undefined,stage: string|undefined): string {
+ if(!unit||!['Assembly','Sanding'].includes(stage||''))return '';
+ const remaining=unit.parts.filter(part=>!unit.completed.includes(stage+':'+part.id));
+ return remaining.length===1?remaining[0].id:'';
+}
+export function isSameProductTask(row: ShopInterval|undefined,unitId: string,stage: string|undefined,partId: string,operation: string): boolean {
+ if(!row||row.stage==='Pause'||row.stage==='Other'||row.unit_id!==unitId||row.stage!==stage)return false;
+ if(['Assembly','Sanding'].includes(stage||''))return row.part_id===partId;
+ return stage!=='Painting'||row.operation===operation;
+}
 export function brisbaneDate(value: string|number = Date.now()): string {
  return new Intl.DateTimeFormat('en-CA', {timeZone:'Australia/Brisbane',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
 }
