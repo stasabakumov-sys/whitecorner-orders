@@ -156,9 +156,10 @@ type BookingDraft = {
                   }
                   @if (row.status === 'Shipping Preparation') {
                     <div class="actions">
-                      <p-button label="Add package" severity="secondary" outlined (onClick)="f.addPackage(shipment)" />
+                      <p-button label="Add custom box" severity="secondary" outlined (onClick)="f.addPackage(shipment)" />
                       @if (shipment.status === 'Packaging Review') { <p-button label="Approve packages" [disabled]="!f.shipmentComplete(shipment.id)" (onClick)="f.approvePackages(shipment)" /> }
                     </div>
+                    <div class="muted hint">For the final shipment you can move Contents between boxes, remove unused boxes, or add a custom box. Approve the final list before requesting fresh quotes.</div>
                     @if (!f.shipmentComplete(shipment.id)) { <div class="muted hint">Complete L × W × H and weight for every package before approval.</div> }
                     @else if (shipment.status !== 'Packaging Review') { <div class="done">Packing list approved ✓</div><div class="muted hint">Changing any package will require approval and fresh quotes again.</div> }
                   } @else if (row.status === 'Shipping Booked') {

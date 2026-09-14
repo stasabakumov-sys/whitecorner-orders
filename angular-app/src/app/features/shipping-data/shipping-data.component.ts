@@ -54,6 +54,11 @@ type ShippingRule = {
   match_value?: string | null;
   effect_type?: string | null;
   package_count_delta?: number | null;
+  package_name?: string | null;
+  length_mm?: number | null;
+  width_mm?: number | null;
+  height_mm?: number | null;
+  weight_kg?: number | null;
   active?: boolean;
 };
 
@@ -188,7 +193,12 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                     <div><b>{{ r.rule_type }}</b><div class="small">{{ r.active ? 'Active' : 'Inactive' }}</div></div>
                     <div><b>{{ r.match_name }}</b><div class="small">{{ r.match_value ? 'Value: '+r.match_value : 'Any value' }}</div></div>
                     <div>{{ r.effect_type }}</div>
-                    <div>Boxes: <input class="delta" type="number" [value]="r.package_count_delta??0" (input)="setRuleDraft(r.id,$any($event.target).value)"></div>
+                    <div>Boxes: <input class="delta" type="number" min="1" [value]="ruleValue(r,'package_count_delta')" (input)="setRuleDraft(r.id,'package_count_delta',$any($event.target).value)"></div>
+                    <div>Name: <input class="name" [value]="ruleValue(r,'package_name')" (input)="setRuleDraft(r.id,'package_name',$any($event.target).value)"></div>
+                    <div>L mm: <input type="number" min="1" [value]="ruleValue(r,'length_mm')" (input)="setRuleDraft(r.id,'length_mm',$any($event.target).value)"></div>
+                    <div>W mm: <input type="number" min="1" [value]="ruleValue(r,'width_mm')" (input)="setRuleDraft(r.id,'width_mm',$any($event.target).value)"></div>
+                    <div>H mm: <input type="number" min="1" [value]="ruleValue(r,'height_mm')" (input)="setRuleDraft(r.id,'height_mm',$any($event.target).value)"></div>
+                    <div>kg: <input type="number" min="0.01" step="0.01" [value]="ruleValue(r,'weight_kg')" (input)="setRuleDraft(r.id,'weight_kg',$any($event.target).value)"></div>
                     <button class="btn" (click)="saveRule(r)">Save</button>
                   </div>
                 }
@@ -235,7 +245,7 @@ export class ShippingDataComponent implements OnInit {
   error = signal('');
   editingIds = signal<Set<string>>(new Set());
   packageDrafts = new Map<string, Partial<ShippingPackage>>();
-  ruleDrafts = new Map<string, number>();
+  ruleDrafts = new Map<string, Partial<ShippingRule>>();
   filters = [
     {key:'all' as const,label:'All'},
     {key:'backdrops' as const,label:'Backdrops'},
@@ -348,12 +358,19 @@ export class ShippingDataComponent implements OnInit {
     this.packageDrafts.delete(pkg.id);
   }
 
-  setRuleDraft(id: string, value: string) { this.ruleDrafts.set(id, Number(value||0)); }
+  ruleValue(rule:ShippingRule,key:keyof ShippingRule){return (this.ruleDrafts.get(rule.id) as any)?.[key]??rule[key]??'';}
+  setRuleDraft(id:string,key:keyof ShippingRule,value:string){
+    const draft=this.ruleDrafts.get(id)||{};
+    (draft as any)[key]=key==='package_name'?(value||null):(value===''?null:Number(value));
+    this.ruleDrafts.set(id,draft);
+  }
 
   async saveRule(rule: ShippingRule) {
-    const delta = this.ruleDrafts.get(rule.id) ?? Number(rule.package_count_delta||0);
-    const { error } = await this.supabase.client.from('wc_shipping_rules').update({package_count_delta:delta,updated_at:new Date().toISOString()}).eq('id',rule.id);
+    const draft=this.ruleDrafts.get(rule.id)||{};
+    const payload={package_count_delta:Number((draft.package_count_delta??rule.package_count_delta)||0),package_name:draft.package_name??rule.package_name??null,length_mm:draft.length_mm??rule.length_mm??null,width_mm:draft.width_mm??rule.width_mm??null,height_mm:draft.height_mm??rule.height_mm??null,weight_kg:draft.weight_kg??rule.weight_kg??null,updated_at:new Date().toISOString()};
+    if(!String(payload.package_name||'').trim()||payload.package_count_delta<1||[payload.length_mm,payload.width_mm,payload.height_mm,payload.weight_kg].some(v=>v==null||!Number.isFinite(Number(v))||Number(v)<=0)){this.error.set('Complete the additional box name, dimensions and weight before saving the rule.');return;}
+    const { error } = await this.supabase.client.from('wc_shipping_rules').update(payload).eq('id',rule.id);
     if (error) { this.error.set(error.message); return; }
-    this.rules.update(rows => rows.map(x => x.id===rule.id ? {...x,package_count_delta:delta} : x));
+    this.error.set('');this.rules.update(rows => rows.map(x => x.id===rule.id ? {...x,...payload} : x));this.ruleDrafts.delete(rule.id);
   }
 }

@@ -6,12 +6,14 @@ import {CostingService} from './costing.service';
 
 @Component({selector:'app-catalog-cost-editor',standalone:true,imports:[ProductLinkComponent,CommonModule,FormsModule],styleUrl:'./costing.css',template:`
 <section class="editor">
-<h3>@if(linkProduct){<app-product-link [item]="part" />}@else{ {{part.product_name}} }</h3><small>{{part.kind==='main'?'Main product':part.kind==='processing'?'Processing of addon':part.kind==='replacement'?'Replacement tabletop':'Addon'}} · {{part.multiplier}} per finished product</small>
+<h3>@if(part.kind.startsWith('option:')){ {{part.kind.slice(7)}} · material addition }@else if(linkProduct){<app-product-link [item]="part" />}@else{ {{part.product_name}} }</h3><small>{{part.kind==='main'?'Base product':part.kind.startsWith('option:')?'Cart option delta':part.kind==='processing'?'Processing of addon':part.kind==='replacement'?'Replacement tabletop':'Addon'}} · {{part.multiplier}} per finished product</small>
 <p>{{options()}}</p>
+@if(part.kind==='main'){<p>Reusable base cost. Cart colour and optional shelves do not duplicate these materials.</p>}
+@if(part.kind.startsWith('option:')){<p>Add only the extra materials and work required by this option. The base Cart cost is added automatically.</p>}
 @if(part.standard_top_excluded){<p><b>Exclude the standard tabletop materials.</b> The replacement tabletop has its own profile below.</p>}
 @if(!part.profile){<p>No complete saved cost profile yet. Add the missing information.</p>}
 @if(part.legacy_lines?.length&&!part.profile){<p>Existing material quantities have been loaded. Check them before saving.</p>}
-<fieldset [disabled]="s.busy()||s.loading()"><legend>Materials for one {{part.kind==='main'?'product':'addon'}}</legend>
+<fieldset [disabled]="s.busy()||s.loading()"><legend>{{part.kind.startsWith('option:')?'Additional materials for one selected option':'Materials for one '+(part.kind==='main'?'base product':'addon')}}</legend>
 @for(l of lines;track $index){<div class="fields"><label>Material<select [(ngModel)]="l.material_id"><option value="">Choose material</option>@for(m of s.materials();track m.id){<option [value]="m.id">{{m.name}} · {{m.unit}}{{m.active?'':' (archived)'}}</option>}</select></label><label>Quantity<input type="number" min="0.0001" step="0.0001" [(ngModel)]="l.quantity"></label><button (click)="lines.splice($index,1)">Remove</button></div>}
 <button (click)="lines.push({material_id:'',quantity:1})">Add material</button>
 <p><label><input type="checkbox" [(ngModel)]="confirmed"> Material list complete (an empty list means no materials)</label></p>

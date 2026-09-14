@@ -1,0 +1,46 @@
+name: Apply Cart modular packaging and costing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/*_cart_modular_packaging.sql'
+      - 'supabase/migrations/*_cart_modular_costing.sql'
+      - '.github/workflows/apply-cart-modular.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cart-modular-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Apply idempotent Cart migrations in order
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: zgvnrpspwluapaxnycrg
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          for migration in \
+            supabase/migrations/20260914000600_cart_modular_packaging.sql \
+            supabase/migrations/20260914000700_cart_modular_costing.sql
+          do
+            jq -n --rawfile query "$migration" \
+              '{query: $query, read_only: false}' > request.json
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --url "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query" \
+              --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data-binary @request.json
+          done

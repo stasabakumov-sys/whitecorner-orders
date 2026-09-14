@@ -383,7 +383,7 @@ export class FulfilmentService {
 
   async addPackage(shipment:ShipmentRow){
     const next=Math.max(0,...this.packagesFor(shipment.id).map(p=>p.package_no))+1;
-    const {data,error}=await this.supabase.client.from('wc_shipment_packages').insert({shipment_id:shipment.id,package_no:next,package_name:'Package '+next,source_type:'Manual'}).select().single();
+    const {data,error}=await this.supabase.client.from('wc_shipment_packages').insert({shipment_id:shipment.id,package_no:next,package_name:'Custom box',source_type:'Manual'}).select().single();
     if(error){this.error.set(error.message);return;}
     this.shipmentPackages.update(xs=>[...xs,data as ShipmentPackageRow]); await this.invalidateShipmentQuote(shipment.id);
   }
