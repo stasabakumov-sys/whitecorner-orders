@@ -15,6 +15,10 @@ describe('Product card cost profiles',()=>{
     const rows=backdropCostProfiles('product','Plane Arch',['200cm x 100cm'],[foldable]);
     expect(rows).toHaveLength(2);expect(rows[0]).toEqual(expect.objectContaining({variant_key:'fold',size_key:'2000x1000',folding:'foldable'}));expect(rows[1]).toEqual(expect.objectContaining({backdrop_material_scope:true,size_key:'2000x1000',folding:'nonfoldable',shipping_product_id:'product'}));
   });
+  it('creates material editors from a unitless manual size without relaxing Wix parsing',()=>{
+    expect(backdropCostProfiles('product','Plane Arch',['190x100'],[],true).map(row=>[row.size_key,row.folding])).toEqual([['1900x1000','foldable'],['1900x1000','nonfoldable']]);
+    expect(backdropCostProfiles('product','Plane Arch',['190x100'],[])).toEqual([]);
+  });
   it('uses the saved structural material profile instead of a generated editor row',()=>{
     const saved={variant_key:'saved',kind:'main',options:{Size:'200cm x 100cm',Foldable:'NO'},backdrop_material_scope:true,profile:{materials_confirmed:true}};
     const orderVariant={variant_key:'order',kind:'main',options:{Size:'200cm x 100cm',Foldable:'NO',Colour:'Raw'},profile:{materials_confirmed:true}};

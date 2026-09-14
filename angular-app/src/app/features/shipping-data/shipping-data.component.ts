@@ -6,7 +6,7 @@ import { Component, OnInit, computed, signal, Optional, ChangeDetectorRef } from
 import {DialogModule} from 'primeng/dialog';
 import {DrawerModule} from 'primeng/drawer';
 import {FormsModule} from '@angular/forms';
-import {backdropSizeKey,backdropDrawingKey,qualifiedDrawingKey,optionSizes,packagingSizes,sizeKeyLabel} from './product-sizes';
+import {backdropSizeKey,manualBackdropSizeKey,backdropDrawingKey,qualifiedDrawingKey,optionSizes,packagingSizes,sizeKeyLabel} from './product-sizes';
 import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
 import {BoxDrawingComponent} from './box-drawing.component';
@@ -62,11 +62,12 @@ export function currentProductCostProfiles(rows:any[]){
 }
 
 function costProfileGroupKey(p:any){return `${p.backdrop_material_scope?'structural':'order'}|${p.kind}|${p.standard_top_excluded?'topless':'complete'}|${JSON.stringify(Object.fromEntries(Object.entries(p.options||{}).filter(([key])=>!['colour','color'].includes(key.toLowerCase())).sort(([a],[b])=>a.localeCompare(b))))}`;}
-export function backdropCostProfiles(productId:string,productName:string,sizes:string[],rows:any[]){
+export function backdropCostProfiles(productId:string,productName:string,sizes:string[],rows:any[],manualSizes=false){
  const groups=new Map<string,any[]>();for(const row of rows){const key=costProfileGroupKey(row);groups.set(key,[...(groups.get(key)||[]),row]);}
  const grouped=[...groups.values()].map(parts=>({...parts[0],shared_parts:parts}));
  const main=grouped.filter(row=>row.kind==='main'&&!row.standard_top_excluded),other=grouped.filter(row=>row.kind!=='main'||row.standard_top_excluded);
- const sizeKeys=[...new Set([...sizes.map(backdropSizeKey),...main.map(row=>productionSize(row.options))].filter(Boolean))];
+ const parse=manualSizes?manualBackdropSizeKey:backdropSizeKey;
+ const sizeKeys=[...new Set([...sizes.map(parse),...main.map(row=>productionSize(row.options))].filter(Boolean))];
  const variants=sizeKeys.flatMap(size=>(['foldable','nonfoldable'] as Folding[]).map(folding=>{
   const matching=main.filter(row=>productionSize(row.options)===size&&foldingOption(row.options)===folding);
   const found=matching.find(row=>row.backdrop_material_scope)||matching.find(row=>!row.backdrop_material_scope);
@@ -131,7 +132,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             </app-product-details></section>
             <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button></nav>
             @if(detailTab==='cost'){
-            <section class="shipsection"><app-product-work-cost [product]="p" [sizes]="productSizes(p)" [materialProfiles]="costProfiles(p.id)" [materials]="costing.materials()" /></section>
+            <section class="shipsection"><app-product-work-cost [product]="p" [sizes]="productSizes(p)" [manualSizes]="!wixSizes(p).length" [materialProfiles]="costProfiles(p.id)" [materials]="costing.materials()" /></section>
             <section class="shipsection"><h3>Product cost · incl. GST</h3>
             <p class="small">Add materials here. Planned work is calculated above from Estimated min and Work Rates. Order Costing shows the combined order summary.</p>
             @if(costing.error()){<p role="alert">{{costing.error()}}</p>}
@@ -246,7 +247,7 @@ export class ShippingDataComponent implements OnInit {
   selectedProduct = computed(() => this.products().find(p => p.id===this.selectedId()) ?? null);
 
   constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute,@Optional() public costing:CostingService=new CostingService(supabase),@Optional() private cdr?:ChangeDetectorRef) {}
-  costProfiles(id:string){const product=this.products().find(p=>p.id===id) as ShippingProduct;const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile,backdrop_material_scope:profile.template_item?.profile_scope==='backdrop-structure'}));const rows=currentProductCostProfiles([...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()]);return this.isBackdrop(product)?backdropCostProfiles(id,product.product_name,this.productSizes(product),rows):rows;}
+  costProfiles(id:string){const product=this.products().find(p=>p.id===id) as ShippingProduct;const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile,backdrop_material_scope:profile.template_item?.profile_scope==='backdrop-structure'}));const rows=currentProductCostProfiles([...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()]);return this.isBackdrop(product)?backdropCostProfiles(id,product.product_name,this.productSizes(product),rows,!this.wixSizes(product).length):rows;}
   failedImages=new Set<string>();
   productImage(p:ShippingProduct){
     const items=this.costing.orders().flatMap(o=>o.wc_order_items||[]);
