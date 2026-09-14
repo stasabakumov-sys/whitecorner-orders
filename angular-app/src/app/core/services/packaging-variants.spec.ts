@@ -1,10 +1,21 @@
 import {describe,it,expect,vi} from 'vitest';
-import {expandVariant,hasSizeOption,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {composeModularPackages,expandVariant,hasSizeOption,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {reviewComponents,packagingError} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {PackagingVariantsComponent} from '../../features/shipping-data/packaging-variants.component';
 const item=(size='Size I',quantity=1)=>({id:'cart',product_name:'Cart',quantity,catalog_reference:{catalogItemId:'catalog'},wix_options:{Size:size,'Internal Shelf':'Yes'}});
 const box=(contents:any[])=>({package_name:'Box',length_mm:1000,width_mm:500,height_mm:100,weight_kg:10,contents});
 describe('Exact packaging variants',()=>{
+ it('composes every Cart from reusable base, selected option and separate add-on boxes',()=>{
+  const cart={id:'cart',product_name:'Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Colour:'White','Internal Shelf':'Yes','Side shelves':'No'}};
+  const addon={id:'doors',product_name:'Back panel with a pair of closable doors',quantity:1};
+  const products=[{id:'p',wix_product_id:'catalog',product_name:'Cart',product_type:'Cart',active:true}];
+  const templates=[{shipping_product_id:'p',source_type:'Base',package_no:1,package_name:'Cart base',length_mm:1180,width_mm:670,height_mm:60,weight_kg:22.5,active:true}];
+  const rules=[{shipping_product_id:'p',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Shelf',length_mm:700,width_mm:500,height_mm:80,weight_kg:8,active:true},{shipping_product_id:'p',rule_type:'Option',match_name:'Side shelves',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Sides',length_mm:600,width_mm:400,height_mm:80,weight_kg:6,active:true},{shipping_product_id:'p',rule_type:'Add-on',match_name:addon.product_name,effect_type:'Add package',package_count_delta:1,package_name:'Doors',length_mm:900,width_mm:500,height_mm:80,weight_kg:9,active:true}];
+  const boxes=composeModularPackages({wc_order_items:[cart,addon]},products,templates,rules);
+  expect(boxes.map(b=>b.package_name)).toEqual(['Cart base','Shelf','Doors']);
+  expect(packagingError(boxes,reviewComponents({wc_order_items:[cart,addon]}))).toBe('');
+  expect(composeModularPackages({wc_order_items:[{...cart,wix_options:{...cart.wix_options,'Side shelves':'Yes'}}]},products,templates,rules).map(b=>b.package_name)).toEqual(['Cart base','Shelf','Sides']);
+ });
  it('never substitutes Size I for Size II or another addon configuration',()=>{
   const source=item(),packages=[box(reviewComponents({wc_order_items:[source]}))];
   expect(variantSignature(source)).not.toBe(variantSignature(item('Size II')));

@@ -34,6 +34,8 @@ on:
       - '.github/workflows/shop-floor-cnc-auto-snapshot-release.yml'
       - '.github/scripts/partner-pans*'
       - '.github/scripts/material-costing*'
+      - '.github/scripts/cart-modular*'
+      - 'supabase/migrations/*_cart_modular_*.sql'
       - '.github/scripts/hub-test-orders*'
       - '.github/scripts/prepare-product-parts.mjs'
       - '.github/scripts/prepare-work-rates.mjs'
@@ -74,6 +76,8 @@ on:
       - '.github/workflows/shop-floor-cnc-auto-snapshot-release.yml'
       - '.github/scripts/partner-pans*'
       - '.github/scripts/material-costing*'
+      - '.github/scripts/cart-modular*'
+      - 'supabase/migrations/*_cart_modular_*.sql'
       - '.github/scripts/hub-test-orders*'
       - '.github/scripts/prepare-product-parts.mjs'
       - '.github/scripts/prepare-work-rates.mjs'
@@ -129,6 +133,7 @@ jobs:
           node .github/scripts/material-costing.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/material-costing-tabletop.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/material-costing-catalog.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+          node .github/scripts/cart-modular-packaging.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/partner-pans-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/packaging-variant-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/box-drawings-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"

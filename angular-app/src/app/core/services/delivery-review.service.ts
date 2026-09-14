@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
-import {expandVariant,variantSignature,findPackagingProfile} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {composeModularPackages,expandVariant,packagingError,variantSignature,findPackagingProfile} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import { ReviewPackage, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 @Injectable({providedIn:'root'})
@@ -54,8 +54,19 @@ export class DeliveryReviewService {
  async variantPackages(item:any){
   const {data,error}=await findPackagingProfile(this.supabase.client,variantSignature(item));
   if(error)throw Error('Could not load packaging variant.');
-  const boxes=data?expandVariant(data.packages,item,this.rules()):[];
-  if(!boxes.length)throw Error('No complete profile matches this Size and the other options. Configure it in Shipping Data.');
+  let boxes=data?expandVariant(data.packages,item,this.rules()):[];
+  if(!boxes.length){
+   const [products,templates,rules]=await Promise.all([
+    this.supabase.client.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,active').eq('active',true),
+    this.supabase.client.from('wc_shipping_packages').select('*').eq('active',true).order('package_no'),
+    this.supabase.client.from('wc_shipping_rules').select('*').eq('active',true).eq('effect_type','Add package'),
+   ]);
+   if(products.error||templates.error||rules.error)throw Error('Could not load modular Cart packaging. Please try again.');
+   boxes=composeModularPackages({wc_order_items:[item]},products.data||[],templates.data||[],rules.data||[],this.rules());
+  }
+  if(!boxes.length)throw Error('No complete profile or modular Cart packaging matches this product. Configure it in Shipping Data.');
+  const issue=packagingError(boxes,reviewComponents({wc_order_items:[item]},this.rules()));
+  if(issue)throw Error(`Cart packaging is incomplete: ${issue} Complete the missing Base or option box once in Shipping Data.`);
   return boxes;
  }
  async requotePackages(row:any,packages:ReviewPackage[],saveProfile:boolean){return this.perform({action:'requote-packages',orderId:row.order_id,expectedVersion:row.updated_at,confirmRequote:true,packages,saveProfile});}

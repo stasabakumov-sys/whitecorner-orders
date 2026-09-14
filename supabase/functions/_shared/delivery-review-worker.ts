@@ -1,6 +1,6 @@
 import {resolveCourierContents} from './courier-contents.ts';
 import { buildReviewRequest, componentNormal, eligibleOrder, evaluateQuotes, goodsCents, insuranceFor, packagingError, productId, restoreReviewPackages, reviewComponents, reviewInputKey, reviewItems, reviewSignature } from './delivery-review-domain.ts';
-import {expandVariant, hasSizeOption, variantSignature, findPackagingProfile, canonicalPackagingSignature} from './delivery-review-domain.ts';
+import {composeModularPackages, expandVariant, hasSizeOption, variantSignature, findPackagingProfile, canonicalPackagingSignature} from './delivery-review-domain.ts';
 
 function checked(result:any){if(result.error)throw Error(result.error.message);return result.data;}
 export async function reviewContext(db:any,orderId:string){
@@ -45,6 +45,17 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
      if(variant)variantPackages.push(...expandVariant(variant.packages,item,rules));
     }
     if(!packagingError(variantPackages,components))packages=variantPackages;
+    if(!packages.length){
+    // Every Cart starts with its reusable Base boxes. Matching options and
+    // separate add-ons contribute only their own additional boxes.
+    const [modularProducts,modularTemplates,modularRules]=await Promise.all([
+     db.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,active').eq('active',true),
+     db.from('wc_shipping_packages').select('*').eq('active',true).order('package_no'),
+     db.from('wc_shipping_rules').select('*').eq('active',true).eq('effect_type','Add package'),
+    ]);
+    const modular=composeModularPackages(order,checked(modularProducts)||[],checked(modularTemplates)||[],checked(modularRules)||[],rules);
+    if(!packagingError(modular,components))packages=modular;
+    }
     if(!packages.length){
     // Existing exact composition profiles created in Fulfilment are reusable.
     const templates=checked(await db.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no'))||[];
