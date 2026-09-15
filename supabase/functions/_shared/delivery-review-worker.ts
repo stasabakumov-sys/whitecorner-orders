@@ -36,26 +36,26 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
   const components=reviewComponents(order,rules),signature=reviewSignature(order,rules);
   let packages=review.packages||[];
   if(!packages.length){
-   const profile=checked(await findPackagingProfile(db,signature));
-   if(profile)packages=restoreReviewPackages(profile.packages,components);
-   else {
+   const modularProducts=await db.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,active').eq('active',true);
+   const products=checked(modularProducts)||[];
+   const hasCart=reviewItems(order,rules).some(item=>products.some((product:any)=>componentNormal(product.product_type||'')==='cart'&&(productId(item)?product.wix_product_id===productId(item):!product.wix_product_id&&componentNormal(product.product_name||'')===componentNormal(item.product_name||''))));
+   if(hasCart){
+    const [modularRules,mainVariants]=await Promise.all([
+     db.from('wc_shipping_rules').select('*').eq('active',true).eq('effect_type','Add package'),
+     db.from('wc_delivery_packaging_profiles').select('*').eq('template_item->>profile_scope','cart-main'),
+    ]);
+    const modular=composeModularPackages(order,products,[],checked(modularRules)||[],rules,checked(mainVariants)||[]);
+    if(!packagingError(modular,components))packages=modular;
+   }else{
+    const profile=checked(await findPackagingProfile(db,signature));
+    if(profile)packages=restoreReviewPackages(profile.packages,components);
+    else {
     const variantPackages:any[]=[];
     for(const item of reviewItems(order,rules)){
      const variant=checked(await findPackagingProfile(db,variantSignature(item)));
      if(variant)variantPackages.push(...expandVariant(variant.packages,item,rules));
     }
     if(!packagingError(variantPackages,components))packages=variantPackages;
-    if(!packages.length){
-    // Every Cart starts with its reusable Base boxes. Matching options and
-    // separate add-ons contribute only their own additional boxes.
-    const [modularProducts,modularTemplates,modularRules]=await Promise.all([
-     db.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,active').eq('active',true),
-     db.from('wc_shipping_packages').select('*').eq('active',true).order('package_no'),
-     db.from('wc_shipping_rules').select('*').eq('active',true).eq('effect_type','Add package'),
-    ]);
-    const modular=composeModularPackages(order,checked(modularProducts)||[],checked(modularTemplates)||[],checked(modularRules)||[],rules);
-    if(!packagingError(modular,components))packages=modular;
-    }
     if(!packages.length){
     // Existing exact composition profiles created in Fulfilment are reusable.
     const templates=checked(await db.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no'))||[];
@@ -84,6 +84,7 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
      if(!packagingError(candidate,components))packages=candidate;
     }
     }
+   }
    }
   }
   const error=packagingError(packages,components);

@@ -294,30 +294,39 @@ export const variantSignature=(item:any)=>packagingSignature([variantItem(item)]
 export interface ModularShippingProduct {id:string;wix_product_id?:string|null;product_name?:string|null;product_type?:string|null;active?:boolean}
 export interface ModularShippingPackage {shipping_product_id:string;size_key?:string|null;source_type?:string|null;package_no?:number|null;package_name?:string|null;length_mm?:number|null;width_mm?:number|null;height_mm?:number|null;weight_kg?:number|null;quantity?:number|null;active?:boolean}
 export interface ModularShippingRule {shipping_product_id?:string|null;size_key?:string|null;rule_type?:string|null;match_name?:string|null;match_value?:string|null;effect_type?:string|null;package_count_delta?:number|null;package_name?:string|null;length_mm?:number|null;width_mm?:number|null;height_mm?:number|null;weight_kg?:number|null;active?:boolean}
+export interface CartMainPackagingVariant {shipping_product_id?:string|null;template_item?:any;packages?:any[]}
 const optionEntries=(item:OrderItemRow)=>orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).flatMap(label=>{const split=label.indexOf(':');return split<0?[]:[{name:componentNormal(label.slice(0,split)),value:componentNormal(label.slice(split+1))}];});
+const cartSize=(item:OrderItemRow)=>optionEntries(item).find(option=>['size','dimension','dimensions'].includes(option.name))?.value||'';
+const shelfSelected=(item:OrderItemRow)=>optionEntries(item).some(option=>option.name==='internal shelf'&&['yes','true','included','selected'].includes(option.value));
+const cartMainItem=(item:OrderItemRow)=>({...item,wix_options:Object.fromEntries(Object.entries(item.wix_options||{}).filter(([name])=>['size','dimension','dimensions','internal shelf'].includes(componentNormal(name))))});
 const productForItem=(item:OrderItemRow,products:ModularShippingProduct[])=>{
  const id=productId(item);
  return products.find(p=>p.active!==false&&(id?String(p.wix_product_id||'')===id:!p.wix_product_id&&componentNormal(p.product_name||'')===componentNormal(item.product_name||'')));
 };
-/** Compose reusable Cart packing as base boxes plus independently stored option/add-on boxes. */
-export function composeModularPackages(order:any,products:ModularShippingProduct[],templates:ModularShippingPackage[],rules:ModularShippingRule[],ignoredRules:any[]=[]):ReviewPackage[]{
+/** Compose one exact Cart Main variant plus independently stored option/add-on boxes. */
+export function composeModularPackages(order:any,products:ModularShippingProduct[],templates:ModularShippingPackage[],rules:ModularShippingRule[],ignoredRules:any[]=[],mainVariants?:CartMainPackagingVariant[]):ReviewPackage[]{
  const items=reviewItems(order,ignoredRules),components=reviewComponents(order,ignoredRules),out:ReviewPackage[]=[];
  const add=(source:any,content:PackageComponent)=>{const copies=Math.max(1,Math.floor(Number(source.quantity)||1));for(let n=0;n<copies;n++)out.push({package_name:String(source.package_name||'Package'),length_mm:Number(source.length_mm),width_mm:Number(source.width_mm),height_mm:Number(source.height_mm),weight_kg:Number(source.weight_kg),contents:[content]});};
  for(const item of items){
   const product=productForItem(item,products);if(!product||componentNormal(product.product_type||'')!=='cart')continue;
-  const size=optionEntries(item).find(option=>['size','dimension','dimensions'].includes(option.name))?.value||'';
-  const main=components.filter(c=>c.order_item_id===item.id&&c.component_key==='main');
-  const base=templates.filter(p=>p.active!==false&&p.shipping_product_id===product.id&&p.size_key===size&&(p.source_type||'Base')==='Base').sort((a,b)=>Number(a.package_no||0)-Number(b.package_no||0));
-  for(const unit of main)for(const box of base)add({...box,quantity:box.quantity||1},unit);
-  const options=optionEntries(item);
+  const size=cartSize(item),options=optionEntries(item);
+  if(mainVariants!==undefined){
+   const variant=mainVariants.find(profile=>profile.shipping_product_id===product.id&&profile.template_item?.profile_scope==='cart-main'&&cartSize(profile.template_item)===size&&shelfSelected(profile.template_item)===shelfSelected(item));
+   if(variant?.packages?.length)out.push(...expandVariant(variant.packages,cartMainItem(item),ignoredRules));
+  }else{
+   const main=components.filter(c=>c.order_item_id===item.id&&c.component_key==='main');
+   const base=templates.filter(p=>p.active!==false&&p.shipping_product_id===product.id&&p.size_key===size&&(p.source_type||'Base')==='Base').sort((a,b)=>Number(a.package_no||0)-Number(b.package_no||0));
+   for(const unit of main)for(const box of base)add({...box,quantity:box.quantity||1},unit);
+  }
   for(const rule of rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&r.size_key===size&&r.rule_type==='Option'&&r.effect_type==='Add package')){
    const name=componentNormal(rule.match_name||''),value=componentNormal(rule.match_value||'');
+   if(mainVariants!==undefined&&name==='internal shelf')continue;
    if(!options.some(o=>o.name===name&&(!value||o.value===value)))continue;
    const optionUnits=components.filter(c=>c.order_item_id===item.id&&c.component_key===`option:${name}`);
    for(const unit of optionUnits)add({...rule,quantity:Math.max(1,Number(rule.package_count_delta)||1)},unit);
   }
  }
- const orderedCartSizes=items.flatMap(item=>{const product=productForItem(item,products);if(!product||componentNormal(product.product_type||'')!=='cart')return[];const size=optionEntries(item).find(option=>['size','dimension','dimensions'].includes(option.name))?.value;return size?[{productId:product.id,size}]:[];});
+ const orderedCartSizes=items.flatMap(item=>{const product=productForItem(item,products);if(!product||componentNormal(product.product_type||'')!=='cart')return[];const size=cartSize(item);return size?[{productId:product.id,size}]:[];});
  for(const rule of rules.filter(r=>r.active!==false&&r.rule_type==='Add-on'&&r.effect_type==='Add package'&&orderedCartSizes.some(size=>size.productId===r.shipping_product_id&&size.size===r.size_key))){
   const matching=items.filter(item=>componentNormal(item.product_name||'')===componentNormal(rule.match_name||''));
   for(const item of matching)for(const unit of components.filter(c=>c.order_item_id===item.id&&c.component_key==='main'))add({...rule,quantity:Math.max(1,Number(rule.package_count_delta)||1)},unit);
