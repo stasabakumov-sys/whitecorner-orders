@@ -303,15 +303,16 @@ const productForItem=(item:OrderItemRow,products:ModularShippingProduct[])=>{
  const id=productId(item);
  return products.find(p=>p.active!==false&&(id?String(p.wix_product_id||'')===id:!p.wix_product_id&&componentNormal(p.product_name||'')===componentNormal(item.product_name||'')));
 };
-/** Compose one exact Cart Main variant plus independently stored option/add-on boxes. */
+/** Compose reusable Cart Main boxes, unless a selected option explicitly replaces Main with an exact manually saved variant. */
 export function composeModularPackages(order:any,products:ModularShippingProduct[],templates:ModularShippingPackage[],rules:ModularShippingRule[],ignoredRules:any[]=[],mainVariants?:CartMainPackagingVariant[]):ReviewPackage[]{
  const items=reviewItems(order,ignoredRules),components=reviewComponents(order,ignoredRules),out:ReviewPackage[]=[];
  const add=(source:any,content:PackageComponent)=>{const copies=Math.max(1,Math.floor(Number(source.quantity)||1));for(let n=0;n<copies;n++)out.push({package_name:String(source.package_name||'Package'),length_mm:Number(source.length_mm),width_mm:Number(source.width_mm),height_mm:Number(source.height_mm),weight_kg:Number(source.weight_kg),contents:[content]});};
  for(const item of items){
   const product=productForItem(item,products);if(!product||componentNormal(product.product_type||'')!=='cart')continue;
   const size=cartSize(item),options=optionEntries(item);
-  if(mainVariants!==undefined){
-   const variant=mainVariants.find(profile=>profile.shipping_product_id===product.id&&profile.template_item?.profile_scope==='cart-main'&&cartSize(profile.template_item)===size&&shelfSelected(profile.template_item)===shelfSelected(item));
+  const replacesMain=shelfSelected(item)&&rules.some(r=>r.active!==false&&r.shipping_product_id===product.id&&r.size_key===size&&r.rule_type==='Option'&&componentNormal(r.match_name||'')==='internal shelf'&&componentNormal(r.match_value||'')==='yes'&&r.effect_type==='Replace profile');
+  if(replacesMain){
+   const variant=(mainVariants||[]).find(profile=>profile.shipping_product_id===product.id&&profile.template_item?.profile_scope==='cart-main'&&cartSize(profile.template_item)===size&&shelfSelected(profile.template_item)===shelfSelected(item));
    if(variant?.packages?.length)out.push(...expandVariant(variant.packages,cartMainItem(item),ignoredRules));
   }else{
    const main=components.filter(c=>c.order_item_id===item.id&&c.component_key==='main');
@@ -320,7 +321,7 @@ export function composeModularPackages(order:any,products:ModularShippingProduct
   }
   for(const rule of rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&r.size_key===size&&r.rule_type==='Option'&&r.effect_type==='Add package')){
    const name=componentNormal(rule.match_name||''),value=componentNormal(rule.match_value||'');
-   if(mainVariants!==undefined&&name==='internal shelf')continue;
+   if(replacesMain&&name==='internal shelf')continue;
    if(!options.some(o=>o.name===name&&(!value||o.value===value)))continue;
    const optionUnits=components.filter(c=>c.order_item_id===item.id&&c.component_key===`option:${name}`);
    for(const unit of optionUnits)add({...rule,quantity:Math.max(1,Number(rule.package_count_delta)||1)},unit);

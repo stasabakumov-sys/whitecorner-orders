@@ -21,10 +21,20 @@ describe('Exact packaging variants',()=>{
   const contents=reviewComponents({wc_order_items:[mainItem]});
   const mainVariants=[{shipping_product_id:'p',template_item:{...mainItem,profile_scope:'cart-main'},packages:[{package_name:'Main with shelf',length_mm:1430,width_mm:630,height_mm:110,weight_kg:22.5,contents}]}];
   const products=[{id:'p',wix_product_id:'catalog',product_name:'Cart',product_type:'Cart',active:true}];
-  const rules=[{shipping_product_id:'p',size_key:'size i',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Old shelf box',length_mm:1400,width_mm:600,height_mm:40,weight_kg:5.5,active:true},{shipping_product_id:'p',size_key:'size i',rule_type:'Option',match_name:'Side shelves',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Side shelves',length_mm:630,width_mm:230,height_mm:100,weight_kg:6,active:true}];
+  const rules=[{shipping_product_id:'p',size_key:'size i',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Replace profile',package_count_delta:1,package_name:'Old shelf box',length_mm:1400,width_mm:600,height_mm:40,weight_kg:5.5,active:true},{shipping_product_id:'p',size_key:'size i',rule_type:'Option',match_name:'Side shelves',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Side shelves',length_mm:630,width_mm:230,height_mm:100,weight_kg:6,active:true}];
   const boxes=composeModularPackages({wc_order_items:[cart]},products,[],rules,[],mainVariants);
   expect(boxes.map(box=>box.package_name)).toEqual(['Main with shelf','Side shelves']);
   expect(boxes[0].contents.map(content=>content.component_key).sort()).toEqual(['main','option:internal shelf']);
+ });
+ it('keeps reusable Main unchanged until Internal Shelf is explicitly set to replace it',()=>{
+  const cart={id:'cart',product_name:'Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Size:'Size I','Internal Shelf':'Yes'}};
+  const products=[{id:'p',wix_product_id:'catalog',product_name:'Cart',product_type:'Cart',active:true}];
+  const templates=[{shipping_product_id:'p',size_key:'size i',source_type:'Base',package_no:1,package_name:'Reusable Main',length_mm:1180,width_mm:670,height_mm:60,weight_kg:22.5,active:true}];
+  const separate={shipping_product_id:'p',size_key:'size i',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Shelf box',length_mm:1200,width_mm:600,height_mm:50,weight_kg:9,active:true};
+  const mainItem={...cart,wix_options:{Size:'Size I','Internal Shelf':'Yes'}},contents=reviewComponents({wc_order_items:[mainItem]});
+  const variants=[{shipping_product_id:'p',template_item:{...mainItem,profile_scope:'cart-main'},packages:[{package_name:'Main + Shelf',length_mm:1230,width_mm:670,height_mm:110,weight_kg:24,contents}]}];
+  expect(composeModularPackages({wc_order_items:[cart]},products,templates,[separate],[],variants).map(box=>box.package_name)).toEqual(['Reusable Main','Shelf box']);
+  expect(composeModularPackages({wc_order_items:[cart]},products,templates,[{...separate,effect_type:'Replace profile'}],[],variants).map(box=>box.package_name)).toEqual(['Main + Shelf']);
  });
  it('never substitutes Size I for Size II or another addon configuration',()=>{
   const source=item(),packages=[box(reviewComponents({wc_order_items:[source]}))];

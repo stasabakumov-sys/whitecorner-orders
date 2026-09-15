@@ -176,14 +176,12 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             }}
             @if(!p.saved_only){
             @if(isCart(p)){
-             <p class="small cart-packaging-note">Quote uses one exact Main variant for this size, then adds only separately packed Add-ons. Main dimensions and weights are never calculated automatically.</p>
-             <app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" />
+             <p class="small cart-packaging-note">Quote uses the reusable Main packages below. For Internal Shelf, choose a separate box or a manually entered Main + Shelf replacement variant.</p>
             }@else{
              @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" />}
             }
-            @if(!isCart(p)){
             <div class="shipsection">
-              <h3>Packages</h3>
+              <h3>{{isCart(p)?'Reusable Main packages':'Packages'}}</h3>
               <div class="tablewrap">
                 <table class="shiptable">
                   <thead><tr><th>Source</th><th>Box</th><th>Name</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th></th></tr></thead>
@@ -210,7 +208,6 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                 </table>
               </div>
             </div>
-            }
 
             <div class="shipsection">
               <h3>{{isCart(p)?'Add-ons':'Rules'}}</h3>
@@ -219,15 +216,22 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                   <div class="rule">
                     <div><b>{{ r.rule_type }}</b><div class="small">{{ r.active ? 'Active' : 'Inactive' }}</div></div>
                     <div><b>{{ r.match_name }}</b><div class="small">{{ r.match_value ? 'Value: '+r.match_value : 'Any value' }}</div></div>
-                    <div>{{ r.effect_type }}</div>
+                    @if(isCart(p)&&isInternalShelfRule(r)){
+                     <label class="rule-mode">Packing<select [value]="ruleValue(r,'effect_type')" (change)="setRuleDraft(r.id,'effect_type',$any($event.target).value)"><option value="Add package">Separate box</option><option value="Replace profile">Main + Shelf variant</option></select></label>
+                    }@else{<div>{{ r.effect_type }}</div>}
+                    @if(ruleValue(r,'effect_type')==='Add package'){
                     <div>Boxes: <input class="delta" type="number" min="1" [value]="ruleValue(r,'package_count_delta')" (input)="setRuleDraft(r.id,'package_count_delta',$any($event.target).value)"></div>
                     <div>Name: <input class="name" [value]="ruleValue(r,'package_name')" (input)="setRuleDraft(r.id,'package_name',$any($event.target).value)"></div>
                     <div>L mm: <input type="number" min="1" [value]="ruleValue(r,'length_mm')" (input)="setRuleDraft(r.id,'length_mm',$any($event.target).value)"></div>
                     <div>W mm: <input type="number" min="1" [value]="ruleValue(r,'width_mm')" (input)="setRuleDraft(r.id,'width_mm',$any($event.target).value)"></div>
                     <div>H mm: <input type="number" min="1" [value]="ruleValue(r,'height_mm')" (input)="setRuleDraft(r.id,'height_mm',$any($event.target).value)"></div>
                     <div>kg: <input type="number" min="0.01" step="0.01" [value]="ruleValue(r,'weight_kg')" (input)="setRuleDraft(r.id,'weight_kg',$any($event.target).value)"></div>
+                    }
                     <button class="btn" [disabled]="ruleSaving(r.id)" (click)="saveRule(r)">{{ruleSaving(r.id)?'Saving…':'Save'}}</button>
                     @if(ruleFeedback()[r.id];as feedback){<span class="rule-feedback" [class.ok-text]="feedback.ok" [class.error-text]="!feedback.ok" [attr.role]="feedback.ok?'status':'alert'">{{feedback.text}}</span>}
+                    @if(isCart(p)&&isInternalShelfRule(r)&&ruleValue(r,'effect_type')==='Replace profile'){
+                     <app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" />
+                    }
                   </div>
                 }
               } @else {
@@ -362,7 +366,8 @@ export class ShippingDataComponent implements OnInit {
 
   productPackages(id: string,sizeKey='') { return this.packages().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey)).sort((a,b)=>(a.package_no??0)-(b.package_no??0)); }
   basePackages(id: string,sizeKey='') { return this.productPackages(id,sizeKey).filter(x => x.source_type==='Base'); }
-  productRules(id: string,sizeKey='') { return this.rules().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey) && x.active!==false && x.effect_type!=='No effect' && Number(x.package_count_delta||0)!==0&&(!sizeKey||componentNormal(x.match_name||'')!=='internal shelf')); }
+  productRules(id: string,sizeKey='') { return this.rules().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey) && x.active!==false && x.effect_type!=='No effect' && (x.effect_type==='Replace profile'||Number(x.package_count_delta||0)!==0)); }
+  isInternalShelfRule(rule:ShippingRule){return componentNormal(rule.match_name||'')==='internal shelf';}
   complete(pkg: ShippingPackage) { return pkg.length_mm!=null && pkg.width_mm!=null && pkg.height_mm!=null && pkg.weight_kg!=null; }
   incompleteCount(id: string) { return this.productPackages(id).filter(x => !this.complete(x)).length; }
   incompleteBaseCount(id: string) { return this.basePackages(id).filter(x => !this.complete(x)).length; }
@@ -400,7 +405,7 @@ export class ShippingDataComponent implements OnInit {
   ruleValue(rule:ShippingRule,key:keyof ShippingRule){return (this.ruleDrafts.get(rule.id) as any)?.[key]??rule[key]??'';}
   setRuleDraft(id:string,key:keyof ShippingRule,value:string){
     const draft=this.ruleDrafts.get(id)||{};
-    (draft as any)[key]=key==='package_name'?(value||null):(value===''?null:Number(value));
+    (draft as any)[key]=['package_name','effect_type'].includes(String(key))?(value||null):(value===''?null:Number(value));
     this.ruleDrafts.set(id,draft);
     this.ruleFeedback.update(rows=>{const next={...rows};delete next[id];return next;});
   }
@@ -410,8 +415,8 @@ export class ShippingDataComponent implements OnInit {
     if(this.ruleSaving(rule.id))return;
     const draft=this.ruleDrafts.get(rule.id)||{};
     const value=<K extends keyof ShippingRule>(key:K):ShippingRule[K]=>Object.prototype.hasOwnProperty.call(draft,key)?draft[key] as ShippingRule[K]:rule[key];
-    const payload={package_count_delta:Number(value('package_count_delta')||0),package_name:value('package_name')??null,length_mm:value('length_mm')??null,width_mm:value('width_mm')??null,height_mm:value('height_mm')??null,weight_kg:value('weight_kg')??null,updated_at:new Date().toISOString()};
-    if(!String(payload.package_name||'').trim()||payload.package_count_delta<1||[payload.length_mm,payload.width_mm,payload.height_mm,payload.weight_kg].some(v=>v==null||!Number.isFinite(Number(v))||Number(v)<=0)){
+    const payload={effect_type:value('effect_type')??'Add package',package_count_delta:Number(value('package_count_delta')||0),package_name:value('package_name')??null,length_mm:value('length_mm')??null,width_mm:value('width_mm')??null,height_mm:value('height_mm')??null,weight_kg:value('weight_kg')??null,updated_at:new Date().toISOString()};
+    if(payload.effect_type==='Add package'&&(!String(payload.package_name||'').trim()||payload.package_count_delta<1||[payload.length_mm,payload.width_mm,payload.height_mm,payload.weight_kg].some(v=>v==null||!Number.isFinite(Number(v))||Number(v)<=0))){
       this.ruleFeedback.update(rows=>({...rows,[rule.id]:{ok:false,text:'Complete the box name, L, W, H and kg before saving.'}}));return;
     }
     this.ruleSavingIds.update(ids=>new Set([...ids,rule.id]));

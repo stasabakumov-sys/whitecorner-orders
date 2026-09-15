@@ -26,7 +26,7 @@ Deno.serve(async(req)=>{
     const normalized=body.options.map((o:any)=>({name:componentNormal(o.name),value:componentNormal(o.value)}));
     const size=normalized.filter((o:any)=>['size','dimension','dimensions'].includes(o.name));
     const shelf=normalized.filter((o:any)=>o.name==='internal shelf');
-    if(componentNormal(product.product_type||'')!=='cart'||body.options.length!==2||size.length!==1||shelf.length!==1||!['yes','no'].includes(shelf[0].value))return json({error:'Choose this Cart size and whether Internal Shelf is included.'},422);
+    if(componentNormal(product.product_type||'')!=='cart'||body.options.length!==2||size.length!==1||shelf.length!==1||shelf[0].value!=='yes')return json({error:'A Cart Main replacement variant requires this size and Internal Shelf: Yes.'},422);
    }
    let catalogId=product.wix_product_id||'';
    if(!catalogId){

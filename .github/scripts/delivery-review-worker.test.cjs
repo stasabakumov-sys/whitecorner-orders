@@ -164,13 +164,14 @@ test('variant save is authenticated, canonical, and never quotes or changes orde
  body.packages[0].contents[0].component_name='Spoof';assert.equal((await call(body)).status,200);assert.equal(saved.created_by,'actor');assert.equal(saved.packages[0].contents[0].component_name,'Cart');assert.equal(saved.signature,domain.variantSignature(item));
  const mainItem={...item,wix_options:{Size:'Size II','Internal Shelf':'Yes'}},mainBody={...body,profileScope:'cart-main',options:[{name:'Size',value:'Size II'},{name:'Internal Shelf',value:'Yes'}],packages:[{...body.packages[0],contents:domain.reviewComponents({wc_order_items:[mainItem]})}]};
  assert.equal((await call({...mainBody,options:[{name:'Size',value:'Size II'}]})).status,422);
+ assert.equal((await call({...mainBody,options:[{name:'Size',value:'Size II'},{name:'Internal Shelf',value:'No'}]})).status,422);
  assert.equal((await call(mainBody)).status,200);assert.equal(saved.template_item.profile_scope,'cart-main');assert.equal(JSON.stringify(saved.template_item.wix_options),JSON.stringify({Size:'Size II','Internal Shelf':'Yes'}));
 });
 
-test('Cart without a manually saved Main variant cannot fall back to legacy boxes',async()=>{
+test('Cart without a shelf replacement variant continues to use its reusable Main boxes',async()=>{
  const s=setup();s.review.packages=[];s.order.wc_order_items[0].wix_options={Size:'Size II'};
- const original=s.db.from.bind(s.db);s.db.from=table=>{if(!['wc_shipping_products','wc_shipping_packages'].includes(table))return original(table);const data=table==='wc_shipping_products'?[{id:'p',product_name:'Cart',product_type:'Cart'}]:[{shipping_product_id:'p',package_name:'Old size unknown',length_mm:1000,width_mm:500,height_mm:100,weight_kg:10,contents:[]}];const q={select(){return q},eq(){return q},order(){return q},then:resolve=>resolve({data})};return q;};
- await processDeliveryReview(s.db,'order',s.call);assert.equal(s.calls.length,0);assert.equal(s.review.state,'packaging_required');
+ const original=s.db.from.bind(s.db);s.db.from=table=>{if(!['wc_shipping_products','wc_shipping_packages'].includes(table))return original(table);const data=table==='wc_shipping_products'?[{id:'p',product_name:'Cart',product_type:'Cart'}]:[{shipping_product_id:'p',size_key:'size ii',source_type:'Base',package_name:'Reusable Main',length_mm:1000,width_mm:500,height_mm:100,weight_kg:10,contents:[]}];const q={select(){return q},eq(){return q},order(){return q},then:resolve=>resolve({data})};return q;};
+ await processDeliveryReview(s.db,'order',s.call);assert.equal(s.review.state,'quoted');assert.equal(s.review.packages[0].package_name,'Reusable Main');assert.equal(s.calls.filter(call=>call.route==='quotes').length,1);
 });
 test('production explains Shop Floor refusals without exposing other database errors',async()=>{
  const s=productionFixture();s.order.delivery_type='Pickup';
