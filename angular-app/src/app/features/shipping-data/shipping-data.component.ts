@@ -203,7 +203,8 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                     <div>W mm: <input type="number" min="1" [value]="ruleValue(r,'width_mm')" (input)="setRuleDraft(r.id,'width_mm',$any($event.target).value)"></div>
                     <div>H mm: <input type="number" min="1" [value]="ruleValue(r,'height_mm')" (input)="setRuleDraft(r.id,'height_mm',$any($event.target).value)"></div>
                     <div>kg: <input type="number" min="0.01" step="0.01" [value]="ruleValue(r,'weight_kg')" (input)="setRuleDraft(r.id,'weight_kg',$any($event.target).value)"></div>
-                    <button class="btn" (click)="saveRule(r)">Save</button>
+                    <button class="btn" [disabled]="ruleSaving(r.id)" (click)="saveRule(r)">{{ruleSaving(r.id)?'Saving…':'Save'}}</button>
+                    @if(ruleFeedback()[r.id];as feedback){<span class="rule-feedback" [class.ok-text]="feedback.ok" [class.error-text]="!feedback.ok" [attr.role]="feedback.ok?'status':'alert'">{{feedback.text}}</span>}
                   </div>
                 }
               } @else {
@@ -253,6 +254,8 @@ export class ShippingDataComponent implements OnInit {
   editingIds = signal<Set<string>>(new Set());
   packageDrafts = new Map<string, Partial<ShippingPackage>>();
   ruleDrafts = new Map<string, Partial<ShippingRule>>();
+  ruleSavingIds=signal<Set<string>>(new Set());
+  ruleFeedback=signal<Record<string,{ok:boolean;text:string}>>({});
   filters = [
     {key:'all' as const,label:'All'},
     {key:'backdrops' as const,label:'Backdrops'},
@@ -330,7 +333,7 @@ export class ShippingDataComponent implements OnInit {
 
   productPackages(id: string) { return this.packages().filter(x => x.shipping_product_id===id).sort((a,b)=>(a.package_no??0)-(b.package_no??0)); }
   basePackages(id: string) { return this.productPackages(id).filter(x => x.source_type==='Base'); }
-  productRules(id: string) { return this.rules().filter(x => x.shipping_product_id===id && x.effect_type!=='No effect' && Number(x.package_count_delta||0)!==0); }
+  productRules(id: string) { return this.rules().filter(x => x.shipping_product_id===id && x.active!==false && x.effect_type!=='No effect' && Number(x.package_count_delta||0)!==0); }
   complete(pkg: ShippingPackage) { return pkg.length_mm!=null && pkg.width_mm!=null && pkg.height_mm!=null && pkg.weight_kg!=null; }
   incompleteCount(id: string) { return this.productPackages(id).filter(x => !this.complete(x)).length; }
   incompleteBaseCount(id: string) { return this.basePackages(id).filter(x => !this.complete(x)).length; }
@@ -370,14 +373,25 @@ export class ShippingDataComponent implements OnInit {
     const draft=this.ruleDrafts.get(id)||{};
     (draft as any)[key]=key==='package_name'?(value||null):(value===''?null:Number(value));
     this.ruleDrafts.set(id,draft);
+    this.ruleFeedback.update(rows=>{const next={...rows};delete next[id];return next;});
   }
+  ruleSaving(id:string){return this.ruleSavingIds().has(id);}
 
   async saveRule(rule: ShippingRule) {
+    if(this.ruleSaving(rule.id))return;
     const draft=this.ruleDrafts.get(rule.id)||{};
-    const payload={package_count_delta:Number((draft.package_count_delta??rule.package_count_delta)||0),package_name:draft.package_name??rule.package_name??null,length_mm:draft.length_mm??rule.length_mm??null,width_mm:draft.width_mm??rule.width_mm??null,height_mm:draft.height_mm??rule.height_mm??null,weight_kg:draft.weight_kg??rule.weight_kg??null,updated_at:new Date().toISOString()};
-    if(!String(payload.package_name||'').trim()||payload.package_count_delta<1||[payload.length_mm,payload.width_mm,payload.height_mm,payload.weight_kg].some(v=>v==null||!Number.isFinite(Number(v))||Number(v)<=0)){this.error.set('Complete the additional box name, dimensions and weight before saving the rule.');return;}
-    const { error } = await this.supabase.client.from('wc_shipping_rules').update(payload).eq('id',rule.id);
-    if (error) { this.error.set(error.message); return; }
-    this.error.set('');this.rules.update(rows => rows.map(x => x.id===rule.id ? {...x,...payload} : x));this.ruleDrafts.delete(rule.id);
+    const value=<K extends keyof ShippingRule>(key:K):ShippingRule[K]=>Object.prototype.hasOwnProperty.call(draft,key)?draft[key] as ShippingRule[K]:rule[key];
+    const payload={package_count_delta:Number(value('package_count_delta')||0),package_name:value('package_name')??null,length_mm:value('length_mm')??null,width_mm:value('width_mm')??null,height_mm:value('height_mm')??null,weight_kg:value('weight_kg')??null,updated_at:new Date().toISOString()};
+    if(!String(payload.package_name||'').trim()||payload.package_count_delta<1||[payload.length_mm,payload.width_mm,payload.height_mm,payload.weight_kg].some(v=>v==null||!Number.isFinite(Number(v))||Number(v)<=0)){
+      this.ruleFeedback.update(rows=>({...rows,[rule.id]:{ok:false,text:'Complete the box name, L, W, H and kg before saving.'}}));return;
+    }
+    this.ruleSavingIds.update(ids=>new Set([...ids,rule.id]));
+    this.ruleFeedback.update(rows=>{const next={...rows};delete next[rule.id];return next;});
+    try{
+      const { error } = await this.supabase.client.from('wc_shipping_rules').update(payload).eq('id',rule.id);
+      if(error){this.ruleFeedback.update(rows=>({...rows,[rule.id]:{ok:false,text:`Could not save: ${error.message}. Please retry.`}}));return;}
+      this.error.set('');this.rules.update(rows => rows.map(x => x.id===rule.id ? {...x,...payload} : x));this.ruleDrafts.delete(rule.id);
+      this.ruleFeedback.update(rows=>({...rows,[rule.id]:{ok:true,text:'Saved ✓'}}));
+    }finally{this.ruleSavingIds.update(ids=>{const next=new Set(ids);next.delete(rule.id);return next;});}
   }
 }
