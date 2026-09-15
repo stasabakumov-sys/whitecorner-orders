@@ -15,12 +15,11 @@ describe('Shipping rule save feedback',()=>{
   expect(component.ruleFeedback()[rule.id]).toEqual({ok:true,text:'Saved ✓'});
   expect(component.ruleSaving(rule.id)).toBe(false);
  });
- it('saves Main + Shelf mode without requiring separate-box measurements',async()=>{
-  let payload:any;const eq=vi.fn().mockResolvedValue({error:null});
-  const component=new ShippingDataComponent({client:{from:()=>({update:(value:any)=>(payload=value,{eq})})}} as any,undefined,{} as any);
-  const shelfRule={...rule,match_name:'Internal Shelf',effect_type:'Add package',length_mm:null,width_mm:null,height_mm:null,weight_kg:null};
-  component.setRuleDraft(rule.id,'effect_type','Replace profile');await component.saveRule(shelfRule as any);
-  expect(payload.effect_type).toBe('Replace profile');expect(component.ruleFeedback()[rule.id]).toEqual({ok:true,text:'Saved ✓'});
+ it('selects one or several Add-ons for a Main combination without changing their package rules',()=>{
+  const component=new ShippingDataComponent({} as any,undefined,{} as any),second={...rule,id:'second',match_name:'Side shelves'};
+  component.toggleMainAddOn(rule as any,true);component.toggleMainAddOn(second as any,true);
+  expect(component.mainAddOns().map(item=>item.id)).toEqual(['rule','second']);
+  component.toggleMainAddOn(rule as any,false);expect(component.mainAddOns().map(item=>item.id)).toEqual(['second']);
  });
  it('keeps the draft and shows a row-level reason when required measurements are missing',async()=>{
   const from=vi.fn(),component=new ShippingDataComponent({client:{from}} as any,undefined,{} as any);

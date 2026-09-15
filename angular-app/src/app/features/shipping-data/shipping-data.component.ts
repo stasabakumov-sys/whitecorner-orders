@@ -154,7 +154,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             <app-box-drawing [productId]="p.id" />
             <p class="small product-drawing-help">Product drawing shared by all variants.</p>
             </app-product-details></section>
-            @if(isCart(p)&&detailTab!=='wix'&&cartSizes(p).length){<nav class="cart-size-tabs" aria-label="Cart sizes">@for(size of cartSizes(p);track size.key){<button [class.on]="activeCartSize(p)===size.key" (click)="selectedCartSize=size.key">{{size.label}}</button>}</nav>}
+            @if(isCart(p)&&detailTab!=='wix'&&cartSizes(p).length){<nav class="cart-size-tabs" aria-label="Cart sizes">@for(size of cartSizes(p);track size.key){<button [class.on]="activeCartSize(p)===size.key" (click)="selectCartSize(size.key)">{{size.label}}</button>}</nav>}
             <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button><button [class.on]="detailTab==='wix'" (click)="detailTab='wix'">Wix catalogue</button></nav>
             @if(detailTab==='cost'){
             <section class="shipsection"><app-product-work-cost [product]="p" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" [manualSizes]="!wixSizes(p).length" [materialProfiles]="costProfiles(p.id,activeCartSize(p))" [materials]="costing.materials()" /></section>
@@ -176,7 +176,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             }}
             @if(!p.saved_only){
             @if(isCart(p)){
-             <p class="small cart-packaging-note">Quote uses the reusable Main packages below. For Internal Shelf, choose a separate box or a manually entered Main + Shelf replacement variant.</p>
+             <p class="small cart-packaging-note">Quote uses the reusable Main packages below. Select one or several Add-ons in the far-right column to create an exact, manually entered Main + Add-ons replacement variant.</p>
             }@else{
              @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" />}
             }
@@ -216,24 +216,19 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                   <div class="rule">
                     <div><b>{{ r.rule_type }}</b><div class="small">{{ r.active ? 'Active' : 'Inactive' }}</div></div>
                     <div><b>{{ r.match_name }}</b><div class="small">{{ r.match_value ? 'Value: '+r.match_value : 'Any value' }}</div></div>
-                    @if(isCart(p)&&isInternalShelfRule(r)){
-                     <label class="rule-mode">Packing<select [value]="ruleValue(r,'effect_type')" (change)="setRuleDraft(r.id,'effect_type',$any($event.target).value)"><option value="Add package">Separate box</option><option value="Replace profile">Main + Shelf variant</option></select></label>
-                    }@else{<div>{{ r.effect_type }}</div>}
-                    @if(ruleValue(r,'effect_type')==='Add package'){
+                    <div>{{ r.effect_type==='Replace profile'?'Add package':r.effect_type }}</div>
                     <div>Boxes: <input class="delta" type="number" min="1" [value]="ruleValue(r,'package_count_delta')" (input)="setRuleDraft(r.id,'package_count_delta',$any($event.target).value)"></div>
                     <div>Name: <input class="name" [value]="ruleValue(r,'package_name')" (input)="setRuleDraft(r.id,'package_name',$any($event.target).value)"></div>
                     <div>L mm: <input type="number" min="1" [value]="ruleValue(r,'length_mm')" (input)="setRuleDraft(r.id,'length_mm',$any($event.target).value)"></div>
                     <div>W mm: <input type="number" min="1" [value]="ruleValue(r,'width_mm')" (input)="setRuleDraft(r.id,'width_mm',$any($event.target).value)"></div>
                     <div>H mm: <input type="number" min="1" [value]="ruleValue(r,'height_mm')" (input)="setRuleDraft(r.id,'height_mm',$any($event.target).value)"></div>
                     <div>kg: <input type="number" min="0.01" step="0.01" [value]="ruleValue(r,'weight_kg')" (input)="setRuleDraft(r.id,'weight_kg',$any($event.target).value)"></div>
-                    }
                     <button class="btn" [disabled]="ruleSaving(r.id)" (click)="saveRule(r)">{{ruleSaving(r.id)?'Saving…':'Save'}}</button>
+                    @if(isCart(p)){<label class="combine-main"><input type="checkbox" [checked]="mainAddOnSelected(r)" (change)="toggleMainAddOn(r,$any($event.target).checked)"><span>Combine<br>with Main</span></label>}
                     @if(ruleFeedback()[r.id];as feedback){<span class="rule-feedback" [class.ok-text]="feedback.ok" [class.error-text]="!feedback.ok" [attr.role]="feedback.ok?'status':'alert'">{{feedback.text}}</span>}
-                    @if(isCart(p)&&isInternalShelfRule(r)&&ruleValue(r,'effect_type')==='Replace profile'){
-                     <app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" />
-                    }
                   </div>
                 }
+                @if(isCart(p)&&mainAddOns().length){<app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" [addOns]="mainAddOns()" />}
               } @else {
                 <div class="mut">No rules for this product.</div>
               }
@@ -257,7 +252,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 })
 export class ShippingDataComponent implements OnInit {
   search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';selectedCartSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
-  openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.selectedId.set(id);}
+  openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);}
   isBackdrop(p?:ShippingProduct){return /backdrop/i.test(p?.product_name||'');}
   isCart(p?:ShippingProduct){return componentNormal(p?.product_type||'')==='cart';}
   contentLabel(c:any){return [...new Set([c.product_name,c.component_name].filter(Boolean).map((s:string)=>s.trim()))].join(' · ');}
@@ -266,6 +261,7 @@ export class ShippingDataComponent implements OnInit {
   productSizes(p:ShippingProduct){const imported=this.wixSizes(p);return imported.length?imported:[...new Set((p.manual_sizes||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean))];}
   cartSizes(p:ShippingProduct){return cartSizeRows(this.productSizes(p));}
   activeCartSize(p:ShippingProduct){const sizes=this.cartSizes(p);return sizes.some(size=>size.key===this.selectedCartSize)?this.selectedCartSize:sizes[0]?.key||'';}
+  selectCartSize(size:string){this.selectedCartSize=size;this.mainAddOns.set([]);}
   cartSizeLabel(p:ShippingProduct){return this.cartSizes(p).find(size=>size.key===this.activeCartSize(p))?.label||'';}
   packingProfiles(p:ShippingProduct){return !this.isCart(p)?p.saved_profiles||[]:(p.saved_profiles||[]).filter((profile:any)=>packagingSizes(profile,p.product_name).some(size=>cartSizeKey(size)===this.activeCartSize(p)));}
   newFolding='';libraryMessage='';qualifiedKey=qualifiedDrawingKey;legacyFolding:Record<string,string>={};legacyRevisions:Record<string,string>={};classifying='';
@@ -287,6 +283,7 @@ export class ShippingDataComponent implements OnInit {
   ruleDrafts = new Map<string, Partial<ShippingRule>>();
   ruleSavingIds=signal<Set<string>>(new Set());
   ruleFeedback=signal<Record<string,{ok:boolean;text:string}>>({});
+  mainAddOns=signal<ShippingRule[]>([]);
   filters = [
     {key:'all' as const,label:'All'},
     {key:'backdrops' as const,label:'Backdrops'},
@@ -367,7 +364,8 @@ export class ShippingDataComponent implements OnInit {
   productPackages(id: string,sizeKey='') { return this.packages().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey)).sort((a,b)=>(a.package_no??0)-(b.package_no??0)); }
   basePackages(id: string,sizeKey='') { return this.productPackages(id,sizeKey).filter(x => x.source_type==='Base'); }
   productRules(id: string,sizeKey='') { return this.rules().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey) && x.active!==false && x.effect_type!=='No effect' && (x.effect_type==='Replace profile'||Number(x.package_count_delta||0)!==0)); }
-  isInternalShelfRule(rule:ShippingRule){return componentNormal(rule.match_name||'')==='internal shelf';}
+  mainAddOnSelected(rule:ShippingRule){return this.mainAddOns().some(item=>item.id===rule.id);}
+  toggleMainAddOn(rule:ShippingRule,selected:boolean){this.mainAddOns.update(rows=>selected?[...rows.filter(item=>item.id!==rule.id),rule]:rows.filter(item=>item.id!==rule.id));}
   complete(pkg: ShippingPackage) { return pkg.length_mm!=null && pkg.width_mm!=null && pkg.height_mm!=null && pkg.weight_kg!=null; }
   incompleteCount(id: string) { return this.productPackages(id).filter(x => !this.complete(x)).length; }
   incompleteBaseCount(id: string) { return this.basePackages(id).filter(x => !this.complete(x)).length; }
@@ -415,8 +413,8 @@ export class ShippingDataComponent implements OnInit {
     if(this.ruleSaving(rule.id))return;
     const draft=this.ruleDrafts.get(rule.id)||{};
     const value=<K extends keyof ShippingRule>(key:K):ShippingRule[K]=>Object.prototype.hasOwnProperty.call(draft,key)?draft[key] as ShippingRule[K]:rule[key];
-    const payload={effect_type:value('effect_type')??'Add package',package_count_delta:Number(value('package_count_delta')||0),package_name:value('package_name')??null,length_mm:value('length_mm')??null,width_mm:value('width_mm')??null,height_mm:value('height_mm')??null,weight_kg:value('weight_kg')??null,updated_at:new Date().toISOString()};
-    if(payload.effect_type==='Add package'&&(!String(payload.package_name||'').trim()||payload.package_count_delta<1||[payload.length_mm,payload.width_mm,payload.height_mm,payload.weight_kg].some(v=>v==null||!Number.isFinite(Number(v))||Number(v)<=0))){
+    const payload={effect_type:'Add package',package_count_delta:Number(value('package_count_delta')||0),package_name:value('package_name')??null,length_mm:value('length_mm')??null,width_mm:value('width_mm')??null,height_mm:value('height_mm')??null,weight_kg:value('weight_kg')??null,updated_at:new Date().toISOString()};
+    if(!String(payload.package_name||'').trim()||payload.package_count_delta<1||[payload.length_mm,payload.width_mm,payload.height_mm,payload.weight_kg].some(v=>v==null||!Number.isFinite(Number(v))||Number(v)<=0)){
       this.ruleFeedback.update(rows=>({...rows,[rule.id]:{ok:false,text:'Complete the box name, L, W, H and kg before saving.'}}));return;
     }
     this.ruleSavingIds.update(ids=>new Set([...ids,rule.id]));
