@@ -40,11 +40,12 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
    const products=checked(modularProducts)||[];
    const hasCart=reviewItems(order,rules).some(item=>products.some((product:any)=>componentNormal(product.product_type||'')==='cart'&&(productId(item)?product.wix_product_id===productId(item):!product.wix_product_id&&componentNormal(product.product_name||'')===componentNormal(item.product_name||''))));
    if(hasCart){
-    const [modularRules,mainVariants]=await Promise.all([
-     db.from('wc_shipping_rules').select('*').eq('active',true).eq('effect_type','Add package'),
+    const [modularPackages,modularRules,mainVariants]=await Promise.all([
+     db.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no'),
+     db.from('wc_shipping_rules').select('*').eq('active',true),
      db.from('wc_delivery_packaging_profiles').select('*').eq('template_item->>profile_scope','cart-main'),
     ]);
-    const modular=composeModularPackages(order,products,[],checked(modularRules)||[],rules,checked(mainVariants)||[]);
+    const modular=composeModularPackages(order,products,checked(modularPackages)||[],checked(modularRules)||[],rules,checked(mainVariants)||[]);
     if(!packagingError(modular,components))packages=modular;
    }else{
     const profile=checked(await findPackagingProfile(db,signature));
