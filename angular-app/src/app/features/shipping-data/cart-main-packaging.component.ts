@@ -1,4 +1,4 @@
-import {Component,Input,OnChanges,signal} from '@angular/core';
+import {Component,EventEmitter,Input,OnChanges,Output,signal} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {canonicalPackagingItemKey,packagingError,reviewComponents} from '../../../../../supabase/functions/_shared/delivery-review-domain';
@@ -24,6 +24,7 @@ import {cartSizeFromOptions} from './cart-size';
  `,styles:[`:host{display:block;flex-basis:100%;width:100%}.editor{border-top:1px solid var(--wc-border);margin-top:4px;padding:14px 0 2px}.states{display:flex;gap:8px;flex-wrap:wrap}.states span{padding:5px 9px;border-radius:8px;background:var(--p-orange-50);color:var(--p-orange-800)}.states span.ready{background:var(--p-green-50);color:var(--p-green-800)}.tools{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:10px 0}.tools label{display:flex;flex-direction:column;gap:5px}.tools input{width:165px;max-width:100%}.box{border-top:1px solid var(--wc-border);padding:10px 0}.choice{display:flex;align-items:center;gap:7px;margin:8px 0}.choice input{width:auto}.mut{color:var(--wc-muted)}.weight-note{font-size:.75rem;color:var(--p-orange-700)}.weight-note.over{color:var(--p-red-600)}[role=alert]{color:var(--p-red-600)}[role=status]{color:var(--p-green-700)}h4{margin:0 0 6px}h5{margin:14px 0 6px}`]})
 export class CartMainPackagingComponent implements OnChanges{
  @Input() product:any;@Input() sizeKey='';@Input() sizeLabel='';@Input() addOns:any[]=[];
+ @Output() profileSaved=new EventEmitter<any>();
  variants=signal<any[]>([]);error=signal('');busy=signal(false);saved=signal(false);boxes:any[]=[];confirmed=false;rules:any[]=[];
  constructor(private db:SupabaseService){}
  Number=Number;
@@ -47,5 +48,5 @@ export class CartMainPackagingComponent implements OnChanges{
  toggle(box:any,component:any,on:boolean){box.contents=on?[...box.contents.filter((c:any)=>c.id!==component.id),component]:box.contents.filter((c:any)=>c.id!==component.id);this.confirmed=false;this.saved.set(false);}
  issue(){return packagingError(this.boxes,this.components());}
  weightNote(value:any){const weight=Number(value);return weight>25?'Over the common 25 kg carrier limit':weight>=24?'Close to the common 25 kg carrier limit':'';}
- async save(){if(this.busy()||this.issue()||!this.confirmed)return;this.busy.set(true);this.error.set('');this.saved.set(false);try{const {data,error}=await this.db.client.functions.invoke('delivery-cost-review',{body:{action:'save-packaging-variant',profileScope:'cart-main',productId:this.product.id,options:[{name:'Size',value:this.sizeLabel}],addOnRuleIds:this.addOns.map(rule=>rule.id),packages:this.boxes}});if(error||!data?.ok){const detail=await error?.context?.json?.().catch(()=>null);throw Error(detail?.error||data?.error||'Main + Add-ons variant was not saved.');}await this.load();this.confirmed=false;this.saved.set(true);}catch(e:any){this.error.set((e?.message||'Main + Add-ons variant was not saved.')+' Your entries are retained; retry after checking the connection.');}finally{this.busy.set(false);}}
+ async save(){if(this.busy()||this.issue()||!this.confirmed)return;this.busy.set(true);this.error.set('');this.saved.set(false);try{const {data,error}=await this.db.client.functions.invoke('delivery-cost-review',{body:{action:'save-packaging-variant',profileScope:'cart-main',productId:this.product.id,options:[{name:'Size',value:this.sizeLabel}],addOnRuleIds:this.addOns.map(rule=>rule.id),packages:this.boxes}});if(error||!data?.ok){const detail=await error?.context?.json?.().catch(()=>null);throw Error(detail?.error||data?.error||'Main + Add-ons variant was not saved.');}await this.load();this.confirmed=false;this.saved.set(true);if(this.variants()[0])this.profileSaved.emit(this.variants()[0]);}catch(e:any){this.error.set((e?.message||'Main + Add-ons variant was not saved.')+' Your entries are retained; retry after checking the connection.');}finally{this.busy.set(false);}}
 }

@@ -23,6 +23,7 @@
 input{width:76px;max-width:100%}.name{width:150px}input:disabled{background:var(--wc-ground);color:var(--wc-muted)}.delta{width:60px}
 .rule{border:1px solid var(--wc-border);border-radius:var(--wc-radius);padding:10px;margin-bottom:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.rule>div{flex:1;min-width:90px}
 .combine-main{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:95px;text-align:left;font-size:.8rem}.combine-main input{width:auto}.shipsection>app-cart-main-packaging{display:block;margin-top:10px}
+.saved-cart-combinations{border:1px solid var(--wc-border);border-radius:var(--wc-radius);padding:12px}.saved-combination-list{display:flex;gap:8px;flex-wrap:wrap}.saved-combination-list button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;border:1px solid var(--wc-border);border-radius:8px;background:#fff;padding:9px 12px;text-align:left}.saved-combination-list button.on{border-color:var(--p-primary-color);background:color-mix(in srgb,var(--p-primary-color) 9%,white);color:var(--p-primary-color)}.saved-combination-list span{font-size:.75rem;color:var(--wc-muted)}
 .rule-feedback{font-size:.875rem;font-weight:600;flex-basis:100%;text-align:right}.ok-text{color:#17643d}.error-text{color:#991b1b}
 .error{background:#fff1f1;color:#991b1b;border:1px solid #fecaca;padding:12px;border-radius:var(--wc-radius);margin-bottom:10px}
 @media(max-width:1000px){.shipgrid{grid-template-columns:220px minmax(0,1fr)}}
