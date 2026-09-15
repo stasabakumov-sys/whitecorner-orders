@@ -11,6 +11,7 @@ $$;
 alter table public.wc_shipping_packages add column if not exists size_key text;
 alter table public.wc_shipping_rules add column if not exists size_key text;
 alter table public.wc_shipping_packages drop constraint if exists wc_shipping_packages_shipping_product_id_source_type_package_no_key;
+alter table public.wc_shipping_packages drop constraint if exists wc_shipping_packages_shipping_product_id_source_type_packag_key;
 
 with ranked as(
  select pr.shipping_product_id,wc_cart_size_key(pr.template_item->'wix_options') size_key,
