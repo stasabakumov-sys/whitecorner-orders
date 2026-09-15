@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { productionDecision, setReviewedProductionStatus, unquotedApprovalStates } from '../_shared/delivery-production-gate.ts';
 import { courierReviewCall, processDeliveryReview, reviewContext } from '../_shared/delivery-review-worker.ts';
-import { componentNormal, deliveryCents, packagingError, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../_shared/delivery-review-domain.ts';
+import { componentNormal, deliveryCents, packagingError, packagingSignature, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../_shared/delivery-review-domain.ts';
 import { variantSignature, productId } from '../_shared/delivery-review-domain.ts';
 const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,x-client-info,apikey,content-type','Access-Control-Allow-Methods':'POST,OPTIONS','Content-Type':'application/json'};
 Deno.serve(async(req)=>{
@@ -22,11 +22,16 @@ Deno.serve(async(req)=>{
    if(new Set(body.options.map((o:any)=>o.name.trim().toLowerCase())).size!==body.options.length)return json({error:'Duplicate option names'},422);
    const cartMain=body.profileScope==='cart-main';
    if(body.profileScope!==undefined&&!cartMain)return json({error:'Unknown packaging profile scope'},422);
+   let selectedAddOns:any[]=[];
    if(cartMain){
     const normalized=body.options.map((o:any)=>({name:componentNormal(o.name),value:componentNormal(o.value)}));
     const size=normalized.filter((o:any)=>['size','dimension','dimensions'].includes(o.name));
-    const shelf=normalized.filter((o:any)=>o.name==='internal shelf');
-    if(componentNormal(product.product_type||'')!=='cart'||body.options.length!==2||size.length!==1||shelf.length!==1||shelf[0].value!=='yes')return json({error:'A Cart Main replacement variant requires this size and Internal Shelf: Yes.'},422);
+    const ids=Array.isArray(body.addOnRuleIds)?[...new Set(body.addOnRuleIds.filter((id:any)=>typeof id==='string'&&id.length<=100))]:[];
+    if(componentNormal(product.product_type||'')!=='cart'||body.options.length!==1||size.length!==1||!ids.length||ids.length>20||ids.length!==(body.addOnRuleIds||[]).length)return json({error:'Choose one Cart size and at least one Add-on.'},422);
+    const {data:available,error:availableError}=await db.from('wc_shipping_rules').select('id,shipping_product_id,size_key,rule_type,match_name,match_value,effect_type,active').eq('shipping_product_id',product.id).eq('active',true).in('id',ids);
+    if(availableError)return json({error:'Add-on rules unavailable'},503);
+    selectedAddOns=(available||[]).filter((rule:any)=>['option','add-on'].includes(componentNormal(rule.rule_type||''))&&['add package','replace profile'].includes(componentNormal(rule.effect_type||''))&&(!rule.size_key||componentNormal(rule.size_key)===size[0].value));
+    if(selectedAddOns.length!==ids.length)return json({error:'One or more selected Add-ons do not belong to this Cart size.'},422);
    }
    let catalogId=product.wix_product_id||'';
    if(!catalogId){
@@ -34,13 +39,17 @@ Deno.serve(async(req)=>{
     if(sourceError||!source||source.product_name!==product.product_name)return json({error:'Choose an existing order composition for this product.'},422);
     catalogId=productId(source);
    }
-   const item={id:product.id,source_item_id:body.sourceItemId||null,profile_scope:cartMain?'cart-main':undefined,product_name:product.product_name,quantity:1,catalog_reference:catalogId?{catalogItemId:catalogId}:{},wix_options:Object.fromEntries(body.options.map((o:any)=>[o.name.trim(),o.value.trim()]))};
+   const wixOptions:any=Object.fromEntries(body.options.map((o:any)=>[o.name.trim(),o.value.trim()]));
+   if(cartMain)for(const rule of selectedAddOns.filter((rule:any)=>componentNormal(rule.rule_type||'')==='option'))wixOptions[String(rule.match_name)]=String(rule.match_value||'Yes');
+   const mergedAddOns=selectedAddOns.map((rule:any)=>({rule_type:rule.rule_type,match_name:rule.match_name,match_value:rule.match_value||''})).sort((a:any,b:any)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+   const item={id:product.id,source_item_id:body.sourceItemId||null,profile_scope:cartMain?'cart-main':undefined,merged_add_ons:cartMain?mergedAddOns:undefined,product_name:product.product_name,quantity:1,catalog_reference:catalogId?{catalogItemId:catalogId}:{},wix_options:wixOptions};
+   const profileItems=cartMain?[item,...selectedAddOns.filter((rule:any)=>componentNormal(rule.rule_type||'')==='add-on').map((rule:any)=>({id:`rule:${rule.id}`,product_name:String(rule.match_name),quantity:1,wix_options:{},catalog_reference:{}}))]:[item];
    const {data:rules,error:rulesError}=await db.from('wc_shipping_rules').select('match_name,match_value,effect_type,active').eq('active',true).eq('effect_type','No effect');
    if(rulesError)return json({error:'Packaging rules unavailable'},503);
-   const components=reviewComponents({wc_order_items:[item]},rules||[]),issue=packagingError(body.packages,components);
+   const components=reviewComponents({wc_order_items:profileItems},rules||[]),issue=packagingError(body.packages,components);
    if(issue)return json({error:issue},422);
    const packages=body.packages.map((p:any)=>({package_name:String(p.package_name||'Package').slice(0,150),length_mm:Number(p.length_mm),width_mm:Number(p.width_mm),height_mm:Number(p.height_mm),weight_kg:Number(p.weight_kg),contents:p.contents.map((c:any)=>components.find(x=>x.order_item_id===c.order_item_id&&x.component_key===(c.component_key||'main')&&x.unit_index===(c.unit_index||1)))}));
-   const {error}=await db.from('wc_delivery_packaging_profiles').upsert({signature:variantSignature(item),shipping_product_id:product.id,template_item:item,packages,created_by:user.id,updated_at:new Date().toISOString()});
+   const {error}=await db.from('wc_delivery_packaging_profiles').upsert({signature:cartMain?packagingSignature(profileItems):variantSignature(item),shipping_product_id:product.id,template_item:item,packages,created_by:user.id,updated_at:new Date().toISOString()});
    return error?json({error:'Variant could not be saved. Check the variant migration.'},409):json({ok:true});
   }
   if(!/^[\da-f-]{36}$/i.test(body.orderId||''))return json({error:'Valid order ID required'},422);
