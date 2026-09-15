@@ -19,7 +19,7 @@ import {CostingService} from '../costing/costing.service';
 import {Folding,foldingOption,productionSize} from '../costing/production-cost';
 import {productId,componentNormal} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {shippingProfileCatalog,savedProfileOptions} from '../../core/utils/shipping-profile-catalog';
-import {cartSizeKey,cartSizeRows} from './cart-size';
+import {cartSizeFromOptions,cartSizeKey,cartSizeRows} from './cart-size';
 import {CartMainPackagingComponent} from './cart-main-packaging.component';
 
 type ShippingProduct = {
@@ -177,6 +177,13 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             @if(!p.saved_only){
             @if(isCart(p)){
              <p class="small cart-packaging-note">Quote uses the reusable Main packages below. Select one or several Add-ons in the far-right column to create an exact, manually entered Main + Add-ons replacement variant.</p>
+             @if(cartMainProfiles(p).length){<section class="shipsection saved-cart-combinations">
+              <h3>Saved Main + Add-ons variants</h3>
+              <p class="small">Saved combinations remain available after the page is reloaded. Open one to review or rewrite its complete packaging.</p>
+              <div class="saved-combination-list">@for(profile of cartMainProfiles(p);track profile.signature){
+               <button type="button" [class.on]="cartMainProfileSelected(profile)" (click)="openCartMainProfile(p,profile)"><b>Main + {{cartMainProfileLabel(profile)}}</b><span>{{profile.packages?.length||0}} box(es) · Open</span></button>
+              }</div>
+             </section>}
             }@else{
              @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" />}
             }
@@ -228,7 +235,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                     @if(ruleFeedback()[r.id];as feedback){<span class="rule-feedback" [class.ok-text]="feedback.ok" [class.error-text]="!feedback.ok" [attr.role]="feedback.ok?'status':'alert'">{{feedback.text}}</span>}
                   </div>
                 }
-                @if(isCart(p)&&mainAddOns().length){<app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" [addOns]="mainAddOns()" />}
+                @if(isCart(p)&&mainAddOns().length){<app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" [addOns]="mainAddOns()" (profileSaved)="storeCartMainProfile(p,$event)" />}
               } @else {
                 <div class="mut">No rules for this product.</div>
               }
@@ -364,6 +371,23 @@ export class ShippingDataComponent implements OnInit {
   productPackages(id: string,sizeKey='') { return this.packages().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey)).sort((a,b)=>(a.package_no??0)-(b.package_no??0)); }
   basePackages(id: string,sizeKey='') { return this.productPackages(id,sizeKey).filter(x => x.source_type==='Base'); }
   productRules(id: string,sizeKey='') { return this.rules().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey) && x.active!==false && x.effect_type!=='No effect' && (x.effect_type==='Replace profile'||Number(x.package_count_delta||0)!==0)); }
+  addOnDescriptorKey(value:any){return [value?.rule_type,value?.match_name,value?.match_value].map(item=>componentNormal(item||'')).join(':');}
+  cartMainProfileDescriptors(profile:any){
+    const stored=profile?.template_item?.merged_add_ons;
+    if(Array.isArray(stored)&&stored.length)return stored;
+    return Object.entries(profile?.template_item?.wix_options||{}).filter(([name,value])=>!['size','dimension','dimensions'].includes(componentNormal(name))&&/^(yes|true|included|selected)$/i.test(String(value))).map(([match_name,match_value])=>({rule_type:'Option',match_name,match_value}));
+  }
+  cartMainProfiles(product:ShippingProduct){return (product.saved_profiles||[]).filter(profile=>profile.template_item?.profile_scope==='cart-main'&&cartSizeFromOptions(profile.template_item?.wix_options)===this.activeCartSize(product)&&this.cartMainProfileDescriptors(profile).length).sort((a,b)=>this.cartMainProfileLabel(a).localeCompare(this.cartMainProfileLabel(b)));}
+  cartMainProfileLabel(profile:any){return this.cartMainProfileDescriptors(profile).map((item:any)=>item.match_name).join(' + ');}
+  cartMainProfileSelected(profile:any){return this.cartMainProfileDescriptors(profile).map((item:any)=>this.addOnDescriptorKey(item)).sort().join('|')===this.mainAddOns().map(item=>this.addOnDescriptorKey(item)).sort().join('|');}
+  openCartMainProfile(product:ShippingProduct,profile:any){
+    const available=this.productRules(product.id,this.activeCartSize(product)),selected=this.cartMainProfileDescriptors(profile).map((descriptor:any)=>available.find(rule=>this.addOnDescriptorKey(rule)===this.addOnDescriptorKey(descriptor))).filter(Boolean) as ShippingRule[];
+    if(selected.length!==this.cartMainProfileDescriptors(profile).length){this.error.set('This saved Main combination refers to an Add-on rule that is no longer active. Restore the rule before editing the combination.');return;}
+    this.error.set('');this.mainAddOns.set(selected);
+  }
+  storeCartMainProfile(product:ShippingProduct,profile:any){
+    this.products.update(rows=>rows.map(row=>row.id!==product.id?row:{...row,saved_profiles:[...(row.saved_profiles||[]).filter(saved=>saved.signature!==profile.signature),profile]}));
+  }
   mainAddOnSelected(rule:ShippingRule){return this.mainAddOns().some(item=>item.id===rule.id);}
   toggleMainAddOn(rule:ShippingRule,selected:boolean){this.mainAddOns.update(rows=>selected?[...rows.filter(item=>item.id!==rule.id),rule]:rows.filter(item=>item.id!==rule.id));}
   complete(pkg: ShippingPackage) { return pkg.length_mm!=null && pkg.width_mm!=null && pkg.height_mm!=null && pkg.weight_kg!=null; }

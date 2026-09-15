@@ -21,6 +21,18 @@ describe('Shipping rule save feedback',()=>{
   expect(component.mainAddOns().map(item=>item.id)).toEqual(['rule','second']);
   component.toggleMainAddOn(rule as any,false);expect(component.mainAddOns().map(item=>item.id)).toEqual(['second']);
  });
+ it('lists a saved combination after reload and restores its Add-on checkboxes when opened',()=>{
+  const component=new ShippingDataComponent({} as any,undefined,{parts:()=>[]} as any),shelf={...rule,id:'shelf',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',size_key:'size i',effect_type:'Add package',active:true},side={...rule,id:'side',rule_type:'Option',match_name:'Side shelves',match_value:'Yes',size_key:'size i',effect_type:'Add package',active:true};
+  const profile={signature:'combined',template_item:{profile_scope:'cart-main',wix_options:{Size:'Size I','Internal Shelf':'Yes','Side shelves':'Yes'},merged_add_ons:[{rule_type:'Option',match_name:'Side shelves',match_value:'Yes'},{rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes'}]},packages:[{},{}]};
+  const product={id:'cart',product_name:'Cart',product_type:'Cart',saved_profiles:[profile]};component.products.set([product] as any);component.rules.set([shelf,side] as any);
+  expect(component.cartMainProfiles(product as any)).toEqual([profile]);expect(component.cartMainProfileLabel(profile)).toBe('Side shelves + Internal Shelf');
+  component.openCartMainProfile(product as any,profile);expect(component.mainAddOns().map(item=>item.id)).toEqual(['side','shelf']);expect(component.cartMainProfileSelected(profile)).toBe(true);
+ });
+ it('adds a newly confirmed Main combination to the visible saved list immediately',()=>{
+  const component=new ShippingDataComponent({} as any,undefined,{} as any),product={id:'cart',product_name:'Cart',saved_profiles:[]},profile={signature:'combined',template_item:{profile_scope:'cart-main'}};
+  component.products.set([product] as any);component.storeCartMainProfile(product as any,profile);
+  expect(component.products()[0].saved_profiles).toEqual([profile]);
+ });
  it('keeps the draft and shows a row-level reason when required measurements are missing',async()=>{
   const from=vi.fn(),component=new ShippingDataComponent({client:{from}} as any,undefined,{} as any);
   component.setRuleDraft(rule.id,'length_mm','');
