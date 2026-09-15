@@ -20,6 +20,7 @@ import {Folding,foldingOption,productionSize} from '../costing/production-cost';
 import {productId,componentNormal} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {shippingProfileCatalog,savedProfileOptions} from '../../core/utils/shipping-profile-catalog';
 import {cartSizeKey,cartSizeRows} from './cart-size';
+import {CartMainPackagingComponent} from './cart-main-packaging.component';
 
 type ShippingProduct = {
   id: string;
@@ -102,7 +103,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -166,21 +167,23 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             </section>
             }
             @if(detailTab==='packing'){
-            @for(profile of packingProfiles(p);track profile.signature){
+            @if(!isCart(p)){@for(profile of packingProfiles(p);track profile.signature){
              <section class="shipsection"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3>
              <p class="small">Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.</p>
              <div class="tablewrap"><table class="shiptable packaging-table"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th><th>Drawing</th></tr></thead><tbody>
              @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{contentLabel(c)}} · Unit {{c.unit_index}}</div>}</td><td><app-package-drawings [signature]="profile.signature" [index]="$index" [box]="box" [backdrop]="isBackdrop(p)" [sharedSize]="isBackdrop(p)?sharedSize(profile,p):''" [sizeLabel]="sizeLabel(sharedSize(profile,p))" /></td></tr>}
              </tbody></table></div></section>
-            }
+            }}
             @if(!p.saved_only){
             @if(isCart(p)){
-             <p class="small cart-packaging-note">Cart packaging is assembled from the reusable Base packages below plus one separate box for each selected option or add-on. There is no need to save every option combination.</p>
+             <p class="small cart-packaging-note">Quote uses one exact Main variant for this size, then adds only separately packed Add-ons. Main dimensions and weights are never calculated automatically.</p>
+             <app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" />
             }@else{
              @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" />}
             }
+            @if(!isCart(p)){
             <div class="shipsection">
-              <h3>{{isCart(p)?'Reusable Base packages':'Packages'}}</h3>
+              <h3>Packages</h3>
               <div class="tablewrap">
                 <table class="shiptable">
                   <thead><tr><th>Source</th><th>Box</th><th>Name</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th></th></tr></thead>
@@ -207,9 +210,10 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                 </table>
               </div>
             </div>
+            }
 
             <div class="shipsection">
-              <h3>{{isCart(p)?'Additional package rules':'Rules'}}</h3>
+              <h3>{{isCart(p)?'Add-ons':'Rules'}}</h3>
               @if (productRules(p.id,isCart(p)?activeCartSize(p):'').length) {
                 @for (r of productRules(p.id,isCart(p)?activeCartSize(p):''); track r.id) {
                   <div class="rule">
@@ -258,6 +262,7 @@ export class ShippingDataComponent implements OnInit {
   productSizes(p:ShippingProduct){const imported=this.wixSizes(p);return imported.length?imported:[...new Set((p.manual_sizes||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean))];}
   cartSizes(p:ShippingProduct){return cartSizeRows(this.productSizes(p));}
   activeCartSize(p:ShippingProduct){const sizes=this.cartSizes(p);return sizes.some(size=>size.key===this.selectedCartSize)?this.selectedCartSize:sizes[0]?.key||'';}
+  cartSizeLabel(p:ShippingProduct){return this.cartSizes(p).find(size=>size.key===this.activeCartSize(p))?.label||'';}
   packingProfiles(p:ShippingProduct){return !this.isCart(p)?p.saved_profiles||[]:(p.saved_profiles||[]).filter((profile:any)=>packagingSizes(profile,p.product_name).some(size=>cartSizeKey(size)===this.activeCartSize(p)));}
   newFolding='';libraryMessage='';qualifiedKey=qualifiedDrawingKey;legacyFolding:Record<string,string>={};legacyRevisions:Record<string,string>={};classifying='';
   sharedSize(profile:any,p:ShippingProduct){return backdropDrawingKey(profile,p.product_name);}
@@ -357,7 +362,7 @@ export class ShippingDataComponent implements OnInit {
 
   productPackages(id: string,sizeKey='') { return this.packages().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey)).sort((a,b)=>(a.package_no??0)-(b.package_no??0)); }
   basePackages(id: string,sizeKey='') { return this.productPackages(id,sizeKey).filter(x => x.source_type==='Base'); }
-  productRules(id: string,sizeKey='') { return this.rules().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey) && x.active!==false && x.effect_type!=='No effect' && Number(x.package_count_delta||0)!==0); }
+  productRules(id: string,sizeKey='') { return this.rules().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey) && x.active!==false && x.effect_type!=='No effect' && Number(x.package_count_delta||0)!==0&&(!sizeKey||componentNormal(x.match_name||'')!=='internal shelf')); }
   complete(pkg: ShippingPackage) { return pkg.length_mm!=null && pkg.width_mm!=null && pkg.height_mm!=null && pkg.weight_kg!=null; }
   incompleteCount(id: string) { return this.productPackages(id).filter(x => !this.complete(x)).length; }
   incompleteBaseCount(id: string) { return this.basePackages(id).filter(x => !this.complete(x)).length; }

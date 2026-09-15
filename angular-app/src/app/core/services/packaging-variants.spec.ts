@@ -1,6 +1,5 @@
 import {describe,it,expect,vi} from 'vitest';
-import {composeModularPackages,expandVariant,hasSizeOption,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
-import {reviewComponents,packagingError} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {composeModularPackages,expandVariant,hasSizeOption,packagingError,reviewComponents,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {PackagingVariantsComponent} from '../../features/shipping-data/packaging-variants.component';
 const item=(size='Size I',quantity=1)=>({id:'cart',product_name:'Cart',quantity,catalog_reference:{catalogItemId:'catalog'},wix_options:{Size:size,'Internal Shelf':'Yes'}});
 const box=(contents:any[])=>({package_name:'Box',length_mm:1000,width_mm:500,height_mm:100,weight_kg:10,contents});
@@ -15,6 +14,17 @@ describe('Exact packaging variants',()=>{
   expect(boxes.map(b=>b.package_name)).toEqual(['Cart base','Shelf','Doors']);
   expect(packagingError(boxes,reviewComponents({wc_order_items:[cart,addon]}))).toBe('');
   expect(composeModularPackages({wc_order_items:[{...cart,wix_options:{...cart.wix_options,'Side shelves':'Yes'}}]},products,templates,rules).map(b=>b.package_name)).toEqual(['Cart base','Shelf','Sides']);
+ });
+ it('selects one manually saved Main variant and keeps Side shelves as the only option add-on',()=>{
+  const cart={id:'cart',product_name:'Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Size:'Size I','Internal Shelf':'Yes','Side shelves':'Yes'}};
+  const mainItem={...cart,wix_options:{Size:'Size I','Internal Shelf':'Yes'}};
+  const contents=reviewComponents({wc_order_items:[mainItem]});
+  const mainVariants=[{shipping_product_id:'p',template_item:{...mainItem,profile_scope:'cart-main'},packages:[{package_name:'Main with shelf',length_mm:1430,width_mm:630,height_mm:110,weight_kg:22.5,contents}]}];
+  const products=[{id:'p',wix_product_id:'catalog',product_name:'Cart',product_type:'Cart',active:true}];
+  const rules=[{shipping_product_id:'p',size_key:'size i',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Old shelf box',length_mm:1400,width_mm:600,height_mm:40,weight_kg:5.5,active:true},{shipping_product_id:'p',size_key:'size i',rule_type:'Option',match_name:'Side shelves',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Side shelves',length_mm:630,width_mm:230,height_mm:100,weight_kg:6,active:true}];
+  const boxes=composeModularPackages({wc_order_items:[cart]},products,[],rules,[],mainVariants);
+  expect(boxes.map(box=>box.package_name)).toEqual(['Main with shelf','Side shelves']);
+  expect(boxes[0].contents.map(content=>content.component_key).sort()).toEqual(['main','option:internal shelf']);
  });
  it('never substitutes Size I for Size II or another addon configuration',()=>{
   const source=item(),packages=[box(reviewComponents({wc_order_items:[source]}))];
