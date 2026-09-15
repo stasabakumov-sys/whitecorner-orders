@@ -33,6 +33,7 @@ jobs:
           test -n "$SUPABASE_ACCESS_TOKEN"
           for migration in \
             supabase/migrations/20260914000600_cart_modular_packaging.sql \
+            supabase/migrations/20260915000100_cart_modular_packaging.sql \
             supabase/migrations/20260914000700_cart_modular_costing.sql
           do
             jq -n --rawfile query "$migration" \

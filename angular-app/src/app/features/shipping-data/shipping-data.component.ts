@@ -135,7 +135,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             <app-box-drawing [productId]="p.id" />
             <p class="small product-drawing-help">Product drawing shared by all variants.</p>
             </app-product-details></section>
-            <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button></nav>
+            <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button><button [class.on]="detailTab==='wix'" (click)="detailTab='wix'">Wix catalogue</button></nav>
             @if(detailTab==='cost'){
             <section class="shipsection"><app-product-work-cost [product]="p" [sizes]="productSizes(p)" [manualSizes]="!wixSizes(p).length" [materialProfiles]="costProfiles(p.id)" [materials]="costing.materials()" /></section>
             <section class="shipsection"><h3>Product cost · incl. GST</h3>
@@ -155,9 +155,13 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
              </tbody></table></div></section>
             }
             @if(!p.saved_only){
-            @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" />}
+            @if(isCart(p)){
+             <p class="small cart-packaging-note">Cart packaging is assembled from the reusable Base packages below plus one separate box for each selected option or add-on. There is no need to save every option combination.</p>
+            }@else{
+             @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" />}
+            }
             <div class="shipsection">
-              <h3>Packages</h3>
+              <h3>{{isCart(p)?'Reusable Base packages':'Packages'}}</h3>
               <div class="tablewrap">
                 <table class="shiptable">
                   <thead><tr><th>Source</th><th>Box</th><th>Name</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th></th></tr></thead>
@@ -186,7 +190,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             </div>
 
             <div class="shipsection">
-              <h3>Rules</h3>
+              <h3>{{isCart(p)?'Additional package rules':'Rules'}}</h3>
               @if (productRules(p.id).length) {
                 @for (r of productRules(p.id); track r.id) {
                   <div class="rule">
@@ -207,10 +211,12 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               }
             </div>
             }
-            <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" /></section>
             }
             @if(detailTab==='minutes'){
              <section class="shipsection"><app-product-parts [product]="p" [sizes]="productSizes(p)" /></section>
+            }
+            @if(detailTab==='wix'){
+             <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" /></section>
             }
           } @else {
             <div class="mut">No products in this filter.</div>
@@ -222,9 +228,10 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
   styleUrl: './shipping-data.component.css',
 })
 export class ShippingDataComponent implements OnInit {
-  search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'='cost';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
+  search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
   openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedId.set(id);}
   isBackdrop(p?:ShippingProduct){return /backdrop/i.test(p?.product_name||'');}
+  isCart(p?:ShippingProduct){return componentNormal(p?.product_type||'')==='cart';}
   contentLabel(c:any){return [...new Set([c.product_name,c.component_name].filter(Boolean).map((s:string)=>s.trim()))].join(' · ');}
   updateDetails(details:any){this.products.update(rows=>rows.map(p=>p.id===details.id?{...p,...details}:p));}
   wixSizes(p:ShippingProduct){return [...new Set([...(p.saved_profiles||[]).flatMap(profile=>packagingSizes(profile,p.product_name)),...this.costing.parts().filter(part=>part.shipping_product_id===p.id).flatMap(part=>optionSizes(part.options))])];}
