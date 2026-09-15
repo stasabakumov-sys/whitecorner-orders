@@ -1,8 +1,9 @@
 import type {ShopTemplate} from './shop-floor.models';
 import {foldingOption,productionSize} from '../costing/production-cost';
 import {manualBackdropSizeKey,optionSizes} from '../shipping-data/product-sizes';
+import {cartSizeFromOptions} from '../shipping-data/cart-size';
 
-export type ShopCatalogProduct={id:string;wix_product_id?:string|null;product_name:string;manual_sizes?:string|null};
+export type ShopCatalogProduct={id:string;wix_product_id?:string|null;product_name:string;product_type?:string|null;manual_sizes?:string|null};
 
 function optionText(value:unknown){return String((value as any)?.original??(value as any)?.value??value??'').trim();}
 
@@ -13,6 +14,7 @@ export function catalogProductForItem(item:any,catalog:ShopCatalogProduct[]){
 
 export function resolvedProductionSize(item:any,product?:ShopCatalogProduct){
  const ordered=productionSize(item?.wix_options);if(ordered)return ordered;
+ if(String(product?.product_type||'').trim().toLowerCase()==='cart'||/cart|mobile bar|serving table|event bar/i.test(product?.product_name||'')){const exact=cartSizeFromOptions(item?.wix_options);if(exact)return exact;}
  const manual=[...new Set(String(product?.manual_sizes||'').split(/\r?\n/).map(manualBackdropSizeKey).filter(Boolean))];
  if(manual.length!==1)return '';
  const orderValues=optionSizes(item?.wix_options);if(!orderValues.length)return manual[0];
@@ -29,5 +31,5 @@ export function orderedFinish(options:any):'raw'|'painted'|''{
 export function matchingProductTemplates(templates:ShopTemplate[],product:ShopCatalogProduct|undefined,item:any){
  if(!product)return [];
  const size=resolvedProductionSize(item,product),folding=foldingOption(item?.wix_options);
- return templates.filter(template=>template.product_id===product.id&&(template.size_key?template.size_key===size&&template.folding===folding:!/backdrop/i.test(item?.product_name||'')));
+ return templates.filter(template=>template.product_id===product.id&&(template.size_key?template.size_key===size&&(folding?template.folding===folding:!template.folding):!/backdrop/i.test(item?.product_name||'')));
 }
