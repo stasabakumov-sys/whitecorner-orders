@@ -23,15 +23,16 @@ import {backdropSizeKey,manualBackdropSizeKey,sizeKeyLabel} from '../shipping-da
  }
  `,styles:[`:host{display:block}.mut{color:var(--wc-muted);font-size:.875rem}.template{border-top:1px solid var(--wc-border);margin-top:14px;padding-top:10px}.table-wrap{overflow:auto}.comparison{background:white;border:1px solid var(--wc-border);border-radius:12px;margin-top:14px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--wc-border)}.totals{display:flex;gap:18px;flex-wrap:wrap;padding:12px 0}.error{color:var(--p-red-600)}`]})
 export class ProductWorkCostComponent implements OnChanges{
- @Input() product:any;@Input() sizes:string[]=[];@Input() manualSizes=false;@Input() materialProfiles:any[]=[];@Input() materials:any[]=[];templates:ShopTemplate[]=[];rates:WorkRate[]=[];loading=false;error='';private token=0;
+ @Input() product:any;@Input() sizes:string[]=[];@Input() selectedSize='';@Input() manualSizes=false;@Input() materialProfiles:any[]=[];@Input() materials:any[]=[];templates:ShopTemplate[]=[];rates:WorkRate[]=[];loading=false;error='';private token=0;
  foldingLabel=foldingLabel;sizeLabel=sizeKeyLabel;variantLabel=templateVariantLabel;
  get hasFolding(){return /backdrop/i.test(this.product?.product_name||'');}
+ get isSizedCart(){return String(this.product?.product_type||'').trim().toLowerCase()==='cart'&&!!this.selectedSize;}
  comparison(){const parse=this.manualSizes?manualBackdropSizeKey:backdropSizeKey;const sizes=[...new Set([...this.sizes.map(parse),...this.templates.map(t=>t.size_key||'')].filter(Boolean))];return productionCostRows(sizes,this.templates,this.materialProfiles,this.materials,this.rates,this.product.product_name,this.product.id);}
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
- ngOnChanges(changes:SimpleChanges){const p=changes['product'];if(p&&(p.firstChange||p.previousValue?.id!==p.currentValue?.id||p.previousValue?.saved_only!==p.currentValue?.saved_only))void this.load();}
+ ngOnChanges(changes:SimpleChanges){const p=changes['product'];if((p&&(p.firstChange||p.previousValue?.id!==p.currentValue?.id||p.previousValue?.saved_only!==p.currentValue?.saved_only))||changes['selectedSize'])void this.load();}
  async load(){const id=this.product?.id,token=++this.token;this.templates=[];this.rates=[];this.error='';this.loading=false;if(!id||this.product.saved_only)return;this.loading=true;
   try{const [templates,rates]=await Promise.all([this.db.client.from('wc_shop_templates').select('*').eq('product_id',id).order('name'),this.db.client.from('wc_work_rates').select('*').order('sort_order')]);
-   if(token!==this.token)return;if(templates.error||rates.error)throw Error('Could not calculate planned work cost.');this.templates=(templates.data||[]) as ShopTemplate[];this.rates=(rates.data||[]) as WorkRate[];
+   if(token!==this.token)return;if(templates.error||rates.error)throw Error('Could not calculate planned work cost.');this.templates=((templates.data||[]) as ShopTemplate[]).filter(t=>!this.isSizedCart||t.size_key===this.selectedSize);this.rates=(rates.data||[]) as WorkRate[];
   }catch{if(token===this.token)this.error='Could not calculate planned work cost. Refresh and retry.';}
   finally{if(token===this.token){this.loading=false;this.cdr?.markForCheck();}}
  }

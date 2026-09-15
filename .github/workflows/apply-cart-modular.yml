@@ -6,6 +6,7 @@ on:
     paths:
       - 'supabase/migrations/*_cart_modular_packaging.sql'
       - 'supabase/migrations/*_cart_modular_costing.sql'
+      - 'supabase/migrations/*_cart_size_profiles.sql'
       - '.github/workflows/apply-cart-modular.yml'
   workflow_dispatch:
 
@@ -34,7 +35,8 @@ jobs:
           for migration in \
             supabase/migrations/20260914000600_cart_modular_packaging.sql \
             supabase/migrations/20260915000100_cart_modular_packaging.sql \
-            supabase/migrations/20260914000700_cart_modular_costing.sql
+            supabase/migrations/20260914000700_cart_modular_costing.sql \
+            supabase/migrations/20260915000200_cart_size_profiles.sql
           do
             jq -n --rawfile query "$migration" \
               '{query: $query, read_only: false}' > request.json

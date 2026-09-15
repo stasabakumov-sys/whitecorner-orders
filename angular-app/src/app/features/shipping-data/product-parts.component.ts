@@ -10,7 +10,7 @@ type AssignedPart=ShopPart&{component_product_id:string};
 
 @Component({selector:'app-product-parts',standalone:true,imports:[FormsModule],template:`
  <h3>Parts & estimated minutes</h3>
- <p class="mut">@if(hasFolding){Save separate parts and minutes for each size and folding option.}@else{Save one template for each size or composition.} Raw skips painting; Painted includes the painting minutes below. Add-on parts apply only when ordered.</p>
+ <p class="mut">@if(hasFolding){Save separate parts and minutes for each size and folding option.}@else if(isSizedCart){This template belongs only to the selected Cart size.}@else{Save one template for each size or composition.} Raw skips painting; Painted includes the painting minutes below. Add-on parts apply only when ordered.</p>
  @if(product?.saved_only){<p class="error" role="alert">Link this imported profile to a catalogue product before adding production parts.</p>}
  @else if(loading){<p>Loading parts…</p>}
  @else if(loadFailed){<button type="button" (click)="load()">Retry loading parts</button>}
@@ -37,10 +37,11 @@ type AssignedPart=ShopPart&{component_product_id:string};
  :host{display:block}.mut{color:var(--wc-muted);font-size:.875rem}.template-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.template-tabs button.active{border-color:var(--p-primary-color);color:var(--p-primary-color)}label{display:flex;flex-direction:column;gap:5px;margin:10px 0}.table-wrap{overflow:auto;margin:12px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;border-bottom:1px solid var(--wc-border);padding:8px;min-width:125px}th:first-child,td:first-child{min-width:180px}input,select{width:100%;box-sizing:border-box}.estimate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}.primary{background:var(--p-primary-color);color:#fff}.error{color:var(--p-red-600)}.success{color:var(--p-green-700)}
  `]})
 export class ProductPartsComponent implements OnChanges{
- @Input() product:any;@Input() sizes:string[]=[];
+ @Input() product:any;@Input() sizes:string[]=[];@Input() selectedSize='';
  folding:Folding|''='';sizeKey='';folds:Folding[]=['foldable','nonfoldable'];foldingLabel=foldingLabel;sizeLabel=sizeKeyLabel;
  private drafts=new Map<string,any>();
- get hasFolding(){return /backdrop/i.test(this.product?.product_name||'');}
+  get hasFolding(){return /backdrop/i.test(this.product?.product_name||'');}
+ get isSizedCart(){return String(this.product?.product_type||'').trim().toLowerCase()==='cart'&&!!this.selectedSize;}
  isAssignedEditing=(t:ShopTemplate)=>t.id===this.editingId&&!!t.folding;
  unassigned(){return this.templates.filter(t=>!t.folding||!t.size_key);}
  sizeKeys(){return [...new Set([...this.sizes.map(manualBackdropSizeKey),...this.templates.map(t=>t.size_key||'')].filter(Boolean))];}
@@ -57,7 +58,7 @@ export class ProductPartsComponent implements OnChanges{
  get paint(){return paintOperations(this.product?.product_name||'');}
  loadFailed=false;private loadedProductId='';
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
- ngOnChanges(changes:SimpleChanges){const change=changes['product'];if(change&&(change.firstChange||change.previousValue?.id!==change.currentValue?.id||change.previousValue?.saved_only!==change.currentValue?.saved_only))void this.load();}
+ ngOnChanges(changes:SimpleChanges){const change=changes['product'];if((change&&(change.firstChange||change.previousValue?.id!==change.currentValue?.id||change.previousValue?.saved_only!==change.currentValue?.saved_only))||changes['selectedSize'])void this.load();}
  async load(){const id=this.product?.id,token=++this.loadToken;this.error='';this.done=false;this.loadFailed=false;
   if(this.loadedProductId!==id){this.templates=[];this.components=[];this.drafts.clear();this.newTemplate();this.loadedProductId=id;}
   if(!id||this.product.saved_only){this.loading=false;return;}this.loading=true;
@@ -68,12 +69,12 @@ export class ProductPartsComponent implements OnChanges{
    ]);
    if(token!==this.loadToken)return;
    if(templates.error||components.error||!Array.isArray(templates.data)||!Array.isArray(components.data))throw Error('Could not load product parts.');
-   this.templates=templates.data as ShopTemplate[];this.components=components.data as ProductComponent[];
+   this.templates=(templates.data as ShopTemplate[]).filter(t=>!this.isSizedCart||t.size_key===this.selectedSize);this.components=components.data as ProductComponent[];
    const selected=this.templates.find(t=>t.id===this.editingId)||this.templates[0];selected?this.editTemplate(selected):this.newTemplate();
   }catch{if(token===this.loadToken){this.loadFailed=true;this.error='Could not load product parts. Your current entries are retained. Retry loading before saving.';}}
   finally{if(token===this.loadToken){this.loading=false;this.cdr?.markForCheck();}}
  }
- newTemplate(){this.editingId='';this.version=0;this.templateName=this.product?.short_name||this.product?.product_name||'';this.parts=[];this.estimates={};this.folding='';this.sizeKey=this.sizeKeys().length===1?this.sizeKeys()[0]:'';this.done=false;}
+ newTemplate(){this.editingId='';this.version=0;this.templateName=this.product?.short_name||this.product?.product_name||'';this.parts=[];this.estimates={};this.folding='';this.sizeKey=this.isSizedCart?this.selectedSize:(this.sizeKeys().length===1?this.sizeKeys()[0]:'');this.done=false;}
  editTemplate(t:ShopTemplate){const selectedFolding=this.folding,selectedSize=this.sizeKey;this.editingId=t.id;this.version=t.version;this.templateName=t.name;this.parts=structuredClone(t.parts) as AssignedPart[];this.estimates={...t.estimates};this.folding=t.folding||(this.hasFolding?selectedFolding:'');this.sizeKey=t.size_key||(this.hasFolding&&selectedSize?selectedSize:(this.sizeKeys().length===1?this.sizeKeys()[0]:''));delete this.estimates['Painting:Repaint'];this.done=false;this.error='';}
  addPart(){this.parts=[...this.parts,{id:crypto.randomUUID(),name:'',component_product_id:this.product.id}];}
  removePart(id:string){this.parts=this.parts.filter(p=>p.id!==id);for(const stage of ['Assembly','Sanding'])delete this.estimates[stage+':'+id];}
@@ -83,11 +84,12 @@ export class ProductPartsComponent implements OnChanges{
   if(this.hasFolding&&(!this.sizeKey||!this.folding)){this.error='Choose product size and Foldable or Non-foldable before saving.';return;}
   this.busy=true;const productId=this.product.id,token=this.loadToken;
   try{
-   const {data,error}=await this.db.client.rpc(this.hasFolding?'wc_shop_save_variant_template':'wc_shop_save_product_template',{p_id:this.editingId||null,p_product:productId,p_name:this.templateName.trim(),p_parts:this.parts.map(p=>({...p,name:p.name.trim()})),p_estimates:{...this.estimates},p_version:this.version||null,...(this.hasFolding?{p_size:this.sizeKey,p_folding:this.folding}:{})});
+   const rpc=this.hasFolding?'wc_shop_save_variant_template':this.isSizedCart?'wc_shop_save_sized_product_template':'wc_shop_save_product_template';
+   const {data,error}=await this.db.client.rpc(rpc,{p_id:this.editingId||null,p_product:productId,p_name:this.templateName.trim(),p_parts:this.parts.map(p=>({...p,name:p.name.trim()})),p_estimates:{...this.estimates},p_version:this.version||null,...(this.hasFolding?{p_size:this.sizeKey,p_folding:this.folding}:this.isSizedCart?{p_size:this.sizeKey}:{})});
    if(this.product.id!==productId||token!==this.loadToken)return;
    if(error)throw error;
    if(!data?.id||typeof data.name!=='string'||data.product_id!==productId||!Array.isArray(data.parts)||!data.parts.length||!data.estimates||typeof data.estimates!=='object'||!Number.isInteger(data.version)||data.version<1)throw Error('The server did not confirm the saved template.');
-   if(this.hasFolding&&(data.size_key!==this.sizeKey||data.folding!==this.folding))throw Error('The server did not confirm the saved variant.');
+   if(((this.hasFolding||this.isSizedCart)&&data.size_key!==this.sizeKey)||(this.hasFolding&&data.folding!==this.folding))throw Error('The server did not confirm the saved variant.');
    this.drafts.delete(this.sizeKey+':'+this.folding);
    this.templates=[...this.templates.filter(t=>t.id!==data.id),data].sort((a,b)=>a.name.localeCompare(b.name));this.editTemplate(data);this.done=true;
   }catch(e:any){if(this.product.id===productId&&token===this.loadToken)this.error=(e?.message||'Could not save product parts.')+' Your entries are retained. Reopen the product to check the saved template before retrying.';}
