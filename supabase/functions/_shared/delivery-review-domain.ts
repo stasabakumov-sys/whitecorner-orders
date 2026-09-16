@@ -320,7 +320,13 @@ export function composeModularPackages(order:any,products:ModularShippingProduct
  const add=(source:any,content:PackageComponent)=>{const copies=Math.max(1,Math.floor(Number(source.quantity)||1));for(let n=0;n<copies;n++)out.push({package_name:String(source.package_name||'Package'),length_mm:Number(source.length_mm),width_mm:Number(source.width_mm),height_mm:Number(source.height_mm),weight_kg:Number(source.weight_kg),contents:[content]});};
  for(const item of items){
   const product=productForItem(item,products);if(!product||componentNormal(product.product_type||'')!=='cart')continue;
-  const size=cartSize(item),options=optionEntries(item);
+  const configuredSizes=[...new Set(templates.filter(p=>p.active!==false&&p.shipping_product_id===product.id&&(p.source_type||'Base')==='Base').map(p=>componentNormal(p.size_key||'')).filter(Boolean))];
+  // Some Wix Cart products have one product-wide size saved in Products but do
+  // not expose Size as an order option. Reuse that sole configured size; if the
+  // product has multiple sizes, keep requiring an exact order value.
+  const size=cartSize(item)||(configuredSizes.length===1?configuredSizes[0]:'');
+  if(!size)continue;
+  const options=optionEntries(item);
   const optionRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&r.size_key===size&&r.rule_type==='Option'&&['Add package','Replace profile'].includes(r.effect_type||'')&&options.some(option=>option.name===componentNormal(r.match_name||'')&&(!r.match_value||option.value===componentNormal(r.match_value))));
   const addonRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&r.size_key===size&&r.rule_type==='Add-on'&&['Add package','Replace profile'].includes(r.effect_type||'')&&items.some(candidate=>componentNormal(candidate.product_name||'')===componentNormal(r.match_name||'')));
   const selectedKeys=[...optionRules,...addonRules].map(addonDescriptorKey).sort();
