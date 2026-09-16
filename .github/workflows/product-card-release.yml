@@ -29,6 +29,7 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/product-card-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
           node .github/scripts/box-drawings-migration.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
+          node .github/scripts/backdrop-drawing-links-migration.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/hub-test-orders.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Apply owner-approved product card migrations
         env:
