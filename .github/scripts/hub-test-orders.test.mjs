@@ -63,7 +63,8 @@ try {
  await db.exec(`create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
  create table storage.objects(bucket_id text,name text,metadata jsonb);alter table storage.objects enable row level security;
  create function storage.foldername(text) returns text[] language sql as $$select string_to_array($1,'/')$$;
- create table wc_delivery_packaging_profiles(signature text primary key,packages jsonb);
+ create table wc_delivery_packaging_profiles(signature text primary key,packages jsonb,shipping_product_id uuid references wc_shipping_products(id),template_item jsonb);
+ create function wc_shop_metric_size(value text) returns text language sql immutable as $$select case when $1~'^[0-9]+mm x [0-9]+mm$' then split_part($1,'mm x ',1)||'x'||split_part(split_part($1,'mm x ',2),'mm',1) end$$;
  alter table wc_shipping_products add column short_name text default '';
  create schema supabase_migrations;create table supabase_migrations.schema_migrations(version text primary key,name text,statements text[]);`);
  for(const name of ['20260909000100_box_drawings','20260909000200_backdrop_drawing_library','20260909000300_product_drawings','20260909000500_drawing_upload_limit'])await db.exec(await readFile(`supabase/migrations/${name}.sql`,'utf8'));
@@ -72,7 +73,7 @@ try {
  await db.exec('rollback');
  // Pasting through Windows SQL Editor changes line endings inside SQL literals too.
  await db.exec(releaseSql.replace(/\r?\n/g,'\r\n'));await db.exec(releaseSql);await db.exec(releaseSql.replace(/\r?\n/g,'\r\n'));
- assert.equal((await db.query('select count(*)::int n from supabase_migrations.schema_migrations')).rows[0].n,2);
+ assert.equal((await db.query('select count(*)::int n from supabase_migrations.schema_migrations')).rows[0].n,3);
  assert.deepEqual((await db.query('select paint_operations from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0].paint_operations,['First primer','First sanding','Finish coat']);
  assert.equal((await db.query('select cardinality(paint_operations) n from wc_shop_units where unit_id=$1',[startedBackdrop])).rows[0].n,5);
  const freshBackdrop=randomUUID();
@@ -93,6 +94,7 @@ try {
  assert.ok((await db.query('select completed from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0].completed.includes('Painting:finished'));
  await db.exec('reset role');
  const beforeSnapshot=(await db.query('select * from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0];
+ await db.exec('drop function wc_shop_metric_size(text)');
  const variantRelease=execFileSync(process.execPath,['.github/scripts/production-variants-release.mjs','--print-sql'],{encoding:'utf8'});
  await db.exec(variantRelease);await db.exec(variantRelease.replace(/\r?\n/g,'\r\n'));
  assert.deepEqual((await db.query('select * from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0],beforeSnapshot);

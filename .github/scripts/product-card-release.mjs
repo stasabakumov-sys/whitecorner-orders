@@ -18,7 +18,6 @@ const sql=`begin;
 select pg_advisory_xact_lock(20260913000100);
 do $prerequisites$ begin
  if to_regprocedure('public.wc_shop_save_product_template(uuid,uuid,text,jsonb,jsonb,integer)') is null then raise exception 'Product parts prerequisite missing';end if;
- if to_regprocedure('public.wc_shop_metric_size(text)') is null then raise exception 'Backdrop size parser prerequisite missing';end if;
  if not exists(select 1 from supabase_migrations.schema_migrations where version='20260913000200')
  and (select replace(prosrc,E'\\r','') from pg_proc where oid='public.wc_shop_command(uuid,text,jsonb)'::regprocedure) is distinct from replace(${literal(oldBody)},E'\\r','') then raise exception 'Shop Floor command differs from reviewed source';end if;
 end $prerequisites$;
