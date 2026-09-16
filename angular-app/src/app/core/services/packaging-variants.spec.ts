@@ -15,6 +15,22 @@ describe('Exact packaging variants',()=>{
   expect(packagingError(boxes,reviewComponents({wc_order_items:[cart,addon]}))).toBe('');
   expect(composeModularPackages({wc_order_items:[{...cart,wix_options:{...cart.wix_options,'Side shelves':'Yes'}}]},products,templates,rules).map(b=>b.package_name)).toEqual(['Cart base','Shelf','Sides']);
  });
+ it('uses the only configured product size when Wix does not include Size in the order',()=>{
+  const cart={id:'cart',product_name:'Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Colour:'White','Internal Shelf':'Yes','Side shelves':'No'}};
+  const addon={id:'doors',product_name:'Back panel with a pair of closable doors',quantity:1};
+  const products=[{id:'p',wix_product_id:'catalog',product_name:'Cart',product_type:'Cart',active:true}];
+  const templates=[{shipping_product_id:'p',size_key:'size ii',source_type:'Base',package_no:1,package_name:'Cart base',length_mm:1400,width_mm:600,height_mm:100,weight_kg:22,active:true}];
+  const rules=[{shipping_product_id:'p',size_key:'size ii',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Shelf',length_mm:1300,width_mm:500,height_mm:80,weight_kg:8,active:true},{shipping_product_id:'p',size_key:'size ii',rule_type:'Add-on',match_name:addon.product_name,effect_type:'Add package',package_count_delta:1,package_name:'Back panel',length_mm:1300,width_mm:600,height_mm:80,weight_kg:9,active:true}];
+  const boxes=composeModularPackages({wc_order_items:[cart,addon]},products,templates,rules);
+  expect(boxes.map(box=>box.package_name)).toEqual(['Cart base','Shelf','Back panel']);
+  expect(packagingError(boxes,reviewComponents({wc_order_items:[cart,addon]}))).toBe('');
+ });
+ it('does not guess a Cart size when the order omits Size and the product has multiple configured sizes',()=>{
+  const cart={id:'cart',product_name:'Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{'Internal Shelf':'Yes'}};
+  const products=[{id:'p',wix_product_id:'catalog',product_name:'Cart',product_type:'Cart',active:true}];
+  const templates=['size i','size ii'].map((size_key,index)=>({shipping_product_id:'p',size_key,source_type:'Base',package_no:1,package_name:`Cart ${index+1}`,length_mm:1000,width_mm:600,height_mm:100,weight_kg:20,active:true}));
+  expect(composeModularPackages({wc_order_items:[cart]},products,templates,[])).toEqual([]);
+ });
  it('selects one manually saved exact Main + multiple Add-ons variant',()=>{
   const cart={id:'cart',product_name:'Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Size:'Size I','Internal Shelf':'Yes','Side shelves':'Yes'}};
   const mainItem={...cart,wix_options:{Size:'Size I','Internal Shelf':'Yes','Side shelves':'Yes'}};
