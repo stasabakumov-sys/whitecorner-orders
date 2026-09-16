@@ -31,6 +31,7 @@ async function schema(target){await target.exec(`
   select case when count(distinct value)=1 and min(value)<>'' then min(value) end from n$$;
  create function wc_shop_resolved_variant_size(options jsonb,manual_sizes text) returns text language sql immutable as $$
   select case when options ? 'Size' then replace(lower(options->>'Size'),'cm','') else replace(lower(btrim(manual_sizes)),'x','0x')||'0' end$$;
+ create function wc_cart_size_key(jsonb) returns text language sql immutable as $$select null::text$$;
  create function wc_shop_validate_parts(parts jsonb,estimates jsonb) returns void language plpgsql as $$begin if jsonb_typeof(parts) is distinct from 'array' or jsonb_array_length(parts)=0 then raise exception 'Add product parts before CNC';end if;end$$;
  create function wc_assert_delivery_context(uuid,timestamptz,jsonb,jsonb,timestamptz) returns void language sql as $$select$$;
  create function wc_set_reviewed_production_status(uuid,uuid,text,uuid,text,timestamptz,jsonb,jsonb,timestamptz) returns jsonb language sql as $$select null::jsonb$$;
@@ -54,6 +55,7 @@ async function moveToCnc(value){return db.query("select wc_set_reviewed_producti
 try{
  await schema(db);
  await db.exec(await readFile('supabase/migrations/20260914000500_shop_floor_cnc_auto_snapshot.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20260916000100_backdrop_default_raw_finish.sql','utf8'));
 
  const painted=await fixture();await moveToCnc(painted);
  let snapshot=(await db.query('select s.*,u.production_status from wc_shop_units s join wc_production_units u on u.id=s.unit_id where s.unit_id=$1',[painted.unit])).rows[0];
@@ -68,10 +70,13 @@ try{
  const backdrop=await fixture({name:'Plywood Backdrop',options:{Foldable:'YES',Colour:'White'},size:'1900x1000',folding:'foldable',manualSizes:'190x100'});await moveToCnc(backdrop);
  assert.equal((await db.query('select finish from wc_shop_units where unit_id=$1',[backdrop.unit])).rows[0].finish,'painted');
 
+ const defaultRawBackdrop=await fixture({name:'Ripple Arch Backdrop',options:{Foldable:'YES'},size:'1900x1000',folding:'foldable',manualSizes:'190x100'});await moveToCnc(defaultRawBackdrop);
+ assert.equal((await db.query('select finish from wc_shop_units where unit_id=$1',[defaultRawBackdrop.unit])).rows[0].finish,'raw');
+
  const ambiguous=await fixture({templates:2});await assert.rejects(moveToCnc(ambiguous),/Multiple Estimated min templates match/);
  assert.equal((await db.query('select production_status from wc_production_units where id=$1',[ambiguous.unit])).rows[0].production_status,'New');
  const noTemplate=await fixture({templates:0});await assert.rejects(moveToCnc(noTemplate),/No Estimated min template matches/);
- const noFinish=await fixture({options:{Size:'100x50'}});await assert.rejects(moveToCnc(noFinish),/order finish is unclear/);
+ const noFinish=await fixture({options:{Pans:'None'}});await assert.rejects(moveToCnc(noFinish),/order finish is unclear/);
 
  const noProductOrder=randomUUID(),noProductItem=randomUUID(),noProductUnit=randomUUID();
  await db.query('insert into wc_orders(id) values($1)',[noProductOrder]);
@@ -79,8 +84,8 @@ try{
  await db.query("insert into wc_production_units values($1,$2,'New')",[noProductUnit,noProductItem]);
  await assert.rejects(moveToCnc({order:noProductOrder,unit:noProductUnit}),/No Product card matches/);
 
- assert.equal((await db.query("select count(*)::int n from wc_order_activity where activity_type='status_change'")).rows[0].n,3);
- console.log('Automatic CNC snapshot: painted/raw success, immutable snapshot and actionable ambiguity errors passed.');
+ assert.equal((await db.query("select count(*)::int n from wc_order_activity where activity_type='status_change'")).rows[0].n,4);
+ console.log('Automatic CNC snapshot: painted/raw/default RAW Backdrop success, immutable snapshot and actionable ambiguity errors passed.');
 }catch(error){console.error(error.message,error.where||'');process.exitCode=1;}finally{await db.close();}
 
 if(!process.exitCode){
@@ -91,10 +96,14 @@ if(!process.exitCode){
    insert into supabase_migrations.schema_migrations values
    ('20260912000100','shop_floor_tracker',array['baseline']),
    ('20260914000300','shop_floor_auto_assignment',array['automatic']),
-   ('20260914000400','shop_floor_skip_zero_sanding',array['zero']);`);
+   ('20260914000400','shop_floor_skip_zero_sanding',array['zero']),
+   ('20260915000200','cart_size_profiles',array['cart-size']);`);
   const sql=execFileSync(process.execPath,['.github/scripts/shop-floor-cnc-auto-snapshot-release.mjs','--print-sql'],{encoding:'utf8'});
   await release.exec(sql);await release.exec(sql);
   assert.equal((await release.query("select count(*)::int n from supabase_migrations.schema_migrations where version='20260914000500'")).rows[0].n,1);
-  console.log('Automatic CNC snapshot wrapper: first application and exact replay passed.');
+  const rawDefaultSql=execFileSync(process.execPath,['.github/scripts/backdrop-default-raw-finish-release.mjs','--print-sql'],{encoding:'utf8'});
+  await release.exec(rawDefaultSql);await release.exec(rawDefaultSql);
+  assert.equal((await release.query("select count(*)::int n from supabase_migrations.schema_migrations where version='20260916000100'")).rows[0].n,1);
+  console.log('Automatic CNC snapshot wrappers: first application and exact replay passed.');
  }catch(error){console.error(error.message,error.where||'');process.exitCode=1;}finally{await release.close();}
 }
