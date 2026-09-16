@@ -10,17 +10,17 @@ describe('Product card cost profiles',()=>{
     const rows=[{variant_key:'current',kind:'main',options:{}}];
     expect(currentProductCostProfiles(rows)).toEqual(rows);
   });
-  it('adds an editable Non-foldable material profile when only Foldable exists',()=>{
+  it('creates exactly one material editor per folding option, independent of size',()=>{
     const foldable={variant_key:'fold',kind:'main',options:{Size:'200cm x 100cm',Foldable:'YES'},profile:{lines:[{material_id:'mdf',quantity:1}],materials_confirmed:true}};
     const rows=backdropCostProfiles('product','Plane Arch',['200cm x 100cm'],[foldable]);
-    expect(rows).toHaveLength(2);expect(rows[0]).toEqual(expect.objectContaining({variant_key:'fold',size_key:'2000x1000',folding:'foldable'}));expect(rows[1]).toEqual(expect.objectContaining({backdrop_material_scope:true,size_key:'2000x1000',folding:'nonfoldable',shipping_product_id:'product'}));
+    expect(rows).toHaveLength(2);expect(rows.map(row=>[row.size_key,row.folding])).toEqual([[null,'foldable'],[null,'nonfoldable']]);expect(rows[0].legacy_lines).toEqual(foldable.profile.lines);expect(rows[1]).toEqual(expect.objectContaining({backdrop_material_scope:true,shipping_product_id:'product'}));
   });
-  it('creates material editors from a unitless manual size without relaxing Wix parsing',()=>{
-    expect(backdropCostProfiles('product','Plane Arch',['190x100'],[],true).map(row=>[row.size_key,row.folding])).toEqual([['1900x1000','foldable'],['1900x1000','nonfoldable']]);
-    expect(backdropCostProfiles('product','Plane Arch',['190x100'],[])).toEqual([]);
+  it('does not create duplicate material editors for additional sizes',()=>{
+    expect(backdropCostProfiles('product','Plane Arch',['190x100','180cm x 90cm'],[],true).map(row=>row.folding)).toEqual(['foldable','nonfoldable']);
+    expect(backdropCostProfiles('product','Plane Arch',[],[]).map(row=>row.folding)).toEqual(['foldable','nonfoldable']);
   });
   it('uses the saved structural material profile instead of a generated editor row',()=>{
-    const saved={variant_key:'saved',kind:'main',options:{Size:'200cm x 100cm',Foldable:'NO'},backdrop_material_scope:true,profile:{materials_confirmed:true}};
+    const saved={variant_key:'saved',kind:'main',options:{Foldable:'NO'},backdrop_material_scope:true,profile:{materials_confirmed:true,template_item:{profile_scope:'backdrop-structure-v2'}}};
     const orderVariant={variant_key:'order',kind:'main',options:{Size:'200cm x 100cm',Foldable:'NO',Colour:'Raw'},profile:{materials_confirmed:true}};
     const rows=backdropCostProfiles('product','Plane Arch',['200cm x 100cm'],[orderVariant,saved]);expect(rows.find(row=>row.folding==='nonfoldable')).toEqual(expect.objectContaining({variant_key:'saved',backdrop_material_scope:true}));
   });

@@ -3,6 +3,11 @@ import {backdropSizeKey,optionSizes} from '../shipping-data/product-sizes';
 import {plannedTotal,plannedWorkRows,WorkRate} from './planned-work-cost';
 
 export type Folding='foldable'|'nonfoldable';
+export function backdropFinishModes(product:any):boolean[]{
+ const label=`${product?.product_name||''} ${product?.short_name||''}`.toLowerCase();
+ const raw=/(^|[^a-z])raw([^a-z]|$)/.test(label),painted=/(^|[^a-z])painted([^a-z]|$)/.test(label);
+ return raw&&painted?[false,true]:painted?[true]:[false];
+}
 export function foldingOption(options:any):Folding|''{
  const values=Object.entries(options||{}).filter(([key])=>key.trim().toLowerCase()==='foldable').map(([,value]:any)=>String(value?.original??value?.value??value??'').trim().toLowerCase().replace(/[\s_-]/g,''));
  const mapped=[...new Set(values.map(value=>['yes','true','foldable'].includes(value)?'foldable':['no','false','nonfoldable','unfoldable'].includes(value)?'nonfoldable':''))];
@@ -11,27 +16,25 @@ export function foldingOption(options:any):Folding|''{
 export function productionSize(options:any){const sizes=[...new Set(optionSizes(options).map(backdropSizeKey))];return sizes.length===1?sizes[0]:'';}
 export function foldingLabel(fold:string|null|undefined){return fold==='foldable'?'Foldable':fold==='nonfoldable'?'Non-foldable':'Variant not assigned';}
 export function templateVariantLabel(template:ShopTemplate){return template.size_key&&template.folding?`${template.size_key.split('x').map(n=>Number(n)/10).join(' × ')} cm · ${foldingLabel(template.folding)}`:'Size / folding not assigned';}
-export interface ProductionCostRow{size:string;folding:Folding;painted:boolean;materials:number|null;work:number|null;total:number|null;issues:string[]}
-export function productionCostRows(sizes:string[],templates:ShopTemplate[],profiles:any[],materials:any[],rates:WorkRate[],productName:string,productId:string):ProductionCostRow[]{
- return sizes.flatMap(size=>(['foldable','nonfoldable'] as Folding[]).flatMap(folding=>{
-  const matching=templates.filter(t=>t.product_id===productId&&t.size_key===size&&t.folding===folding);
-  const candidates=profiles.filter(p=>p.kind==='main'&&!p.standard_top_excluded&&productionSize(p.options)===size&&foldingOption(p.options)===folding);
+export interface ProductionCostRow{folding:Folding;painted:boolean;materials:number|null;work:number|null;total:number|null;issues:string[]}
+function materialTotal(profile:any,materials:any[]):number|null{
+ if(!profile?.materials_confirmed)return null;let cents=0;
+ for(const line of profile.lines||[]){const material=materials.find(m=>m.id===line.material_id),quantity=Number(line.quantity);if(!material?.active||material.price_gst==null||!Number.isFinite(Number(material.price_gst))||!Number.isFinite(quantity)||quantity<=0)return null;cents+=Math.round(Number(material.price_gst)*quantity*100);}
+ return cents/100;
+}
+export function productionCostRows(templates:ShopTemplate[],profiles:any[],paintProfile:any,materials:any[],rates:WorkRate[],productName:string,productId:string,finishModes:boolean[]):ProductionCostRow[]{
+ return (['foldable','nonfoldable'] as Folding[]).flatMap(folding=>{
+  const shared=templates.filter(t=>t.product_id===productId&&!t.size_key&&t.folding===folding),legacy=templates.filter(t=>t.product_id===productId&&!!t.size_key&&t.folding===folding);
+  const matching=shared.length?shared:legacy.length===1?legacy:[];
+  const candidates=profiles.filter(p=>p.kind==='main'&&!p.standard_top_excluded&&foldingOption(p.options)===folding);
   let materialCost:number|null=null;const issues:string[]=[];
   if(candidates.length!==1)issues.push(candidates.length?'Multiple material compositions: review profiles':'Materials not configured');
-  else{
-   const group=candidates[0].shared_parts?.length?candidates[0].shared_parts:[candidates[0]];
-   const saved=group.map((p:any)=>p.profile).filter(Boolean);
-   if(!saved.length||saved.some((p:any)=>!p.materials_confirmed))issues.push('Materials not confirmed');
-   else{
-    const signature=(p:any)=>JSON.stringify((p.lines||[]).map((l:any)=>[l.material_id,Number(l.quantity)]).sort((a:any,b:any)=>String(a[0]).localeCompare(String(b[0]))));
-    if(new Set(saved.map(signature)).size>1)issues.push('Material profiles disagree across colours');
-    else{let cents=0;for(const line of saved[0].lines||[]){const m=materials.find(m=>m.id===line.material_id);const q=Number(line.quantity);if(!m?.active||m.price_gst==null||!Number.isFinite(Number(m.price_gst))||!Number.isFinite(q)||q<=0){issues.push('Material price or quantity missing');break;}cents+=Math.round(Number(m.price_gst)*q*100);}if(!issues.length)materialCost=cents/100;}
-   }
-  }
+  else{materialCost=materialTotal(candidates[0].profile,materials);if(materialCost===null)issues.push(candidates[0].profile?.materials_confirmed?'Material price or quantity missing':'Materials not confirmed');}
   if(matching.length!==1)issues.push(matching.length?'Multiple time templates: review Estimated min':'Estimated time not configured');
-  return [false,true].map(painted=>{const rowIssues=[...issues];let work:number|null=null;
-   if(matching.length===1){const mainOnly={...matching[0],parts:matching[0].parts.filter(part=>!part.component_product_id||part.component_product_id===productId)};if(!mainOnly.parts.length)rowIssues.push('Main product parts not configured');else{work=plannedTotal(plannedWorkRows(mainOnly,rates,productName),painted);if(work===null)rowIssues.push('Minutes or hourly rates missing');}}
-   return{size,folding,painted,materials:materialCost,work,total:materialCost===null||work===null?null:Math.round((materialCost+work)*100)/100,issues:rowIssues};
+  return finishModes.map(painted=>{const rowIssues=[...issues];let work:number|null=null,materialsCost=materialCost;
+   if(painted){const paintMaterials=materialTotal(paintProfile,materials);if(paintMaterials===null)rowIssues.push(paintProfile?.materials_confirmed?'Paint price or quantity missing':'Painting materials not confirmed');else if(materialsCost!==null)materialsCost=Math.round((materialsCost+paintMaterials)*100)/100;}
+   if(matching.length===1){const estimates={...matching[0].estimates,...(painted?paintProfile?.estimates||{}:{})},mainOnly={...matching[0],estimates,parts:matching[0].parts.filter(part=>!part.component_product_id||part.component_product_id===productId)};if(!mainOnly.parts.length)rowIssues.push('Main product parts not configured');else{work=plannedTotal(plannedWorkRows(mainOnly,rates,productName),painted);if(work===null)rowIssues.push('Minutes or hourly rates missing');}}
+   return{folding,painted,materials:materialsCost,work,total:materialsCost===null||work===null?null:Math.round((materialsCost+work)*100)/100,issues:rowIssues};
   });
- }));
+ });
 }

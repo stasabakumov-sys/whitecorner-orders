@@ -34,6 +34,10 @@ on:
       - '.github/scripts/shop-floor-cnc-auto-snapshot*'
       - '.github/workflows/shop-floor-cnc-auto-snapshot-release.yml'
       - 'supabase/migrations/*_backdrop_default_raw_finish.sql'
+      - 'supabase/migrations/*_backdrop_shared_costs.sql'
+      - '.github/scripts/backdrop-shared-costs-migration.test.mjs'
+      - '.github/scripts/backdrop-shared-costs-release.mjs'
+      - '.github/workflows/backdrop-shared-costs-release.yml'
       - '.github/scripts/backdrop-default-raw-finish-release.mjs'
       - '.github/workflows/backdrop-default-raw-finish-release.yml'
       - '.github/scripts/partner-pans*'
@@ -80,6 +84,10 @@ on:
       - '.github/scripts/shop-floor-cnc-auto-snapshot*'
       - '.github/workflows/shop-floor-cnc-auto-snapshot-release.yml'
       - 'supabase/migrations/*_backdrop_default_raw_finish.sql'
+      - 'supabase/migrations/*_backdrop_shared_costs.sql'
+      - '.github/scripts/backdrop-shared-costs-migration.test.mjs'
+      - '.github/scripts/backdrop-shared-costs-release.mjs'
+      - '.github/workflows/backdrop-shared-costs-release.yml'
       - '.github/scripts/backdrop-default-raw-finish-release.mjs'
       - '.github/workflows/backdrop-default-raw-finish-release.yml'
       - '.github/scripts/partner-pans*'
@@ -146,6 +154,7 @@ jobs:
           node .github/scripts/packaging-variant-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/box-drawings-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/backdrop-drawing-links-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+          node .github/scripts/backdrop-shared-costs-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse Shop Floor migration
         run: node .github/scripts/shop-floor.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse Shop Floor automatic composition
