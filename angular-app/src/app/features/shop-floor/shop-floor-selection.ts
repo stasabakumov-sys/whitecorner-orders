@@ -1,11 +1,9 @@
 import type {ShopTemplate} from './shop-floor.models';
-import {foldingOption,productionSize} from '../costing/production-cost';
+import {foldingOption,optionFinish,productionSize} from '../costing/production-cost';
 import {manualBackdropSizeKey,optionSizes} from '../shipping-data/product-sizes';
 import {cartSizeFromOptions} from '../shipping-data/cart-size';
 
 export type ShopCatalogProduct={id:string;wix_product_id?:string|null;product_name:string;product_type?:string|null;manual_sizes?:string|null};
-
-function optionText(value:unknown){return String((value as any)?.original??(value as any)?.value??value??'').trim();}
 
 export function catalogProductForItem(item:any,catalog:ShopCatalogProduct[]){
  const external=String(item?.catalog_reference?.catalogItemId||item?.catalog_reference?.productId||'');
@@ -23,11 +21,7 @@ export function resolvedProductionSize(item:any,product?:ShopCatalogProduct){
 }
 
 export function orderedFinish(options:any,productName=''):'raw'|'painted'|''{
- const values=Object.entries(options||{}).filter(([key])=>/^(colou?r|finish)$/i.test(key.trim())).map(([,value])=>optionText(value).toLowerCase()).filter(Boolean);
- const unique=[...new Set(values)];
- if(!unique.length&&/backdrop/i.test(productName))return 'raw';
- if(unique.length!==1)return '';
- return /^(raw|unpainted|natural)(\b|\s*\/)/.test(unique[0])?'raw':'painted';
+ const finish=optionFinish(options);return finish===null&&/backdrop/i.test(productName)?'raw':finish||'';
 }
 
 export function matchingProductTemplates(templates:ShopTemplate[],product:ShopCatalogProduct|undefined,item:any){

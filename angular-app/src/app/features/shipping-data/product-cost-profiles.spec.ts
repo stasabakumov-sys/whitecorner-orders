@@ -22,7 +22,7 @@ describe('Product card cost profiles',()=>{
   it('uses the saved structural material profile instead of a generated editor row',()=>{
     const saved={variant_key:'saved',kind:'main',options:{Foldable:'NO'},backdrop_material_scope:true,profile:{materials_confirmed:true,template_item:{profile_scope:'backdrop-structure-v2'}}};
     const orderVariant={variant_key:'order',kind:'main',options:{Size:'200cm x 100cm',Foldable:'NO',Colour:'Raw'},profile:{materials_confirmed:true}};
-    const rows=backdropCostProfiles('product','Plane Arch',['200cm x 100cm'],[orderVariant,saved]);expect(rows.find(row=>row.folding==='nonfoldable')).toEqual(expect.objectContaining({variant_key:'saved',backdrop_material_scope:true}));
+    const rows=backdropCostProfiles('product','Plane Arch',['200cm x 100cm'],[orderVariant,saved]);expect(rows.find(row=>row.folding==='nonfoldable')).toEqual(expect.objectContaining({variant_key:'saved',backdrop_material_scope:true,shipping_product_id:'product'}));
   });
   it('shows one Cart base plus both independent option editors',()=>{
     const product='cart-product';

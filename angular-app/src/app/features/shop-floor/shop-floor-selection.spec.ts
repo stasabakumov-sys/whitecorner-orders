@@ -22,6 +22,9 @@ describe('Automatic Shop Floor product composition',()=>{
   expect(orderedFinish({Size:'190x100'})).toBe('');
   expect(orderedFinish({Size:'190x100'},product.product_name)).toBe('raw');
   expect(orderedFinish({Colour:'White'},product.product_name)).toBe('painted');
+  expect(orderedFinish({Paint:'Yes'},product.product_name)).toBe('painted');
+  expect(orderedFinish({Paint:'No'},product.product_name)).toBe('raw');
   expect(orderedFinish({Colour:'Raw',Finish:'Painted'},product.product_name)).toBe('');
+  expect(orderedFinish({Colour:'Raw',Paint:'Yes'},product.product_name)).toBe('');
  });
 });
