@@ -73,15 +73,16 @@ export function currentProductCostProfiles(rows:any[]){
 }
 
 function variantKey(parts:any[]){return `[${parts.map(part=>JSON.stringify(part)).join(', ')}]`;}
-export function cartCostProfiles(productId:string,rows:any[],sizeKey:string){
+export function cartCostProfiles(productId:string,rows:any[],sizeKey:string,productName='Cart'){
   const current=rows.filter(row=>{try{return ['catalog-v4-cart-base','catalog-v4-cart-option'].includes(JSON.parse(row.variant_key)?.[0]);}catch{return false;}});
   const found=current.find(row=>{try{const key=JSON.parse(row.variant_key);return key?.[0]==='catalog-v4-cart-base'&&key?.[2]===sizeKey;}catch{return false;}});
-  const source=found||current.find(row=>row.kind==='main')||rows.find(row=>row.kind==='main');
-  if(!source||!sizeKey)return [];
-  const base=found||{...source,variant_key:variantKey(['catalog-v4-cart-base',productId,sizeKey,'complete']),kind:'main',options:{Size:sizeKey},profile:null,legacy_lines:null,standard_top_excluded:false};
+  if(!sizeKey)return [];
+  const source=found||current.find(row=>row.kind==='main')||rows.find(row=>row.kind==='main')||{shipping_product_id:productId,product_name:productName,item_id:null,main_item_id:null,multiplier:1,has_pans:false};
+  const base={...(found||source),variant_key:found?.variant_key||variantKey(['catalog-v4-cart-base',productId,sizeKey,'complete']),kind:'main',options:{Size:sizeKey},profile:found?.profile||null,legacy_lines:found?.legacy_lines||null,standard_top_excluded:false,cart_material_scope:!found?.item_id,size_key:sizeKey};
   const options=['Internal Shelf','Side shelves'].map(name=>{
     const key=variantKey(['catalog-v4-cart-option',productId,sizeKey,name.toLowerCase(),'yes']);
-    return current.find(row=>row.variant_key===key)||{...base,variant_key:key,kind:`option:${name}`,options:{[name]:'Yes'},profile:null,legacy_lines:null,has_pans:false,standard_top_excluded:false};
+    const saved=current.find(row=>row.variant_key===key);
+    return {...(saved||base),variant_key:key,kind:`option:${name}`,options:{Size:sizeKey,[name]:'Yes'},profile:saved?.profile||null,legacy_lines:saved?.legacy_lines||null,has_pans:false,standard_top_excluded:false,cart_material_scope:!saved?.item_id,size_key:sizeKey};
   });
   return [base,...options];
 }
@@ -316,7 +317,7 @@ export class ShippingDataComponent implements OnInit {
   selectedProduct = computed(() => this.products().find(p => p.id===this.selectedId()) ?? null);
 
   constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute,@Optional() public costing:CostingService=new CostingService(supabase),@Optional() private cdr?:ChangeDetectorRef) {}
-  costProfiles(id:string,sizeKey=''){const product=this.products().find(p=>p.id===id) as ShippingProduct;const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,shipping_product_id:profile.shipping_product_id,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile,backdrop_material_scope:['backdrop-structure','backdrop-structure-v2'].includes(profile.template_item?.profile_scope)}));const rows=currentProductCostProfiles([...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()]);if(this.isCart(product))return cartCostProfiles(id,rows,sizeKey);return this.isBackdrop(product)?backdropCostProfiles(id,product.product_name,this.productSizes(product),rows,!this.wixSizes(product).length):rows;}
+  costProfiles(id:string,sizeKey=''){const product=this.products().find(p=>p.id===id) as ShippingProduct;const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,shipping_product_id:profile.shipping_product_id,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile,backdrop_material_scope:['backdrop-structure','backdrop-structure-v2'].includes(profile.template_item?.profile_scope),cart_material_scope:profile.template_item?.profile_scope==='cart-size-materials'}));const rows=currentProductCostProfiles([...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()]);if(this.isCart(product))return cartCostProfiles(id,rows,sizeKey,product.product_name);return this.isBackdrop(product)?backdropCostProfiles(id,product.product_name,this.productSizes(product),rows,!this.wixSizes(product).length):rows;}
   failedImages=new Set<string>();
   productImage(p:ShippingProduct){
     const items=this.costing.orders().flatMap(o=>o.wc_order_items||[]);
