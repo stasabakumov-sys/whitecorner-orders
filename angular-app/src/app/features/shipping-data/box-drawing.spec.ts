@@ -18,9 +18,19 @@ describe('Private saved box drawings',()=>{
   c.box={length_mm:123};expect(c.current.filename).toBe('box.cdr');
  });
  it('uploads CDR unchanged and links it only after successful storage upload',async()=>{
-  const {c,bucket,rpc}=setup();await c.upload(event());
-  expect(bucket.upload.mock.calls[0][1].name).toBe('box.cdr');expect(bucket.upload.mock.calls[0][2]).toEqual({contentType:'application/octet-stream',upsert:false});
+  const {c,bucket,rpc}=setup(),file=new File([new Uint8Array(25600)],'box.cdr',{type:'application/x-coreldraw'}),selected={target:{files:[file],value:'chosen'}} as unknown as Event;await c.upload(selected);
+  expect(bucket.upload.mock.calls[0][1]).toBe(file);expect(bucket.upload.mock.calls[0][2]).toEqual({contentType:'application/octet-stream',upsert:false});
   expect(rpc).toHaveBeenCalledWith('wc_attach_box_drawing',expect.objectContaining({p_signature:'profile',p_index:0,p_box:{length_mm:970},p_filename:'box.cdr',p_size:25600,p_expected:null}));expect(c.current.filename).toBe('box.cdr');
+ });
+ it('explains how to recover when the browser cannot read or send a selected file',async()=>{
+  const {c,bucket,rpc}=setup();bucket.upload.mockRejectedValue(new TypeError('Failed to fetch'));await c.upload(event());
+  expect(c.error).toContain('browser could not read or send');expect(c.error).toContain('OneDrive');expect(rpc).not.toHaveBeenCalled();
+ });
+ it('unblocks the page after 20 seconds and discards a late upload',async()=>{
+  vi.useFakeTimers();try{const {c,bucket,rpc}=setup();let finish:any;bucket.upload.mockReturnValue(new Promise(resolve=>{finish=resolve;}));const uploading=c.upload(event(29*1024));await vi.advanceTimersByTimeAsync(20000);await uploading;
+   expect(c.error).toContain('timed out after 20 seconds');expect(c.busy).toBe(false);expect(c.pendingBytes).toBe(0);expect(rpc).not.toHaveBeenCalled();
+   finish({data:{path:'late'},error:null});await vi.runAllTimersAsync();expect(bucket.remove).toHaveBeenCalled();
+  }finally{vi.useRealTimers();}
  });
  it('keeps the previous drawing when a replacement upload fails',async()=>{
   const {c,bucket,rpc}=setup();c.record={filename:'old.cdr',object_path:'old',box_snapshot:c.box,revision:'old'};bucket.upload.mockResolvedValue({error:new Error('Upload failed')});
