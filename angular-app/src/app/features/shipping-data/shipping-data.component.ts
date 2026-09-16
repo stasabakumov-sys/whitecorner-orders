@@ -16,11 +16,12 @@ import {PackagingVariantsComponent,sharedBackdropLayoutKey} from './packaging-va
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
 import {ProductWorkCostComponent} from '../costing/product-work-cost.component';
 import {CostingService} from '../costing/costing.service';
-import {Folding,foldingOption,productionSize} from '../costing/production-cost';
+import {Folding,foldingOption} from '../costing/production-cost';
 import {productId,componentNormal} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {shippingProfileCatalog,savedProfileOptions} from '../../core/utils/shipping-profile-catalog';
 import {cartSizeFromOptions,cartSizeKey,cartSizeRows} from './cart-size';
 import {CartMainPackagingComponent} from './cart-main-packaging.component';
+import {BackdropPaintProfileComponent} from './backdrop-paint-profile.component';
 
 type ShippingProduct = {
   id: string;
@@ -33,6 +34,7 @@ type ShippingProduct = {
   saved_profiles?:any[];
   saved_only?:boolean;
   product_source?:'catalog'|'hub_test';
+  backdrop_paint_profile?:any;
 };
 
 type ShippingPackage = {
@@ -85,25 +87,22 @@ export function cartCostProfiles(productId:string,rows:any[],sizeKey:string){
 }
 export function cartCostProfileLabel(part:any){return part.kind==='main'?'Main':part.kind==='option:Internal Shelf'?'Shelf':'Side shelves';}
 
-function costProfileGroupKey(p:any){return `${p.backdrop_material_scope?'structural':'order'}|${p.kind}|${p.standard_top_excluded?'topless':'complete'}|${JSON.stringify(Object.fromEntries(Object.entries(p.options||{}).filter(([key])=>!['colour','color'].includes(key.toLowerCase())).sort(([a],[b])=>a.localeCompare(b))))}`;}
 export function backdropCostProfiles(productId:string,productName:string,sizes:string[],rows:any[],manualSizes=false){
- const groups=new Map<string,any[]>();for(const row of rows){const key=costProfileGroupKey(row);groups.set(key,[...(groups.get(key)||[]),row]);}
- const grouped=[...groups.values()].map(parts=>({...parts[0],shared_parts:parts}));
- const main=grouped.filter(row=>row.kind==='main'&&!row.standard_top_excluded),other=grouped.filter(row=>row.kind!=='main'||row.standard_top_excluded);
- const parse=manualSizes?manualBackdropSizeKey:backdropSizeKey;
- const sizeKeys=[...new Set([...sizes.map(parse),...main.map(row=>productionSize(row.options))].filter(Boolean))];
- const variants=sizeKeys.flatMap(size=>(['foldable','nonfoldable'] as Folding[]).map(folding=>{
-  const matching=main.filter(row=>productionSize(row.options)===size&&foldingOption(row.options)===folding);
-  const found=matching.find(row=>row.backdrop_material_scope)||matching.find(row=>!row.backdrop_material_scope);
-  return found?{...found,size_key:found.size_key||size,folding:found.folding||folding}:{variant_key:`backdrop-material:${productId}:${size}:${folding}`,shipping_product_id:productId,product_name:productName,kind:'main',multiplier:1,standard_top_excluded:false,options:{Size:size.split('x').map(value=>Number(value)/10+'cm').join(' x '),Foldable:folding==='foldable'?'YES':'NO'},backdrop_material_scope:true,size_key:size,folding};
- }));
+ const main=rows.filter(row=>row.kind==='main'&&!row.standard_top_excluded),other=rows.filter(row=>row.kind!=='main'||row.standard_top_excluded);
+ const variants=(['foldable','nonfoldable'] as Folding[]).map(folding=>{
+  const shared=main.find(row=>row.backdrop_material_scope&&row.profile?.template_item?.profile_scope==='backdrop-structure-v2'&&foldingOption(row.options)===folding);
+  if(shared)return{...shared,size_key:null,folding};
+  const legacy=main.filter(row=>foldingOption(row.options)===folding).map(row=>row.profile).filter(Boolean);
+  const signatures=[...new Set(legacy.map(profile=>JSON.stringify((profile.lines||[]).map((line:any)=>[line.material_id,Number(line.quantity)]).sort())))];
+  return{variant_key:JSON.stringify(['backdrop-structure-v2',productId,folding]),shipping_product_id:productId,product_name:productName,kind:'main',multiplier:1,standard_top_excluded:false,options:{Foldable:folding==='foldable'?'YES':'NO'},backdrop_material_scope:true,size_key:null,folding,profile:null,legacy_lines:signatures.length===1?legacy[0]?.lines||[]:[]};
+ });
  return [...variants,...other];
 }
 
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[BackdropPaintProfileComponent,PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -161,9 +160,10 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             <section class="shipsection"><h3>Product cost · incl. GST</h3>
             <p class="small">Add materials here. Planned work is calculated above from Estimated min and Work Rates. Order Costing shows the combined order summary.</p>
             @if(costing.error()){<p role="alert">{{costing.error()}}</p>}
-            @if(isBackdrop(p)){<p class="small">Raw and painted use one material profile. Painting changes only the calculated work cost above.</p>}
+            @if(isBackdrop(p)){<p class="small">All sizes reuse one Foldable profile and one Non-foldable profile. Painting is stored once for the whole product.</p>}
             @for(part of costProfiles(p.id,activeCartSize(p));track part.variant_key){<details><summary>Edit materials · {{costProfileLabel(part,p.id)}}</summary><app-catalog-cost-editor [part]="part" [showWork]="false" [hideColour]="isBackdrop(p)" /></details>}
             @empty{<p class="mut">No order variant available yet. Open Add materials on an order to define its costs.</p>}
+            @if(isBackdrop(p)){<app-backdrop-paint-profile [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" />}
             </section>
             }
             @if(detailTab==='packing'){
@@ -315,7 +315,7 @@ export class ShippingDataComponent implements OnInit {
   selectedProduct = computed(() => this.products().find(p => p.id===this.selectedId()) ?? null);
 
   constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute,@Optional() public costing:CostingService=new CostingService(supabase),@Optional() private cdr?:ChangeDetectorRef) {}
-  costProfiles(id:string,sizeKey=''){const product=this.products().find(p=>p.id===id) as ShippingProduct;const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile,backdrop_material_scope:profile.template_item?.profile_scope==='backdrop-structure'}));const rows=currentProductCostProfiles([...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()]);if(this.isCart(product))return cartCostProfiles(id,rows,sizeKey);return this.isBackdrop(product)?backdropCostProfiles(id,product.product_name,this.productSizes(product),rows,!this.wixSizes(product).length):rows;}
+  costProfiles(id:string,sizeKey=''){const product=this.products().find(p=>p.id===id) as ShippingProduct;const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile,backdrop_material_scope:['backdrop-structure','backdrop-structure-v2'].includes(profile.template_item?.profile_scope)}));const rows=currentProductCostProfiles([...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()]);if(this.isCart(product))return cartCostProfiles(id,rows,sizeKey);return this.isBackdrop(product)?backdropCostProfiles(id,product.product_name,this.productSizes(product),rows,!this.wixSizes(product).length):rows;}
   failedImages=new Set<string>();
   productImage(p:ShippingProduct){
     const items=this.costing.orders().flatMap(o=>o.wc_order_items||[]);
