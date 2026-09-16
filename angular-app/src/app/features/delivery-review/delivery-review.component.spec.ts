@@ -1,4 +1,5 @@
 import {TestBed} from '@angular/core/testing';
+import {signal} from '@angular/core';
 import {describe,it,expect,vi} from 'vitest';
 import {DeliveryReviewComponent} from './delivery-review.component';
 import {DeliveryReviewService} from '../../core/services/delivery-review.service';
@@ -36,6 +37,17 @@ describe('Delivery review UI',()=>{
   expect(c.editable({...row,state:'approved_without_quote'})).toBe(true);
   expect(c.canApproveWithoutQuote({...row,quote_attempted_at:'2026-09-07'})).toBe(false);
   expect(c.canApproveWithoutQuote({...row,token:'worker'})).toBe(false);
+ });
+ it('loads one saved packaging composition for the Cart and its linked add-on',async()=>{
+  const cart={id:'cart',product_name:'Mobile Bar Cart',quantity:1},addon={id:'doors',product_name:'Back panel with doors',quantity:1};
+  const boxes=[{package_name:'Main + doors',contents:[{order_item_id:'cart'},{order_item_id:'doors'}]}];
+  const variantPackages=vi.fn().mockResolvedValue(boxes),row:any={order_id:'order',wc_orders:{wc_order_items:[cart,addon]}};
+  const service:any={rows:signal([row]),busy:signal(false),error:signal(''),variantPackages};
+  const component=new DeliveryReviewComponent(service);component.selectedId.set('order');
+  vi.spyOn(component,'productGroups').mockReturnValue([{id:'cart',item:cart,sources:[cart,addon],boxes:[]} as any]);
+  await component.loadVariant(addon);
+  expect(variantPackages).toHaveBeenCalledExactlyOnceWith(addon,{wc_order_items:[cart,addon]});
+  expect(component.draft).toEqual(boxes);expect(component.owner(component.draft[0])).toBe('cart');
  });
  it('colors margin at exact 10 and 20 percent thresholds without changing the outcome',()=>{
   const service=new DeliveryReviewService({} as any),outcome=vi.spyOn(service,'outcome');

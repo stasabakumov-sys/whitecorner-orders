@@ -291,12 +291,13 @@ export function reviewOutcome(review:any,order:any,currentKey?:string){
 export const hasSizeOption=(item:any)=>orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).some(label=>componentNormal(label.split(':')[0])==='size');
 export const variantItem=(item:any)=>({...item,quantity:1});
 export const variantSignature=(item:any)=>packagingSignature([variantItem(item)]);
-export interface ModularShippingProduct {id:string;wix_product_id?:string|null;product_name?:string|null;product_type?:string|null;active?:boolean}
+export interface ModularShippingProduct {id:string;wix_product_id?:string|null;product_name?:string|null;product_type?:string|null;manual_sizes?:string|null;active?:boolean}
 export interface ModularShippingPackage {shipping_product_id:string;size_key?:string|null;source_type?:string|null;package_no?:number|null;package_name?:string|null;length_mm?:number|null;width_mm?:number|null;height_mm?:number|null;weight_kg?:number|null;quantity?:number|null;active?:boolean}
 export interface ModularShippingRule {shipping_product_id?:string|null;size_key?:string|null;rule_type?:string|null;match_name?:string|null;match_value?:string|null;effect_type?:string|null;package_count_delta?:number|null;package_name?:string|null;length_mm?:number|null;width_mm?:number|null;height_mm?:number|null;weight_kg?:number|null;active?:boolean}
 export interface CartMainPackagingVariant {shipping_product_id?:string|null;template_item?:any;packages?:any[]}
 const optionEntries=(item:OrderItemRow)=>orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).flatMap(label=>{const split=label.indexOf(':');return split<0?[]:[{name:componentNormal(label.slice(0,split)),value:componentNormal(label.slice(split+1))}];});
 const cartSize=(item:OrderItemRow)=>optionEntries(item).find(option=>['size','dimension','dimensions'].includes(option.name))?.value||'';
+const soleManualCartSize=(product:ModularShippingProduct)=>{const sizes=[...new Set(String(product.manual_sizes||'').split(/\r?\n/).map(componentNormal).filter(Boolean))];return sizes.length===1?sizes[0]:'';};
 const productForItem=(item:OrderItemRow,products:ModularShippingProduct[])=>{
  const id=productId(item);
  return products.find(p=>p.active!==false&&(id?String(p.wix_product_id||'')===id:!p.wix_product_id&&componentNormal(p.product_name||'')===componentNormal(item.product_name||'')));
@@ -320,7 +321,7 @@ export function composeModularPackages(order:any,products:ModularShippingProduct
  const add=(source:any,content:PackageComponent)=>{const copies=Math.max(1,Math.floor(Number(source.quantity)||1));for(let n=0;n<copies;n++)out.push({package_name:String(source.package_name||'Package'),length_mm:Number(source.length_mm),width_mm:Number(source.width_mm),height_mm:Number(source.height_mm),weight_kg:Number(source.weight_kg),contents:[content]});};
  for(const item of items){
   const product=productForItem(item,products);if(!product||componentNormal(product.product_type||'')!=='cart')continue;
-  const size=cartSize(item),options=optionEntries(item);
+  const size=cartSize(item)||soleManualCartSize(product),options=optionEntries(item);
   const optionRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&r.size_key===size&&r.rule_type==='Option'&&['Add package','Replace profile'].includes(r.effect_type||'')&&options.some(option=>option.name===componentNormal(r.match_name||'')&&(!r.match_value||option.value===componentNormal(r.match_value))));
   const addonRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&r.size_key===size&&r.rule_type==='Add-on'&&['Add package','Replace profile'].includes(r.effect_type||'')&&items.some(candidate=>componentNormal(candidate.product_name||'')===componentNormal(r.match_name||'')));
   const selectedKeys=[...optionRules,...addonRules].map(addonDescriptorKey).sort();

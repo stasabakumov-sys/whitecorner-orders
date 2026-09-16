@@ -125,7 +125,7 @@ export class DeliveryReviewComponent implements OnInit {
   if(this.variantLoading||this.s.busy())return;
   if(this.draft.some(p=>p.contents.some(c=>c.order_item_id===item.id)&&new Set(p.contents.map(c=>c.order_item_id)).size>1)){this.s.error.set('A box is shared with another product. Adjust its contents manually before loading a variant.');return;}
   this.variantLoading=true;this.s.error.set('');
-  try{const boxes=await this.s.variantPackages(item);this.draft=[...this.draft.filter(p=>this.owner(p)!==item.id),...boxes];for(const p of boxes)this.boxOwners.set(p,item.id);this.confirmed=false;}
+  try{const row=this.selected(),group=row&&this.productGroups(row).find(candidate=>candidate.sources.some(source=>source.id===item.id)),sources=group?.sources||[item],sourceIds=new Set(sources.map(source=>source.id));const boxes=await this.s.variantPackages(item,{wc_order_items:sources});this.draft=[...this.draft.filter(p=>!sourceIds.has(this.owner(p))&&!p.contents.some(c=>sourceIds.has(c.order_item_id))),...boxes];for(const p of boxes)this.boxOwners.set(p,group?.item?.id||item.id);this.confirmed=false;}
   catch(e:any){this.s.error.set(e.message);}finally{this.variantLoading=false;}
  }
 
