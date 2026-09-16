@@ -62,7 +62,7 @@ export class DeliveryReviewService {
    const [products,templates,rules,mainVariants]=await Promise.all([
     this.supabase.client.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,manual_sizes,active').eq('active',true),
     this.supabase.client.from('wc_shipping_packages').select('*').eq('active',true).order('package_no'),
-    this.supabase.client.from('wc_shipping_rules').select('*').eq('active',true).eq('effect_type','Add package'),
+    this.supabase.client.from('wc_shipping_rules').select('*').eq('active',true),
     this.supabase.client.from('wc_delivery_packaging_profiles').select('*').eq('template_item->>profile_scope','cart-main'),
    ]);
    if(products.error||templates.error||rules.error||mainVariants.error)throw Error('Could not load modular Cart packaging. Please try again.');
