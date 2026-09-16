@@ -36,7 +36,7 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
   const components=reviewComponents(order,rules),signature=reviewSignature(order,rules);
   let packages=review.packages||[];
   if(!packages.length){
-   const modularProducts=await db.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,manual_sizes,active').eq('active',true);
+   const modularProducts=await db.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,active').eq('active',true);
    const products=checked(modularProducts)||[];
    const hasCart=reviewItems(order,rules).some(item=>products.some((product:any)=>componentNormal(product.product_type||'')==='cart'&&(productId(item)?product.wix_product_id===productId(item):!product.wix_product_id&&componentNormal(product.product_name||'')===componentNormal(item.product_name||''))));
    if(hasCart){

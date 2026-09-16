@@ -3,7 +3,7 @@ import {signal} from '@angular/core';
 import {DeliveryReviewService} from './delivery-review.service';
 import {DeliveryReviewComponent} from '../../features/delivery-review/delivery-review.component';
 import {ShippingDataComponent} from '../../features/shipping-data/shipping-data.component';
-import {reviewComponents,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 const item={id:'item',product_name:'MDF roof cart',wix_options:{Size:'Size II'}};
 describe('Safe packaging variant navigation',()=>{
  it('loads reusable Base plus the selected Cart option when no exact variant exists',async()=>{
@@ -11,27 +11,6 @@ describe('Safe packaging variant navigation',()=>{
   const rows:any={wc_shipping_products:[{id:'cart-product',wix_product_id:'catalog',product_name:cart.product_name,product_type:'Cart',active:true}],wc_shipping_packages:[{shipping_product_id:'cart-product',size_key:'size ii',source_type:'Base',package_no:1,package_name:'Base',length_mm:1000,width_mm:600,height_mm:100,weight_kg:20,active:true}],wc_shipping_rules:[{shipping_product_id:'cart-product',size_key:'size ii',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Shelf',length_mm:700,width_mm:500,height_mm:80,weight_kg:8,active:true}]};
   const from=vi.fn((table:string)=>{const q:any={select:()=>q,eq:()=>q,order:()=>q,range:async()=>({data:[],error:null}),maybeSingle:async()=>({data:null,error:null}),then:(resolve:any)=>resolve({data:rows[table]||[],error:null})};return q;});
   const s=new DeliveryReviewService({client:{from}} as any);expect((await s.variantPackages(cart)).map(box=>box.package_name)).toEqual(['Base','Shelf']);
- });
- it('loads an exact Cart Main combination backed by a Replace profile rule',async()=>{
-  const cart={id:'cart',product_name:'Mobile Bar Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Size:'Size II'}},doors={id:'doors',product_name:'Back panel with doors',quantity:1};
-  const profileItems=[cart,{...doors,id:'rule:doors'}],contents=reviewComponents({wc_order_items:profileItems});
-  const rows:any={
-   wc_shipping_products:[{id:'cart-product',wix_product_id:'catalog',product_name:cart.product_name,product_type:'Cart',active:true}],
-   wc_shipping_packages:[{shipping_product_id:'cart-product',size_key:'size ii',source_type:'Base',package_name:'Base',length_mm:1000,width_mm:600,height_mm:100,weight_kg:20,active:true}],
-   wc_shipping_rules:[{shipping_product_id:'cart-product',size_key:'size ii',rule_type:'Add-on',match_name:doors.product_name,match_value:'',effect_type:'Replace profile',active:true}],
-   wc_delivery_packaging_profiles:[{shipping_product_id:'cart-product',template_item:{...cart,profile_scope:'cart-main',merged_add_ons:[{rule_type:'Add-on',match_name:doors.product_name,match_value:''}]},packages:[{package_name:'Main + doors',length_mm:1100,width_mm:650,height_mm:150,weight_kg:24,contents}]}],
-  };
-  const from=vi.fn((table:string)=>{let data=[...(rows[table]||[])];const q:any={select:()=>q,eq:(field:string,value:any)=>{data=data.filter((row:any)=>field.includes('->>')?row.template_item?.profile_scope===value:row[field]===value);return q;},order:()=>q,range:async()=>({data:[],error:null}),maybeSingle:async()=>({data:null,error:null}),then:(resolve:any)=>resolve({data,error:null})};return q;});
-  const s=new DeliveryReviewService({client:{from}} as any);
-  await expect(s.variantPackages(cart,{wc_order_items:[cart,doors]})).resolves.toEqual([expect.objectContaining({package_name:'Main + doors'})]);
- });
- it('combines separate saved profiles when no complete Cart Main combination exists',async()=>{
-  const cart={id:'cart',product_name:'Mobile Bar Cart',quantity:1,wix_options:{Colour:'White','Internal Shelf':'Yes'}},doors={id:'doors',product_name:'Back panel with doors',quantity:1};
-  const profile=(source:any,name:string)=>({signature:variantSignature(source),packages:[{package_name:name,length_mm:1000,width_mm:600,height_mm:100,weight_kg:20,contents:reviewComponents({wc_order_items:[source]})}]});
-  const rows:any={wc_delivery_packaging_profiles:[profile(cart,'Cart box'),profile(doors,'Doors box')]};
-  const from=vi.fn((table:string)=>{let data=[...(rows[table]||[])];const q:any={select:()=>q,eq:(field:string,value:any)=>{data=data.filter((row:any)=>field.includes('->>')?row.template_item?.profile_scope===value:row[field]===value);return q;},order:()=>q,range:async()=>({data,error:null}),maybeSingle:async()=>({data:data[0]||null,error:null}),then:(resolve:any)=>resolve({data,error:null})};return q;});
-  const s=new DeliveryReviewService({client:{from}} as any);
-  await expect(s.variantPackages(cart,{wc_order_items:[cart,doors]})).resolves.toEqual([expect.objectContaining({package_name:'Cart box'}),expect.objectContaining({package_name:'Doors box'})]);
  });
  it('checks the exact option signature and navigates by associated product ID',async()=>{
   const eq=vi.fn(),from=vi.fn((table:string)=>{const q:any={select:()=>q,eq:(...args:any[])=>{eq(...args);return q;},maybeSingle:async()=>({data:table==='wc_delivery_packaging_profiles'?{shipping_product_id:'correct'}:{id:'correct'}})};return q;});

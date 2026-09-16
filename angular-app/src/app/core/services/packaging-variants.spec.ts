@@ -15,16 +15,6 @@ describe('Exact packaging variants',()=>{
   expect(packagingError(boxes,reviewComponents({wc_order_items:[cart,addon]}))).toBe('');
   expect(composeModularPackages({wc_order_items:[{...cart,wix_options:{...cart.wix_options,'Side shelves':'Yes'}}]},products,templates,rules).map(b=>b.package_name)).toEqual(['Cart base','Shelf','Sides']);
  });
- it('uses the sole manual product size when Wix omitted Size from the order',()=>{
-  const cart={id:'cart',product_name:'Mobile Bar Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Colour:'White','Internal Shelf':'Yes','Side shelves':'No'}};
-  const products=[{id:'p',wix_product_id:'catalog',product_name:cart.product_name,product_type:'Cart',manual_sizes:'Size II: W1400 × D600 × H1000 mm',active:true}];
-  const size='size ii w1400 d600 h1000 mm',templates=[{shipping_product_id:'p',size_key:size,source_type:'Base',package_no:1,package_name:'Cart base',length_mm:1400,width_mm:600,height_mm:100,weight_kg:22,active:true}];
-  const rules=[{shipping_product_id:'p',size_key:size,rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Add package',package_count_delta:1,package_name:'Shelf',length_mm:700,width_mm:500,height_mm:80,weight_kg:8,active:true}];
-  const boxes=composeModularPackages({wc_order_items:[cart]},products,templates,rules);
-  expect(boxes.map(box=>box.package_name)).toEqual(['Cart base','Shelf']);
-  expect(packagingError(boxes,reviewComponents({wc_order_items:[cart]}))).toBe('');
-  expect(composeModularPackages({wc_order_items:[cart]},[{...products[0],manual_sizes:`${products[0].manual_sizes}\nSize III: W1600 x D600 x H1000 mm`}],templates,rules)).toEqual([]);
- });
  it('selects one manually saved exact Main + multiple Add-ons variant',()=>{
   const cart={id:'cart',product_name:'Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Size:'Size I','Internal Shelf':'Yes','Side shelves':'Yes'}};
   const mainItem={...cart,wix_options:{Size:'Size I','Internal Shelf':'Yes','Side shelves':'Yes'}};

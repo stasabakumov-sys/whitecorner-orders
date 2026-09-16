@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
-import {composeModularPackages,expandVariant,packagingError,reviewItems,variantSignature,findPackagingProfile} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {composeModularPackages,expandVariant,packagingError,variantSignature,findPackagingProfile} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import { ReviewPackage, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 @Injectable({providedIn:'root'})
@@ -51,36 +51,21 @@ export class DeliveryReviewService {
   if(!product)throw Error('The shipping product is unavailable. Add boxes here to prepare this order.');
   return {productId:product.id,signature};
  }
- async variantPackages(item:any,order:any={wc_order_items:[item]}){
-  const composition={wc_order_items:Array.isArray(order?.wc_order_items)&&order.wc_order_items.length?order.wc_order_items:[item]};
-  const target=reviewComponents(composition,this.rules());
-  let savedFallbackError='';
+ async variantPackages(item:any){
   const {data,error}=await findPackagingProfile(this.supabase.client,variantSignature(item));
   if(error)throw Error('Could not load packaging variant.');
   let boxes=data?expandVariant(data.packages,item,this.rules()):[];
-  if(packagingError(boxes,target))boxes=[];
   if(!boxes.length){
-   const [products,templates,rules,mainVariants]=await Promise.all([
-    this.supabase.client.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,manual_sizes,active').eq('active',true),
+   const [products,templates,rules]=await Promise.all([
+    this.supabase.client.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,active').eq('active',true),
     this.supabase.client.from('wc_shipping_packages').select('*').eq('active',true).order('package_no'),
-    this.supabase.client.from('wc_shipping_rules').select('*').eq('active',true),
-    this.supabase.client.from('wc_delivery_packaging_profiles').select('*').eq('template_item->>profile_scope','cart-main'),
+    this.supabase.client.from('wc_shipping_rules').select('*').eq('active',true).eq('effect_type','Add package'),
    ]);
-   if(products.error||templates.error||rules.error||mainVariants.error)throw Error('Could not load modular Cart packaging. Please try again.');
-   boxes=composeModularPackages(composition,products.data||[],templates.data||[],rules.data||[],this.rules(),mainVariants.data||[]);
+   if(products.error||templates.error||rules.error)throw Error('Could not load modular Cart packaging. Please try again.');
+   boxes=composeModularPackages({wc_order_items:[item]},products.data||[],templates.data||[],rules.data||[],this.rules());
   }
-  if(packagingError(boxes,target)){
-   const items=reviewItems(composition,this.rules());
-   const profiles=await Promise.all(items.map(async source=>({source,result:await findPackagingProfile(this.supabase.client,variantSignature(source))})));
-   if(profiles.some(entry=>entry.result.error))throw Error('Could not load saved packaging profiles. Please try again.');
-   const separate=profiles.flatMap(entry=>entry.result.data?expandVariant(entry.result.data.packages,entry.source,this.rules()):[]);
-   const missing=profiles.filter(entry=>!entry.result.data).map(entry=>entry.source.product_name||'Unnamed product'),separateIssue=packagingError(separate,target);
-   if(!missing.length&&!separateIssue)boxes=separate;
-   else savedFallbackError=missing.length?`No saved packaging profile matches: ${missing.join(', ')}.`:`Saved packaging profiles are incomplete: ${separateIssue}`;
-  }
-  if(packagingError(boxes,target)&&savedFallbackError)throw Error(savedFallbackError);
   if(!boxes.length)throw Error('No complete profile or modular Cart packaging matches this product. Configure it in Shipping Data.');
-  const issue=packagingError(boxes,target);
+  const issue=packagingError(boxes,reviewComponents({wc_order_items:[item]},this.rules()));
   if(issue)throw Error(`Cart packaging is incomplete: ${issue} Complete the missing Base or option box once in Shipping Data.`);
   return boxes;
  }
