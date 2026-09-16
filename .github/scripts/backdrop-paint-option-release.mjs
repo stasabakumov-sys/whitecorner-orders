@@ -8,7 +8,7 @@ const verify=`select
  exists(select 1 from supabase_migrations.schema_migrations where version='${version}') registered,
  to_regprocedure('public.wc_shop_order_finish(jsonb,text)') is not null finish_resolver,
  to_regprocedure('public.wc_shop_auto_snapshot(uuid)') is not null auto_snapshot,
- coalesce((select strpos(p.prosrc,'''paint'',''painting''')>0 and strpos(p.prosrc,'''without paint''')>0 from pg_proc p where p.oid=to_regprocedure('public.wc_shop_order_finish(jsonb,text)')),false) paint_option_wired,
+ public.wc_shop_order_finish('{"Paint":"Yes"}'::jsonb,'raw')='painted' and public.wc_shop_order_finish('{"Paint":"No"}'::jsonb,'raw')='raw' paint_option_wired,
  coalesce((select strpos(p.prosrc,'paint_profile->''estimates''')>0 from pg_proc p where p.oid=to_regprocedure('public.wc_shop_auto_snapshot(uuid)')),false) paint_estimates_wired;`;
 const sql=`begin;select pg_advisory_xact_lock(${version});do $release$ begin
  if to_regprocedure('public.wc_shop_order_finish(jsonb,text)') is null then raise exception 'Backdrop finish resolver missing';end if;
@@ -16,7 +16,7 @@ const sql=`begin;select pg_advisory_xact_lock(${version});do $release$ begin
  if exists(select 1 from supabase_migrations.schema_migrations where version='${version}') then
   if (select replace(statements[1],E'\\r','') from supabase_migrations.schema_migrations where version='${version}') is distinct from replace(${literal},E'\\r','') then raise exception 'Migration differs';end if;
  else execute ${literal};insert into supabase_migrations.schema_migrations(version,name,statements) values('${version}','${name}',array[${literal}]);end if;
- if not coalesce((select strpos(p.prosrc,'''paint'',''painting''')>0 from pg_proc p where p.oid=to_regprocedure('public.wc_shop_order_finish(jsonb,text)')),false) then raise exception 'Paint option resolver unavailable';end if;
+ if public.wc_shop_order_finish('{"Paint":"Yes"}'::jsonb,'raw') is distinct from 'painted' or public.wc_shop_order_finish('{"Paint":"No"}'::jsonb,'raw') is distinct from 'raw' then raise exception 'Paint option resolver unavailable';end if;
 end $release$;commit;${verify}`;
 
 if(process.argv.includes('--print-sql')){process.stdout.write(sql);process.exit(0);}
