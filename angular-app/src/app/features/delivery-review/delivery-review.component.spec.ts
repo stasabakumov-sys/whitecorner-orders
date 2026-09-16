@@ -49,6 +49,14 @@ describe('Delivery review UI',()=>{
   expect(variantPackages).toHaveBeenCalledExactlyOnceWith(addon,{wc_order_items:[cart,addon]});
   expect(component.draft).toEqual(boxes);expect(component.owner(component.draft[0])).toBe('cart');
  });
+ it('shows a load failure beside the button that was used',async()=>{
+  const item={id:'cart',product_name:'Cart',quantity:1},row:any={order_id:'order',wc_orders:{wc_order_items:[item]}};
+  const service:any={rows:signal([row]),busy:signal(false),error:signal(''),variantPackages:vi.fn().mockRejectedValue(Error('Replacement profile is unavailable'))};
+  const component=new DeliveryReviewComponent(service);component.selectedId.set('order');
+  vi.spyOn(component,'productGroups').mockReturnValue([{id:'cart',item,sources:[item],boxes:[]} as any]);
+  await component.loadVariant(item);
+  expect(component.variantNotices()['cart']).toBe('Replacement profile is unavailable');
+ });
  it('colors margin at exact 10 and 20 percent thresholds without changing the outcome',()=>{
   const service=new DeliveryReviewService({} as any),outcome=vi.spyOn(service,'outcome');
   const component=new DeliveryReviewComponent(service),row={wc_orders:{shipping:100}};
