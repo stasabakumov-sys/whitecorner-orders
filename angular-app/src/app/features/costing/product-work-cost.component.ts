@@ -26,7 +26,7 @@ export class ProductWorkCostComponent implements OnChanges{
  foldingLabel=foldingLabel;variantLabel=templateVariantLabel;
  get hasFolding(){return String(this.product?.product_type||'').toLowerCase()==='backdrop'||/backdrop/i.test(this.product?.product_name||'');}
  get isSizedCart(){return String(this.product?.product_type||'').trim().toLowerCase()==='cart'&&!!this.selectedSize;}
- finishModes(){return backdropFinishModes(this.product);}
+ finishModes(){return backdropFinishModes(this.product,this.materialProfiles.map(profile=>profile.options));}
  displayTemplates(){return this.hasFolding?(['foldable','nonfoldable'] as const).flatMap(fold=>{const shared=this.templates.find(t=>!t.size_key&&t.folding===fold);if(shared)return[shared];const legacy=this.templates.filter(t=>t.folding===fold);return legacy.length===1?[legacy[0]]:[];}):this.templates;}
  comparison(){return productionCostRows(this.templates,this.materialProfiles,this.product?.backdrop_paint_profile,this.materials,this.rates,this.product.product_name,this.product.id,this.finishModes());}
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}

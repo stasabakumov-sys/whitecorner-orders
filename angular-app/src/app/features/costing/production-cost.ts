@@ -3,7 +3,19 @@ import {backdropSizeKey,optionSizes} from '../shipping-data/product-sizes';
 import {plannedTotal,plannedWorkRows,WorkRate} from './planned-work-cost';
 
 export type Folding='foldable'|'nonfoldable';
-export function backdropFinishModes(product:any):boolean[]{
+function optionText(value:unknown){return String((value as any)?.original??(value as any)?.value??value??'').trim().toLowerCase();}
+export function optionFinish(options:any):'raw'|'painted'|''|null{
+ const finishes=Object.entries(options||{}).filter(([key])=>/^(colou?r|finish|paint|painting)$/i.test(key.trim())).map(([key,value])=>{
+  const text=optionText(value);if(!text)return null;
+  const raw=/^(raw|unpainted|natural)(\b|\s*\/)/.test(text);
+  const noPaint=/^(no|none|false|0|not selected|not required|without paint)(\b|\s*\/|$)/.test(text);
+  return raw||(/^paint(ing)?$/i.test(key.trim())&&noPaint)?'raw':'painted';
+ }).filter((value):value is 'raw'|'painted'=>value!==null);
+ const unique=[...new Set(finishes)];return unique.length===0?null:unique.length===1?unique[0]:'';
+}
+export function backdropFinishModes(product:any,variantOptions:any[]=[]):boolean[]{
+ const explicit=[...new Set(variantOptions.map(optionFinish).filter((finish):finish is 'raw'|'painted'=>finish==='raw'||finish==='painted'))];
+ if(explicit.length)return [...(explicit.includes('raw')?[false]:[]),...(explicit.includes('painted')?[true]:[])];
  const label=`${product?.product_name||''} ${product?.short_name||''}`.toLowerCase();
  const raw=/(^|[^a-z])raw([^a-z]|$)/.test(label),painted=/(^|[^a-z])painted([^a-z]|$)/.test(label);
  return raw&&painted?[false,true]:painted?[true]:[false];
