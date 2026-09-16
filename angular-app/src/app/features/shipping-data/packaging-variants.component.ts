@@ -2,10 +2,33 @@ import {Component,Input,OnChanges,signal} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {packagingOptionLabels,orderItemOptionLabels,packagingError,reviewComponents,variantSignature,productId} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {backdropDrawingKey,sizeKeyLabel} from './product-sizes';
+
+export type SharedBackdropPackagingProfile={profile:any;productName:string};
+export type PackagingScope='shared-backdrop'|'product';
+
+function sharedBoxLayout(profile:any){
+ return JSON.stringify((profile?.packages||[]).map((box:any)=>({
+  length_mm:Number(box.length_mm),width_mm:Number(box.width_mm),height_mm:Number(box.height_mm),weight_kg:Number(box.weight_kg),
+  contents:(box.contents||[]).map((content:any)=>[content.component_key||'main',Number(content.unit_index)||1]).sort(),
+ })));
+}
+
+export function sharedBackdropBoxes(options:Record<string,string>,profiles:SharedBackdropPackagingProfile[]){
+ const target=backdropDrawingKey({template_item:{wix_options:options},packages:[]},'');
+ if(!target)return {key:'',packages:[] as any[],ambiguous:false};
+ const matches=profiles.filter(entry=>backdropDrawingKey(entry.profile,entry.productName)===target&&entry.profile?.packages?.length);
+ const layouts=[...new Map(matches.map(entry=>[sharedBoxLayout(entry.profile),entry.profile.packages])).values()];
+ return {key:target,packages:layouts.length===1?structuredClone(layouts[0]):[],ambiguous:layouts.length>1};
+}
 
 @Component({selector:'app-packaging-variants',standalone:true,imports:[FormsModule],template:`
  <h3>Packaging variants</h3>
- <p>One product per template. Size, Foldable and structural options must match. Colour (including Raw) shares the same packaging. Quantities are expanded automatically.</p>
+ @if(packagingScope==='shared-backdrop'){
+  <p>Shared Backdrop box database: exact Size and Foldable/Non-foldable must match. Product design and Colour (including Raw) do not change packaging.</p>
+ }@else{
+  <p>This product uses its own packaging profiles. Size and structural options must match. Colour (including Raw) shares the same packaging.</p>
+ }
  @if(error()){<p role="alert">{{error()}}</p>}
  <div class="tools">
  <select aria-label="Saved packaging variant" [disabled]="busy()" [(ngModel)]="selectedKey" (ngModelChange)="open($event)"><option value="">New variant</option>@for(v of variants();track v.signature){<option [value]="v.signature">{{label(v.template_item)}}</option>}</select>
@@ -15,6 +38,7 @@ import {packagingOptionLabels,orderItemOptionLabels,packagingError,reviewCompone
  <fieldset [disabled]="busy()"><legend>Exact option values from Wix</legend>
  @for(o of options;track $index){<div class="tools"><input aria-label="Option name" [(ngModel)]="o.name" (ngModelChange)="remap()"><input aria-label="Option value" [(ngModel)]="o.value" (ngModelChange)="remap()"><button (click)="options.splice($index,1);remap()">Remove option</button></div>}
  <button (click)="options.push({name:'',value:''})">Add option</button>
+ @if(reuseMessage()){<p [attr.role]="reuseConflict()?'alert':'status'">{{reuseMessage()}}</p>}
  <h4>Boxes for one product</h4>
  @for(p of boxes;track $index){<section class="box"><div class="tools">
  <label>Name<input [(ngModel)]="p.package_name"></label>
@@ -32,7 +56,10 @@ import {packagingOptionLabels,orderItemOptionLabels,packagingError,reviewCompone
 export class PackagingVariantsComponent implements OnChanges {
  @Input() product:any;
  @Input() initialSignature='';
+ @Input() packagingScope:PackagingScope='product';
+ @Input() sharedBackdropProfiles:SharedBackdropPackagingProfile[]=[];
  variants=signal<any[]>([]);examples=signal<any[]>([]);rules:any[]=[];error=signal('');busy=signal(false);saved=signal(false);
+ reuseMessage=signal('');reuseConflict=signal(false);
  selectedKey='';sourceItemId='';catalogId='';
  options:{name:string,value:string}[]=[{name:'Size',value:''}];boxes:any[]=[];confirmed=false;
  constructor(private supabase:SupabaseService){}
@@ -46,14 +73,24 @@ export class PackagingVariantsComponent implements OnChanges {
    examples.push(...(data||[]).filter((i:any)=>this.product.wix_product_id?i.catalog_reference?.catalogItemId===this.product.wix_product_id:i.product_name===this.product.product_name));if((data||[]).length<250)break;}
   this.examples.set([...new Map(examples.map(e=>[this.label(e),e])).values()]);
  }catch(e:any){this.error.set(e.message);}finally{this.busy.set(false);}}
- reset(){this.selectedKey='';this.sourceItemId='';this.catalogId='';this.options=[{name:'Size',value:''}];this.boxes=[];this.confirmed=false;this.saved.set(false);this.error.set('');}
+ reset(){this.selectedKey='';this.sourceItemId='';this.catalogId='';this.options=[{name:'Size',value:''}];this.boxes=[];this.confirmed=false;this.saved.set(false);this.error.set('');this.reuseMessage.set('');this.reuseConflict.set(false);}
  item(){return {id:this.product.id,product_name:this.product.product_name,quantity:1,catalog_reference:(this.product.wix_product_id||this.catalogId)?{catalogItemId:this.product.wix_product_id||this.catalogId}:{},wix_options:Object.fromEntries(this.options.map(o=>[o.name,o.value]))};}
  components(){return reviewComponents({wc_order_items:[this.item()]},this.rules);}
  label(item:any){return packagingOptionLabels(item).join(' · ')||'All colours · no structural options';}
  open(key:string){this.reset();const v=this.variants().find(v=>v.signature===key);if(!v)return;this.selectedKey=key;this.sourceItemId=v.template_item.source_item_id||'';this.catalogId=productId(v.template_item);this.options=Object.entries(v.template_item.wix_options).map(([name,value])=>({name,value:String(value)}));this.boxes=structuredClone(v.packages);this.remap();}
  useExample(id:string){const item=this.examples().find(e=>e.id===id);if(!item)return;this.sourceItemId=item.id;this.catalogId=productId(item);this.options=orderItemOptionLabels(item,100).flatMap(label=>{const n=label.indexOf(':');return n<0?[]:[{name:label.slice(0,n).trim(),value:label.slice(n+1).trim()}];});this.remap();}
  copy(){this.selectedKey='';const size=this.options.find(o=>o.name.trim().toLowerCase()==='size');if(size)size.value='';else this.options.push({name:'Size',value:''});this.remap();}
- remap(){const components=this.components();this.boxes=this.boxes.map(p=>({...p,contents:(p.contents||[]).flatMap((c:any)=>{const match=components.find(x=>x.component_key===c.component_key&&x.unit_index===c.unit_index);return match?[match]:[];})}));this.confirmed=false;this.saved.set(false);}
+ remap(){const components=this.components();this.boxes=this.boxes.map(p=>({...p,contents:(p.contents||[]).flatMap((c:any)=>{const match=components.find(x=>x.component_key===c.component_key&&x.unit_index===c.unit_index);return match?[match]:[];})}));if(!this.boxes.length)this.reuseSharedBackdropBoxes();this.confirmed=false;this.saved.set(false);}
+ reuseSharedBackdropBoxes(){
+  this.reuseMessage.set('');this.reuseConflict.set(false);
+  if(this.packagingScope!=='shared-backdrop')return;
+  const found=sharedBackdropBoxes(Object.fromEntries(this.options.map(option=>[option.name,option.value])),this.sharedBackdropProfiles);
+  if(found.ambiguous){this.reuseConflict.set(true);this.reuseMessage.set(`Different box layouts are saved for ${sizeKeyLabel(found.key)}. Choose the correct saved variant instead of guessing.`);return;}
+  if(!found.packages.length)return;
+  const components=this.components();
+  this.boxes=found.packages.map(box=>({...box,contents:(box.contents||[]).flatMap((content:any)=>{const match=components.find(component=>component.component_key===(content.component_key||'main')&&component.unit_index===(Number(content.unit_index)||1));return match?[match]:[];})}));
+  this.reuseMessage.set(`Shared Backdrop boxes loaded for ${sizeKeyLabel(found.key)}. Review the measurements, weight and contents before saving.`);
+ }
  assigned(p:any,c:any){return p.contents.some((x:any)=>x.id===c.id);}
  toggle(p:any,c:any,on:boolean){p.contents=on?[...p.contents.filter((x:any)=>x.id!==c.id),c]:p.contents.filter((x:any)=>x.id!==c.id);this.confirmed=false;}
  addBox(){this.boxes.push({package_name:'Box '+(this.boxes.length+1),length_mm:0,width_mm:0,height_mm:0,weight_kg:0,contents:[]});this.confirmed=false;}

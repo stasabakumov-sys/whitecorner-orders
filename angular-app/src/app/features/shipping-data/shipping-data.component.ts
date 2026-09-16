@@ -185,7 +185,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               }</div>
              </section>}
             }@else{
-             @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" />}
+             @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [sharedBackdropProfiles]="sharedBackdropPackagingProfiles()" />}
             }
             <div class="shipsection">
               <h3>{{isCart(p)?'Reusable Main packages':'Packages'}}</h3>
@@ -260,8 +260,9 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 export class ShippingDataComponent implements OnInit {
   search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';selectedCartSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
   openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);}
-  isBackdrop(p?:ShippingProduct){return /backdrop/i.test(p?.product_name||'');}
+  isBackdrop(p?:ShippingProduct){return componentNormal(p?.product_type||'')==='backdrop'||/backdrop/i.test(p?.product_name||'');}
   isCart(p?:ShippingProduct){return componentNormal(p?.product_type||'')==='cart';}
+  packagingScope(p?:ShippingProduct){return this.isBackdrop(p)?'shared-backdrop' as const:'product' as const;}
   contentLabel(c:any){return [...new Set([c.product_name,c.component_name].filter(Boolean).map((s:string)=>s.trim()))].join(' · ');}
   updateDetails(details:any){this.products.update(rows=>rows.map(p=>p.id===details.id?{...p,...details}:p));}
   wixSizes(p:ShippingProduct){return [...new Set([...(p.saved_profiles||[]).flatMap(profile=>packagingSizes(profile,p.product_name)),...this.costing.parts().filter(part=>part.shipping_product_id===p.id).flatMap(part=>optionSizes(part.options))])];}
@@ -274,6 +275,10 @@ export class ShippingDataComponent implements OnInit {
   newFolding='';libraryMessage='';qualifiedKey=qualifiedDrawingKey;legacyFolding:Record<string,string>={};legacyRevisions:Record<string,string>={};classifying='';
   sharedSize(profile:any,p:ShippingProduct){return backdropDrawingKey(profile,p.product_name);}
   librarySizes(){return [...new Set([...this.extraSizes(),...this.products().filter(p=>this.isBackdrop(p)).flatMap(p=>(p.saved_profiles||[]).map(profile=>this.sharedSize(profile,p)).filter(Boolean))])].sort();}
+  sharedBackdropPackagingProfiles(){
+    const profiles=this.products().filter(product=>this.isBackdrop(product)).flatMap(product=>(product.saved_profiles||[]).map(profile=>({profile,productName:product.product_name})));
+    return [...new Map(profiles.map(entry=>[entry.profile.signature||`${entry.productName}:${backdropDrawingKey(entry.profile,entry.productName)}:${JSON.stringify(entry.profile.packages||[])}`,entry])).values()];
+  }
   addLibrarySize(){const size=backdropSizeKey(this.newSize);if(!size||!['foldable','nonfoldable'].includes(this.newFolding))return;const key=size+':'+this.newFolding;this.libraryMessage=this.librarySizes().includes(key)?'This size and folding option already exists. Use its drawing below.':'';this.extraSizes.update(s=>[...new Set([...s,key])]);}
   async openLibrary(){this.libraryOpen=true;this.libraryLoading=true;this.libraryError='';this.libraryMessage='';try{const {data,error}=await this.supabase.client.from('wc_backdrop_box_drawings').select('size_key,revision');if(error)throw error;this.legacyRevisions=Object.fromEntries((data||[]).map(d=>[d.size_key,d.revision]));this.extraSizes.update(s=>[...new Set([...s.filter(qualifiedDrawingKey),...(data||[]).map(d=>d.size_key)])]);}catch{this.libraryError='Could not load the drawing library. Please reopen to retry.';}finally{this.libraryLoading=false;this.cdr?.markForCheck();}}
   async classifyDrawing(key:string){const fold=this.legacyFolding[key];if(this.classifying||!['foldable','nonfoldable'].includes(fold))return;this.classifying=key;this.libraryError='';try{const {data,error}=await this.supabase.client.rpc('wc_classify_backdrop_box_drawing',{p_size:key,p_folding:fold,p_expected:this.legacyRevisions[key]});if(error)throw error;if(data?.size_key!==key+':'+fold)throw Error('The server did not confirm the change.');this.extraSizes.update(s=>[...new Set(s.filter(k=>k!==key).concat(data.size_key))]);this.libraryMessage='Folding option saved. Reopen the product card to refresh its drawing.';}catch(e:any){this.libraryError='Could not classify drawing. '+(e?.message||'Check the connection and retry.');}finally{this.classifying='';this.cdr?.markForCheck();}}
