@@ -4,6 +4,7 @@ import {pathToFileURL} from 'node:url';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 
 const {PGlite}=await import(pathToFileURL(path.resolve(process.argv[2])).href);const db=new PGlite();
 try{
@@ -38,5 +39,8 @@ try{
  const paintedItem=randomUUID(),paintedUnit=randomUUID();await db.query('insert into wc_order_items values($1,$2)',[paintedItem,{Foldable:'YES',Colour:'White'}]);await db.query('insert into wc_production_units values($1,$2)',[paintedUnit,paintedItem]);await db.query('select wc_shop_auto_snapshot($1)',[paintedUnit]);unit=(await db.query('select * from wc_shop_units where unit_id=$1',[paintedUnit])).rows[0];assert.equal(unit.finish,'painted');assert.equal(unit.estimates['Painting:First primer'],10);
  const paintOptionItem=randomUUID(),paintOptionUnit=randomUUID();await db.query('insert into wc_order_items values($1,$2)',[paintOptionItem,{Foldable:'YES',Paint:'Yes'}]);await db.query('insert into wc_production_units values($1,$2)',[paintOptionUnit,paintOptionItem]);await db.query('select wc_shop_auto_snapshot($1)',[paintOptionUnit]);unit=(await db.query('select * from wc_shop_units where unit_id=$1',[paintOptionUnit])).rows[0];assert.equal(unit.finish,'painted');assert.equal(unit.estimates['Painting:First primer'],10);
  assert.equal((await db.query("select wc_shop_order_finish($1,'raw') finish",[{Paint:'No'}])).rows[0].finish,'raw');
+ await db.exec("create schema supabase_migrations;create table supabase_migrations.schema_migrations(version text primary key,name text,statements text[])");
+ const releaseSql=execFileSync(process.execPath,['.github/scripts/backdrop-paint-option-release.mjs','--print-sql'],{encoding:'utf8'});await db.exec(releaseSql);await db.exec(releaseSql);
+ assert.equal((await db.query("select count(*)::int n from supabase_migrations.schema_migrations where version='20260916000400'")).rows[0].n,1);
  console.log('Backdrop shared costs: product-wide folding templates, shared materials and one painting add-on passed.');
 }catch(error){console.error(error.message,error.where||'',error.position||'');process.exitCode=1;}finally{await db.close();}
