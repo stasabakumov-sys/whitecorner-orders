@@ -163,7 +163,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             @if(isBackdrop(p)){<p class="small">All sizes reuse one Foldable profile and one Non-foldable profile. Painting is stored once for the whole product.</p>}
             @for(part of costProfiles(p.id,activeCartSize(p));track part.variant_key){<details><summary>Edit materials · {{costProfileLabel(part,p.id)}}</summary><app-catalog-cost-editor [part]="part" [showWork]="false" [hideColour]="isBackdrop(p)" /></details>}
             @empty{<p class="mut">No order variant available yet. Open Add materials on an order to define its costs.</p>}
-            @if(isBackdrop(p)){<app-backdrop-paint-profile [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" />}
+            @if(isBackdrop(p)){<app-backdrop-paint-profile mode="materials" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" />}
             </section>
             }
             @if(detailTab==='packing'){
@@ -244,6 +244,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             }
             @if(detailTab==='minutes'){
              <section class="shipsection"><app-product-parts [product]="p" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" /></section>
+             @if(isBackdrop(p)){<section class="shipsection"><app-backdrop-paint-profile mode="minutes" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" /></section>}
             }
             @if(detailTab==='wix'){
              <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" /></section>
