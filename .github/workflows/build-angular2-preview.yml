@@ -20,6 +20,7 @@ on:
       - 'supabase/migrations/*_drawing_upload_limit.sql'
       - 'supabase/migrations/*_backdrop_drawing_library.sql'
       - 'supabase/migrations/*_backdrop_drawing_folding.sql'
+      - 'supabase/migrations/*_backdrop_drawing_links.sql'
       - 'supabase/migrations/*_backdrop_paint_operations.sql'
       - 'supabase/migrations/*_production_template_variants.sql'
       - 'supabase/migrations/*_backdrop_material_variants.sql'
@@ -65,6 +66,7 @@ on:
       - 'supabase/migrations/*_drawing_upload_limit.sql'
       - 'supabase/migrations/*_backdrop_drawing_library.sql'
       - 'supabase/migrations/*_backdrop_drawing_folding.sql'
+      - 'supabase/migrations/*_backdrop_drawing_links.sql'
       - 'supabase/migrations/*_backdrop_paint_operations.sql'
       - 'supabase/migrations/*_production_template_variants.sql'
       - 'supabase/migrations/*_backdrop_material_variants.sql'
@@ -143,6 +145,7 @@ jobs:
           node .github/scripts/partner-pans-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/packaging-variant-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/box-drawings-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+          node .github/scripts/backdrop-drawing-links-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse Shop Floor migration
         run: node .github/scripts/shop-floor.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse Shop Floor automatic composition
