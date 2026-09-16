@@ -22,9 +22,11 @@ export function resolvedProductionSize(item:any,product?:ShopCatalogProduct){
  return loose.length===1&&loose[0]===manual[0]?loose[0]:'';
 }
 
-export function orderedFinish(options:any):'raw'|'painted'|''{
+export function orderedFinish(options:any,productName=''):'raw'|'painted'|''{
  const values=Object.entries(options||{}).filter(([key])=>/^(colou?r|finish)$/i.test(key.trim())).map(([,value])=>optionText(value).toLowerCase()).filter(Boolean);
- const unique=[...new Set(values)];if(unique.length!==1)return '';
+ const unique=[...new Set(values)];
+ if(!unique.length&&/backdrop/i.test(productName))return 'raw';
+ if(unique.length!==1)return '';
  return /^(raw|unpainted|natural)(\b|\s*\/)/.test(unique[0])?'raw':'painted';
 }
 
