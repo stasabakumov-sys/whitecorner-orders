@@ -7,7 +7,7 @@ import {backdropDrawingKey,sizeKeyLabel} from './product-sizes';
 export type SharedBackdropPackagingProfile={profile:any;productName:string};
 export type PackagingScope='shared-backdrop'|'product';
 
-function sharedBoxLayout(profile:any){
+export function sharedBackdropLayoutKey(profile:any){
  return JSON.stringify((profile?.packages||[]).map((box:any)=>({
   length_mm:Number(box.length_mm),width_mm:Number(box.width_mm),height_mm:Number(box.height_mm),weight_kg:Number(box.weight_kg),
   contents:(box.contents||[]).map((content:any)=>[content.component_key||'main',Number(content.unit_index)||1]).sort(),
@@ -18,7 +18,7 @@ export function sharedBackdropBoxes(options:Record<string,string>,profiles:Share
  const target=backdropDrawingKey({template_item:{wix_options:options},packages:[]},'');
  if(!target)return {key:'',packages:[] as any[],ambiguous:false};
  const matches=profiles.filter(entry=>backdropDrawingKey(entry.profile,entry.productName)===target&&entry.profile?.packages?.length);
- const layouts=[...new Map(matches.map(entry=>[sharedBoxLayout(entry.profile),entry.profile.packages])).values()];
+ const layouts=[...new Map(matches.map(entry=>[sharedBackdropLayoutKey(entry.profile),entry.profile.packages])).values()];
  return {key:target,packages:layouts.length===1?structuredClone(layouts[0]):[],ambiguous:layouts.length>1};
 }
 
