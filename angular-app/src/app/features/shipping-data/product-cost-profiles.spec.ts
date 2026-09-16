@@ -36,12 +36,21 @@ describe('Product card cost profiles',()=>{
       ['option:Side shelves','["catalog-v4-cart-option", "cart-product", "size i", "side shelves", "yes"]']
     ]);
     expect(rows[1].profile).toEqual(internal.profile);
-    expect(rows[2]).toEqual(expect.objectContaining({item_id:'item',main_item_id:'item',options:{'Side shelves':'Yes'},profile:null}));
+    expect(rows[2]).toEqual(expect.objectContaining({item_id:'item',main_item_id:'item',options:{Size:'size i','Side shelves':'Yes'},profile:null,cart_material_scope:true}));
     expect(rows.map(cartCostProfileLabel)).toEqual(['Main','Shelf','Side shelves']);
   });
   it('does not reuse one Cart size profile as another size',()=>{
     const source={variant_key:'["catalog-v4-cart-base", "cart-product", "size i", "complete"]',kind:'main',item_id:'item',main_item_id:'item',options:{Size:'Size I'},profile:{lines:[{material_id:'old'}]},legacy_lines:[{material_id:'old'}]};
     const rows=cartCostProfiles('cart-product',[source],'size ii');
-    expect(rows).toHaveLength(3);expect(rows[0]).toEqual(expect.objectContaining({options:{Size:'size ii'},profile:null,legacy_lines:null}));
+    expect(rows).toHaveLength(3);expect(rows[0]).toEqual(expect.objectContaining({options:{Size:'size ii'},profile:null,legacy_lines:null,cart_material_scope:true}));
+  });
+  it('creates editable Cart material profiles from a product size without an order',()=>{
+    const rows=cartCostProfiles('cart-product',[],'size ii','Mobile Bar Cart');
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toEqual(expect.objectContaining({shipping_product_id:'cart-product',product_name:'Mobile Bar Cart',item_id:null,main_item_id:null,kind:'main',size_key:'size ii',cart_material_scope:true,variant_key:'["catalog-v4-cart-base", "cart-product", "size ii", "complete"]'}));
+    expect(rows.slice(1).map(row=>[row.kind,row.cart_material_scope,row.options])).toEqual([
+      ['option:Internal Shelf',true,{Size:'size ii','Internal Shelf':'Yes'}],
+      ['option:Side shelves',true,{Size:'size ii','Side shelves':'Yes'}]
+    ]);
   });
 });
