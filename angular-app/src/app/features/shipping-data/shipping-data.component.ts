@@ -12,7 +12,7 @@ import { SupabaseService } from '../../core/services/supabase.service';
 import {BoxDrawingComponent} from './box-drawing.component';
 import {ProductDetailsComponent} from './product-details.component';
 import {ProductPartsComponent} from './product-parts.component';
-import {PackagingVariantsComponent} from './packaging-variants.component';
+import {PackagingVariantsComponent,sharedBackdropLayoutKey} from './packaging-variants.component';
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
 import {ProductWorkCostComponent} from '../costing/product-work-cost.component';
 import {CostingService} from '../costing/costing.service';
@@ -121,7 +121,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
       <div class="product-tools"><input aria-label="Search products" placeholder="Search products" [(ngModel)]="search"><app-wix-catalog-review (saved)="load()" /><button (click)="openLibrary()">Backdrop box drawings</button></div>
       </div>
       <div class="tablewrap product-tablewrap"><table class="shiptable product-list"><thead><tr><th class="number">#</th><th>Product</th><th>Short name</th><th>Product size</th><th>Packaging profiles</th></tr></thead><tbody>
-      @for(p of visibleProducts();track p.id){<tr><td class="number">{{$index+1}}</td><td><button class="product-link" (click)="openProduct(p.id)">{{p.product_name}}</button></td><td>{{p.short_name||'—'}}</td><td>{{productSizes(p).join(' · ')||'—'}}</td><td>{{p.saved_profiles?.length||0}}</td></tr>}
+      @for(p of visibleProducts();track p.id){<tr><td class="number">{{$index+1}}</td><td><button class="product-link" (click)="openProduct(p.id)">{{p.product_name}}</button></td><td>{{p.short_name||'—'}}</td><td>{{productSizes(p).join(' · ')||'—'}}</td><td>{{reusableProfileCount(p)}}</td></tr>}
       @empty{<tr><td colspan="5">No products found.</td></tr>}
       </tbody></table></div>
       <p-dialog header="Backdrop box drawings" [(visible)]="libraryOpen" [modal]="true" [style]="{width:'min(760px,95vw)'}" [draggable]="false">
@@ -146,7 +146,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                 @if(p.short_name){<div class="product-full-name">{{p.product_name}}</div>}
                 @if(productSizes(p).length&&!isCart(p)){<div class="small product-header-size">{{productSizes(p).join(' · ')}}</div>}
               </div>
-              <span class="badge">{{p.saved_profiles?.length||0}} reusable profile(s)</span>
+              <span class="badge">{{reusableProfileCount(p)}} reusable profile(s)</span>
             </div>
 
             <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" [sizeTable]="isCart(p)" (saved)="updateDetails($event)">
@@ -271,7 +271,15 @@ export class ShippingDataComponent implements OnInit {
   activeCartSize(p:ShippingProduct){const sizes=this.cartSizes(p);return sizes.some(size=>size.key===this.selectedCartSize)?this.selectedCartSize:sizes[0]?.key||'';}
   selectCartSize(size:string){this.selectedCartSize=size;this.mainAddOns.set([]);}
   cartSizeLabel(p:ShippingProduct){return this.cartSizes(p).find(size=>size.key===this.activeCartSize(p))?.label||'';}
-  packingProfiles(p:ShippingProduct){return !this.isCart(p)?p.saved_profiles||[]:(p.saved_profiles||[]).filter((profile:any)=>packagingSizes(profile,p.product_name).some(size=>cartSizeKey(size)===this.activeCartSize(p)));}
+  packingProfiles(p:ShippingProduct){
+    if(this.isBackdrop(p)){
+      const parse=this.wixSizes(p).length?backdropSizeKey:manualBackdropSizeKey,sizes=new Set(this.productSizes(p).map(parse).filter(Boolean));
+      const entries=this.sharedBackdropPackagingProfiles().map(entry=>({...entry,key:backdropDrawingKey(entry.profile,entry.productName)})).filter(entry=>entry.key&&sizes.has(entry.key.split(':')[0]));
+      return [...new Map(entries.map(entry=>[`${entry.key}|${sharedBackdropLayoutKey(entry.profile)}`,entry])).values()].map(entry=>({...entry.profile,packages:(entry.profile.packages||[]).map((box:any)=>({...box,contents:(box.contents||[]).map((content:any)=>content.component_key&&content.component_key!=='main'?content:{...content,product_name:p.product_name,component_name:p.product_name})}))}));
+    }
+    return !this.isCart(p)?p.saved_profiles||[]:(p.saved_profiles||[]).filter((profile:any)=>packagingSizes(profile,p.product_name).some(size=>cartSizeKey(size)===this.activeCartSize(p)));
+  }
+  reusableProfileCount(p:ShippingProduct){return this.isBackdrop(p)?this.packingProfiles(p).length:p.saved_profiles?.length||0;}
   newFolding='';libraryMessage='';qualifiedKey=qualifiedDrawingKey;legacyFolding:Record<string,string>={};legacyRevisions:Record<string,string>={};classifying='';
   sharedSize(profile:any,p:ShippingProduct){return backdropDrawingKey(profile,p.product_name);}
   librarySizes(){return [...new Set([...this.extraSizes(),...this.products().filter(p=>this.isBackdrop(p)).flatMap(p=>(p.saved_profiles||[]).map(profile=>this.sharedSize(profile,p)).filter(Boolean))])].sort();}

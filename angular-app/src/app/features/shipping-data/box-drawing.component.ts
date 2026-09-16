@@ -22,6 +22,7 @@ export function sameDrawingBox(a:any,b:any):boolean {
  </div>
  @if(current){<small>{{sizeLabel(current.size_bytes)}}</small>}
  @if(busy&&current){<small role="status">Uploading replacement…</small>}
+ @if(busy&&!current){<small role="status">Uploading {{sizeLabel(pendingBytes)}}…</small>}
  @if(stale){<small>Box changed. Upload a matching drawing.</small>}
  @if(!current&&!readOnly){<small>Up to 20 MB</small>}
  }
@@ -41,7 +42,7 @@ export class BoxDrawingComponent implements OnChanges {
  @Input() productId='';@Input() variantKey='';
  @Input() readOnly=false;
  legacySizeDrawing=false;
- record:any=null;busy=false;loading=false;error='';success='';loadError=false;private generation=0;
+ record:any=null;busy=false;loading=false;error='';success='';loadError=false;pendingBytes=0;private generation=0;
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
  get current(){return this.record&&(this.productId||this.sharedSize||sameDrawingBox(this.record.box_snapshot,this.box))?this.record:null;}
  get stale(){return !!this.record&&!this.current;}
@@ -66,12 +67,16 @@ export class BoxDrawingComponent implements OnChanges {
   if(file.size>20971520){this.error=`${file.name} (${this.sizeLabel(file.size)}) exceeds the 20 MB limit. Choose a smaller file.`;return;}
   if(file.name.length>255){this.error='Filename exceeds 255 characters. Rename the file and try again.';return;}
   const generation=this.generation,signature=this.signature,index=this.index,box=structuredClone(this.box),previous=this.record,sharedSize=this.sharedSize,productId=this.productId,variantKey=this.variantKey;
-  this.busy=true;this.error='';let path='';let uploaded=false;let attaching=false;
+  this.busy=true;this.pendingBytes=file.size;this.error='';let path='';let uploaded=false;let attaching=false;
   try{
    const {data,error:authError}=await this.db.client.auth.getUser();if(authError||!data.user)throw new Error('Please sign in again.');
    path=`${data.user.id}/${crypto.randomUUID()}`;
-   const binary=new File([file],file.name,{type:'application/octet-stream'});
-   const {error:uploadError}=await this.db.client.storage.from('box-drawings').upload(path,binary,{contentType:'application/octet-stream',upsert:false});if(uploadError)throw uploadError;uploaded=true;
+   // Upload the browser-selected File directly. Re-wrapping a CDR in another
+   // File can make cloud-backed/locked Windows files fail while fetch reads it.
+   const bucket=this.db.client.storage.from('box-drawings'),uploadRequest=bucket.upload(path,file,{contentType:'application/octet-stream',upsert:false});let timer:any,timedOut=false;
+   const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{timedOut=true;reject(new Error('Upload timed out after 20 seconds. This attempt will be discarded; choose the file and retry.'));},20000);});
+   let uploadResult:any;try{uploadResult=await Promise.race([uploadRequest,timeout]);}catch(e){if(timedOut)void uploadRequest.then(result=>{if(!result.error)return bucket.remove([path]);return undefined;}).catch(()=>undefined);throw e;}finally{clearTimeout(timer);}
+   if(uploadResult.error)throw uploadResult.error;uploaded=true;
    attaching=true;
    const {data:drawing,error:saveError}=productId
     ?await this.db.client.rpc('wc_save_product_drawing',{p_product:productId,p_variant:variantKey,p_path:path,p_filename:file.name,p_bytes:file.size,p_expected:previous?.revision??null})
@@ -82,10 +87,10 @@ export class BoxDrawingComponent implements OnChanges {
    if(!drawing?.object_path||!drawing?.filename)throw new Error('The server did not confirm the saved drawing. Reopen this product to check before retrying.');
    if(generation===this.generation){this.record=drawing;this.success=`${file.name} uploaded and saved.`;}
    if(previous?.object_path)await this.db.client.storage.from('box-drawings').remove([previous.object_path]);
-  }catch(e:any){if(generation===this.generation)this.error=`${file.name}: ${e?.message||'Upload failed.'} ${attaching?'Reopen this product to check whether the file was saved before retrying.':'Check the file and connection, then try again.'}`;
+  }catch(e:any){if(generation===this.generation){const message=e?.message||'Upload failed.';const recovery=/timed out/i.test(message)?'':!attaching&&/failed to fetch/i.test(message)?'The browser could not read or send the selected file. If it is stored in OneDrive or another cloud folder, download it to this computer, then choose it again. Otherwise check the connection and retry.':attaching?'Reopen this product to check whether the file was saved before retrying.':'Check the file and connection, then try again.';this.error=`${file.name}: ${message}${recovery?' '+recovery:''}`;}
    // A lost RPC response may still have committed. Never delete a potentially linked file.
    if(uploaded&&!attaching)await this.db.client.storage.from('box-drawings').remove([path]);
-  }finally{this.busy=false;}
+  }finally{this.busy=false;this.pendingBytes=0;}
  }
  async download(){const drawing=this.current;if(!drawing||this.busy)return;this.error='';
   try{const {data,error}=await this.db.client.storage.from('box-drawings').createSignedUrl(drawing.object_path,60,{download:drawing.filename});

@@ -33,6 +33,12 @@ describe('Shipping rule save feedback',()=>{
   component.products.set([product] as any);component.storeCartMainProfile(product as any,profile);
   expect(component.products()[0].saved_profiles).toEqual([profile]);
  });
+ it('shows shared Backdrop packaging immediately for another product of the same size',()=>{
+  const saved={signature:'source-profile',template_item:{wix_options:{Size:'190cm x 95cm',Foldable:'YES',Colour:'White'}},packages:[{length_mm:1980,width_mm:1040,height_mm:90,weight_kg:22,contents:[{component_key:'main',unit_index:1,product_name:'Ripple Arch Backdrop'}]}]};
+  const source={id:'source',product_name:'Ripple Arch Backdrop',product_type:'Backdrop',saved_profiles:[saved]},target={id:'target',product_name:'Half Ripple Arch Backdrop',product_type:'Backdrop',saved_profiles:[]};
+  const component=new ShippingDataComponent({} as any,undefined,{parts:()=>[{shipping_product_id:'target',options:{Size:'190cm x 95cm'}}]} as any);component.products.set([source,target] as any);
+  const profiles=component.packingProfiles(target as any);expect(profiles).toHaveLength(1);expect(component.reusableProfileCount(target as any)).toBe(1);expect(profiles[0].packages[0].contents[0].product_name).toBe(target.product_name);
+ });
  it('keeps the draft and shows a row-level reason when required measurements are missing',async()=>{
   const from=vi.fn(),component=new ShippingDataComponent({client:{from}} as any,undefined,{} as any);
   component.setRuleDraft(rule.id,'length_mm','');
