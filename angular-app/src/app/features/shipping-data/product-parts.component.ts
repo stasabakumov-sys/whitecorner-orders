@@ -4,6 +4,7 @@ import {SupabaseService} from '../../core/services/supabase.service';
 import {paintOperations,paintLabel,ShopPart,ShopTemplate} from '../shop-floor/shop-floor.models';
 import {manualBackdropSizeKey,sizeKeyLabel} from './product-sizes';
 import {Folding,foldingLabel} from '../costing/production-cost';
+import {isCartProduct} from './cart-size';
 
 type ProductComponent={id:string;product_name:string;component_role:string};
 type AssignedPart=ShopPart&{component_product_id:string};
@@ -40,7 +41,7 @@ export class ProductPartsComponent implements OnChanges{
  folding:Folding|''='';sizeKey='';folds:Folding[]=['foldable','nonfoldable'];foldingLabel=foldingLabel;sizeLabel=sizeKeyLabel;
  private drafts=new Map<string,any>();
  get hasFolding(){return String(this.product?.product_type||'').toLowerCase()==='backdrop'||/backdrop/i.test(this.product?.product_name||'');}
- get isSizedCart(){return String(this.product?.product_type||'').trim().toLowerCase()==='cart'&&!!this.selectedSize;}
+ get isSizedCart(){return isCartProduct(this.product)&&!!this.selectedSize;}
  isAssignedEditing=(t:ShopTemplate)=>t.id===this.editingId&&!!t.folding;
  unassigned(){return this.templates.filter(t=>!t.folding||(!this.hasFolding&&!t.size_key));}
  sizeKeys(){return [...new Set([...this.sizes.map(manualBackdropSizeKey),...this.templates.map(t=>t.size_key||'')].filter(Boolean))];}

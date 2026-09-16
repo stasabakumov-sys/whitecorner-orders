@@ -19,7 +19,7 @@ import {CostingService} from '../costing/costing.service';
 import {Folding,foldingOption} from '../costing/production-cost';
 import {productId,componentNormal} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {shippingProfileCatalog,savedProfileOptions} from '../../core/utils/shipping-profile-catalog';
-import {cartSizeFromOptions,cartSizeKey,cartSizeRows} from './cart-size';
+import {cartSizeFromOptions,cartSizeKey,cartSizeRows,isCartProduct} from './cart-size';
 import {CartMainPackagingComponent} from './cart-main-packaging.component';
 import {BackdropPaintProfileComponent} from './backdrop-paint-profile.component';
 
@@ -263,7 +263,7 @@ export class ShippingDataComponent implements OnInit {
   search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';selectedCartSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
   openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);}
   isBackdrop(p?:ShippingProduct){return componentNormal(p?.product_type||'')==='backdrop'||/backdrop/i.test(p?.product_name||'');}
-  isCart(p?:ShippingProduct){return componentNormal(p?.product_type||'')==='cart';}
+  isCart(p?:ShippingProduct){return isCartProduct(p);}
   packagingScope(p?:ShippingProduct){return this.isBackdrop(p)?'shared-backdrop' as const:'product' as const;}
   contentLabel(c:any){return [...new Set([c.product_name,c.component_name].filter(Boolean).map((s:string)=>s.trim()))].join(' · ');}
   updateDetails(details:any){this.products.update(rows=>rows.map(p=>p.id===details.id?{...p,...details}:p));}
