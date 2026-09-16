@@ -25,6 +25,14 @@ describe('Safe packaging variant navigation',()=>{
   const s=new DeliveryReviewService({client:{from}} as any);
   await expect(s.variantPackages(cart,{wc_order_items:[cart,doors]})).resolves.toEqual([expect.objectContaining({package_name:'Main + doors'})]);
  });
+ it('combines separate saved profiles when no complete Cart Main combination exists',async()=>{
+  const cart={id:'cart',product_name:'Mobile Bar Cart',quantity:1,wix_options:{Colour:'White','Internal Shelf':'Yes'}},doors={id:'doors',product_name:'Back panel with doors',quantity:1};
+  const profile=(source:any,name:string)=>({signature:variantSignature(source),packages:[{package_name:name,length_mm:1000,width_mm:600,height_mm:100,weight_kg:20,contents:reviewComponents({wc_order_items:[source]})}]});
+  const rows:any={wc_delivery_packaging_profiles:[profile(cart,'Cart box'),profile(doors,'Doors box')]};
+  const from=vi.fn((table:string)=>{let data=[...(rows[table]||[])];const q:any={select:()=>q,eq:(field:string,value:any)=>{data=data.filter((row:any)=>field.includes('->>')?row.template_item?.profile_scope===value:row[field]===value);return q;},order:()=>q,range:async()=>({data,error:null}),maybeSingle:async()=>({data:data[0]||null,error:null}),then:(resolve:any)=>resolve({data,error:null})};return q;});
+  const s=new DeliveryReviewService({client:{from}} as any);
+  await expect(s.variantPackages(cart,{wc_order_items:[cart,doors]})).resolves.toEqual([expect.objectContaining({package_name:'Cart box'}),expect.objectContaining({package_name:'Doors box'})]);
+ });
  it('checks the exact option signature and navigates by associated product ID',async()=>{
   const eq=vi.fn(),from=vi.fn((table:string)=>{const q:any={select:()=>q,eq:(...args:any[])=>{eq(...args);return q;},maybeSingle:async()=>({data:table==='wc_delivery_packaging_profiles'?{shipping_product_id:'correct'}:{id:'correct'}})};return q;});
   const s=new DeliveryReviewService({client:{from}} as any);
