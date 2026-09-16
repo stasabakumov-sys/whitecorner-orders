@@ -4,6 +4,7 @@ import {SupabaseService} from '../../core/services/supabase.service';
 import {BACKDROP_PAINT_OPERATIONS,ShopTemplate} from '../shop-floor/shop-floor.models';
 import {PlannedWorkRow,WorkRate,plannedTotal,plannedWorkRows} from './planned-work-cost';
 import {backdropFinishModes,productionCostRows,foldingLabel,templateVariantLabel} from './production-cost';
+import {isCartProduct} from '../shipping-data/cart-size';
 
 @Component({selector:'app-product-work-cost',standalone:true,imports:[CommonModule],template:`
  <h3>{{hasFolding?'Production cost':'Planned work cost'}} · incl. GST</h3><p class="mut">Calculated from @if(hasFolding){saved materials, }Estimated min and shared hourly rates. Raw excludes painting. Repaint is unplanned and excluded.</p>
@@ -25,7 +26,7 @@ export class ProductWorkCostComponent implements OnChanges{
  @Input() product:any;@Input() sizes:string[]=[];@Input() selectedSize='';@Input() manualSizes=false;@Input() materialProfiles:any[]=[];@Input() materials:any[]=[];templates:ShopTemplate[]=[];rates:WorkRate[]=[];loading=false;error='';private token=0;
  foldingLabel=foldingLabel;variantLabel=templateVariantLabel;
  get hasFolding(){return String(this.product?.product_type||'').toLowerCase()==='backdrop'||/backdrop/i.test(this.product?.product_name||'');}
- get isSizedCart(){return String(this.product?.product_type||'').trim().toLowerCase()==='cart'&&!!this.selectedSize;}
+ get isSizedCart(){return isCartProduct(this.product)&&!!this.selectedSize;}
  finishModes(){return backdropFinishModes(this.product,this.materialProfiles.map(profile=>profile.options));}
  displayTemplates(){return this.hasFolding?(['foldable','nonfoldable'] as const).flatMap(fold=>{const shared=this.templates.find(t=>!t.size_key&&t.folding===fold);if(shared)return[shared];const legacy=this.templates.filter(t=>t.folding===fold);return legacy.length===1?[legacy[0]]:[];}):this.templates;}
  comparison(){return productionCostRows(this.templates,this.materialProfiles,this.product?.backdrop_paint_profile,this.materials,this.rates,this.product.product_name,this.product.id,this.finishModes());}

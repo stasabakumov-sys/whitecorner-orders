@@ -24,26 +24,16 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$SUPABASE_ACCESS_TOKEN"
-          check_sql="select to_regprocedure('public.wc_save_cart_material_profile(uuid,text,text,jsonb,boolean,timestamp with time zone)') is not null as installed"
+          check_sql="select to_regprocedure('public.wc_save_cart_material_profile(uuid,text,text,jsonb,boolean,timestamp with time zone)') is not null and not exists(select 1 from public.wc_shipping_products where active and product_type is distinct from 'Cart' and product_name ~* '(\\mcart\\M|\\mmobile bar\\M|\\mserving table\\M|\\mevent bar\\M)') as installed"
           jq -n --arg query "$check_sql" '{query: $query, read_only: true}' > check.json
-          check_response=$(curl --fail-with-body --silent --show-error \
+          jq -n --rawfile query supabase/migrations/20260916000600_cart_product_classification.sql \
+            '{query: $query, read_only: false}' > migration.json
+          curl --fail-with-body --silent --show-error \
             --request POST \
             --url "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query" \
             --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
             --header 'Content-Type: application/json' \
-            --data-binary @check.json)
-          if jq -e '.[0].installed == true' <<< "$check_response" > /dev/null; then
-            echo 'Cart product cost migration is already installed.'
-          else
-            jq -n --rawfile query supabase/migrations/20260916000500_cart_product_material_profiles.sql \
-              '{query: $query, read_only: false}' > migration.json
-            curl --fail-with-body --silent --show-error \
-              --request POST \
-              --url "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query" \
-              --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-              --header 'Content-Type: application/json' \
-              --data-binary @migration.json
-          fi
+            --data-binary @migration.json
           postflight=$(curl --fail-with-body --silent --show-error \
             --request POST \
             --url "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query" \
