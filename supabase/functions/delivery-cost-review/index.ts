@@ -71,7 +71,8 @@ Deno.serve(async(req)=>{
     const oldContents=(old?.packages||[]).flatMap((box:any)=>box.contents||[]).filter((content:any)=>!content.component_key||content.component_key==='main');
     obsoleteOwned=old?.shipping_product_id===product.id||(!old?.shipping_product_id&&(Boolean(product.wix_product_id)&&oldContents.some((content:any)=>content.wix_product_id===product.wix_product_id)||oldContents.some((content:any)=>componentNormal(content.product_name||'')===componentNormal(product.product_name))||componentNormal(old?.template_item?.product_name||'')===componentNormal(product.product_name)));
    }
-   const {error}=await db.from('wc_delivery_packaging_profiles').upsert({signature,shipping_product_id:product.id,template_item:item,packages,created_by:user.id,updated_at:new Date().toISOString()});
+   const storedPackages=isBackdrop?packages.map((box:any)=>({package_name:box.package_name,backdrop_size_key:backdropPackagingKey(item),weight_kg:box.weight_kg,contents:box.contents})):packages;
+   const {error}=await db.from('wc_delivery_packaging_profiles').upsert({signature,shipping_product_id:product.id,template_item:item,packages:storedPackages,created_by:user.id,updated_at:new Date().toISOString()});
    if(error)return json({error:'Variant could not be saved. Check the variant migration.'},409);
    if(obsoleteOwned){
     const {error:cleanupError}=await db.from('wc_delivery_packaging_profiles').delete().eq('signature',previous);

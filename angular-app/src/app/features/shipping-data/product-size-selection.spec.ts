@@ -7,6 +7,7 @@ describe('Product size selection',()=>{
   const c=Object.create(ShippingDataComponent.prototype) as ShippingDataComponent;
   c.catalogProducts=signal({[product.id]:{productOptions:[{name:'Size',choices:sizes.map(description=>({description}))}]}});
   c.selectedCartSize='';c.selectedPackingSize='';c.mainAddOns=signal<any[]>([]);
+  c.backdropDimensions=signal({});c.rules=signal([]);
   return c;
  }
  it('switches the product drawing and packaging together, preserving separate folding profiles',()=>{

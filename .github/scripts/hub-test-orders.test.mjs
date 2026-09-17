@@ -63,17 +63,23 @@ try {
  await db.exec(`create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
  create table storage.objects(bucket_id text,name text,metadata jsonb);alter table storage.objects enable row level security;
  create function storage.foldername(text) returns text[] language sql as $$select string_to_array($1,'/')$$;
- create table wc_delivery_packaging_profiles(signature text primary key,packages jsonb,shipping_product_id uuid references wc_shipping_products(id),template_item jsonb);
+ create table wc_delivery_packaging_profiles(signature text primary key,packages jsonb,shipping_product_id uuid references wc_shipping_products(id),template_item jsonb,created_by uuid references auth.users(id));
  create function wc_shop_metric_size(value text) returns text language sql immutable as $$select case when $1~'^[0-9]+mm x [0-9]+mm$' then split_part($1,'mm x ',1)||'x'||split_part(split_part($1,'mm x ',2),'mm',1) end$$;
  alter table wc_shipping_products add column short_name text default '';
  create schema supabase_migrations;create table supabase_migrations.schema_migrations(version text primary key,name text,statements text[]);`);
  for(const name of ['20260909000100_box_drawings','20260909000200_backdrop_drawing_library','20260909000300_product_drawings','20260909000500_drawing_upload_limit'])await db.exec(await readFile(`supabase/migrations/${name}.sql`,'utf8'));
+ const rippleBox={package_name:'Backdrop',length_mm:930,width_mm:930,height_mm:90,weight_kg:24,contents:[{wix_product_id:'115701e9-439e-4488-4d87-47b287fd5310',profile_item_key:'["115701e9-439e-4488-4d87-47b287fd5310",["foldable yes","size 180cm x 90cm"]]:0',component_key:'main'}]};
+ await db.query('insert into wc_delivery_packaging_profiles(signature,packages,created_by) values($1,$2,$3)',['ripple-180',[rippleBox],actor]);
  const releaseSql=execFileSync(process.execPath,['.github/scripts/product-card-release.mjs','--print-sql'],{encoding:'utf8'});
  await assert.rejects(db.exec(releaseSql.replace('Sign in required','Changed production contract')),/Shop Floor command differs/);
  await db.exec('rollback');
  // Pasting through Windows SQL Editor changes line endings inside SQL literals too.
  await db.exec(releaseSql.replace(/\r?\n/g,'\r\n'));await db.exec(releaseSql);await db.exec(releaseSql.replace(/\r?\n/g,'\r\n'));
- assert.equal((await db.query('select count(*)::int n from supabase_migrations.schema_migrations')).rows[0].n,4);
+ assert.equal((await db.query('select count(*)::int n from supabase_migrations.schema_migrations')).rows[0].n,5);
+ const migratedBox=(await db.query("select packages->0 box from wc_delivery_packaging_profiles where signature='ripple-180'")).rows[0].box;
+ const {length_mm,width_mm,height_mm,...weightAndIdentity}=rippleBox;
+ assert.deepEqual(migratedBox,{...weightAndIdentity,backdrop_size_key:'1800x900:foldable'});
+ assert.deepEqual((await db.query("select length_mm::int length_mm,width_mm::int width_mm,height_mm::int height_mm from wc_backdrop_packaging_dimensions where size_key='1800x900:foldable'")).rows[0],{length_mm:930,width_mm:930,height_mm:90});
  assert.deepEqual((await db.query('select paint_operations from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0].paint_operations,['First primer','First sanding','Finish coat']);
  assert.equal((await db.query('select cardinality(paint_operations) n from wc_shop_units where unit_id=$1',[startedBackdrop])).rows[0].n,5);
  const freshBackdrop=randomUUID();
