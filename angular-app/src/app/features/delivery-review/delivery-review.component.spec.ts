@@ -71,6 +71,8 @@ describe('Delivery review UI',()=>{
   const body=f.nativeElement.textContent;expect(body).toContain('TNT');expect(body).toContain('Carrier excluded by policy');expect(body).toContain('$5.56');expect(body).toContain('Price review required');
   expect(body).toContain('Order total incl. GST');expect(body).toContain('$210.00');expect(body).toContain('Invoice delivery incl. GST');expect(body).toContain('$100.00');expect(body).not.toContain('$90.91');
   const button=[...f.nativeElement.querySelectorAll('button')].find((b:any)=>b.textContent.includes('Approve current')) as HTMLButtonElement;
-  expect(button.disabled).toBe(true);expect(service.load).toHaveBeenCalledOnce();
+  const actions=button.closest('.review-actions')!;expect(actions.firstElementChild!.textContent).toContain('Edit packaging');expect(actions.lastElementChild).toBe(button);
+  const approve=vi.spyOn(service,'approve').mockResolvedValue(true);button.click();await f.whenStable();
+  expect(approve).toHaveBeenCalledExactlyOnceWith('order','Delivery price accepted for this order');expect(service.load).toHaveBeenCalledOnce();
  });
 });
