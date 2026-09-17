@@ -39,6 +39,12 @@ describe('Shipping rule save feedback',()=>{
   const component=new ShippingDataComponent({} as any,undefined,{parts:()=>[{shipping_product_id:'target',options:{Size:'190cm x 95cm'}}]} as any);component.products.set([source,target] as any);
   const profiles=component.packingProfiles(target as any);expect(profiles).toHaveLength(1);expect(component.reusableProfileCount(target as any)).toBe(1);expect(profiles[0].packages[0].contents[0].product_name).toBe(target.product_name);
  });
+ it('opens a saved packaging profile in the existing editor without recreating the Packing block',()=>{
+  const component=new ShippingDataComponent({} as any,undefined,{} as any),open=vi.fn();
+  component.packagingEditor={open} as any;
+  component.editPackagingProfile('saved-profile');
+  expect(open).toHaveBeenCalledOnce();expect(open).toHaveBeenCalledWith('saved-profile');
+ });
  it('keeps the draft and shows a row-level reason when required measurements are missing',async()=>{
   const from=vi.fn(),component=new ShippingDataComponent({client:{from}} as any,undefined,{} as any);
   component.setRuleDraft(rule.id,'length_mm','');

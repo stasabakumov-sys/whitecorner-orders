@@ -2,7 +2,7 @@ import {productNavigationMatches} from '../../core/utils/product-navigation';
 import {WixCatalogReviewComponent} from './wix-catalog-review.component';
 import {WixProductSnapshotComponent} from './wix-product-snapshot.component';
 import {PackageDrawingsComponent} from './package-drawings.component';
-import { Component, OnInit, computed, signal, Optional, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, computed, signal, Optional, ChangeDetectorRef, ViewChild } from '@angular/core';
 import {DialogModule} from 'primeng/dialog';
 import {DrawerModule} from 'primeng/drawer';
 import {FormsModule} from '@angular/forms';
@@ -187,7 +187,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               }</div>
              </section>}
             }@else{
-             <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id+':'+packagingEditorKey) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [sharedBackdropProfiles]="sharedBackdropPackagingProfiles()" />}</div>
+             <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [sharedBackdropProfiles]="sharedBackdropPackagingProfiles()" />}</div>
             }
             <div class="shipsection">
               <h3>{{isCart(p)?'Reusable Main packages':'Packages'}}</h3>
@@ -262,11 +262,9 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 })
 export class ShippingDataComponent implements OnInit {
   search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';selectedCartSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
-  openProduct(id:string){this.requestedVariant='';this.packagingEditorKey=0;this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
-  editPackagingProfile(signature:string){
-    this.requestedVariant=signature;this.packagingEditorKey++;
-    setTimeout(()=>document.getElementById('packaging-variant-editor')?.scrollIntoView({behavior:'smooth',block:'start'}));
-  }
+  @ViewChild(PackagingVariantsComponent) packagingEditor?:PackagingVariantsComponent;
+  openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
+  editPackagingProfile(signature:string){this.packagingEditor?.open(signature);}
   finishCatalog=signal<{id:string;source:any}|null>(null);
   finishModes(p:ShippingProduct){const catalog=this.finishCatalog();return productFinishModes(p,catalog?.id===p.id?catalog.source:null,this.costProfiles(p.id,this.activeCartSize(p)));}
   hasPainting(p:ShippingProduct){return this.finishModes(p).includes(true);}
@@ -307,7 +305,6 @@ export class ShippingDataComponent implements OnInit {
   rules = signal<ShippingRule[]>([]);
   selectedId = signal<string | null>(null);
   requestedVariant='';
-  packagingEditorKey=0;
   kindFilter = signal<'all'|'backdrops'|'carts'|'others'>('all');
   error = signal('');
   editingIds = signal<Set<string>>(new Set());
