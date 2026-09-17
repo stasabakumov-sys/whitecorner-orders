@@ -1,13 +1,13 @@
 // Targeted, owner-authorised release. No db push and no customer payload logging.
 import {readFile,writeFile} from 'node:fs/promises';
-const names=['20260913000100_backdrop_drawing_folding','20260913000200_backdrop_paint_operations','20260916000200_backdrop_drawing_links','20260918000100_backdrop_packaging_dimensions','20260918000200_link_legacy_backdrop_packaging'];
+const names=['20260913000100_backdrop_drawing_folding','20260913000200_backdrop_paint_operations','20260916000200_backdrop_drawing_links','20260918000100_backdrop_packaging_dimensions','20260918000300_backdrop_180_reference'];
 const literal=value=>"'"+value.replaceAll("'","''")+"'";
 const sources=await Promise.all(names.map(name=>readFile(`supabase/migrations/${name}.sql`,'utf8').then(s=>s.replace(/^\uFEFF/,'').replaceAll('\r',''))));
 const original=await readFile('supabase/migrations/20260912000100_shop_floor_tracker.sql','utf8');
 const originalCommand=original.slice(original.indexOf('create function public.wc_shop_command('));
 const oldBody=originalCommand.slice(originalCommand.indexOf('as $$')+5,originalCommand.indexOf('end $$;')+4).replaceAll('\r','');
 const verify=`select
- (select count(*)::int from supabase_migrations.schema_migrations where version in ('20260913000100','20260913000200','20260916000200','20260918000100','20260918000200')) registered,
+ (select count(*)::int from supabase_migrations.schema_migrations where version in ('20260913000100','20260913000200','20260916000200','20260918000100','20260918000300')) registered,
  exists(select 1 from pg_attribute where attrelid='public.wc_shop_units'::regclass and attname='paint_operations' and not attisdropped) paint_routes,
  to_regprocedure('public.wc_classify_backdrop_box_drawing(text,text,uuid)') is not null classification,
  to_regprocedure('public.wc_save_backdrop_packaging_dimensions(text,text,numeric,numeric,numeric,uuid)') is not null backdrop_dimensions_save,

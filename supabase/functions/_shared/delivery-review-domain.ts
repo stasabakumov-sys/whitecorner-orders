@@ -135,7 +135,8 @@ export function canonicalPackagingSignature(signature:string):string{
 // including their drawing links; ambiguous legacy matches require manual review.
 export async function findPackagingProfile(db:any,signature:string){
  const direct=await db.from('wc_delivery_packaging_profiles').select('*').eq('signature',signature).maybeSingle();
- if(direct.error||direct.data)return direct;
+ if(direct.error)return direct;
+ if(direct.data)return resolveBackdropProfileDimensions(db,direct.data);
  const matches:any[]=[];
  for(let start=0;;start+=250){
   const page=await db.from('wc_delivery_packaging_profiles').select('*').order('signature').range(start,start+249);
@@ -144,7 +145,23 @@ export async function findPackagingProfile(db:any,signature:string){
   if((page.data||[]).length<250)break;
  }
  if(matches.length>1)return {data:null,error:{message:'Multiple saved packaging profiles differ only by colour. Save one shared profile before using it.'}};
- return{data:matches[0]||null,error:null};
+ return resolveBackdropProfileDimensions(db,matches[0]||null);
+}
+// Only explicitly referenced product profiles use live shared measurements.
+// Order/review/shipment snapshots keep their historical dimensions.
+export async function resolveBackdropProfileDimensions(db:any,profile:any){
+ if(!profile?.packages?.some((box:any)=>box.backdrop_size_key))return {data:profile,error:null};
+ const dimensions=new Map<string,any>();
+ for(const box of profile.packages){
+  const key=box.backdrop_size_key;if(!key||dimensions.has(key))continue;
+  const result=await db.from('wc_backdrop_packaging_dimensions').select('*').eq('size_key',key).maybeSingle();
+  if(result.error||!result.data)return {data:null,error:{message:'Shared Backdrop dimensions are unavailable. Review Backdrop box drawings.'}};
+  dimensions.set(key,result.data);
+ }
+ return {data:{...profile,packages:profile.packages.map((box:any)=>{
+  const shared=dimensions.get(box.backdrop_size_key);
+  return shared?{...box,package_name:shared.package_name,length_mm:Number(shared.length_mm),width_mm:Number(shared.width_mm),height_mm:Number(shared.height_mm)}:box;
+ })},error:null};
 }
 export function productId(item:OrderItemRow){const c=item.catalog_reference as any,r=item.raw_item as any;return String(c?.catalogItemId||c?.productId||r?.catalogReference?.catalogItemId||r?.productId||'');}
 const attribute=/^(colou?r|size|dimensions?|width|height|length|finish|foldable|material|tabletop(?: design)?|personalisation|personalization|engraving|notes?|message)$/i;

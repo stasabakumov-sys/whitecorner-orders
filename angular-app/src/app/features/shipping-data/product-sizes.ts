@@ -26,30 +26,23 @@ export function manualBackdropSizeKey(value:string):string {
 }
 export function sizeKeyLabel(key:string){const [size,fold]=key.split(':');return size.split('x').map(x=>Number(x)/10).join(' × ')+' cm'+(fold==='foldable'?' · Foldable':fold==='nonfoldable'?' · Non-foldable':'');}
 export function qualifiedDrawingKey(key:string){return /^[1-9]\d*x[1-9]\d*:(foldable|nonfoldable)$/.test(key);}
-function legacyOptionValues(profile:any,productName:string,option:RegExp):string[]{
- const contents=(profile.packages||[]).flatMap((box:any)=>box.contents||[]).filter((content:any)=>!content.component_key||content.component_key==='main');
- const matching=contents.filter((content:any)=>content.product_name===productName);
- const candidates=matching.length?matching:contents;
- const values:string[]=[];
- for(const content of candidates){
-  try{
-   const key=content.profile_item_key||'',options=JSON.parse(key.slice(0,key.lastIndexOf(':')))[1];
-   for(const value of options||[])if(option.test(value))values.push(value.replace(option,''));
-  }catch{/* Legacy profile without option metadata. */}
- }
- return values;
-}
 export function backdropDrawingKey(profile:any,productName:string):string{
  const sizes=[...new Set(packagingSizes(profile,productName).map(backdropSizeKey))];
  if(sizes.length!==1||!sizes[0])return '';
  const values=Object.entries(profile.template_item?.wix_options||{}).filter(([k])=>/^foldable$/i.test(k.trim())).map(([,v])=>typeof v==='boolean'?String(v):text(v));
- values.push(...legacyOptionValues(profile,productName,/^foldable\s+/i));
+ for(const c of (profile.packages||[]).flatMap((b:any)=>b.contents||[])){
+  if(c.product_name!==productName||c.component_key&&c.component_key!=='main')continue;
+  try{const key=c.profile_item_key||'';const opts=JSON.parse(key.slice(0,key.lastIndexOf(':')))[1];for(const opt of opts||[])if(/^foldable\s+/i.test(opt))values.push(opt.replace(/^foldable\s+/i,''));}catch{/* Missing legacy options need review. */}
+ }
  const folds=[...new Set(values.map(v=>{const n=v.trim().toLowerCase().replace(/[\s_-]/g,'');return ['yes','true','foldable'].includes(n)?'foldable':['no','false','nonfoldable','unfoldable'].includes(n)?'nonfoldable':'';}))];
  return folds.length===1&&folds[0]?sizes[0]+':'+folds[0]:'';
 }
 export function packagingSizes(profile:any,productName:string):string[]{
  const values=optionSizes(profile.template_item?.wix_options);
- values.push(...legacyOptionValues(profile,productName,/^size\s+/i));
+ for(const c of (profile.packages||[]).flatMap((b:any)=>b.contents||[])){
+  if(c.product_name!==productName||c.component_key&&c.component_key!=='main')continue;
+  try{const key=c.profile_item_key||'';const opts=JSON.parse(key.slice(0,key.lastIndexOf(':')))[1];for(const opt of opts||[])if(/^size\s+/i.test(opt))values.push(opt.replace(/^size\s+/i,''));}catch{/* Legacy profile without option metadata. */}
+ }
  return [...new Set(values)];
 }
 

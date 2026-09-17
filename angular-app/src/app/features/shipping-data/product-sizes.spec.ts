@@ -45,11 +45,6 @@ describe('Shared backdrop folding key',()=>{
   expect(backdropDrawingKey(p,'Backdrop')).toBe('2000x1000:nonfoldable');
   p.template_item=profile('YES').template_item;expect(backdropDrawingKey(p,'Backdrop')).toBe('');
  });
- it('recovers size and folding from an assigned legacy profile after the product name changes',()=>{
-  const p:any={packages:[{contents:[{product_name:'Old Backdrop name',component_key:'main',profile_item_key:JSON.stringify(['id',['size 180cm x 90cm','foldable yes']])+':0'}]}]};
-  expect(packagingSizes(p,'Renamed Backdrop')).toEqual(['180cm x 90cm']);
-  expect(backdropDrawingKey(p,'Renamed Backdrop')).toBe('1800x900:foldable');
- });
 });
 
 describe('Packaging size tabs',()=>{

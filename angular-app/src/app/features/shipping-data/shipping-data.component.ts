@@ -13,6 +13,7 @@ import {BoxDrawingComponent} from './box-drawing.component';
 import {ProductDetailsComponent} from './product-details.component';
 import {ProductPartsComponent} from './product-parts.component';
 import {PackagingVariantsComponent,BackdropPackagingDimensions} from './packaging-variants.component';
+import {backdropReferenceProfiles} from './backdrop-packing-reference';
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
 import {ProductWorkCostComponent} from '../costing/product-work-cost.component';
 import {CostingService} from '../costing/costing.service';
@@ -176,6 +177,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             </nav>}
             @if(!isCart(p)){@for(profile of visiblePackingProfiles(p);track profile.signature){
              <section class="shipsection"><div class="packaging-profile-heading"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3></div>
+             @if(profile.reference_only){<p role="status">Shared box dimensions. Enter and save the weight for this model and size.</p>}
              <p class="small">@if(isBackdrop(p)){Dimensions and drawing are shared for this size and folding option. Weight belongs only to this model and size.}@else{Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.}</p>
              <app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" [backdrop]="isBackdrop(p)" [sharedSize]="sharedSize(profile,p)" [sharedSizeLabel]="sizeLabel(sharedSize(profile,p))" [fallbackOptions]="backdropProfileOptions(profile,p)" [backdropDimensions]="backdropDimension(profile,p)" (dimensionsSaved)="storeBackdropDimensions($event)" (profileSaved)="storeCartMainProfile(p,$event)" />
              </section>
@@ -191,7 +193,9 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               }</div>
              </section>}
             }@else if(!visiblePackingProfiles(p).length){
+             @if(isBackdrop(p)){<p role="status">No shared box dimensions are configured for {{activeProductSize(p)}}. Add them in Backdrop box drawings.</p>}@else{
              <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [catalog]="catalogProducts()[p.id]" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [backdropDimensions]="backdropDimensions()" />}</div>
+             }
             }
             @if(isCart(p)){
             <div class="shipsection">
@@ -292,7 +296,7 @@ export class ShippingDataComponent implements OnInit {
   selectCartSize(size:string){this.selectedCartSize=size;this.mainAddOns.set([]);}
   cartSizeLabel(p:ShippingProduct){return this.cartSizes(p).find(size=>size.key===this.activeCartSize(p))?.label||'';}
   packingProfiles(p:ShippingProduct){
-    if(this.isBackdrop(p))return p.saved_profiles||[];
+    if(this.isBackdrop(p))return [...(p.saved_profiles||[]),...backdropReferenceProfiles(p,this.productSizes(p),this.backdropDimensions(),this.rules())];
     return !this.isCart(p)?p.saved_profiles||[]:(p.saved_profiles||[]).filter((profile:any)=>packagingSizes(profile,p.product_name).some(size=>cartSizeKey(size)===this.activeCartSize(p)));
   }
   packingSizeTabs(p:ShippingProduct){return packagingSizeGroups(this.packingProfiles(p),p.product_name,this.productSizes(p));}
@@ -433,7 +437,7 @@ export class ShippingDataComponent implements OnInit {
     this.error.set('');this.mainAddOns.set(selected);
   }
   storeCartMainProfile(product:ShippingProduct,profile:any){
-    this.products.update(rows=>rows.map(row=>row.id!==product.id?row:{...row,saved_profiles:[...(row.saved_profiles||[]).filter(saved=>saved.signature!==profile.signature),profile]}));
+    this.products.update(rows=>rows.map(row=>row.id!==product.id?row:{...row,saved_profiles:[...(row.saved_profiles||[]).filter(saved=>saved.signature!==profile.signature&&(!this.isBackdrop(product)||saved.signature!==profile.previousSignature)),profile]}));
   }
   mainAddOnSelected(rule:ShippingRule){return this.mainAddOns().some(item=>item.id===rule.id);}
   toggleMainAddOn(rule:ShippingRule,selected:boolean){this.mainAddOns.update(rows=>selected?[...rows.filter(item=>item.id!==rule.id),rule]:rows.filter(item=>item.id!==rule.id));}
