@@ -4,28 +4,19 @@ import {SupabaseService} from '../../core/services/supabase.service';
 import {packagingOptionLabels,orderItemOptionLabels,packagingError,reviewComponents,variantSignature,productId} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {catalogSizes,backdropDrawingKey,sizeKeyLabel} from './product-sizes';
 
-export type SharedBackdropPackagingProfile={profile:any;productName:string};
+export type BackdropPackagingDimensions={size_key:string;package_name:string;length_mm:number;width_mm:number;height_mm:number;revision:string};
 export type PackagingScope='shared-backdrop'|'product';
 
-export function sharedBackdropLayoutKey(profile:any){
- return JSON.stringify((profile?.packages||[]).map((box:any)=>({
-  length_mm:Number(box.length_mm),width_mm:Number(box.width_mm),height_mm:Number(box.height_mm),weight_kg:Number(box.weight_kg),
-  contents:(box.contents||[]).map((content:any)=>[content.component_key||'main',Number(content.unit_index)||1]).sort(),
- })));
-}
-
-export function sharedBackdropBoxes(options:Record<string,string>,profiles:SharedBackdropPackagingProfile[]){
+export function sharedBackdropBox(options:Record<string,string>,dimensions:Record<string,BackdropPackagingDimensions>){
  const target=backdropDrawingKey({template_item:{wix_options:options},packages:[]},'');
- if(!target)return {key:'',packages:[] as any[],ambiguous:false};
- const matches=profiles.filter(entry=>backdropDrawingKey(entry.profile,entry.productName)===target&&entry.profile?.packages?.length);
- const layouts=[...new Map(matches.map(entry=>[sharedBackdropLayoutKey(entry.profile),entry.profile.packages])).values()];
- return {key:target,packages:layouts.length===1?structuredClone(layouts[0]):[],ambiguous:layouts.length>1};
+ const row=dimensions[target];
+ return {key:target,box:row?{package_name:row.package_name,length_mm:Number(row.length_mm),width_mm:Number(row.width_mm),height_mm:Number(row.height_mm),weight_kg:0,contents:[]}:null};
 }
 
 @Component({selector:'app-packaging-variants',standalone:true,imports:[FormsModule],template:`
  <h3>Packaging variants</h3>
  @if(packagingScope==='shared-backdrop'){
-  <p>Shared Backdrop box database: exact Size and Foldable/Non-foldable must match. Product design and Colour (including Raw) do not change packaging.</p>
+  <p>Backdrop dimensions and drawing are shared by exact Size and Foldable/Non-foldable. Enter weight separately for this model and size; design and Colour (including Raw) do not change packaging.</p>
  }@else{
   <p>This product uses its own packaging profiles. Size and structural options must match. Colour (including Raw) shares the same packaging.</p>
  }
@@ -47,12 +38,12 @@ export function sharedBackdropBoxes(options:Record<string,string>,profiles:Share
  @if(reuseMessage()){<p [attr.role]="reuseConflict()?'alert':'status'">{{reuseMessage()}}</p>}
  <h4>Boxes for one product</h4>
  @for(p of boxes;track $index){<section class="box"><div class="tools">
- <label>Name<input [(ngModel)]="p.package_name"></label>
- <label>L mm<input type="number" min="1" [(ngModel)]="p.length_mm"></label><label>W mm<input type="number" min="1" [(ngModel)]="p.width_mm"></label><label>H mm<input type="number" min="1" [(ngModel)]="p.height_mm"></label><label>kg<input type="number" min="0.001" step="0.1" [(ngModel)]="p.weight_kg"></label>
- <button (click)="boxes.splice($index,1)">Remove box</button></div>
+ <label>Name<input [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.package_name"></label>
+ <label>L mm<input type="number" min="1" [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.length_mm"></label><label>W mm<input type="number" min="1" [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.width_mm"></label><label>H mm<input type="number" min="1" [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.height_mm"></label><label>kg<input type="number" min="0.001" step="0.1" [(ngModel)]="p.weight_kg"></label>
+ @if(packagingScope!=='shared-backdrop'){<button (click)="boxes.splice($index,1)">Remove box</button>}</div>
  <details><summary>Contents ({{p.contents.length}})</summary>@for(c of components();track c.id){<label class="choice"><input type="checkbox" [checked]="assigned(p,c)" (change)="toggle(p,c,$any($event.target).checked)">{{c.component_name}} · Unit {{c.unit_index}}</label>}</details>
  </section>}
- <button (click)="addBox()">Add box</button>
+ @if(packagingScope!=='shared-backdrop'){<button (click)="addBox()">Add box</button>}
  <p>{{issue()}}</p>
  <label class="choice"><input type="checkbox" [(ngModel)]="confirmed">I checked this variant's options, box measurements and contents.</label>
  <button [disabled]="!!issue()||!confirmed" (click)="save()">{{saving()?'Saving…':busy()?'Loading packaging…':'Save changes'}}</button>
@@ -67,7 +58,7 @@ export class PackagingVariantsComponent implements OnChanges {
  chooseSize(value:string){const name=(this.catalog?.productOptions||[]).find((o:any)=>/^(size|dimensions?)$/i.test(o.name||''))?.name||Object.keys(this.catalog?.variants?.find((v:any)=>Object.keys(v.choices||{}).some(k=>/^(size|dimensions?)$/i.test(k)))?.choices||{}).find(k=>/^(size|dimensions?)$/i.test(k))||'Size';this.options=this.options.filter(o=>!/^(size|dimensions?)$/i.test(o.name.trim()));this.options.push({name,value});this.remap();}
  @Input() initialSignature='';
  @Input() packagingScope:PackagingScope='product';
- @Input() sharedBackdropProfiles:SharedBackdropPackagingProfile[]=[];
+ @Input() backdropDimensions:Record<string,BackdropPackagingDimensions>={};
  variants=signal<any[]>([]);examples=signal<any[]>([]);rules:any[]=[];error=signal('');busy=signal(false);saving=signal(false);loadingExamples=signal(false);saved=signal(false);
  reuseMessage=signal('');reuseConflict=signal(false);
  selectedKey='';sourceItemId='';catalogId='';
@@ -96,21 +87,21 @@ export class PackagingVariantsComponent implements OnChanges {
  label(item:any){return packagingOptionLabels(item).join(' · ')||'All colours · no structural options';}
  open(key:string){this.reset();const v=this.variants().find(v=>v.signature===key);if(!v)return;this.selectedKey=key;this.sourceItemId=v.template_item.source_item_id||'';this.catalogId=productId(v.template_item);this.options=Object.entries(v.template_item.wix_options).map(([name,value])=>({name,value:String(value)}));this.boxes=structuredClone(v.packages);this.remap();}
  useExample(id:string){const item=this.examples().find(e=>e.id===id);if(!item)return;this.sourceItemId=item.id;this.catalogId=productId(item);this.options=orderItemOptionLabels(item,100).flatMap(label=>{const n=label.indexOf(':');return n<0?[]:[{name:label.slice(0,n).trim(),value:label.slice(n+1).trim()}];});this.remap();}
- copy(){this.selectedKey='';const size=this.options.find(o=>o.name.trim().toLowerCase()==='size');if(size)size.value='';else this.options.push({name:'Size',value:''});this.remap();}
+ copy(){this.selectedKey='';const size=this.options.find(o=>o.name.trim().toLowerCase()==='size');if(size)size.value='';else this.options.push({name:'Size',value:''});if(this.packagingScope==='shared-backdrop')this.boxes=[];this.remap();}
  remap(){const components=this.components();this.boxes=this.boxes.map(p=>({...p,contents:(p.contents||[]).flatMap((c:any)=>{const match=components.find(x=>x.component_key===c.component_key&&x.unit_index===c.unit_index);return match?[match]:[];})}));if(!this.boxes.length)this.reuseSharedBackdropBoxes();this.confirmed=false;this.saved.set(false);}
  reuseSharedBackdropBoxes(){
   this.reuseMessage.set('');this.reuseConflict.set(false);
   if(this.packagingScope!=='shared-backdrop')return;
-  const found=sharedBackdropBoxes(Object.fromEntries(this.options.map(option=>[option.name,option.value])),this.sharedBackdropProfiles);
-  if(found.ambiguous){this.reuseConflict.set(true);this.reuseMessage.set(`Different box layouts are saved for ${sizeKeyLabel(found.key)}. Choose the correct saved variant instead of guessing.`);return;}
-  if(!found.packages.length)return;
+  const found=sharedBackdropBox(Object.fromEntries(this.options.map(option=>[option.name,option.value])),this.backdropDimensions);
+  if(!found.key)return;
+  if(!found.box){this.reuseConflict.set(true);this.reuseMessage.set(`Add shared dimensions for ${sizeKeyLabel(found.key)} in Backdrop box drawings before entering this product's weight.`);return;}
   const components=this.components();
-  this.boxes=found.packages.map(box=>({...box,contents:(box.contents||[]).flatMap((content:any)=>{const match=components.find(component=>component.component_key===(content.component_key||'main')&&component.unit_index===(Number(content.unit_index)||1));return match?[match]:[];})}));
-  this.reuseMessage.set(`Shared Backdrop boxes loaded for ${sizeKeyLabel(found.key)}. Review the measurements, weight and contents before saving.`);
+  this.boxes=[{...found.box,contents:components.length===1?components:[]}];
+  this.reuseMessage.set(`Shared dimensions loaded for ${sizeKeyLabel(found.key)}. Enter this product's weight before saving.`);
  }
  assigned(p:any,c:any){return p.contents.some((x:any)=>x.id===c.id);}
  toggle(p:any,c:any,on:boolean){p.contents=on?[...p.contents.filter((x:any)=>x.id!==c.id),c]:p.contents.filter((x:any)=>x.id!==c.id);this.confirmed=false;}
- addBox(){const components=this.components();this.boxes.push({package_name:'Box '+(this.boxes.length+1),length_mm:0,width_mm:0,height_mm:0,weight_kg:0,contents:components.length===1?components:[]});this.confirmed=false;}
+ addBox(){if(this.packagingScope==='shared-backdrop'){this.reuseSharedBackdropBoxes();return;}const components=this.components();this.boxes.push({package_name:'Box '+(this.boxes.length+1),length_mm:0,width_mm:0,height_mm:0,weight_kg:0,contents:components.length===1?components:[]});this.confirmed=false;}
  issue(){if(!this.product.wix_product_id&&!this.sourceItemId)return 'Choose an existing order composition to identify the Wix product.';if(!this.selectedKey&&catalogSizes(this.catalog).length&&!this.sizeValue())return 'Choose the product size for these boxes.';if(this.options.some(o=>!o.name.trim()||!o.value.trim()))return 'Open Variant matching (advanced): complete or remove the empty option.';if(new Set(this.options.map(o=>o.name.trim().toLowerCase())).size!==this.options.length)return 'Remove duplicate option names.';return packagingError(this.boxes,this.components());}
  async save(){if(this.busy()||this.issue()||!this.confirmed)return;this.busy.set(true);this.saving.set(true);this.error.set('');try{
   const {data,error}=await this.supabase.client.functions.invoke('delivery-cost-review',{body:{action:'save-packaging-variant',productId:this.product.id,sourceItemId:this.sourceItemId,options:this.options,packages:this.boxes}});

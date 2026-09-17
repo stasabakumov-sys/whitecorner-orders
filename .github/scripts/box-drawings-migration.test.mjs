@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises';import {pathToFileURL} from 'node:url';import path from 'node:path';import assert from 'node:assert/strict';
 const {PGlite}=await import(pathToFileURL(path.resolve(process.argv[2])).href);const db=new PGlite();
 try{
- await db.exec(`create role anon;create role authenticated;create schema auth;create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
+ await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
  create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
  create table storage.objects(bucket_id text,name text,metadata jsonb);alter table storage.objects enable row level security;
  create function storage.foldername(text) returns text[] language sql as $$select string_to_array($1,'/')$$;
@@ -10,7 +10,7 @@ try{
  insert into wc_delivery_packaging_profiles values('profile','[{"package_name":"Box","length_mm":970}]');`);
  await db.exec(await readFile('supabase/migrations/20260909000100_box_drawings.sql','utf8'));
  assert.equal((await db.query("select public from storage.buckets where id='box-drawings'")).rows[0].public,false);
- const user='00000000-0000-4000-8000-000000000001';await db.query("select set_config('test.actor',$1,false)",[user]);await db.exec('set role authenticated');
+ const user='00000000-0000-4000-8000-000000000001';await db.query('insert into auth.users values($1)',[user]);await db.query("select set_config('test.actor',$1,false)",[user]);await db.exec('set role authenticated');
  await db.query("insert into storage.objects values('box-drawings',$1,'{"+'"size":25600'+"}')",[user+'/first']);
  const box={package_name:'Box',length_mm:970};const attach=async(file,revision=null,b=box)=>db.query('select wc_attach_box_drawing($1,0,$2,$3,$4,25600,$5) d',['profile',b,user+'/'+file,'box.cdr',revision]);
  const original=(await attach('first')).rows[0].d;assert.equal(original.filename,'box.cdr');
@@ -87,5 +87,14 @@ try{
  await db.exec('reset role;set role anon');
  await assert.rejects(saveShared('1900x950:foldable','shared-new'),/permission denied/);
  await assert.rejects(db.query("select wc_classify_backdrop_box_drawing('1900x950','foldable',null)"),/permission denied/);
- console.log('PASS: folding-specific shared drawings, legacy classification, duplicate/stale rejection, RLS, private storage and existing drawing contracts');
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20260918000100_backdrop_packaging_dimensions.sql','utf8'));
+ await db.exec('set role authenticated');
+ const dimensions=(await db.query("select wc_save_backdrop_packaging_dimensions('1900x950:foldable','Backdrop',1980,1040,90,null) d")).rows[0].d;
+ assert.deepEqual([dimensions.length_mm,dimensions.width_mm,dimensions.height_mm],[1980,1040,90]);
+ await assert.rejects(db.query("select wc_save_backdrop_packaging_dimensions('1900x950:foldable','Backdrop',2000,1050,100,null)"),/changed/);
+ const revised=(await db.query("select wc_save_backdrop_packaging_dimensions('1900x950:foldable','Backdrop',2000,1050,100,$1) d",[dimensions.revision])).rows[0].d;
+ assert.notEqual(revised.revision,dimensions.revision);
+ await db.exec('reset role;set role anon');await assert.rejects(db.query('select * from wc_backdrop_packaging_dimensions'),/permission denied/);
+ console.log('PASS: shared Backdrop dimensions/drawings, optimistic revisions, RLS, private storage and existing drawing contracts');
 }finally{await db.close();}

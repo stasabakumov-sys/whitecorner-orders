@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { productionDecision, setReviewedProductionStatus, unquotedApprovalStates } from '../_shared/delivery-production-gate.ts';
 import { courierReviewCall, processDeliveryReview, reviewContext } from '../_shared/delivery-review-worker.ts';
-import { componentNormal, deliveryCents, packagingError, packagingSignature, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../_shared/delivery-review-domain.ts';
+import { backdropPackagingKey, componentNormal, deliveryCents, packagingError, packagingSignature, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../_shared/delivery-review-domain.ts';
 import { variantSignature, productId } from '../_shared/delivery-review-domain.ts';
 const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,x-client-info,apikey,content-type','Access-Control-Allow-Methods':'POST,OPTIONS','Content-Type':'application/json'};
 Deno.serve(async(req)=>{
@@ -46,11 +46,38 @@ Deno.serve(async(req)=>{
    const profileItems=cartMain?[item,...selectedAddOns.filter((rule:any)=>componentNormal(rule.rule_type||'')==='add-on').map((rule:any)=>({id:`rule:${rule.id}`,product_name:String(rule.match_name),quantity:1,wix_options:{},catalog_reference:{}}))]:[item];
    const {data:rules,error:rulesError}=await db.from('wc_shipping_rules').select('match_name,match_value,effect_type,active').eq('active',true).eq('effect_type','No effect');
    if(rulesError)return json({error:'Packaging rules unavailable'},503);
-   const components=reviewComponents({wc_order_items:profileItems},rules||[]),issue=packagingError(body.packages,components);
+   const components=reviewComponents({wc_order_items:profileItems},rules||[]);
+   const isBackdrop=componentNormal(product.product_type||'')==='backdrop'||/backdrop/i.test(product.product_name||'');
+   let canonicalBackdrop:any=null;
+   if(isBackdrop){
+    const sizeKey=backdropPackagingKey(item);
+    if(!sizeKey)return json({error:'Choose an exact Backdrop size and Foldable/Non-foldable option.'},422);
+    if(!Array.isArray(body.packages)||body.packages.length!==1)return json({error:'A Backdrop packaging profile must contain one shared-dimension box.'},422);
+    const {data,error}=await db.from('wc_backdrop_packaging_dimensions').select('package_name,length_mm,width_mm,height_mm').eq('size_key',sizeKey).maybeSingle();
+    if(error)return json({error:'Shared Backdrop dimensions are unavailable. Open Backdrop box drawings and retry.'},503);
+    if(!data)return json({error:'Add shared dimensions for this Backdrop size and folding option before saving its weight.'},422);
+    canonicalBackdrop=data;
+   }
+   const submitted=(body.packages||[]).map((p:any)=>canonicalBackdrop?{...p,package_name:canonicalBackdrop.package_name,length_mm:canonicalBackdrop.length_mm,width_mm:canonicalBackdrop.width_mm,height_mm:canonicalBackdrop.height_mm}:p);
+   const issue=packagingError(submitted,components);
    if(issue)return json({error:issue},422);
-   const packages=body.packages.map((p:any)=>({package_name:String(p.package_name||'Package').slice(0,150),length_mm:Number(p.length_mm),width_mm:Number(p.width_mm),height_mm:Number(p.height_mm),weight_kg:Number(p.weight_kg),contents:p.contents.map((c:any)=>components.find(x=>x.order_item_id===c.order_item_id&&x.component_key===(c.component_key||'main')&&x.unit_index===(c.unit_index||1)))}));
-   const {error}=await db.from('wc_delivery_packaging_profiles').upsert({signature:cartMain?packagingSignature(profileItems):variantSignature(item),shipping_product_id:product.id,template_item:item,packages,created_by:user.id,updated_at:new Date().toISOString()});
-   return error?json({error:'Variant could not be saved. Check the variant migration.'},409):json({ok:true});
+   const packages=submitted.map((p:any)=>({package_name:String(p.package_name||'Package').slice(0,150),length_mm:Number(p.length_mm),width_mm:Number(p.width_mm),height_mm:Number(p.height_mm),weight_kg:Number(p.weight_kg),contents:p.contents.map((c:any)=>components.find(x=>x.order_item_id===c.order_item_id&&x.component_key===(c.component_key||'main')&&x.unit_index===(c.unit_index||1)))}));
+   const signature=cartMain?packagingSignature(profileItems):variantSignature(item);
+   const previous=typeof body.existingSignature==='string'&&body.existingSignature.length<=2000?body.existingSignature:'';
+   let obsoleteOwned=false;
+   if(isBackdrop&&previous&&previous!==signature){
+    const {data:old,error:oldError}=await db.from('wc_delivery_packaging_profiles').select('shipping_product_id,template_item,packages').eq('signature',previous).maybeSingle();
+    if(oldError)return json({error:'Existing Backdrop packaging could not be verified. Reload and retry.'},503);
+    const oldContents=(old?.packages||[]).flatMap((box:any)=>box.contents||[]).filter((content:any)=>!content.component_key||content.component_key==='main');
+    obsoleteOwned=old?.shipping_product_id===product.id||(!old?.shipping_product_id&&(Boolean(product.wix_product_id)&&oldContents.some((content:any)=>content.wix_product_id===product.wix_product_id)||oldContents.some((content:any)=>componentNormal(content.product_name||'')===componentNormal(product.product_name))||componentNormal(old?.template_item?.product_name||'')===componentNormal(product.product_name)));
+   }
+   const {error}=await db.from('wc_delivery_packaging_profiles').upsert({signature,shipping_product_id:product.id,template_item:item,packages,created_by:user.id,updated_at:new Date().toISOString()});
+   if(error)return json({error:'Variant could not be saved. Check the variant migration.'},409);
+   if(obsoleteOwned){
+    const {error:cleanupError}=await db.from('wc_delivery_packaging_profiles').delete().eq('signature',previous);
+    if(cleanupError)return json({error:'Packaging was saved, but the obsolete Backdrop duplicate could not be removed. Reload before retrying.'},409);
+   }
+   return json({ok:true,signature});
   }
   if(!/^[\da-f-]{36}$/i.test(body.orderId||''))return json({error:'Valid order ID required'},422);
   const {order,rules}=await reviewContext(db,body.orderId);
