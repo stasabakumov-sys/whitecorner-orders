@@ -4,6 +4,11 @@ on:
     branches: [codex/product-card-release-20260913]
     paths: ['.github/workflows/product-card-release.yml']
   workflow_dispatch:
+    inputs:
+      inspect_packaging:
+        description: 'Read-only Backdrop packaging inspection (no migrations)'
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -31,7 +36,13 @@ jobs:
           node .github/scripts/box-drawings-migration.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/backdrop-drawing-links-migration.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/hub-test-orders.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Inspect Backdrop packaging without writes
+        if: ${{ inputs.inspect_packaging == true }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/backdrop-packaging-inspect.mjs
       - name: Apply owner-approved product card migrations
+        if: ${{ inputs.inspect_packaging != true }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/product-card-release.mjs --apply
