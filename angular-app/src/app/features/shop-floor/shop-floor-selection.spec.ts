@@ -16,10 +16,10 @@ describe('Automatic Shop Floor product composition',()=>{
   expect(resolvedProductionSize(item({Size:'180x90',Foldable:'YES'}),product)).toBe('');
   expect(resolvedProductionSize(item(),{...product,manual_sizes:'190x100\n180x90'})).toBe('');
  });
- it('defaults only Backdrops without an explicit finish to RAW',()=>{
+ it('defaults every product without an explicit finish to RAW',()=>{
   expect(orderedFinish({Colour:'Raw'})).toBe('raw');
   expect(orderedFinish({Colour:'White'})).toBe('painted');
-  expect(orderedFinish({Size:'190x100'})).toBe('');
+  expect(orderedFinish({Size:'190x100'})).toBe('raw');
   expect(orderedFinish({Size:'190x100'},product.product_name)).toBe('raw');
   expect(orderedFinish({Colour:'White'},product.product_name)).toBe('painted');
   expect(orderedFinish({Paint:'Yes'},product.product_name)).toBe('painted');

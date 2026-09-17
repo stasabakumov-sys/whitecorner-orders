@@ -18,16 +18,16 @@ describe('Product-owned Shop Floor parts',()=>{
 
 describe('Parts template reopening and persistence feedback',()=>{
  const saved={id:'template',product_id:'main',name:'Plane Arch',parts:[{id:'arch',name:'Arch',component_product_id:'main'}],estimates:{CNC:12,'Assembly:arch':8,'Sanding:arch':5,'Painting:First primer':10},version:2};
- it('opens the saved template, including all minutes, when a fresh product card loads',async()=>{
+ it('opens the saved structural template without legacy Painting minutes',async()=>{
   const {component,templates}=setup();component.product={id:'main',short_name:'Plane Arch'};templates.push(structuredClone(saved));await component.load();
-  expect(component.editingId).toBe('template');expect(component.parts).toEqual(saved.parts);expect(component.estimates).toEqual(saved.estimates);expect(component.version).toBe(2);
+  expect(component.editingId).toBe('template');expect(component.parts).toEqual(saved.parts);expect(component.estimates).toEqual({CNC:12,'Assembly:arch':8,'Sanding:arch':5});expect(component.version).toBe(2);
   component.newTemplate();expect(component.parts).toEqual([]);component.editTemplate(templates[0]);expect(component.estimates['CNC']).toBe(12);
  });
  it('renders a saved edit again after closing and recreating the card',async()=>{
   const {component,rpc,templates}=setup();component.product={id:'main',short_name:'Plane Arch'};await component.load();component.parts=structuredClone(saved.parts);component.estimates={...saved.estimates};
   rpc.mockImplementation(async(name,args)=>{if(name==='wc_shop_product_components')return {data:[{id:'main',product_name:'Plane Arch',component_role:'Product'}],error:null} as any;const row={...saved,name:args.p_name,parts:args.p_parts,estimates:args.p_estimates};templates.push(structuredClone(row));return {data:row,error:null};});
-  await component.save();expect(component.done).toBe(true);expect(component.parts).toEqual(saved.parts);
-  const reopened=new ProductPartsComponent((component as any).db);reopened.product=component.product;await reopened.load();expect(reopened.parts).toEqual(saved.parts);expect(reopened.estimates).toEqual(saved.estimates);expect(reopened.editingId).toBe('template');
+  await component.save();expect(component.done).toBe(true);expect(component.parts).toEqual(saved.parts);expect(component.estimates['Painting:First primer']).toBeUndefined();
+  const reopened=new ProductPartsComponent((component as any).db);reopened.product=component.product;await reopened.load();expect(reopened.parts).toEqual(saved.parts);expect(reopened.estimates['Painting:First primer']).toBeUndefined();expect(reopened.editingId).toBe('template');
  });
  it('does not claim success or clear the draft when saving throws or returns no record',async()=>{
   for(const result of ['throw','empty']){const {component,rpc}=setup();component.product={id:'main'};component.templateName=saved.name;component.parts=structuredClone(saved.parts);component.estimates={...saved.estimates};

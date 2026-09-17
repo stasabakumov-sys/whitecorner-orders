@@ -18,3 +18,7 @@ describe('Product card Backdrop production cost',()=>{
   component.materialProfiles=[{options:{Paint:'No'}}];expect(component.comparison()).toHaveLength(2);expect(component.comparison().every(row=>!row.painted)).toBe(true);
  });
 });
+
+describe('Shared Painting cost for every product',()=>{
+ it('keeps legacy Painting out of RAW and uses only the shared profile for Painted',()=>{const component=new ProductWorkCostComponent({} as any);component.product={id:'product',product_name:'Portable Table',backdrop_paint_profile:{estimates:{'Painting:First primer':20,'Painting:First sanding':10,'Painting:Second primer':5,'Painting:Second sanding':5,'Painting:Finish coat':15}}};component.rates=['cnc','assembly','sanding','painting'].map((work_type,i)=>({work_type,label:work_type,rate_gst_hour:60,sort_order:i,updated_at:''})) as any;const template:any={parts:[{id:'body'}],estimates:{CNC:10,'Assembly:body':10,'Sanding:body':10,'Painting:First primer':999}};expect(component.rows(template,false).map(row=>row.key)).toEqual(['CNC','Assembly','Sanding']);expect(component.total(template,false)).toBe(30);expect(component.total(template,true)).toBe(85);});
+});

@@ -21,7 +21,7 @@ export function resolvedProductionSize(item:any,product?:ShopCatalogProduct){
 }
 
 export function orderedFinish(options:any,productName=''):'raw'|'painted'|''{
- const finish=optionFinish(options);return finish===null&&/backdrop/i.test(productName)?'raw':finish||'';
+ const finish=optionFinish(options);return finish===null?'raw':finish||'';
 }
 
 export function matchingProductTemplates(templates:ShopTemplate[],product:ShopCatalogProduct|undefined,item:any){
