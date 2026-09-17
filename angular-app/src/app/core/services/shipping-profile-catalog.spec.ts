@@ -13,6 +13,11 @@ describe('Unified persisted packaging catalogue',()=>{
  it('groups variants under the matching product rather than duplicating products',()=>{
   const rows=shippingProfileCatalog([{id:'correct',wix_product_id:'catalog',product_name:'Renamed cart'}],[profile('size1'),profile('size2')]);expect(rows).toHaveLength(1);expect(rows[0].saved_profiles).toHaveLength(2);
  });
+ it('keeps a legacy profile on its persisted product after the Wix product name changes',()=>{
+  const p:any=profile();p.shipping_product_id='correct';p.packages[0].contents[0].wix_product_id='';p.packages[0].contents[0].product_name='Old Backdrop name';
+  const rows=shippingProfileCatalog([{id:'correct',wix_product_id:'catalog',product_name:'Renamed Backdrop'}],[p]);
+  expect(rows).toHaveLength(1);expect(rows[0].saved_profiles).toEqual([p]);
+ });
  it('retains whole shared-box profiles instead of splitting them into unsafe product templates',()=>{
   const p=profile();p.packages[0].contents.push({component_key:'main',product_name:'Other',wix_product_id:'other',profile_item_key:'["other",[]]:0'});const rows=shippingProfileCatalog([],[p]);expect(rows).toHaveLength(2);for(const row of rows)expect(row.saved_profiles[0].packages[0].contents).toHaveLength(2);
  });

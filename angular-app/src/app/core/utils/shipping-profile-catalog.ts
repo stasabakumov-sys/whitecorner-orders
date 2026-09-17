@@ -4,6 +4,11 @@ import {componentNormal,canonicalPackagingItemKey} from '../../../../../supabase
 export function shippingProfileCatalog(products:any[],profiles:any[]){
  const rows=products.map(p=>({...p,saved_profiles:[] as any[]}));
  for(const profile of profiles){
+  const assigned=profile.shipping_product_id&&rows.find(p=>p.id===profile.shipping_product_id);
+  if(assigned){
+   if(!assigned.saved_profiles.some((p:any)=>p.signature===profile.signature))assigned.saved_profiles.push(profile);
+   continue;
+  }
   const components=(profile.packages||[]).flatMap((p:any)=>p.contents||[]);
   const sources=[...new Map<string,any>(components.filter((c:any)=>!c.component_key||c.component_key==='main').map((c:any)=>[String(c.wix_product_id||componentNormal(c.product_name||'')),c])).values()];
   for(const source of sources){
