@@ -1,4 +1,4 @@
-import {Component, Input, OnChanges, signal} from '@angular/core';
+import {Component, Input, OnChanges, signal, Output, EventEmitter} from '@angular/core';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {environment} from '../../../environments/environment';
 @Component({selector:'app-wix-product-snapshot',standalone:true,template:`
@@ -14,6 +14,7 @@ import {environment} from '../../../environments/environment';
  </tbody></table></div></section></details>}
  `,styles:[`button{font:inherit;padding:8px 12px;border:1px solid #dce5ef;border-radius:8px;background:white;color:#344054;cursor:pointer}button:disabled{opacity:.5}[role=alert]{color:#b42318}summary{cursor:pointer;font-size:14px;font-weight:600;padding:10px 0}section{max-height:55vh;overflow:auto;padding-top:12px}.scroll{max-height:280px;overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:8px;border-bottom:1px solid #e7edf5}`]})
 export class WixProductSnapshotComponent implements OnChanges{
+ @Output() catalogUpdated=new EventEmitter<any>();
  @Input({required:true})productId='';readonly product=signal<any>(null);readonly error=signal('');readonly expanded=signal(false);private request=0;
  constructor(private readonly supabase:SupabaseService){}
  readonly busy=signal(false);readonly message=signal('');
@@ -23,7 +24,7 @@ export class WixProductSnapshotComponent implements OnChanges{
    const {data,error}=await this.supabase.client.functions.invoke(environment.wixSyncFunction,{body:{action:'refreshCatalogProduct',productId}});
    if(error){let reason='';try{reason=(await error.context?.json())?.error||'';}catch{}throw Error(reason||'Wix update failed. Check your connection and permissions, then retry.');}
    if(!data?.ok||!data.source_product)throw Error(data?.error||'Product save was not confirmed. Reload the card before retrying.');
-   if(request===this.request){this.product.set(data.source_product);this.message.set('Product and variants updated from Wix.');}
+   if(request===this.request){this.product.set(data.source_product);this.catalogUpdated.emit(data.source_product);this.message.set('Product and variants updated from Wix.');}
   }catch(e:any){if(request===this.request)this.error.set(e?.message||'Product update failed. Retry.');}
   finally{this.busy.set(false);}
  }
