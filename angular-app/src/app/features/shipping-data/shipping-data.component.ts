@@ -170,7 +170,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             }
             @if(detailTab==='packing'){
             @if(!isCart(p)){@for(profile of packingProfiles(p);track profile.signature){
-             <section class="shipsection"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3>
+             <section class="shipsection"><div class="packaging-profile-heading"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3>@if(!isBackdrop(p)){<button type="button" (click)="editPackagingProfile(profile.signature)">Edit packaging</button>}</div>
              <p class="small">Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.</p>
              <div class="tablewrap"><table class="shiptable packaging-table"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th><th>Drawing</th></tr></thead><tbody>
              @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{contentLabel(c)}} · Unit {{c.unit_index}}</div>}</td><td><app-package-drawings [signature]="profile.signature" [index]="$index" [box]="box" [backdrop]="isBackdrop(p)" [sharedSize]="isBackdrop(p)?sharedSize(profile,p):''" [sizeLabel]="sizeLabel(sharedSize(profile,p))" /></td></tr>}
@@ -187,7 +187,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               }</div>
              </section>}
             }@else{
-             @for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [sharedBackdropProfiles]="sharedBackdropPackagingProfiles()" />}
+             <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id+':'+packagingEditorKey) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [sharedBackdropProfiles]="sharedBackdropPackagingProfiles()" />}</div>
             }
             <div class="shipsection">
               <h3>{{isCart(p)?'Reusable Main packages':'Packages'}}</h3>
@@ -262,7 +262,11 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 })
 export class ShippingDataComponent implements OnInit {
   search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';selectedCartSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
-  openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
+  openProduct(id:string){this.requestedVariant='';this.packagingEditorKey=0;this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
+  editPackagingProfile(signature:string){
+    this.requestedVariant=signature;this.packagingEditorKey++;
+    setTimeout(()=>document.getElementById('packaging-variant-editor')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
   finishCatalog=signal<{id:string;source:any}|null>(null);
   finishModes(p:ShippingProduct){const catalog=this.finishCatalog();return productFinishModes(p,catalog?.id===p.id?catalog.source:null,this.costProfiles(p.id,this.activeCartSize(p)));}
   hasPainting(p:ShippingProduct){return this.finishModes(p).includes(true);}
@@ -303,6 +307,7 @@ export class ShippingDataComponent implements OnInit {
   rules = signal<ShippingRule[]>([]);
   selectedId = signal<string | null>(null);
   requestedVariant='';
+  packagingEditorKey=0;
   kindFilter = signal<'all'|'backdrops'|'carts'|'others'>('all');
   error = signal('');
   editingIds = signal<Set<string>>(new Set());

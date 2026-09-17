@@ -1,4 +1,4 @@
-import {describe,expect,it} from 'vitest';
+import {describe,expect,it,vi} from 'vitest';
 import {PackagingVariantsComponent,sharedBackdropBoxes} from './packaging-variants.component';
 
 const profile=(size:string,foldable:string,dimensions=[1980,1040,90,22],colour='White')=>({
@@ -30,5 +30,34 @@ describe('Shared Backdrop packaging by size and folding',()=>{
   component.options=[{name:'Size',value:'190cm x 95cm'},{name:'Foldable',value:'YES'}];
   component.reuseSharedBackdropBoxes();
   expect(component.boxes).toEqual([]);
+ });
+});
+
+describe('Packaging editor loading',()=>{
+ const query=(result:any,rangeResult?:Promise<any>)=>({
+  select(){return this;},eq(){return this;},order(){return this;},
+  range(){return rangeResult||Promise.resolve(result);},
+  then(resolve:any,reject:any){return Promise.resolve(result).then(resolve,reject);},
+ });
+ const savedProfile={signature:'only-profile',template_item:{wix_options:{Size:'Size II'}},packages:[{package_name:'Table',length_mm:980,width_mm:460,height_mm:70,weight_kg:13,contents:[{component_key:'main',unit_index:1}]}]};
+
+ it('opens the only saved profile automatically for direct dimension editing',async()=>{
+  const client={from:vi.fn((table:string)=>table==='wc_delivery_packaging_profiles'?query({data:[savedProfile],error:null}):table==='wc_shipping_rules'?query({data:[],error:null}):query({},Promise.resolve({data:[],error:null})))};
+  const component=new PackagingVariantsComponent({client} as any);component.product={id:'table',product_name:'Table',wix_product_id:'catalog'};
+  await component.ngOnChanges();
+  expect(component.selectedKey).toBe('only-profile');
+  expect(component.boxes[0]).toMatchObject({length_mm:980,width_mm:460,height_mm:70,weight_kg:13});
+ });
+
+ it('unlocks package fields while order composition examples continue loading',async()=>{
+  let finishOrders!: (value:any)=>void;
+  const orders=new Promise(resolve=>{finishOrders=resolve;});
+  const client={from:vi.fn((table:string)=>table==='wc_delivery_packaging_profiles'?query({data:[savedProfile],error:null}):table==='wc_shipping_rules'?query({data:[],error:null}):query({},orders))};
+  const component=new PackagingVariantsComponent({client} as any);component.product={id:'table',product_name:'Table',wix_product_id:'catalog'};
+  const loading=component.ngOnChanges();
+  await vi.waitFor(()=>expect(component.loadingExamples()).toBe(true));
+  expect(component.busy()).toBe(false);
+  finishOrders({data:[],error:null});await loading;
+  expect(component.loadingExamples()).toBe(false);
  });
 });
