@@ -37,7 +37,7 @@ describe('Safe packaging variant navigation',()=>{
  it('never defaults an explicit missing or ambiguous link to the first product',async()=>{
   const products=[{id:'first',product_name:'Other cart'},{id:'second',product_name:'Other cart'}];
   for(const params of [{product:'Missing cart'},{product:'Other cart'},{productId:'missing'},{productId:'second'},{}]){
-   const client={from:(table:string)=>{const q:any={select:()=>q,eq:()=>q,order:()=>table==='wc_delivery_packaging_profiles'?q:Promise.resolve({data:table==='wc_shipping_products'?products:[]}),range:async()=>({data:[]})};return q;}};
+   const client={from:(table:string)=>{const q:any={select:()=>q,eq:()=>q,order:()=>['wc_delivery_packaging_profiles','wc_wix_catalog_products'].includes(table)?q:Promise.resolve({data:table==='wc_shipping_products'?products:[]}),range:async()=>({data:[]})};return q;}};
    const route={snapshot:{queryParamMap:{get:(key:string)=>(params as any)[key]??null}}};
    const c=new ShippingDataComponent({client} as any,route as any);await c.load();
    expect(c.selectedId()).toBe((params as any).productId==='second'?'second':null);

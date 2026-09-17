@@ -7,7 +7,7 @@ import { Component, OnInit, computed, signal, Optional, ChangeDetectorRef } from
 import {DialogModule} from 'primeng/dialog';
 import {DrawerModule} from 'primeng/drawer';
 import {FormsModule} from '@angular/forms';
-import {backdropSizeKey,manualBackdropSizeKey,backdropDrawingKey,qualifiedDrawingKey,optionSizes,packagingSizes,sizeKeyLabel} from './product-sizes';
+import {catalogSizes,backdropSizeKey,backdropDrawingKey,qualifiedDrawingKey,optionSizes,packagingSizes,sizeKeyLabel} from './product-sizes';
 import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
 import {BoxDrawingComponent} from './box-drawing.component';
@@ -170,6 +170,10 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             </section>
             }
             @if(detailTab==='packing'){
+            @if(productSizes(p).length){<section class="shipsection"><h3>Packaging by product size</h3>
+             @for(size of productSizes(p);track size){<p><b>{{size}}</b> · {{sizePackingCount(p,size)}} saved packaging configuration(s)</p>}
+             <p class="small">Sizes come from the Wix catalogue. A size with 0 configurations still needs packaging.</p>
+            </section>}
             @if(!isCart(p)){@for(profile of packingProfiles(p);track profile.signature){
              <section class="shipsection"><div class="packaging-profile-heading"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3></div>
              @if(!isBackdrop(p)){<app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" (profileSaved)="storeCartMainProfile(p,$event)" />}@else{
@@ -189,8 +193,8 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                <button type="button" [class.on]="cartMainProfileSelected(profile)" (click)="openCartMainProfile(p,profile)"><b>Main + {{cartMainProfileLabel(profile)}}</b><span>{{profile.packages?.length||0}} box(es) · Open</span></button>
               }</div>
              </section>}
-            }@else if(isBackdrop(p)||!p.saved_profiles?.length){
-             <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [sharedBackdropProfiles]="sharedBackdropPackagingProfiles()" />}</div>
+            }@else if(isBackdrop(p)||!p.saved_profiles?.length||missingSizePackaging(p)){
+             <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [catalog]="catalogProducts()[p.id]" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [sharedBackdropProfiles]="sharedBackdropPackagingProfiles()" />}</div>
             }
             <div class="shipsection">
               <h3>{{isCart(p)?'Reusable Main packages':'Packages'}}</h3>
@@ -252,7 +256,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
              @if(!p.saved_only&&hasPainting(p)){<section class="shipsection"><app-backdrop-paint-profile mode="minutes" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" /></section>}
             }
             @if(detailTab==='wix'){
-              <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" (catalogUpdated)="finishCatalog.set({id:p.id,source:$event})" /></section>
+              <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" (catalogUpdated)="updateCatalog(p.id,$event)" /></section>
             }
           } @else {
             <div class="mut">No products in this filter.</div>
@@ -267,25 +271,30 @@ export class ShippingDataComponent implements OnInit {
   search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';selectedCartSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
   openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
   finishCatalog=signal<{id:string;source:any}|null>(null);
+  catalogProducts=signal<Record<string,any>>({});
+  updateCatalog(id:string,source:any){this.catalogProducts.update(rows=>({...rows,[id]:source}));this.finishCatalog.set({id,source});}
   finishModes(p:ShippingProduct){const catalog=this.finishCatalog();return productFinishModes(p,catalog?.id===p.id?catalog.source:null,this.costProfiles(p.id,this.activeCartSize(p)));}
   hasPainting(p:ShippingProduct){return this.finishModes(p).includes(true);}
-  async loadFinishCatalog(id:string){this.finishCatalog.set(null);if(id.startsWith('saved:'))return;try{const {data,error}=await this.supabase.client.from('wc_wix_catalog_products').select('source_product').eq('shipping_product_id',id).maybeSingle();if(this.selectedId()!==id)return;if(error)throw error;this.finishCatalog.set({id,source:data?.source_product||null});}catch{this.error.set('Could not load current product finishes. Reopen the product to retry.');}finally{this.cdr?.markForCheck();}}
+  async loadFinishCatalog(id:string){this.finishCatalog.set(null);if(id.startsWith('saved:'))return;try{const {data,error}=await this.supabase.client.from('wc_wix_catalog_products').select('source_product').eq('shipping_product_id',id).maybeSingle();if(this.selectedId()!==id)return;if(error)throw error;this.updateCatalog(id,data?.source_product||null);}catch{this.error.set('Could not load current product sizes and finishes. Reopen the product to retry.');}finally{this.cdr?.markForCheck();}}
   isBackdrop(p?:ShippingProduct){return componentNormal(p?.product_type||'')==='backdrop'||/backdrop/i.test(p?.product_name||'');}
   isCart(p?:ShippingProduct){return isCartProduct(p);}
   packagingScope(p?:ShippingProduct){return this.isBackdrop(p)?'shared-backdrop' as const:'product' as const;}
   contentLabel(c:any){return [...new Set([c.product_name,c.component_name].filter(Boolean).map((s:string)=>s.trim()))].join(' · ');}
   updateDetails(details:any){this.products.update(rows=>rows.map(p=>p.id===details.id?{...p,...details}:p));}
-  wixSizes(p:ShippingProduct){return [...new Set([...(p.saved_profiles||[]).flatMap(profile=>packagingSizes(profile,p.product_name)),...this.costing.parts().filter(part=>part.shipping_product_id===p.id).flatMap(part=>optionSizes(part.options))])];}
-  productSizes(p:ShippingProduct){const imported=this.wixSizes(p);return imported.length?imported:[...new Set((p.manual_sizes||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean))];}
+  wixSizes(p:ShippingProduct){return catalogSizes(this.catalogProducts()[p.id]);}
+  missingSizePackaging(p:ShippingProduct){return this.productSizes(p).some(size=>!this.sizePackingCount(p,size));}
+  sizePackingCount(p:ShippingProduct,size:string){const key=(value:string)=>backdropSizeKey(value)||value.trim().toLowerCase();const profiles=this.isCart(p)?p.saved_profiles||[]:this.packingProfiles(p);return profiles.filter(profile=>packagingSizes(profile,p.product_name).some(value=>key(value)===key(size))).length;}
+  productSizes(p:ShippingProduct){return this.wixSizes(p);}
   cartSizes(p:ShippingProduct){return cartSizeRows(this.productSizes(p));}
   activeCartSize(p:ShippingProduct){const sizes=this.cartSizes(p);return sizes.some(size=>size.key===this.selectedCartSize)?this.selectedCartSize:sizes[0]?.key||'';}
   selectCartSize(size:string){this.selectedCartSize=size;this.mainAddOns.set([]);}
   cartSizeLabel(p:ShippingProduct){return this.cartSizes(p).find(size=>size.key===this.activeCartSize(p))?.label||'';}
   packingProfiles(p:ShippingProduct){
     if(this.isBackdrop(p)){
-      const parse=this.wixSizes(p).length?backdropSizeKey:manualBackdropSizeKey,sizes=new Set(this.productSizes(p).map(parse).filter(Boolean));
+      const sizes=new Set(this.productSizes(p).map(backdropSizeKey).filter(Boolean));
       const entries=this.sharedBackdropPackagingProfiles().map(entry=>({...entry,key:backdropDrawingKey(entry.profile,entry.productName)})).filter(entry=>entry.key&&sizes.has(entry.key.split(':')[0]));
-      return [...new Map(entries.map(entry=>[`${entry.key}|${sharedBackdropLayoutKey(entry.profile)}`,entry])).values()].map(entry=>({...entry.profile,packages:(entry.profile.packages||[]).map((box:any)=>({...box,contents:(box.contents||[]).map((content:any)=>content.component_key&&content.component_key!=='main'?content:{...content,product_name:p.product_name,component_name:p.product_name})}))}));
+      const shared=[...new Map(entries.map(entry=>[`${entry.key}|${sharedBackdropLayoutKey(entry.profile)}`,entry])).values()].map(entry=>({...entry.profile,packages:(entry.profile.packages||[]).map((box:any)=>({...box,contents:(box.contents||[]).map((content:any)=>content.component_key&&content.component_key!=='main'?content:{...content,product_name:p.product_name,component_name:p.product_name})}))}));
+      return [...new Map([...(p.saved_profiles||[]),...shared].map(profile=>[`${backdropDrawingKey(profile,p.product_name)}|${sharedBackdropLayoutKey(profile)}`,profile])).values()];
     }
     return !this.isCart(p)?p.saved_profiles||[]:(p.saved_profiles||[]).filter((profile:any)=>packagingSizes(profile,p.product_name).some(size=>cartSizeKey(size)===this.activeCartSize(p)));
   }
@@ -364,6 +373,13 @@ export class ShippingDataComponent implements OnInit {
       profiles.push(...(page.data||[]));if((page.data||[]).length<250)break;
     }
     this.products.set(shippingProfileCatalog(pr.data||[],profiles));
+    const catalog:Record<string,any>={};
+    for(let start=0;;start+=250){
+      const page=await this.supabase.client.from('wc_wix_catalog_products').select('shipping_product_id,source_product').order('shipping_product_id').range(start,start+249);
+      if(page.error){this.error.set('Wix catalogue sizes could not be loaded. Reload Products to retry.');break;}
+      for(const row of page.data||[])if(row.shipping_product_id)catalog[row.shipping_product_id]=row.source_product;
+      if((page.data||[]).length<250){this.catalogProducts.set(catalog);break;}
+    }
     this.packages.set((pk.data ?? []) as ShippingPackage[]);
     this.rules.set((rr.data ?? []) as ShippingRule[]);
     const params=this.route?.snapshot.queryParamMap;
