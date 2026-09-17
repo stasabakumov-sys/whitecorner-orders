@@ -2,6 +2,7 @@ import {productNavigationMatches} from '../../core/utils/product-navigation';
 import {WixCatalogReviewComponent} from './wix-catalog-review.component';
 import {WixProductSnapshotComponent} from './wix-product-snapshot.component';
 import {PackageDrawingsComponent} from './package-drawings.component';
+import {SavedPackingComponent} from './saved-packing.component';
 import { Component, OnInit, computed, signal, Optional, ChangeDetectorRef } from '@angular/core';
 import {DialogModule} from 'primeng/dialog';
 import {DrawerModule} from 'primeng/drawer';
@@ -104,7 +105,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[BackdropPaintProfileComponent,PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[SavedPackingComponent,BackdropPaintProfileComponent,PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -170,17 +171,14 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             }
             @if(detailTab==='packing'){
             @if(!isCart(p)){@for(profile of packingProfiles(p);track profile.signature){
-             <section class="shipsection"><div class="packaging-profile-heading"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3>@if(!isBackdrop(p)){<button type="button" (click)="openPackagingDialog(profile.signature)">Edit packaging</button>}</div>
+             <section class="shipsection"><div class="packaging-profile-heading"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3></div>
+             @if(!isBackdrop(p)){<app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" (profileSaved)="storeCartMainProfile(p,$event)" />}@else{
              <p class="small">Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.</p>
              <div class="tablewrap"><table class="shiptable packaging-table"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th><th>Drawing</th></tr></thead><tbody>
              @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{contentLabel(c)}} · Unit {{c.unit_index}}</div>}</td><td><app-package-drawings [signature]="profile.signature" [index]="$index" [box]="box" [backdrop]="isBackdrop(p)" [sharedSize]="isBackdrop(p)?sharedSize(profile,p):''" [sizeLabel]="sizeLabel(sharedSize(profile,p))" /></td></tr>}
-             </tbody></table></div></section>
+             </tbody></table></div>}
+             </section>
             }}
-            @if(!isCart(p)&&!isBackdrop(p)){
-             <p-dialog header="Edit packaging" [(visible)]="packagingDialogOpen" [modal]="true" [draggable]="false" [style]="{width:'min(760px,95vw)'}">
-              @if(packagingDialogOpen){<app-packaging-variants [product]="p" [initialSignature]="packagingDialogSignature" packagingScope="product" />}
-             </p-dialog>
-            }
             @if(!p.saved_only){
             @if(isCart(p)){
              <p class="small cart-packaging-note">Quote uses the reusable Main packages below. Select one or several Add-ons in the far-right column to create an exact, manually entered Main + Add-ons replacement variant.</p>
@@ -191,7 +189,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                <button type="button" [class.on]="cartMainProfileSelected(profile)" (click)="openCartMainProfile(p,profile)"><b>Main + {{cartMainProfileLabel(profile)}}</b><span>{{profile.packages?.length||0}} box(es) · Open</span></button>
               }</div>
              </section>}
-            }@else{
+            }@else if(isBackdrop(p)||!p.saved_profiles?.length){
              <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [sharedBackdropProfiles]="sharedBackdropPackagingProfiles()" />}</div>
             }
             <div class="shipsection">
@@ -267,9 +265,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 })
 export class ShippingDataComponent implements OnInit {
   search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';selectedCartSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
-  packagingDialogOpen=false;packagingDialogSignature='';
-  openProduct(id:string){this.requestedVariant='';this.packagingDialogOpen=false;this.packagingDialogSignature='';this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
-  openPackagingDialog(signature:string){this.packagingDialogSignature=signature;this.packagingDialogOpen=true;}
+  openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
   finishCatalog=signal<{id:string;source:any}|null>(null);
   finishModes(p:ShippingProduct){const catalog=this.finishCatalog();return productFinishModes(p,catalog?.id===p.id?catalog.source:null,this.costProfiles(p.id,this.activeCartSize(p)));}
   hasPainting(p:ShippingProduct){return this.finishModes(p).includes(true);}

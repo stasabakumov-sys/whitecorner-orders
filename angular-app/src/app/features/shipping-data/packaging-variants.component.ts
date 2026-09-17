@@ -68,7 +68,12 @@ export class PackagingVariantsComponent implements OnChanges {
  selectedKey='';sourceItemId='';catalogId='';
  options:{name:string,value:string}[]=[{name:'Size',value:''}];boxes:any[]=[];confirmed=false;
  constructor(private supabase:SupabaseService){}
- async ngOnChanges(){this.reset();this.busy.set(true);try{
+ private loadedInput='';
+ async ngOnChanges(){
+  const key=JSON.stringify([this.product?.id,this.initialSignature,this.packagingScope]);
+  if(key===this.loadedInput)return;
+  this.loadedInput=key;
+  this.reset();this.busy.set(true);try{
   const [profiles,rules]=await Promise.all([this.supabase.client.from('wc_delivery_packaging_profiles').select('*').eq('shipping_product_id',this.product.id),this.supabase.client.from('wc_shipping_rules').select('*').eq('active',true).eq('effect_type','No effect')]);
   if(profiles.error||rules.error)throw Error('Variants unavailable. Check the packaging variant migration.');
   this.variants.set(profiles.data||[]);this.rules=rules.data||[];
