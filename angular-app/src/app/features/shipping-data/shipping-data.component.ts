@@ -152,12 +152,12 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               <span class="badge">{{reusableProfileCount(p)}} reusable profile(s)</span>
             </div>
 
-            <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" [sizeTable]="isCart(p)" (saved)="updateDetails($event)">
-            <span class="product-drawing-label">Product drawing</span>
-            <app-box-drawing [productId]="p.id" />
-            <p class="small product-drawing-help">Product drawing shared by all variants.</p>
+            <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" [selectedSize]="activeProductSize(p)" (selectedSizeChange)="selectProductSize(p,$event)" (saved)="updateDetails($event)">
+            <span class="product-drawing-label">Product drawing · {{activeProductSize(p)||'All sizes'}}</span>
+            <app-box-drawing [productId]="p.id" [variantKey]="productDrawingKey(p)" />
+            @if(activeProductSize(p)){<details><summary class="small">Previous shared product drawing</summary><app-box-drawing [productId]="p.id" /></details>}
             </app-product-details></section>
-            @if(isCart(p)&&detailTab!=='wix'&&cartSizes(p).length){<nav class="cart-size-tabs" aria-label="Cart sizes">@for(size of cartSizes(p);track size.key){<button [class.on]="activeCartSize(p)===size.key" (click)="selectCartSize(size.key)">{{size.label}}</button>}</nav>}
+            @if(activeProductSize(p)){<p class="small">Selected size: {{activeProductSize(p)}}</p>}
             <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button><button [class.on]="detailTab==='wix'" (click)="detailTab='wix'">Wix catalogue</button></nav>
             @if(detailTab==='cost'){
             <section class="shipsection"><app-product-work-cost [product]="p" [availableFinishes]="finishModes(p)" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" [manualSizes]="!wixSizes(p).length" [materialProfiles]="costProfiles(p.id,activeCartSize(p))" [materials]="costing.materials()" /></section>
@@ -171,7 +171,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             </section>
             }
             @if(detailTab==='packing'){
-            @if(!isCart(p)&&packingSizeTabs(p).length>1){<nav class="packing-size-tabs" role="tablist" aria-label="Packaging product sizes">
+            @if(!productSizes(p).length&&!isCart(p)&&packingSizeTabs(p).length>1){<nav class="packing-size-tabs" role="tablist" aria-label="Packaging product sizes">
              @for(size of packingSizeTabs(p);track size.key){<button type="button" role="tab" [class.on]="activePackingSize(p)===size.key" [attr.aria-selected]="activePackingSize(p)===size.key" (click)="selectPackingSize(size.key)">{{size.label}}</button>}
             </nav>}
             @if(!isCart(p)){@for(profile of visiblePackingProfiles(p);track profile.signature){
@@ -285,6 +285,9 @@ export class ShippingDataComponent implements OnInit {
   sizePackingCount(p:ShippingProduct,size:string){const key=(value:string)=>backdropSizeKey(value)||value.trim().toLowerCase();const profiles=this.isCart(p)?p.saved_profiles||[]:this.packingProfiles(p);return profiles.filter(profile=>packagingSizes(profile,p.product_name).some(value=>key(value)===key(size))).length;}
   productSizes(p:ShippingProduct){return this.wixSizes(p);}
   cartSizes(p:ShippingProduct){return cartSizeRows(this.productSizes(p));}
+  activeProductSize(p:ShippingProduct){if(this.isCart(p))return this.cartSizeLabel(p);const sizes=this.productSizes(p);return sizes.find(size=>'size:'+(backdropSizeKey(size)||size.trim().toLowerCase())===this.selectedPackingSize)||sizes[0]||'';}
+  selectProductSize(p:ShippingProduct,size:string){if(!this.productSizes(p).includes(size))return;if(this.isCart(p))this.selectCartSize(cartSizeKey(size));else this.selectPackingSize('size:'+(backdropSizeKey(size)||size.trim().toLowerCase()));}
+  productDrawingKey(p:ShippingProduct){const size=this.activeProductSize(p);return size?'product-size:'+(backdropSizeKey(size)?'metric:'+backdropSizeKey(size):'text:'+size.trim().toLowerCase()):'';}
   activeCartSize(p:ShippingProduct){const sizes=this.cartSizes(p);return sizes.some(size=>size.key===this.selectedCartSize)?this.selectedCartSize:sizes[0]?.key||'';}
   selectCartSize(size:string){this.selectedCartSize=size;this.mainAddOns.set([]);}
   cartSizeLabel(p:ShippingProduct){return this.cartSizes(p).find(size=>size.key===this.activeCartSize(p))?.label||'';}

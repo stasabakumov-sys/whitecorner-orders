@@ -9,7 +9,7 @@ import {SupabaseService} from '../../core/services/supabase.service';
  @else{<button (click)="save('name')" [disabled]="busy">Save</button><button (click)="cancelName()" [disabled]="busy">Cancel</button>}
  </div></div>
  <div class="field">
- @if(wixSizes.length){<label>Product sizes · Wix</label>@if(sizeTable){<div class="size-table"><table><thead><tr><th>#</th><th>Size</th></tr></thead><tbody>@for(size of wixSizes;track size;let i=$index){<tr><td>{{i+1}}</td><td>{{size}}</td></tr>}</tbody></table></div>}@else{<input id="product-size" class="wix-size" [value]="wixSizes.join(' · ')" [title]="wixSizes.join(' · ')" readonly>}<p>Sizes from Wix are read-only.</p>}
+ @if(wixSizes.length){<label for="product-size">Product sizes · Wix</label><select id="product-size" [ngModel]="selectedSize" (ngModelChange)="selectedSizeChange.emit($event)">@for(size of wixSizes;track size){<option [value]="size">{{size}}</option>}</select><p>Select a size to view its drawing and details.</p>}
  @else{<label>Product sizes</label><p>No size data available.</p>}
  </div><div class="field drawing-field"><ng-content /></div></div>
  @if(product.saved_only){<p>This packaging-only entry needs a saved product record before details can be edited.</p>}
@@ -17,7 +17,7 @@ import {SupabaseService} from '../../core/services/supabase.service';
  @if(done){<p role="status">Saved</p>}
  `,styles:[`:host{display:block;container-type:inline-size}.fields{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.9fr) minmax(0,1fr);gap:16px;align-items:start}.field{display:flex;flex-direction:column;gap:6px;min-width:0}.field .wix-size{max-width:100%;text-overflow:ellipsis}.size-table{border:1px solid var(--wc-border);border-radius:10px;overflow:hidden}.size-table table{width:100%;border-collapse:collapse}.size-table th,.size-table td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--wc-border)}.size-table tr:last-child td{border-bottom:0}.size-table th:first-child,.size-table td:first-child{width:28px}.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.actions input{flex:1;min-width:100px}input,textarea{width:100%;box-sizing:border-box}textarea{min-height:36px;max-height:120px;resize:vertical}input{min-width:0}.actions button{flex-shrink:0}p{margin:0;font-size:.875rem;color:var(--wc-muted)}[role=alert]{color:var(--p-red-600)}@container(max-width:620px){.fields{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.drawing-field{grid-column:1/-1}}@container(max-width:400px){.fields{grid-template-columns:minmax(0,1fr)}}`]})
 export class ProductDetailsComponent implements OnChanges {
- @Input() product:any;@Input() wixSizes:string[]=[];@Input() sizeTable=false;@Output() saved=new EventEmitter<any>();shortName='';busy=false;error='';done=false;editingName=false;
+ @Input() product:any;@Input() wixSizes:string[]=[];@Input() sizeTable=false;@Input() selectedSize='';@Output() selectedSizeChange=new EventEmitter<string>();@Output() saved=new EventEmitter<any>();shortName='';busy=false;error='';done=false;editingName=false;
  constructor(private db:SupabaseService){}
  ngOnChanges(changes:SimpleChanges){if(changes['product']){this.shortName=this.product?.short_name||'';this.editingName=false;this.error='';this.done=false;}}
  editName(){this.shortName=this.product.short_name||'';this.editingName=true;this.done=false;}
