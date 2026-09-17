@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {orderItemOptionLabels,packageComponents,packagingSignature,packagingError,goodsCents,isNonPackagingComponent} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {backdropPackagingKey,orderItemOptionLabels,packageComponents,packagingSignature,packagingError,goodsCents,isNonPackagingComponent} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 const prompt='Please email us a ready-to-use SVG format file only, in black and white, featuring your company name';
 const answer='I would like to add a logo but I dont have it in that file type.';
 describe('Logo presentation and packaging exclusions',()=>{
@@ -32,5 +32,15 @@ describe('Logo presentation and packaging exclusions',()=>{
   expect(isNonPackagingComponent({component_key:'option:logo or personalization'})).toBe(true);
   expect(isNonPackagingComponent({component_key:'option:internal shelf'})).toBe(false);
   expect(orderItemOptionLabels({id:'i',custom_text_fields:{'Customer instructions':'Please use our updated SVG artwork'}})).toHaveLength(1);
+ });
+});
+describe('Backdrop shared dimension key',()=>{
+ it('uses exact metric size and folding while ignoring colour',()=>{
+  expect(backdropPackagingKey({id:'i',wix_options:{Size:'95cm × 190cm',Foldable:'YES',Colour:'Raw'}})).toBe('1900x950:foldable');
+  expect(backdropPackagingKey({id:'i',wix_options:{Dimensions:'2000 x 1000 mm',Foldable:'No'}})).toBe('2000x1000:nonfoldable');
+ });
+ it('does not guess without a unit or folding option',()=>{
+  expect(backdropPackagingKey({id:'i',wix_options:{Size:'200 x 100',Foldable:'YES'}})).toBe('');
+  expect(backdropPackagingKey({id:'i',wix_options:{Size:'200cm x 100cm'}})).toBe('');
  });
 });

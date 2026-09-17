@@ -1,32 +1,29 @@
 import {describe,expect,it,vi} from 'vitest';
-import {PackagingVariantsComponent,sharedBackdropBoxes} from './packaging-variants.component';
+import {PackagingVariantsComponent,sharedBackdropBox} from './packaging-variants.component';
 
 const profile=(size:string,foldable:string,dimensions=[1980,1040,90,22],colour='White')=>({
  template_item:{wix_options:{Size:size,Foldable:foldable,Colour:colour}},
  packages:[{package_name:'Backdrop box',length_mm:dimensions[0],width_mm:dimensions[1],height_mm:dimensions[2],weight_kg:dimensions[3],contents:[{component_key:'main',unit_index:1}]}],
 });
-const shared=(value:any,productName='Existing Backdrop')=>({profile:value,productName});
+const dimensions={
+ '1900x950:foldable':{size_key:'1900x950:foldable',package_name:'Backdrop',length_mm:1980,width_mm:1040,height_mm:90,revision:'one'},
+ '1900x950:nonfoldable':{size_key:'1900x950:nonfoldable',package_name:'Backdrop',length_mm:1980,width_mm:1040,height_mm:45,revision:'two'},
+};
 
 describe('Shared Backdrop packaging by size and folding',()=>{
- it('reuses boxes across Backdrop products for the same exact size and folding while ignoring colour',()=>{
-  const found=sharedBackdropBoxes({Size:'190cm x 95cm',Foldable:'YES',Colour:'Raw'},[shared(profile('950 × 1900 mm','Foldable',[1980,1040,90,22],'White'))]);
+ it('loads shared dimensions without reusing another product weight',()=>{
+  const found=sharedBackdropBox({Size:'190cm x 95cm',Foldable:'YES',Colour:'Raw'},dimensions);
   expect(found.key).toBe('1900x950:foldable');
-  expect(found.ambiguous).toBe(false);
-  expect(found.packages).toEqual([expect.objectContaining({length_mm:1980,width_mm:1040,height_mm:90,weight_kg:22})]);
+  expect(found.box).toEqual(expect.objectContaining({length_mm:1980,width_mm:1040,height_mm:90,weight_kg:0}));
  });
  it('keeps Foldable and Non-foldable boxes separate',()=>{
-  const rows=[shared(profile('190cm x 95cm','YES',[1980,1040,90,22])),shared(profile('190cm x 95cm','NO',[1980,1040,45,18]))];
-  expect(sharedBackdropBoxes({Size:'190cm x 95cm',Foldable:'NO'},rows).packages[0].height_mm).toBe(45);
- });
- it('does not guess when different layouts exist for the same size and folding',()=>{
-  const rows=[shared(profile('190cm x 95cm','YES',[1980,1040,90,22])),shared(profile('190cm x 95cm','YES',[2000,1050,100,24]))];
-  expect(sharedBackdropBoxes({Size:'190cm x 95cm',Foldable:'YES'},rows)).toMatchObject({key:'1900x950:foldable',packages:[],ambiguous:true});
+  expect(sharedBackdropBox({Size:'190cm x 95cm',Foldable:'NO'},dimensions).box?.height_mm).toBe(45);
  });
  it('does not apply the Backdrop database to Carts or other products',()=>{
   const component=new PackagingVariantsComponent({} as any);
   component.product={product_name:'Display Cart'};
   component.packagingScope='product';
-  component.sharedBackdropProfiles=[shared(profile('190cm x 95cm','YES'))];
+  component.backdropDimensions=dimensions;
   component.options=[{name:'Size',value:'190cm x 95cm'},{name:'Foldable',value:'YES'}];
   component.reuseSharedBackdropBoxes();
   expect(component.boxes).toEqual([]);
@@ -61,7 +58,7 @@ describe('Packaging editor loading',()=>{
   expect(component.selectedKey).toBe('only-profile');
   expect(component.boxes[0]).toMatchObject({length_mm:980,width_mm:460,height_mm:70,weight_kg:13});
   const calls=client.from.mock.calls.length;component.boxes[0].height_mm=95;
-  component.sharedBackdropProfiles=[];await component.ngOnChanges();
+  component.backdropDimensions={};await component.ngOnChanges();
   expect(client.from.mock.calls).toHaveLength(calls);expect(component.boxes[0].height_mm).toBe(95);
  });
 

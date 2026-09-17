@@ -30,4 +30,13 @@ describe('Direct saved packaging editing',()=>{
   const {component}=setup();component.product={id:'arch',product_name:'Flutted Arch',wix_product_id:'arch-catalog'};component.profile.template_item.product_name='Another Backdrop';component.edit();
   expect(component.components()[0]).toMatchObject({order_item_id:'arch',product_name:'Flutted Arch'});
  });
+ it('saves a legacy Backdrop profile whose template item is null',async()=>{
+  const {component,invoke}=setup();component.profile.template_item=null;component.backdrop=true;component.fallbackOptions={Size:'180cm x 90cm',Foldable:'YES'};component.backdropDimensions={package_name:'Backdrop',length_mm:930,width_mm:930,height_mm:90};component.edit();component.draft[0].weight_kg=20;await component.save();
+  expect(invoke).toHaveBeenCalledWith('delivery-cost-review',{body:expect.objectContaining({sourceItemId:'',existingSignature:'saved',options:[{name:'Size',value:'180cm x 90cm'},{name:'Foldable',value:'YES'}],packages:[expect.objectContaining({length_mm:930,width_mm:930,height_mm:90,weight_kg:20})]})});
+  expect(component.saved()).toBe(true);
+ });
+ it('keeps Backdrop dimensions read-only and blocks weight editing until the shared reference exists',()=>{
+  const {component}=setup();component.backdrop=true;component.edit();expect(component.editing).toBe(false);expect(component.error()).toContain('shared dimensions');
+  component.backdropDimensions={package_name:'Backdrop',length_mm:1030,width_mm:1030,height_mm:90};component.edit();expect(component.draft[0]).toMatchObject({length_mm:1030,width_mm:1030,height_mm:90,weight_kg:13});
+ });
 });

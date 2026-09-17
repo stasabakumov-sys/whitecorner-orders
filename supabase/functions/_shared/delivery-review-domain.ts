@@ -98,6 +98,23 @@ export interface PackageComponent {
   unit_index:number; quantity:number; profile_item_key:string; wix_product_id:string|null;
 }
 export const componentNormal=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+export function backdropPackagingKey(item:OrderItemRow):string{
+ let size='',fold='';
+ for(const label of orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER)){
+  const split=label.indexOf(':');if(split<0)continue;
+  const name=componentNormal(label.slice(0,split)),value=label.slice(split+1).trim();
+  if(['size','dimension','dimensions'].includes(name))size=value;
+  if(name==='foldable')fold=value;
+ }
+ const match=size.toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(mm|cm|m)?\s*[x×]\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)$/);
+ if(!match)return '';
+ const factor=(unit:string)=>unit==='m'?1000:unit==='cm'?10:1;
+ const a=Number(match[1])*factor(match[2]||match[4]),b=Number(match[3])*factor(match[4]);
+ if(!Number.isInteger(a)||!Number.isInteger(b)||a<=0||b<=0||a>10000||b>10000)return '';
+ const normalized=componentNormal(fold).replace(/\s/g,'');
+ const folding=['yes','true','foldable'].includes(normalized)?'foldable':['no','false','nonfoldable','unfoldable'].includes(normalized)?'nonfoldable':'';
+ return folding?[a,b].sort((x,y)=>y-x).join('x')+':'+folding:'';
+}
 export const isLogoFileInstruction=(text:string)=>/^(?:please )?email us (?:a )?ready to use svg\b/.test(componentNormal(text));
 export const isLogoOption=(name:string)=>/^(?:add )?logo(?: or personali[sz]ation)?$/.test(componentNormal(name));
 export const isPackagingColourOption=(name:string)=>/^colou?r$/.test(componentNormal(name));

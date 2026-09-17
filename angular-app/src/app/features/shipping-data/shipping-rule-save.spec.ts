@@ -34,12 +34,12 @@ describe('Shipping rule save feedback',()=>{
   component.products.set([product] as any);component.storeCartMainProfile(product as any,profile);
   expect(component.products()[0].saved_profiles).toEqual([profile]);
  });
- it('shows shared Backdrop packaging immediately for another product of the same size',()=>{
+ it('does not reuse another Backdrop model weight for the same size',()=>{
   const saved={signature:'source-profile',template_item:{wix_options:{Size:'190cm x 95cm',Foldable:'YES',Colour:'White'}},packages:[{length_mm:1980,width_mm:1040,height_mm:90,weight_kg:22,contents:[{component_key:'main',unit_index:1,product_name:'Ripple Arch Backdrop'}]}]};
   const source={id:'source',product_name:'Ripple Arch Backdrop',product_type:'Backdrop',saved_profiles:[saved]},target={id:'target',product_name:'Half Ripple Arch Backdrop',product_type:'Backdrop',saved_profiles:[]};
   const component=new ShippingDataComponent({} as any,undefined,{parts:()=>[{shipping_product_id:'target',options:{Size:'190cm x 95cm'}}]} as any);component.products.set([source,target] as any);
   component.updateCatalog('target',{variants:[{choices:{Size:'190cm x 95cm'}},{choices:{Size:'180cm x 90cm'}}]});
-  const profiles=component.packingProfiles(target as any);expect(profiles).toHaveLength(1);expect(component.reusableProfileCount(target as any)).toBe(1);expect(profiles[0].packages[0].contents[0].product_name).toBe(target.product_name);
+  const profiles=component.packingProfiles(target as any);expect(profiles).toHaveLength(0);expect(component.reusableProfileCount(target as any)).toBe(0);
   expect(component.productSizes(target as any)).toEqual(['190cm x 95cm','180cm x 90cm']);expect(component.sizePackingCount(target as any,'180cm x 90cm')).toBe(0);
  });
  it('keeps the draft and shows a row-level reason when required measurements are missing',async()=>{
@@ -55,5 +55,18 @@ describe('Shipping rule save feedback',()=>{
   await component.saveRule(rule);
   expect(component.ruleFeedback()[rule.id]).toEqual({ok:false,text:'Could not save: offline. Please retry.'});
   expect(component.ruleSaving(rule.id)).toBe(false);
+ });
+ it('keeps shared Backdrop dimension edits beside a failed save',async()=>{
+  const component=new ShippingDataComponent({client:{rpc:vi.fn().mockResolvedValue({data:null,error:{message:'offline'}})}} as any,undefined,{} as any),key='1800x900:foldable';
+  component.setDimensionDraft(key,'package_name','Backdrop');component.setDimensionDraft(key,'length_mm',930);component.setDimensionDraft(key,'width_mm',930);component.setDimensionDraft(key,'height_mm',90);
+  await component.saveBackdropDimensions(key);
+  expect(component.dimensionFeedback[key]).toEqual({ok:false,text:'Could not save dimensions: offline'});expect(component.dimensionValue(key,'height_mm')).toBe(90);
+ });
+ it('stores confirmed shared Backdrop dimensions and clears their draft',async()=>{
+  const row={size_key:'1800x900:foldable',package_name:'Backdrop',length_mm:930,width_mm:930,height_mm:90,revision:'new'};
+  const component=new ShippingDataComponent({client:{rpc:vi.fn().mockResolvedValue({data:row,error:null})}} as any,undefined,{} as any);
+  for(const [field,value] of Object.entries(row).filter(([field])=>['package_name','length_mm','width_mm','height_mm'].includes(field)))component.setDimensionDraft(row.size_key,field as any,value);
+  await component.saveBackdropDimensions(row.size_key);
+  expect(component.backdropDimensions()[row.size_key]).toEqual(row);expect(component.dimensionDrafts[row.size_key]).toBeUndefined();expect(component.dimensionFeedback[row.size_key].ok).toBe(true);
  });
 });

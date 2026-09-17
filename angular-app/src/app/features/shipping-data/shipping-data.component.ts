@@ -12,7 +12,7 @@ import { SupabaseService } from '../../core/services/supabase.service';
 import {BoxDrawingComponent} from './box-drawing.component';
 import {ProductDetailsComponent} from './product-details.component';
 import {ProductPartsComponent} from './product-parts.component';
-import {PackagingVariantsComponent,sharedBackdropLayoutKey} from './packaging-variants.component';
+import {PackagingVariantsComponent,BackdropPackagingDimensions} from './packaging-variants.component';
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
 import {ProductWorkCostComponent} from '../costing/product-work-cost.component';
 import {CostingService} from '../costing/costing.service';
@@ -126,16 +126,18 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
       @empty{<tr><td colspan="5">No products found.</td></tr>}
       </tbody></table></div>
       <p-dialog header="Backdrop box drawings" [(visible)]="libraryOpen" [modal]="true" [style]="{width:'min(760px,95vw)'}" [draggable]="false">
-       <p>One packaging drawing per backdrop size and folding option, shared by all matching Backdrops. Replacing it updates the shared drawing for all of them.</p>
+       <p>One set of package dimensions and one packaging drawing per Backdrop size and folding option, shared by all matching Backdrops. Weight remains separate for every model and size.</p>
        @if(libraryError){<p role="alert">{{libraryError}}</p>}
        @if(libraryLoading){<p role="status">Loading drawing library…</p>}
        <div class="product-tools"><input aria-label="New backdrop size" placeholder="e.g. 190cm x 95cm" [(ngModel)]="newSize"><select aria-label="Folding option" [(ngModel)]="newFolding"><option value="">Choose folding option</option><option value="foldable">Foldable</option><option value="nonfoldable">Non-foldable</option></select><button (click)="addLibrarySize()" [disabled]="!parseSize(newSize)||!newFolding">Add size</button></div>
        @if(libraryMessage){<p role="status">{{libraryMessage}}</p>}
-       <table class="shiptable"><thead><tr><th>Backdrop size</th><th>Drawing</th></tr></thead><tbody>
-       @for(key of librarySizes();track key){<tr><td>{{sizeLabel(key)}}</td><td><app-box-drawing [sharedSize]="key" [readOnly]="!qualifiedKey(key)" />
+       <table class="shiptable"><thead><tr><th>Backdrop size</th><th>Shared package dimensions</th><th>Drawing</th></tr></thead><tbody>
+       @for(key of librarySizes();track key){<tr><td>{{sizeLabel(key)}}</td><td>
+       @if(qualifiedKey(key)){<div class="dimension-fields"><input aria-label="Package name" placeholder="Package name" [ngModel]="dimensionValue(key,'package_name')" (ngModelChange)="setDimensionDraft(key,'package_name',$event)"><input aria-label="Length mm" type="number" min="1" placeholder="L mm" [ngModel]="dimensionValue(key,'length_mm')" (ngModelChange)="setDimensionDraft(key,'length_mm',$event)"><input aria-label="Width mm" type="number" min="1" placeholder="W mm" [ngModel]="dimensionValue(key,'width_mm')" (ngModelChange)="setDimensionDraft(key,'width_mm',$event)"><input aria-label="Height mm" type="number" min="1" placeholder="H mm" [ngModel]="dimensionValue(key,'height_mm')" (ngModelChange)="setDimensionDraft(key,'height_mm',$event)"><button (click)="saveBackdropDimensions(key)" [disabled]="dimensionSaving===key">{{dimensionSaving===key?'Saving…':'Save dimensions'}}</button></div>@if(dimensionFeedback[key]){<p [attr.role]="dimensionFeedback[key].ok?'status':'alert'">{{dimensionFeedback[key].text}}</p>}}
+       </td><td><app-box-drawing [sharedSize]="key" [readOnly]="!qualifiedKey(key)" />
        @if(!qualifiedKey(key)){<p>Existing drawing: folding option needs review.</p><select aria-label="Classify existing drawing" [(ngModel)]="legacyFolding[key]" [disabled]="!!classifying"><option value="">Choose folding option</option><option value="foldable">Foldable</option><option value="nonfoldable">Non-foldable</option></select><button (click)="classifyDrawing(key)" [disabled]="!legacyFolding[key]||!!classifying">{{classifying===key?'Saving…':'Confirm folding option'}}</button>}
        </td></tr>}
-       @empty{<tr><td colspan="2">Add a backdrop size to upload its first drawing.</td></tr>}
+       @empty{<tr><td colspan="3">Add a backdrop size to enter its dimensions and upload its first drawing.</td></tr>}
        </tbody></table>
       </p-dialog>
       <p-drawer [visible]="!!selectedId()" (visibleChange)="!$event&&selectedId.set(null)" header="Product" position="right" [modal]="true" [dismissible]="true" [blockScroll]="true" styleClass="products-drawer">
@@ -174,8 +176,8 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             </nav>}
             @if(!isCart(p)){@for(profile of visiblePackingProfiles(p);track profile.signature){
              <section class="shipsection"><div class="packaging-profile-heading"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3></div>
-             <p class="small">Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.</p>
-             <app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" [backdrop]="isBackdrop(p)" [sharedSize]="sharedSize(profile,p)" [sharedSizeLabel]="sizeLabel(sharedSize(profile,p))" (profileSaved)="storeCartMainProfile(p,$event)" />
+             <p class="small">@if(isBackdrop(p)){Dimensions and drawing are shared for this size and folding option. Weight belongs only to this model and size.}@else{Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.}</p>
+             <app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" [backdrop]="isBackdrop(p)" [sharedSize]="sharedSize(profile,p)" [sharedSizeLabel]="sizeLabel(sharedSize(profile,p))" [fallbackOptions]="backdropProfileOptions(profile,p)" [backdropDimensions]="backdropDimension(profile,p)" (profileSaved)="storeCartMainProfile(p,$event)" />
              </section>
             }}
             @if(!p.saved_only){
@@ -189,7 +191,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               }</div>
              </section>}
             }@else if(!visiblePackingProfiles(p).length){
-             <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [catalog]="catalogProducts()[p.id]" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [sharedBackdropProfiles]="sharedBackdropPackagingProfiles()" />}</div>
+             <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [catalog]="catalogProducts()[p.id]" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [backdropDimensions]="backdropDimensions()" />}</div>
             }
             @if(isCart(p)){
             <div class="shipsection">
@@ -287,28 +289,25 @@ export class ShippingDataComponent implements OnInit {
   selectCartSize(size:string){this.selectedCartSize=size;this.mainAddOns.set([]);}
   cartSizeLabel(p:ShippingProduct){return this.cartSizes(p).find(size=>size.key===this.activeCartSize(p))?.label||'';}
   packingProfiles(p:ShippingProduct){
-    if(this.isBackdrop(p)){
-      const sizes=new Set(this.productSizes(p).map(backdropSizeKey).filter(Boolean));
-      const entries=this.sharedBackdropPackagingProfiles().map(entry=>({...entry,key:backdropDrawingKey(entry.profile,entry.productName)})).filter(entry=>entry.key&&sizes.has(entry.key.split(':')[0]));
-      const shared=[...new Map(entries.map(entry=>[`${entry.key}|${sharedBackdropLayoutKey(entry.profile)}`,entry])).values()].map(entry=>({...entry.profile,packages:(entry.profile.packages||[]).map((box:any)=>({...box,contents:(box.contents||[]).map((content:any)=>content.component_key&&content.component_key!=='main'?content:{...content,product_name:p.product_name,component_name:p.product_name})}))}));
-      return [...new Map([...(p.saved_profiles||[]),...shared].map(profile=>[`${backdropDrawingKey(profile,p.product_name)}|${sharedBackdropLayoutKey(profile)}`,profile])).values()];
-    }
+    if(this.isBackdrop(p))return p.saved_profiles||[];
     return !this.isCart(p)?p.saved_profiles||[]:(p.saved_profiles||[]).filter((profile:any)=>packagingSizes(profile,p.product_name).some(size=>cartSizeKey(size)===this.activeCartSize(p)));
   }
   packingSizeTabs(p:ShippingProduct){return packagingSizeGroups(this.packingProfiles(p),p.product_name,this.productSizes(p));}
   activePackingSize(p:ShippingProduct){const tabs=this.packingSizeTabs(p);return tabs.some(tab=>tab.key===this.selectedPackingSize)?this.selectedPackingSize:tabs[0]?.key||'';}
   selectPackingSize(key:string){this.selectedPackingSize=key;}
   visiblePackingProfiles(p:ShippingProduct){if(this.isCart(p))return this.packingProfiles(p);const tabs=this.packingSizeTabs(p);return tabs.length>1?(tabs.find(tab=>tab.key===this.activePackingSize(p))?.profiles||[]):this.packingProfiles(p);}
-  reusableProfileCount(p:ShippingProduct){return this.isBackdrop(p)?this.packingProfiles(p).length:p.saved_profiles?.length||0;}
+  reusableProfileCount(p:ShippingProduct){return p.saved_profiles?.length||0;}
   newFolding='';libraryMessage='';qualifiedKey=qualifiedDrawingKey;legacyFolding:Record<string,string>={};legacyRevisions:Record<string,string>={};classifying='';
   sharedSize(profile:any,p:ShippingProduct){return backdropDrawingKey(profile,p.product_name);}
-  librarySizes(){return [...new Set([...this.extraSizes(),...this.products().filter(p=>this.isBackdrop(p)).flatMap(p=>(p.saved_profiles||[]).map(profile=>this.sharedSize(profile,p)).filter(Boolean))])].sort();}
-  sharedBackdropPackagingProfiles(){
-    const profiles=this.products().filter(product=>this.isBackdrop(product)).flatMap(product=>(product.saved_profiles||[]).map(profile=>({profile,productName:product.product_name})));
-    return [...new Map(profiles.map(entry=>[entry.profile.signature||`${entry.productName}:${backdropDrawingKey(entry.profile,entry.productName)}:${JSON.stringify(entry.profile.packages||[])}`,entry])).values()];
-  }
+  backdropDimensions=signal<Record<string,BackdropPackagingDimensions>>({});dimensionDrafts:Record<string,Partial<BackdropPackagingDimensions>>={};dimensionFeedback:Record<string,{ok:boolean;text:string}>={};dimensionSaving='';
+  librarySizes(){return [...new Set([...this.extraSizes(),...Object.keys(this.backdropDimensions()),...this.products().filter(p=>this.isBackdrop(p)).flatMap(p=>(p.saved_profiles||[]).map(profile=>this.sharedSize(profile,p)).filter(Boolean))])].sort();}
+  backdropDimension(profile:any,p:ShippingProduct){return this.backdropDimensions()[this.sharedSize(profile,p)]||null;}
+  backdropProfileOptions(profile:any,p:ShippingProduct){if(!this.isBackdrop(p)||profile?.template_item?.wix_options)return{};const key=this.sharedSize(profile,p),size=packagingSizes(profile,p.product_name)[0]||'';return key&&size?{Size:size,Foldable:key.endsWith(':foldable')?'YES':'NO'}:{};}
+  dimensionValue(key:string,field:keyof BackdropPackagingDimensions){return (this.dimensionDrafts[key] as any)?.[field]??(this.backdropDimensions()[key] as any)?.[field]??'';}
+  setDimensionDraft(key:string,field:keyof BackdropPackagingDimensions,value:any){const numeric=['length_mm','width_mm','height_mm'].includes(field);this.dimensionDrafts[key]={...(this.dimensionDrafts[key]||{}),[field]:numeric?(value===''?null:Number(value)):value};delete this.dimensionFeedback[key];}
+  async saveBackdropDimensions(key:string){if(this.dimensionSaving)return;const current=this.backdropDimensions()[key],value=(field:keyof BackdropPackagingDimensions)=>this.dimensionValue(key,field),name=String(value('package_name')).trim(),length=Number(value('length_mm')),width=Number(value('width_mm')),height=Number(value('height_mm'));if(!name||![length,width,height].every(n=>Number.isFinite(n)&&n>0)){this.dimensionFeedback[key]={ok:false,text:'Complete the package name and positive L, W and H values.'};return;}this.dimensionSaving=key;try{const {data,error}=await this.supabase.client.rpc('wc_save_backdrop_packaging_dimensions',{p_size:key,p_package_name:name,p_length:length,p_width:width,p_height:height,p_expected:current?.revision||null});if(error||!data?.revision)throw Error(error?.message||'The server did not confirm saving.');this.backdropDimensions.update(rows=>({...rows,[key]:data}));delete this.dimensionDrafts[key];this.dimensionFeedback[key]={ok:true,text:'Shared dimensions saved.'};}catch(e:any){this.dimensionFeedback[key]={ok:false,text:'Could not save dimensions: '+(e?.message||'Check the connection and retry.')};}finally{this.dimensionSaving='';this.cdr?.markForCheck();}}
   addLibrarySize(){const size=backdropSizeKey(this.newSize);if(!size||!['foldable','nonfoldable'].includes(this.newFolding))return;const key=size+':'+this.newFolding;this.libraryMessage=this.librarySizes().includes(key)?'This size and folding option already exists. Use its drawing below.':'';this.extraSizes.update(s=>[...new Set([...s,key])]);}
-  async openLibrary(){this.libraryOpen=true;this.libraryLoading=true;this.libraryError='';this.libraryMessage='';try{const {data,error}=await this.supabase.client.from('wc_backdrop_box_drawings').select('size_key,revision');if(error)throw error;this.legacyRevisions=Object.fromEntries((data||[]).map(d=>[d.size_key,d.revision]));this.extraSizes.update(s=>[...new Set([...s.filter(qualifiedDrawingKey),...(data||[]).map(d=>d.size_key)])]);}catch{this.libraryError='Could not load the drawing library. Please reopen to retry.';}finally{this.libraryLoading=false;this.cdr?.markForCheck();}}
+  async openLibrary(){this.libraryOpen=true;this.libraryLoading=true;this.libraryError='';this.libraryMessage='';try{const [drawings,dimensions]=await Promise.all([this.supabase.client.from('wc_backdrop_box_drawings').select('size_key,revision'),this.supabase.client.from('wc_backdrop_packaging_dimensions').select('*')]);if(drawings.error||dimensions.error)throw drawings.error||dimensions.error;this.legacyRevisions=Object.fromEntries((drawings.data||[]).map(d=>[d.size_key,d.revision]));this.backdropDimensions.set(Object.fromEntries((dimensions.data||[]).map(row=>[row.size_key,row])));this.extraSizes.update(s=>[...new Set([...s.filter(qualifiedDrawingKey),...(drawings.data||[]).map(d=>d.size_key),...(dimensions.data||[]).map(d=>d.size_key)])]);}catch{this.libraryError='Could not load the Backdrop dimensions and drawing library. Please reopen to retry.';}finally{this.libraryLoading=false;this.cdr?.markForCheck();}}
   async classifyDrawing(key:string){const fold=this.legacyFolding[key];if(this.classifying||!['foldable','nonfoldable'].includes(fold))return;this.classifying=key;this.libraryError='';try{const {data,error}=await this.supabase.client.rpc('wc_classify_backdrop_box_drawing',{p_size:key,p_folding:fold,p_expected:this.legacyRevisions[key]});if(error)throw error;if(data?.size_key!==key+':'+fold)throw Error('The server did not confirm the change.');this.extraSizes.update(s=>[...new Set(s.filter(k=>k!==key).concat(data.size_key))]);this.libraryMessage='Folding option saved. Reopen the product card to refresh its drawing.';}catch(e:any){this.libraryError='Could not classify drawing. '+(e?.message||'Check the connection and retry.');}finally{this.classifying='';this.cdr?.markForCheck();}}
   profileOptions=savedProfileOptions;
   products = signal<ShippingProduct[]>([]);
@@ -361,12 +360,15 @@ export class ShippingDataComponent implements OnInit {
 
   async load() {
     this.error.set('');
-    const [pr, pk, rr] = await Promise.all([
+    const [pr, pk, rr, dimensions] = await Promise.all([
       this.supabase.client.from('wc_shipping_products').select('*').eq('active',true).order('product_name'),
       this.supabase.client.from('wc_shipping_packages').select('*').eq('active',true).order('package_no'),
-      this.supabase.client.from('wc_shipping_rules').select('*').order('created_at')
+      this.supabase.client.from('wc_shipping_rules').select('*').order('created_at'),
+      this.supabase.client.from('wc_backdrop_packaging_dimensions').select('*')
     ]);
     if (pr.error) { this.error.set(pr.error.message); return; }
+    if(dimensions.error){this.error.set('Shared Backdrop dimensions could not be loaded. Reload Products to retry.');return;}
+    this.backdropDimensions.set(Object.fromEntries((dimensions.data||[]).map(row=>[row.size_key,row])));
     const profiles:any[]=[];
     for(let start=0;;start+=250){
       const page=await this.supabase.client.from('wc_delivery_packaging_profiles').select('*').order('signature').range(start,start+249);
