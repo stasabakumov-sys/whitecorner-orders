@@ -1,7 +1,7 @@
 import {CommonModule} from '@angular/common';
 import {Component,Input,OnChanges,SimpleChanges,ChangeDetectorRef,Optional} from '@angular/core';
 import {SupabaseService} from '../../core/services/supabase.service';
-import {BACKDROP_PAINT_OPERATIONS,ShopTemplate} from '../shop-floor/shop-floor.models';
+import {paintOperations,ShopTemplate} from '../shop-floor/shop-floor.models';
 import {PlannedWorkRow,WorkRate,plannedTotal,plannedWorkRows} from './planned-work-cost';
 import {backdropFinishModes,productionCostRows,foldingLabel,templateVariantLabel} from './production-cost';
 import {isCartProduct} from '../shipping-data/cart-size';
@@ -17,7 +17,7 @@ import {isCartProduct} from '../shipping-data/cart-size';
    </tbody></table></div>
   }
   @for(template of displayTemplates();track template.id){<details class="template" [open]="!hasFolding"><summary>{{template.name}}@if(hasFolding){ · {{foldingLabel(template.folding)}}}</summary><div class="table-wrap"><table><thead><tr><th>Stage / operation</th><th>Minutes</th><th>Rate / hour</th><th>Cost</th></tr></thead><tbody>
-   @for(row of rows(template);track row.key){<tr><td>{{row.label}}</td><td>{{row.minutes==null?'Not set':row.minutes}}</td><td>{{row.rate==null?'Rate required':(row.rate|currency:'AUD')}}</td><td>{{row.cost==null?'—':(row.cost|currency:'AUD')}}</td></tr>}
+   @for(row of rows(template,false);track row.key){<tr><td>{{row.label}}</td><td>{{row.minutes==null?'Not set':row.minutes}}</td><td>{{row.rate==null?'Rate required':(row.rate|currency:'AUD')}}</td><td>{{row.cost==null?'—':(row.cost|currency:'AUD')}}</td></tr>}
   </tbody></table></div><div class="totals">@if(hasFolding){<span>Structural work <b>{{total(template,false)==null?'Incomplete':(total(template,false)|currency:'AUD')}}</b></span>}@else{<span>Raw work <b>{{total(template,false)==null?'Incomplete':(total(template,false)|currency:'AUD')}}</b></span><span>Painted work <b>{{total(template,true)==null?'Incomplete':(total(template,true)|currency:'AUD')}}</b></span>}</div></details>}
   @empty{<p>No parts template yet. Add it in Estimated min.</p>}
  }
@@ -38,5 +38,5 @@ export class ProductWorkCostComponent implements OnChanges{
   }catch{if(token===this.token)this.error='Could not calculate planned work cost. Refresh and retry.';}
   finally{if(token===this.token){this.loading=false;this.cdr?.markForCheck();}}
  }
- rows(template:ShopTemplate):PlannedWorkRow[]{const rows=plannedWorkRows(template,this.rates,this.product?.product_name||'');return this.hasFolding?rows.filter(row=>!BACKDROP_PAINT_OPERATIONS.includes(row.key)):rows;}total(template:ShopTemplate,painted:boolean){return plannedTotal(this.rows(template),painted);}
+ rows(template:ShopTemplate,painted=false):PlannedWorkRow[]{const productName=this.product?.product_name||'',structural=Object.fromEntries(Object.entries(template.estimates||{}).filter(([key])=>!key.startsWith('Painting:'))),estimates={...structural,...(painted?this.product?.backdrop_paint_profile?.estimates||{}:{})},rows=plannedWorkRows({...template,estimates},this.rates,productName);return painted?rows:rows.filter(row=>!paintOperations(productName).includes(row.key));}total(template:ShopTemplate,painted:boolean){return plannedTotal(this.rows(template,painted),painted);}
 }

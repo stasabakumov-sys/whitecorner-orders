@@ -1,7 +1,7 @@
 import {Component,Input,OnChanges,SimpleChanges,ChangeDetectorRef,Optional} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {SupabaseService} from '../../core/services/supabase.service';
-import {paintOperations,paintLabel,ShopPart,ShopTemplate} from '../shop-floor/shop-floor.models';
+import {ShopPart,ShopTemplate} from '../shop-floor/shop-floor.models';
 import {manualBackdropSizeKey,sizeKeyLabel} from './product-sizes';
 import {Folding,foldingLabel} from '../costing/production-cost';
 import {isCartProduct} from './cart-size';
@@ -11,7 +11,7 @@ type AssignedPart=ShopPart&{component_product_id:string};
 
 @Component({selector:'app-product-parts',standalone:true,imports:[FormsModule],template:`
  <h3>Parts & estimated minutes</h3>
- <p class="mut">@if(hasFolding){Save one structural template for Foldable and one for Non-foldable. Every size reuses it; painting is entered once in Product cost.}@else if(isSizedCart){This template belongs only to the selected Cart size.}@else{Save one template for each size or composition.} Add-on parts apply only when ordered.</p>
+  <p class="mut">@if(hasFolding){Save one structural template for Foldable and one for Non-foldable. Every size reuses it.}@else if(isSizedCart){This structural template belongs only to the selected Cart size.}@else{Save one structural template for each size or composition.} Painting is entered once below and is added only to Painted orders. Add-on parts apply only when ordered.</p>
  @if(product?.saved_only){<p class="error" role="alert">Link this imported profile to a catalogue product before adding production parts.</p>}
  @else if(loading){<p>Loading parts…</p>}
  @else if(loadFailed){<button type="button" (click)="load()">Retry loading parts</button>}
@@ -29,7 +29,7 @@ type AssignedPart=ShopPart&{component_product_id:string};
    @empty{<tr><td colspan="5">Add the first product part.</td></tr>}
   </tbody></table></div>
   <button type="button" (click)="addPart()" [disabled]="busy||!components.length">Add part</button>
-  <div class="estimate-grid"><label>CNC (min)<input type="number" min="0" [ngModel]="estimates['CNC']" (ngModelChange)="setEstimate('CNC',$event)" [disabled]="busy"></label>@for(op of paint;track op){<label>{{paintLabel(op,paint)}} (min)<input type="number" min="0" [ngModel]="estimates['Painting:'+op]" (ngModelChange)="setEstimate('Painting:'+op,$event)" [disabled]="busy"></label>}</div>
+  <div class="estimate-grid"><label>CNC (min)<input type="number" min="0" [ngModel]="estimates['CNC']" (ngModelChange)="setEstimate('CNC',$event)" [disabled]="busy"></label></div>
   <button class="primary" type="button" (click)="save()" [disabled]="busy||product.saved_only">{{busy?'Saving…':'Save parts template'}}</button>
  }
  @if(error){<p class="error" role="alert">{{error}}</p>}@if(done){<p class="success" role="status">Parts template saved.</p>}
@@ -54,8 +54,7 @@ export class ProductPartsComponent implements OnChanges{
   this.sizeKey=this.hasFolding?'':size;this.folding=fold;this.error=this.hasFolding&&!shared&&legacy.length>1?'Existing size-specific estimates differ. Enter and save one shared template for this construction.':'';this.done=false;
  }
  templates:ShopTemplate[]=[];components:ProductComponent[]=[];parts:AssignedPart[]=[];estimates:Record<string,number>={};
- templateName='';editingId='';version=0;loading=false;busy=false;error='';done=false;paintLabel=paintLabel;private loadToken=0;
- get paint(){return this.hasFolding?[]:paintOperations(this.product?.product_name||'');}
+ templateName='';editingId='';version=0;loading=false;busy=false;error='';done=false;private loadToken=0;
  loadFailed=false;private loadedProductId='';
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
  ngOnChanges(changes:SimpleChanges){const change=changes['product'];if((change&&(change.firstChange||change.previousValue?.id!==change.currentValue?.id||change.previousValue?.saved_only!==change.currentValue?.saved_only))||changes['selectedSize'])void this.load();}
@@ -75,7 +74,7 @@ export class ProductPartsComponent implements OnChanges{
   finally{if(token===this.loadToken){this.loading=false;this.cdr?.markForCheck();}}
  }
  newTemplate(){this.editingId='';this.version=0;this.templateName=this.product?.short_name||this.product?.product_name||'';this.parts=[];this.estimates={};this.folding='';this.sizeKey=this.hasFolding?'':this.isSizedCart?this.selectedSize:(this.sizeKeys().length===1?this.sizeKeys()[0]:'');this.done=false;}
- editTemplate(t:ShopTemplate){const selectedFolding=this.folding;this.editingId=t.id;this.version=t.version;this.templateName=t.name;this.parts=structuredClone(t.parts) as AssignedPart[];this.estimates=Object.fromEntries(Object.entries(t.estimates||{}).filter(([key])=>!this.hasFolding||!key.startsWith('Painting:')));this.folding=t.folding||(this.hasFolding?selectedFolding:'');this.sizeKey=this.hasFolding?'':t.size_key||(this.sizeKeys().length===1?this.sizeKeys()[0]:'');delete this.estimates['Painting:Repaint'];this.done=false;this.error='';}
+ editTemplate(t:ShopTemplate){const selectedFolding=this.folding;this.editingId=t.id;this.version=t.version;this.templateName=t.name;this.parts=structuredClone(t.parts) as AssignedPart[];this.estimates=Object.fromEntries(Object.entries(t.estimates||{}).filter(([key])=>!key.startsWith('Painting:')));this.folding=t.folding||(this.hasFolding?selectedFolding:'');this.sizeKey=this.hasFolding?'':t.size_key||(this.sizeKeys().length===1?this.sizeKeys()[0]:'');this.done=false;this.error='';}
  addPart(){this.parts=[...this.parts,{id:crypto.randomUUID(),name:'',component_product_id:this.product.id}];}
  removePart(id:string){this.parts=this.parts.filter(p=>p.id!==id);for(const stage of ['Assembly','Sanding'])delete this.estimates[stage+':'+id];}
  setEstimate(key:string,value:string|number|null){if(value===''||value===null)delete this.estimates[key];else this.estimates[key]=Number(value);}

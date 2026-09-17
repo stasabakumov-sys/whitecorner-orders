@@ -161,10 +161,10 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             <section class="shipsection"><h3>Product cost · incl. GST</h3>
             <p class="small">Add materials here. Planned work is calculated above from Estimated min and Work Rates. Order Costing shows the combined order summary.</p>
             @if(costing.error()){<p role="alert">{{costing.error()}}</p>}
-            @if(isBackdrop(p)){<p class="small">All sizes reuse one Foldable profile and one Non-foldable profile. Painting is stored once for the whole product.</p>}
+            <p class="small">Structural materials remain separate from Painting. Painting is stored once for the whole product and is used only for Painted orders.</p>
             @for(part of costProfiles(p.id,activeCartSize(p));track part.variant_key){<details><summary>Edit materials · {{costProfileLabel(part,p.id)}}</summary><app-catalog-cost-editor [part]="part" [showWork]="false" [hideColour]="isBackdrop(p)" /></details>}
             @empty{<p class="mut">No order variant available yet. Open Add materials on an order to define its costs.</p>}
-            @if(isBackdrop(p)){<app-backdrop-paint-profile mode="materials" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" />}
+            @if(!p.saved_only){<app-backdrop-paint-profile mode="materials" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" />}
             </section>
             }
             @if(detailTab==='packing'){
@@ -245,7 +245,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             }
             @if(detailTab==='minutes'){
              <section class="shipsection"><app-product-parts [product]="p" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" /></section>
-             @if(isBackdrop(p)){<section class="shipsection"><app-backdrop-paint-profile mode="minutes" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" /></section>}
+             @if(!p.saved_only){<section class="shipsection"><app-backdrop-paint-profile mode="minutes" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" /></section>}
             }
             @if(detailTab==='wix'){
              <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" /></section>
