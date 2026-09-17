@@ -1,0 +1,22 @@
+name: Remove retired test orders production release
+on:
+  push:
+    branches: [codex/remove-retired-test-orders]
+    paths: ['.github/scripts/remove-retired-test-orders*','.github/workflows/remove-retired-test-orders-release.yml','supabase/migrations/20260917000100_remove_retired_test_orders.sql']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-and-migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --prefix "$RUNNER_TEMP/test-order-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+      - run: node .github/scripts/remove-retired-test-orders.test.mjs "$RUNNER_TEMP/test-order-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Delete the two owner-approved production test orders
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/remove-retired-test-orders-release.mjs --apply
