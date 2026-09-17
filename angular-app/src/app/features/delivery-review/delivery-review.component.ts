@@ -47,8 +47,18 @@ import {orderProducts} from '../../core/utils/order-products';
  <div class="address"><b>Delivery address:</b> {{address(row.wc_orders?.delivery_address)}}</div>
  <h3>Order composition &amp; packaging</h3>
  @if(editable(row)){
+ <button (click)="loadCartPackaging(row,true)" [disabled]="variantLoading||s.busy()">Update packaging from Products</button>
  @if(cartPackagingLoading()){<p role="status">Loading Main + add-on packaging…</p>}
- @else if(s.error()){<button (click)="loadCartPackaging(row)" [disabled]="variantLoading||s.busy()">Retry packaging load</button>}
+ @else if(s.error()){<button (click)="loadCartPackaging(row,true)" [disabled]="variantLoading||s.busy()">Retry packaging load</button>}
+ @if(packagingPreview();as preview){
+ <section class="notice" role="status">
+ <p>Replace the current draft with packaging from Products? Any manual changes in this draft will be replaced. Saved packaging and quotes will not change until you save and recalculate.</p>
+ <p>{{draft.length}} boxes → {{preview.length}} boxes</p>
+ @for(change of packagingChanges();track $index){<p>{{change}}</p>}
+ <button (click)="applyPackagingPreview()" [disabled]="s.busy()||variantLoading">Replace draft</button>
+ <button (click)="packagingPreview.set(null)" [disabled]="s.busy()">Keep current draft</button>
+ </section>
+ }
  }
  @if(canRequote(row)&&!revising){<button (click)="startRevision(row)" [disabled]="s.busy()">Edit packaging and recalculate</button>}
  @if(revising){<p class="notice">Correct the boxes below. Saving requests one new estimate and archives the previous result. It does not book a shipment.</p><button (click)="cancelRevision(row)" [disabled]="s.busy()">Cancel changes</button>}
@@ -117,17 +127,33 @@ import {orderProducts} from '../../core/utils/order-products';
 export class DeliveryReviewComponent implements OnInit {
  variantLoading=false;
  readonly cartPackagingLoading=signal(false);
+ readonly packagingPreview=signal<ReviewPackage[]|null>(null);
+ packagingChanges(){
+  const next=this.packagingPreview();if(!next)return [];
+  const describe=(p:ReviewPackage|undefined)=>p?`${p.package_name}: ${p.length_mm} × ${p.width_mm} × ${p.height_mm} mm, ${p.weight_kg} kg`:'—';
+  const identity=(p:ReviewPackage|undefined)=>JSON.stringify(p?[p.package_name,p.length_mm,p.width_mm,p.height_mm,p.weight_kg,p.contents.map(c=>[c.order_item_id,c.component_key,c.unit_index]).sort()]:null);
+  const changes=Array.from({length:Math.max(this.draft.length,next.length)},(_,i)=>identity(this.draft[i])===identity(next[i])?'':`Box ${i+1}: ${describe(this.draft[i])} → ${describe(next[i])}`).filter(Boolean);
+  return changes.length?changes:['Packaging already matches Products.'];
+ }
+ applyPackagingPreview(){
+  const boxes=this.packagingPreview();if(!boxes||this.s.busy()||this.variantLoading)return;
+  this.replacePackagingDraft(boxes);this.packagingPreview.set(null);
+ }
+ private replacePackagingDraft(boxes:ReviewPackage[]){
+  this.draft=boxes;this.boxOwners=new WeakMap();
+  for(const box of boxes)this.boxOwners.set(box,box.contents[0]?.order_item_id||'');
+  this.confirmed=false;this.saveProfile=false;
+ }
  private packagingRequest=0;
- async loadCartPackaging(row:any){
+ async loadCartPackaging(row:any,preview=false){
   if(!this.editable(row)||this.variantLoading||this.s.busy())return;
-  const selected=this.selectedId(),request=++this.packagingRequest;this.variantLoading=true;this.cartPackagingLoading.set(true);this.s.error.set('');
+  const selected=this.selectedId(),request=++this.packagingRequest;this.variantLoading=true;this.cartPackagingLoading.set(true);this.packagingPreview.set(null);this.s.error.set('');
   let timeout:ReturnType<typeof setTimeout>|undefined;
   try{
-   const boxes=await Promise.race([this.s.previewCartPackaging(row.wc_orders),new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(Error('Packaging loading timed out. Please retry.')),30000);})]);
+   const boxes=await Promise.race([this.s.previewCartPackaging(row.wc_orders,preview),new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(Error('Packaging loading timed out. Please retry.')),30000);})]);
    if(this.selectedId()!==selected||request!==this.packagingRequest)return;
-   this.draft=boxes;this.boxOwners=new WeakMap();
-   for(const box of boxes)this.boxOwners.set(box,box.contents[0]?.order_item_id||'');
-   this.confirmed=false;this.saveProfile=false;
+   if(preview)this.packagingPreview.set(boxes);
+   else this.replacePackagingDraft(boxes);
   }catch(e:any){if(this.selectedId()===selected&&request===this.packagingRequest)this.s.error.set(e.message);}
   finally{clearTimeout(timeout);if(request===this.packagingRequest){this.variantLoading=false;this.cartPackagingLoading.set(false);}}
  }
@@ -170,7 +196,7 @@ export class DeliveryReviewComponent implements OnInit {
  startRevision(row:any){if(!this.canRequote(row)||this.s.busy())return;this.open(row);this.revising=true;this.revisionVersion=row.updated_at;}
  cancelRevision(row:any){this.open(row);}
  async open(row:any){this.revising=false;this.revisionVersion='';this.acceptUnknownCost=false;this.selectedId.set(row.order_id);this.draft=structuredClone(row.packages||[]).map((p:ReviewPackage)=>({...p,contents:p.contents.filter(c=>!isNonPackagingComponent(c))}));this.boxOwners=new WeakMap();for(const p of this.draft)this.boxOwners.set(p,p.contents[0]?.order_item_id||'');this.reason='';this.confirmed=false;this.s.error.set('');
-  this.packagingRequest++;this.variantLoading=false;this.cartPackagingLoading.set(false);
+  this.packagingRequest++;this.variantLoading=false;this.cartPackagingLoading.set(false);this.packagingPreview.set(null);
   if(this.editable(row)&&!this.draft.length)await this.loadCartPackaging(row);
  }
  editable(row:any){return (this.revising&&this.canRequote(row))||!row.quote_attempted_at&&['pending','packaging_required','legacy_packaging_required','address_required','approved_without_quote'].includes(row.state);}

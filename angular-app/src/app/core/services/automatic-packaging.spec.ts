@@ -24,6 +24,29 @@ function setup(){
  return {tables,invoke,from,fail:(table:string)=>fail=table,service:new DeliveryReviewService({client:{from,functions:{invoke}}} as any)};
 }
 describe('Automatic modular packaging',()=>{
+ it('previews current Products measurements before replacing manual edits and never quotes',async()=>{
+  const s=setup(),c=new DeliveryReviewComponent(s.service),row={order_id:'trial',state:'packaging_required',wc_orders:order,packages:[]};
+  s.service.rows.set([row]);await c.open(row);c.draft[0].weight_kg=24;c.confirmed=true;
+  const original=c.draft;s.tables['wc_shipping_rules'][0].height_mm=40;
+  s.tables['wc_delivery_packaging_profiles']=[{signature:reviewSignature(order),packages:structuredClone(original)}];
+  await c.loadCartPackaging(row,true);
+  expect(c.draft).toBe(original);expect(c.draft[3].height_mm).toBe(4);
+  expect(c.packagingChanges().join(' ')).toContain('40 mm');
+  c.packagingPreview.set(null);expect(c.draft[0].weight_kg).toBe(24);
+  await c.loadCartPackaging(row,true);c.applyPackagingPreview();
+  expect(c.draft[3].height_mm).toBe(40);expect(c.draft[0].weight_kg).toBe(22.5);
+  expect(c.confirmed).toBe(false);expect(c.saveProfile).toBe(false);expect(s.invoke).not.toHaveBeenCalled();
+  c.draft[3].height_mm=45;expect(c.draft[3].height_mm).toBe(45);
+ });
+ it('preserves the draft on sync failure and clears a pending preview when another order opens',async()=>{
+  const s=setup(),c=new DeliveryReviewComponent(s.service),row={order_id:'trial',state:'packaging_required',wc_orders:order,packages:[]};
+  s.service.rows.set([row]);await c.open(row);const original=c.draft;
+  s.fail('wc_shipping_rules');await c.loadCartPackaging(row,true);
+  expect(c.draft).toBe(original);expect(c.packagingPreview()).toBeNull();expect(s.service.error()).toContain('Could not load');
+  s.fail('');await c.loadCartPackaging(row,true);
+  await c.open({...row,order_id:'another',packages:original});
+  expect(c.packagingPreview()).toBeNull();
+ });
  it('loads three Main boxes, selected Shelf and separate Back panel without a Size or custom combination',async()=>{
   const s=setup(),boxes=await s.service.previewCartPackaging(order);
   expect(boxes.map(box=>[box.package_name,box.contents[0].order_item_id,box.contents[0].component_key])).toEqual([
