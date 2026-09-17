@@ -24,18 +24,18 @@ import {packagingError,reviewComponents} from '../../../../../supabase/functions
  @if(replacing){<button type="button" [disabled]="saving()" (click)="draft.splice($index,1)">Remove box</button>}</td>
  }@else{
  <td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td>
- <td><app-package-drawings [signature]="profile.signature" [index]="$index" [box]="box" /></td>
+ <td><app-package-drawings [signature]="profile.signature" [index]="$index" [box]="box" [backdrop]="backdrop" [sharedSize]="backdrop?sharedSize:''" [sizeLabel]="sharedSizeLabel" /></td>
  }
  </tr>}
  </tbody></table></div>
  @if(replacing){<button type="button" [disabled]="saving()" (click)="addBox()">Add box</button>}
  `,styles:[`:host{display:block}.actions{display:flex;gap:8px;margin:8px 0}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--wc-border)}input:not([type=checkbox]){width:90px;max-width:100%;box-sizing:border-box}td:first-child input{width:180px}label{display:block}p{font-size:.875rem}[role=alert]{color:#b91c1c}`]})
 export class SavedPackingComponent{
- @Input()product:any;@Input()profile:any;@Input()rules:any[]=[];
+ @Input()product:any;@Input()profile:any;@Input()rules:any[]=[];@Input()backdrop=false;@Input()sharedSize='';@Input()sharedSizeLabel='';
  @Output()profileSaved=new EventEmitter<any>();
  editing=false;replacing=false;draft:any[]=[];saving=signal(false);error=signal('');saved=signal(false);
  constructor(private db:SupabaseService){}
- components(){return reviewComponents({wc_order_items:[{...this.profile.template_item,id:this.product.id,quantity:1}]},this.rules);}
+ components(){return reviewComponents({wc_order_items:[{...this.profile.template_item,id:this.product.id,product_name:this.product.product_name,quantity:1}]},this.rules);}
  edit(){this.editing=true;this.replacing=false;this.saved.set(false);this.error.set('');const components=this.components();this.draft=structuredClone(this.profile.packages).map((box:any)=>({...box,contents:(box.contents||[]).flatMap((c:any)=>{const match=components.find(x=>x.component_key===(c.component_key||'main')&&x.unit_index===(c.unit_index||1));return match?[match]:[];})}));}
  replace(){this.edit();this.replacing=true;this.draft=[];this.addBox();}
  cancel(){if(this.saving())return;this.editing=false;this.replacing=false;this.draft=[];this.error.set('');}

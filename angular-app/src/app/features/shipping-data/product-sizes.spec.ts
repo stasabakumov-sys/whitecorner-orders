@@ -1,5 +1,5 @@
 import {describe,it,expect,vi} from 'vitest';
-import {catalogSizes,backdropSizeKey,manualBackdropSizeKey,backdropDrawingKey,packagingSizes} from './product-sizes';
+import {catalogSizes,backdropSizeKey,manualBackdropSizeKey,backdropDrawingKey,packagingSizeGroups,packagingSizes} from './product-sizes';
 import {BoxDrawingComponent} from './box-drawing.component';
 describe('Catalogue sizes',()=>{
  it('includes choices without saved packaging and deduplicates variant colours',()=>{
@@ -44,5 +44,18 @@ describe('Shared backdrop folding key',()=>{
   const p:any={packages:[{contents:[{product_name:'Backdrop',component_key:'main',profile_item_key:JSON.stringify(['id',['size 200cm x 100cm','foldable no']])+':1'}]}]};
   expect(backdropDrawingKey(p,'Backdrop')).toBe('2000x1000:nonfoldable');
   p.template_item=profile('YES').template_item;expect(backdropDrawingKey(p,'Backdrop')).toBe('');
+ });
+});
+
+describe('Packaging size tabs',()=>{
+ const profile=(signature:string,size?:string)=>({signature,template_item:{wix_options:size?{Size:size}:{}},packages:[]});
+ it('keeps Wix sizes in order and groups every saved profile under the matching tab',()=>{
+  const groups=packagingSizeGroups([profile('small','180cm x 90cm'),profile('small-foldable','180cm x 90cm'),profile('large','190cm x 95cm')],'Backdrop',['180cm x 90cm','190cm x 95cm']);
+  expect(groups.map(group=>[group.label,group.profiles.map(item=>item.signature)])).toEqual([['180cm x 90cm',['small','small-foldable']],['190cm x 95cm',['large']]]);
+ });
+ it('keeps a legacy profile accessible instead of hiding it behind a size filter',()=>{
+  const groups=packagingSizeGroups([profile('sized','190cm x 95cm'),profile('legacy')],'Table',['190cm x 95cm']);
+  expect(groups.map(group=>group.label)).toEqual(['190cm x 95cm','Size not specified']);
+  expect(groups[1].profiles[0].signature).toBe('legacy');
  });
 });
