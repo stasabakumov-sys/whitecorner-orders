@@ -7,7 +7,7 @@ import {execFileSync} from 'node:child_process';
 const {PGlite}=await import(pathToFileURL(path.resolve(process.argv[2])).href);
 const db=new PGlite();
 try {
- await db.exec("create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.actor',true),'')::uuid$$;");
+ await db.exec("create role anon;create role authenticated;create role service_role;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql as $$select nullif(current_setting('test.actor',true),'')::uuid$$;");
  await db.exec(await readFile('supabase/orders-schema.sql','utf8'));
  await db.exec(`create table wc_shipping_products(id uuid primary key default gen_random_uuid(),wix_product_id text unique,product_name text not null,product_type text default 'Other',active boolean default true,notes text,updated_at timestamptz default now());
  create unique index wc_shipping_products_name_ci_uq on wc_shipping_products(lower(product_name));
@@ -73,7 +73,7 @@ try {
  await db.exec('rollback');
  // Pasting through Windows SQL Editor changes line endings inside SQL literals too.
  await db.exec(releaseSql.replace(/\r?\n/g,'\r\n'));await db.exec(releaseSql);await db.exec(releaseSql.replace(/\r?\n/g,'\r\n'));
- assert.equal((await db.query('select count(*)::int n from supabase_migrations.schema_migrations')).rows[0].n,3);
+ assert.equal((await db.query('select count(*)::int n from supabase_migrations.schema_migrations')).rows[0].n,4);
  assert.deepEqual((await db.query('select paint_operations from wc_shop_units where unit_id=$1',[backdropUnit])).rows[0].paint_operations,['First primer','First sanding','Finish coat']);
  assert.equal((await db.query('select cardinality(paint_operations) n from wc_shop_units where unit_id=$1',[startedBackdrop])).rows[0].n,5);
  const freshBackdrop=randomUUID();
