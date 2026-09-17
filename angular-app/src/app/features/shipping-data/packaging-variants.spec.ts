@@ -34,6 +34,19 @@ describe('Shared Backdrop packaging by size and folding',()=>{
 });
 
 describe('Packaging editor loading',()=>{
+ it('saves the first box for a product without Size and assigns its only component automatically',async()=>{
+  const invoke=vi.fn().mockResolvedValue({data:{ok:true}});
+  const component=new PackagingVariantsComponent({client:{functions:{invoke},from:()=>({select(){return this;},eq:async()=>({data:[],error:null})})}} as any);
+  component.product={id:'medium',product_name:'Medium table',wix_product_id:'catalog',manual_sizes:'Display only'};
+  component.reset();component.addBox();Object.assign(component.boxes[0],{package_name:'Table',length_mm:1020,width_mm:840,height_mm:85,weight_kg:22.5});component.confirmed=true;
+  expect(component.options).toEqual([]);expect(component.boxes[0].contents).toHaveLength(1);expect(component.issue()).toBe('');
+  await component.save();expect(invoke.mock.calls[0][1].body).toMatchObject({options:[],packages:[{height_mm:85,weight_kg:22.5}]});expect(component.saved()).toBe(true);
+ });
+ it('keeps real incomplete options blocked and identifies the hidden section',()=>{
+  const component=new PackagingVariantsComponent({} as any);component.product={wix_product_id:'catalog'};component.options=[{name:'Size',value:''}];
+  expect(component.issue()).toContain('Variant matching (advanced)');
+  component.packagingScope='shared-backdrop';component.reset();expect(component.options).toEqual([{name:'Size',value:''}]);
+ });
  const query=(result:any,rangeResult?:Promise<any>)=>({
   select(){return this;},eq(){return this;},order(){return this;},
   range(){return rangeResult||Promise.resolve(result);},

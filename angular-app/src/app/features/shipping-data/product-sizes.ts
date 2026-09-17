@@ -1,4 +1,9 @@
 function text(v:any):string{return typeof v==='string'?v:v?.original||v?.value||v?.name||'';}
+// Catalogue options and variants define the available sizes; saved boxes do not.
+export function catalogSizes(source:any):string[]{
+ const values=[...(source?.productOptions||[]).filter((o:any)=>/^(size|dimensions?)$/i.test(String(o.name||'').trim())).flatMap((o:any)=>(o.choices||[]).map((c:any)=>text(c.description??c.value))),...(source?.variants||[]).flatMap((v:any)=>optionSizes(v.choices))];
+ return [...new Map(values.map(value=>value.trim()).filter(Boolean).map(value=>[value.toLowerCase(),value])).values()];
+}
 export function optionSizes(options:any):string[]{return Object.entries(options||{}).filter(([k])=>/^size|dimensions?$/i.test(k.trim())).map(([,v])=>text(v)).filter(Boolean);}
 // Share only explicit two-dimensional metric sizes. Size I/II and missing units need review.
 export function backdropSizeKey(value:string):string {

@@ -80,7 +80,7 @@ describe('Exact packaging variants',()=>{
  it('copies boxes independently, rebinds Contents and requires confirmation before save',async()=>{
   const invoke=vi.fn(),c=new PackagingVariantsComponent({client:{functions:{invoke}}} as any);c.product={id:'cart',product_name:'Cart',wix_product_id:'catalog'};
   const original={signature:variantSignature(item()),template_item:item(),packages:[box(reviewComponents({wc_order_items:[item()]}))]};c.variants.set([original]);c.open(original.signature);c.copy();
-  expect(c.options.find(o=>o.name==='Size')?.value).toBe('');expect(c.issue()).toContain('Complete');
+  expect(c.options.find(o=>o.name==='Size')?.value).toBe('');expect(c.issue()).toContain('complete or remove the empty option');
   c.options.find(o=>o.name==='Size')!.value='Size II';c.remap();c.boxes[0].length_mm=1300;
   expect(original.packages[0].length_mm).toBe(1000);expect(c.issue()).toBe('');await c.save();expect(invoke).not.toHaveBeenCalled();
   expect(c.boxes[0].contents[0].profile_item_key).toContain('size ii');

@@ -1,6 +1,12 @@
 import {describe,it,expect,vi} from 'vitest';
-import {backdropSizeKey,manualBackdropSizeKey,backdropDrawingKey,packagingSizes} from './product-sizes';
+import {catalogSizes,backdropSizeKey,manualBackdropSizeKey,backdropDrawingKey,packagingSizes} from './product-sizes';
 import {BoxDrawingComponent} from './box-drawing.component';
+describe('Catalogue sizes',()=>{
+ it('includes choices without saved packaging and deduplicates variant colours',()=>{
+  expect(catalogSizes({productOptions:[{name:'Size',choices:[{description:'190cm x 95cm'},{description:'180cm x 90cm'}]}],variants:[{choices:{Size:'190cm x 95cm',Colour:'Raw'}},{choices:{Size:'190cm x 95cm',Colour:'White'}}]})).toEqual(['190cm x 95cm','180cm x 90cm']);
+ });
+ it('does not invent sizes from names or manual annotations',()=>{expect(catalogSizes({name:'Table 100cm',manual_sizes:'100cm',variants:[{choices:{Colour:'Raw'}}]})).toEqual([]);});
+});
 describe('Backdrop shared box library',()=>{
  it('matches equivalent metric dimensions without guessing sizes',()=>{
   expect(backdropSizeKey('190cm x 95cm')).toBe('1900x950');expect(backdropSizeKey('950 × 1900 mm')).toBe('1900x950');
