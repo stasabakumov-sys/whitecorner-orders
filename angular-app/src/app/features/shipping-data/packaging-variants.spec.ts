@@ -47,6 +47,9 @@ describe('Packaging editor loading',()=>{
   await component.ngOnChanges();
   expect(component.selectedKey).toBe('only-profile');
   expect(component.boxes[0]).toMatchObject({length_mm:980,width_mm:460,height_mm:70,weight_kg:13});
+  const calls=client.from.mock.calls.length;component.boxes[0].height_mm=95;
+  component.sharedBackdropProfiles=[];await component.ngOnChanges();
+  expect(client.from.mock.calls).toHaveLength(calls);expect(component.boxes[0].height_mm).toBe(95);
  });
 
  it('unlocks package fields while order composition examples continue loading',async()=>{
