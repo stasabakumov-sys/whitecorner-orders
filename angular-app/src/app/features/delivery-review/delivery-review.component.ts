@@ -60,7 +60,12 @@ import {orderProducts} from '../../core/utils/order-products';
  </section>
  }
  }
- @if(canRequote(row)&&!revising){<button (click)="startRevision(row)" [disabled]="s.busy()">Edit packaging and recalculate</button>}
+ @if(!revising&&(canRequote(row)||result.status==='price_review_required')){
+ <div class="review-actions">
+ @if(canRequote(row)){<button (click)="startRevision(row)" [disabled]="s.busy()">Edit packaging and recalculate</button>}
+ @if(result.status==='price_review_required'){<button (click)="approveCurrentPrice(row)" [disabled]="s.busy()">{{s.busy()?'Saving…':'Approve current delivery price'}}</button>}
+ </div>
+ }
  @if(revising){<p class="notice">Correct the boxes below. Saving requests one new estimate and archives the previous result. It does not book a shipment.</p><button (click)="cancelRevision(row)" [disabled]="s.busy()">Cancel changes</button>}
  <p>Assign packaging under each product. All {{packages(row).length}} boxes are sent together in one delivery quote for this order.</p>
  @for(item of composition(row).unresolved;track item.id){<p role="alert">Composition review required: cannot assign {{item.product_name}} to a product. Its packaging components remain available below.</p>}
@@ -113,11 +118,6 @@ import {orderProducts} from '../../core/utils/order-products';
  @empty{<tr><td colspan="5">No quotes were returned or the response could not be saved. No automatic retry.</td></tr>}
  </tbody></table></div>
  <details><summary>Saved request, full response and insurance options</summary><pre>{{ {request:row.request,response:row.response,insurance:row.insurance_response,assumptions:row.snapshot?.assumptions}|json }}</pre></details>
- @if(result.status==='price_review_required'&&!revising){
- <div class="notice">Increase delivery in Wix by at least {{money(increase(row))}}, or approve an exception below. A Wix price update reuses this saved quote.</div>
- <label>Reason for accepting the current price<textarea [(ngModel)]="reason" maxlength="2000"></textarea></label>
- <button (click)="approve(row)" [disabled]="s.busy()||reason.trim().length<3">{{s.busy()?'Saving…':'Approve current delivery price'}}</button>
- }
  }
  @if(row.attempt_history?.length){<h3>Previous estimates</h3>@for(attempt of row.attempt_history;track $index){<details><summary>Attempt {{$index+1}} · {{attempt.quote_attempted_at||attempt.updated_at|date:'dd MMM yyyy, HH:mm'}} · {{label(attempt.state)}}</summary><p>Superseded {{attempt.superseded_at|date:'dd MMM yyyy, HH:mm'}}</p><pre>{{{packages:attempt.packages,request:attempt.request,response:attempt.response,error:attempt.error}|json}}</pre></details>}}
  </section></div>}
@@ -237,4 +237,5 @@ export class DeliveryReviewComponent implements OnInit {
  label(status:string){return ({importing:'Awaiting import',pending:'Awaiting calculation',packaging_required:'Packaging required',legacy_packaging_required:'Packaging required',address_required:'Address required',calculating:'Calculating',within_target:'Within target',price_review_required:'Price review required',approved_exception:'Approved exception',approved_without_quote:'Approved without quote',no_eligible_quotes:'No eligible quotes',failed:'Calculation failed',uncertain:'Response uncertain',data_changed:'Inputs changed — manual review',invoice_required:'Invoice delivery required'} as Record<string,string>)[status]||status;}
  async save(row:any){if(!this.confirmed||this.packagingIssue(row))return;if(this.s.busy())return;const ok=this.revising?await this.s.requotePackages({...row,updated_at:this.revisionVersion},this.draft,this.saveProfile):await this.s.savePackages(row.order_id,this.draft,this.saveProfile);if(ok)this.revising=false;}
  async approve(row:any){await this.s.approve(row.order_id,this.reason);}
+ async approveCurrentPrice(row:any){if(this.s.outcome(row).status==='price_review_required'&&!this.s.busy())await this.s.approve(row.order_id,'Delivery price accepted for this order');}
 }
