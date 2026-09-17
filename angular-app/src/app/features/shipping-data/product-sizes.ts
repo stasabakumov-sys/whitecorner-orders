@@ -45,3 +45,22 @@ export function packagingSizes(profile:any,productName:string):string[]{
  }
  return [...new Set(values)];
 }
+
+export type PackagingSizeGroup={key:string;label:string;profiles:any[]};
+
+export function packagingSizeGroups(profiles:any[],productName:string,productSizes:string[]):PackagingSizeGroup[]{
+ const normalize=(value:string)=>backdropSizeKey(value)||value.trim().toLowerCase();
+ const groups=new Map<string,PackagingSizeGroup>();
+ const add=(label:string,profile?:any)=>{
+  const key=label==='Size not specified'?'unspecified':`size:${normalize(label)}`;
+  const group=groups.get(key)||{key,label,profiles:[]};
+  if(profile&&!group.profiles.includes(profile))group.profiles.push(profile);
+  groups.set(key,group);
+ };
+ for(const size of productSizes||[])if(size.trim())add(size.trim());
+ for(const profile of profiles||[]){
+  const sizes=packagingSizes(profile,productName);
+  if(!sizes.length)add('Size not specified',profile);else for(const size of sizes)add(size,profile);
+ }
+ return [...groups.values()];
+}

@@ -1,13 +1,12 @@
 import {productNavigationMatches} from '../../core/utils/product-navigation';
 import {WixCatalogReviewComponent} from './wix-catalog-review.component';
 import {WixProductSnapshotComponent} from './wix-product-snapshot.component';
-import {PackageDrawingsComponent} from './package-drawings.component';
 import {SavedPackingComponent} from './saved-packing.component';
 import { Component, OnInit, computed, signal, Optional, ChangeDetectorRef } from '@angular/core';
 import {DialogModule} from 'primeng/dialog';
 import {DrawerModule} from 'primeng/drawer';
 import {FormsModule} from '@angular/forms';
-import {catalogSizes,backdropSizeKey,backdropDrawingKey,qualifiedDrawingKey,optionSizes,packagingSizes,sizeKeyLabel} from './product-sizes';
+import {catalogSizes,backdropSizeKey,backdropDrawingKey,qualifiedDrawingKey,optionSizes,packagingSizeGroups,packagingSizes,sizeKeyLabel} from './product-sizes';
 import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
 import {BoxDrawingComponent} from './box-drawing.component';
@@ -105,7 +104,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[SavedPackingComponent,BackdropPaintProfileComponent,PackageDrawingsComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[SavedPackingComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -170,17 +169,13 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             </section>
             }
             @if(detailTab==='packing'){
-            @if(productSizes(p).length){<section class="shipsection"><h3>Packaging by product size</h3>
-             @for(size of productSizes(p);track size){<p><b>{{size}}</b> · {{sizePackingCount(p,size)}} saved packaging configuration(s)</p>}
-             <p class="small">Sizes come from the Wix catalogue. A size with 0 configurations still needs packaging.</p>
-            </section>}
-            @if(!isCart(p)){@for(profile of packingProfiles(p);track profile.signature){
+            @if(!isCart(p)&&packingSizeTabs(p).length>1){<nav class="packing-size-tabs" role="tablist" aria-label="Packaging product sizes">
+             @for(size of packingSizeTabs(p);track size.key){<button type="button" role="tab" [class.on]="activePackingSize(p)===size.key" [attr.aria-selected]="activePackingSize(p)===size.key" (click)="selectPackingSize(size.key)">{{size.label}}</button>}
+            </nav>}
+            @if(!isCart(p)){@for(profile of visiblePackingProfiles(p);track profile.signature){
              <section class="shipsection"><div class="packaging-profile-heading"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3></div>
-             @if(!isBackdrop(p)){<app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" (profileSaved)="storeCartMainProfile(p,$event)" />}@else{
              <p class="small">Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.</p>
-             <div class="tablewrap"><table class="shiptable packaging-table"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Contents</th><th>Drawing</th></tr></thead><tbody>
-             @for(box of profile.packages;track $index){<tr><td>{{box.package_name}}</td><td>{{box.length_mm}}</td><td>{{box.width_mm}}</td><td>{{box.height_mm}}</td><td>{{box.weight_kg}}</td><td>@for(c of box.contents||[];track $index){<div>{{contentLabel(c)}} · Unit {{c.unit_index}}</div>}</td><td><app-package-drawings [signature]="profile.signature" [index]="$index" [box]="box" [backdrop]="isBackdrop(p)" [sharedSize]="isBackdrop(p)?sharedSize(profile,p):''" [sizeLabel]="sizeLabel(sharedSize(profile,p))" /></td></tr>}
-             </tbody></table></div>}
+             <app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" [backdrop]="isBackdrop(p)" [sharedSize]="sharedSize(profile,p)" [sharedSizeLabel]="sizeLabel(sharedSize(profile,p))" (profileSaved)="storeCartMainProfile(p,$event)" />
              </section>
             }}
             @if(!p.saved_only){
@@ -193,9 +188,10 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                <button type="button" [class.on]="cartMainProfileSelected(profile)" (click)="openCartMainProfile(p,profile)"><b>Main + {{cartMainProfileLabel(profile)}}</b><span>{{profile.packages?.length||0}} box(es) · Open</span></button>
               }</div>
              </section>}
-            }@else if(isBackdrop(p)||!p.saved_profiles?.length||missingSizePackaging(p)){
+            }@else if(!visiblePackingProfiles(p).length){
              <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [catalog]="catalogProducts()[p.id]" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [sharedBackdropProfiles]="sharedBackdropPackagingProfiles()" />}</div>
             }
+            @if(isCart(p)){
             <div class="shipsection">
               <h3>{{isCart(p)?'Reusable Main packages':'Packages'}}</h3>
               <div class="tablewrap">
@@ -251,6 +247,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             </div>
             }
             }
+            }
             @if(detailTab==='minutes'){
              <section class="shipsection"><app-product-parts [product]="p" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" /></section>
              @if(!p.saved_only&&hasPainting(p)){<section class="shipsection"><app-backdrop-paint-profile mode="minutes" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" /></section>}
@@ -268,8 +265,8 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
   styleUrl: './shipping-data.component.css',
 })
 export class ShippingDataComponent implements OnInit {
-  search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';selectedCartSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
-  openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
+  search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';selectedCartSize='';selectedPackingSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
+  openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.selectedPackingSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
   finishCatalog=signal<{id:string;source:any}|null>(null);
   catalogProducts=signal<Record<string,any>>({});
   updateCatalog(id:string,source:any){this.catalogProducts.update(rows=>({...rows,[id]:source}));this.finishCatalog.set({id,source});}
@@ -298,6 +295,10 @@ export class ShippingDataComponent implements OnInit {
     }
     return !this.isCart(p)?p.saved_profiles||[]:(p.saved_profiles||[]).filter((profile:any)=>packagingSizes(profile,p.product_name).some(size=>cartSizeKey(size)===this.activeCartSize(p)));
   }
+  packingSizeTabs(p:ShippingProduct){return packagingSizeGroups(this.packingProfiles(p),p.product_name,this.productSizes(p));}
+  activePackingSize(p:ShippingProduct){const tabs=this.packingSizeTabs(p);return tabs.some(tab=>tab.key===this.selectedPackingSize)?this.selectedPackingSize:tabs[0]?.key||'';}
+  selectPackingSize(key:string){this.selectedPackingSize=key;}
+  visiblePackingProfiles(p:ShippingProduct){if(this.isCart(p))return this.packingProfiles(p);const tabs=this.packingSizeTabs(p);return tabs.length>1?(tabs.find(tab=>tab.key===this.activePackingSize(p))?.profiles||[]):this.packingProfiles(p);}
   reusableProfileCount(p:ShippingProduct){return this.isBackdrop(p)?this.packingProfiles(p).length:p.saved_profiles?.length||0;}
   newFolding='';libraryMessage='';qualifiedKey=qualifiedDrawingKey;legacyFolding:Record<string,string>={};legacyRevisions:Record<string,string>={};classifying='';
   sharedSize(profile:any,p:ShippingProduct){return backdropDrawingKey(profile,p.product_name);}

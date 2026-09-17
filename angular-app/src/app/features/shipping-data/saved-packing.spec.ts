@@ -26,4 +26,8 @@ describe('Direct saved packaging editing',()=>{
  it('rejects incomplete replacement boxes before sending',async()=>{
   const {component,invoke}=setup();component.replace();await component.save();expect(invoke).not.toHaveBeenCalled();expect(component.error()).toContain('positive dimensions');
  });
+ it('uses the selected Backdrop identity while editing shared packaging',()=>{
+  const {component}=setup();component.product={id:'arch',product_name:'Flutted Arch',wix_product_id:'arch-catalog'};component.profile.template_item.product_name='Another Backdrop';component.edit();
+  expect(component.components()[0]).toMatchObject({order_item_id:'arch',product_name:'Flutted Arch'});
+ });
 });
