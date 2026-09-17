@@ -289,6 +289,49 @@ export function reviewOutcome(review:any,order:any,currentKey?:string){
 
 
 export const hasSizeOption=(item:any)=>orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).some(label=>componentNormal(label.split(':')[0])==='size');
+
+/** Read-only assembly. Callers retain approval, persistence and quote guards. */
+export async function resolveOrderPackaging(db:any,order:any,ignoredRules:any[]=[]){
+ const checked=(result:any)=>{if(result.error)throw Error('Could not load saved packaging. Please retry.');return result.data;};
+ const components=reviewComponents(order,ignoredRules),signature=reviewSignature(order,ignoredRules);
+ const exact=checked(await findPackagingProfile(db,signature));
+ if(exact){
+  const boxes=restoreReviewPackages(exact.packages,components);
+  if(packagingError(boxes,components))throw Error('The saved combination is incomplete. Review its packaging in Products.');
+  return boxes;
+ }
+ const [products,templates,rules,variants]=await Promise.all([
+  db.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,active').eq('active',true),
+  db.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no'),
+  db.from('wc_shipping_rules').select('*').eq('active',true),
+  db.from('wc_delivery_packaging_profiles').select('*').eq('template_item->>profile_scope','cart-main'),
+ ]);
+ const allTemplates=checked(templates)||[];
+ // Historical composition templates must match the entire order, not merely a product.
+ const groups=new Map<string,any[]>();
+ for(const p of allTemplates)groups.set(p.shipping_product_id,[...(groups.get(p.shipping_product_id)||[]),p]);
+ for(const group of groups.values()){
+  if(group.every(p=>p.contents?.length&&p.contents.every((c:any)=>canonicalPackagingSignature(c.profile_signature||'')===signature))){
+   const restored=restoreReviewPackages(group,components);
+   if(!packagingError(restored,components))return restored;
+  }
+ }
+ const base=allTemplates.filter((p:any)=>!p.contents?.some((c:any)=>c.profile_signature));
+ let boxes=composeModularPackages(order,checked(products)||[],base,checked(rules)||[],ignoredRules,checked(variants)||[]);
+ // A cross-item saved combination is indivisible. Otherwise an exact item
+ // profile takes precedence over reusable Base/option boxes for that item.
+ for(const item of reviewItems(order,ignoredRules)){
+  const existing=boxes.filter(box=>box.contents.some(c=>c.order_item_id===item.id));
+  if(existing.some(box=>box.contents.some(c=>c.order_item_id!==item.id)))continue;
+  const variant=checked(await findPackagingProfile(db,variantSignature(item)));
+  if(variant){
+   const restored=expandVariant(variant.packages,item,ignoredRules);
+   if(!restored.length)throw Error('The saved item packaging is incomplete. Review it in Products.');
+   boxes=[...boxes.filter(box=>!existing.includes(box)),...restored];
+  }
+ }
+ return boxes;
+}
 export const variantItem=(item:any)=>({...item,quantity:1});
 export const variantSignature=(item:any)=>packagingSignature([variantItem(item)]);
 export interface ModularShippingProduct {id:string;wix_product_id?:string|null;product_name?:string|null;product_type?:string|null;active?:boolean}
@@ -299,7 +342,8 @@ const optionEntries=(item:OrderItemRow)=>orderItemOptionLabels(item,Number.MAX_S
 const cartSize=(item:OrderItemRow)=>optionEntries(item).find(option=>['size','dimension','dimensions'].includes(option.name))?.value||'';
 const productForItem=(item:OrderItemRow,products:ModularShippingProduct[])=>{
  const id=productId(item);
- return products.find(p=>p.active!==false&&(id?String(p.wix_product_id||'')===id:!p.wix_product_id&&componentNormal(p.product_name||'')===componentNormal(item.product_name||'')));
+ const matches=products.filter(p=>p.active!==false&&(id?String(p.wix_product_id||'')===id:!p.wix_product_id&&componentNormal(p.product_name||'')===componentNormal(item.product_name||'')));
+ return matches.length===1?matches[0]:undefined;
 };
 const addonDescriptorKey=(value:any)=>[value.rule_type,value.match_name,value.match_value].map(part=>componentNormal(String(part||''))).join(':');
 const profileAddonKeys=(profile:CartMainPackagingVariant)=>{
@@ -318,17 +362,31 @@ function expandCombination(packages:any[],target:PackageComponent[],quantity:num
 export function composeModularPackages(order:any,products:ModularShippingProduct[],templates:ModularShippingPackage[],rules:ModularShippingRule[],ignoredRules:any[]=[],mainVariants?:CartMainPackagingVariant[]):ReviewPackage[]{
  const items=reviewItems(order,ignoredRules),components=reviewComponents(order,ignoredRules),out:ReviewPackage[]=[];
  const add=(source:any,content:PackageComponent)=>{const copies=Math.max(1,Math.floor(Number(source.quantity)||1));for(let n=0;n<copies;n++)out.push({package_name:String(source.package_name||'Package'),length_mm:Number(source.length_mm),width_mm:Number(source.width_mm),height_mm:Number(source.height_mm),weight_kg:Number(source.weight_kg),contents:[content]});};
+ const addonOwners=new Map<string,string[]>();
+ for(const parent of items){
+  const product=productForItem(parent,products);if(!product)continue;
+  for(const addon of items){
+   if(addon.id===parent.id)continue;
+   if(rules.some(r=>r.active!==false&&r.shipping_product_id===product.id&&r.rule_type==='Add-on'&&['Add package','Replace profile'].includes(r.effect_type||'')&&componentNormal(r.match_name||'')===componentNormal(addon.product_name||''))){
+    addonOwners.set(addon.id,[...(addonOwners.get(addon.id)||[]),parent.id]);
+   }
+  }
+ }
+ if([...addonOwners.values()].some(owners=>owners.length>1))throw Error('Ambiguous add-on assignment. Review which Main product owns each add-on.');
  for(const item of items){
-  const product=productForItem(item,products);if(!product||componentNormal(product.product_type||'')!=='cart')continue;
-  const configuredSizes=[...new Set(templates.filter(p=>p.active!==false&&p.shipping_product_id===product.id&&(p.source_type||'Base')==='Base').map(p=>componentNormal(p.size_key||'')).filter(Boolean))];
+  if(addonOwners.has(item.id))continue;
+  const product=productForItem(item,products);if(!product)continue;
+  const configuredSizes=[...new Set(templates.filter(p=>p.active!==false&&p.shipping_product_id===product.id&&(p.source_type||'Base')==='Base').map(p=>componentNormal(p.size_key||'')))];
   // Some Wix Cart products have one product-wide size saved in Products but do
   // not expose Size as an order option. Reuse that sole configured size; if the
   // product has multiple sizes, keep requiring an exact order value.
   const size=cartSize(item)||(configuredSizes.length===1?configuredSizes[0]:'');
-  if(!size)continue;
+  // Manual catalogue labels are never consulted. Empty/null means product-wide.
+  if(!size&&!(configuredSizes.length===1&&configuredSizes[0]===''))continue;
+  const matchesSize=(key:string|null|undefined)=>componentNormal(key||'')===size;
   const options=optionEntries(item);
-  const optionRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&r.size_key===size&&r.rule_type==='Option'&&['Add package','Replace profile'].includes(r.effect_type||'')&&options.some(option=>option.name===componentNormal(r.match_name||'')&&(!r.match_value||option.value===componentNormal(r.match_value))));
-  const addonRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&r.size_key===size&&r.rule_type==='Add-on'&&['Add package','Replace profile'].includes(r.effect_type||'')&&items.some(candidate=>componentNormal(candidate.product_name||'')===componentNormal(r.match_name||'')));
+  const optionRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&matchesSize(r.size_key)&&r.rule_type==='Option'&&['Add package','Replace profile'].includes(r.effect_type||'')&&options.some(option=>option.name===componentNormal(r.match_name||'')&&(!r.match_value||option.value===componentNormal(r.match_value))));
+  const addonRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&matchesSize(r.size_key)&&r.rule_type==='Add-on'&&['Add package','Replace profile'].includes(r.effect_type||'')&&items.some(candidate=>componentNormal(candidate.product_name||'')===componentNormal(r.match_name||'')));
   const selectedKeys=[...optionRules,...addonRules].map(addonDescriptorKey).sort();
   const variant=(mainVariants||[]).find(profile=>profile.shipping_product_id===product.id&&profile.template_item?.profile_scope==='cart-main'&&cartSize(profile.template_item)===size&&sameKeys(profileAddonKeys(profile),selectedKeys));
   const addonItems=addonRules.flatMap(rule=>items.filter(candidate=>componentNormal(candidate.product_name||'')===componentNormal(rule.match_name||'')));
@@ -337,7 +395,7 @@ export function composeModularPackages(order:any,products:ModularShippingProduct
   if(combined.length)out.push(...combined);
   else{
    const main=components.filter(c=>c.order_item_id===item.id&&c.component_key==='main');
-   const base=templates.filter(p=>p.active!==false&&p.shipping_product_id===product.id&&p.size_key===size&&(p.source_type||'Base')==='Base').sort((a,b)=>Number(a.package_no||0)-Number(b.package_no||0));
+   const base=templates.filter(p=>p.active!==false&&p.shipping_product_id===product.id&&matchesSize(p.size_key)&&(p.source_type||'Base')==='Base').sort((a,b)=>Number(a.package_no||0)-Number(b.package_no||0));
    for(const unit of main)for(const box of base)add({...box,quantity:box.quantity||1},unit);
    for(const rule of optionRules){
    const name=componentNormal(rule.match_name||'');

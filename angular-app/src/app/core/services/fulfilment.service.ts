@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import {expandVariant,hasSizeOption,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {resolveOrderPackaging} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import { packageComponents, componentIdentity, packagingSignature } from '../utils/package-components';
 import { findPackagingProfile, canonicalPackagingSignature, canonicalPackagingItemKey, isNonPackagingComponent, packagingError, restoreReviewPackages, reviewInputKey, reviewOutcome } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import { OrderItemRow, OrderRow } from '../models/order.models';
@@ -288,34 +288,16 @@ export class FulfilmentService {
         await this.syncShipmentStatus(shipment.id);return;
       }
     }
-    const out:any[]=[]; let no=1;
-    for(const item of this.packageItems(order)){
-      const {data:variant,error:variantError}=await findPackagingProfile(this.supabase.client,variantSignature(item));
-      if(variantError){this.error.set('Packaging variants could not be loaded.');return;}
-      if(variant){
-        const boxes=expandVariant(variant.packages,item,this.noPackageRules());
-        if(boxes.length){for(const p of boxes)out.push({shipment_id:shipment.id,package_no:no++,...p,source_type:'Manual'});continue;}
-      }
-      const match=this.exactProfile(item);
-      if(!match)continue;
-      const base=this.shippingProfiles.filter(p=>p.shipping_product_id===match.id);
-      if(!base.length)continue;
-      if(base.some(p=>Array.isArray(p.contents)&&p.contents.some((c:any)=>c.profile_signature))){
-        const signature=packagingSignature(this.packageItems(order));
-        if(base.every(p=>Array.isArray(p.contents)&&p.contents.length&&p.contents.every((c:any)=>canonicalPackagingSignature(c.profile_signature||'')===signature))){
-          out.length=0; no=1;
-          for(const p of base)out.push({shipment_id:shipment.id,package_no:no++,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,contents:this.restoreProfileContents(p.contents,order),source_type:'Profile',shipping_product_id:match.id});
-          break; // Component profiles describe the entire matching order, including quantity.
-        }
-        continue;
-      }
-      if(hasSizeOption(item))continue;
-      const qty=Math.max(1,Number(item.quantity||1));
-      for(let q=0;q<qty;q++)for(const p of base)out.push({shipment_id:shipment.id,package_no:no++,package_name:p.package_name,length_mm:p.length_mm,width_mm:p.width_mm,height_mm:p.height_mm,weight_kg:p.weight_kg,contents:this.restoreProfileContents(p.contents,order),source_type:'Profile',shipping_product_id:match.id});
-    }
+    let boxes;
+    try{boxes=await resolveOrderPackaging(this.supabase.client,order,this.noPackageRules());}
+    catch(e:any){this.error.set(e.message);return;}
+    const issue=packagingError(boxes,this.packageComponents(order));
+    if(issue){this.error.set(`Packaging is incomplete: ${issue} Configure it in Products.`);return;}
+    const out=boxes.map((p,index)=>({shipment_id:shipment.id,package_no:index+1,...p,source_type:'Manual'}));
     if(!out.length)return;
     const {data,error}=await this.supabase.client.from('wc_shipment_packages').insert(out).select();
-    if(!error)this.shipmentPackages.update(xs=>[...xs,...((data??[]) as ShipmentPackageRow[])]);
+    if(error){this.error.set('Could not save the prepared packaging. Please retry.');return;}
+    this.shipmentPackages.update(xs=>[...xs,...((data??[]) as ShipmentPackageRow[])]);
     await this.syncShipmentStatus(shipment.id);
   }
 

@@ -1,6 +1,6 @@
 import {resolveCourierContents} from './courier-contents.ts';
 import { buildReviewRequest, componentNormal, eligibleOrder, evaluateQuotes, goodsCents, insuranceFor, packagingError, productId, restoreReviewPackages, reviewComponents, reviewInputKey, reviewItems, reviewSignature } from './delivery-review-domain.ts';
-import {composeModularPackages, expandVariant, hasSizeOption, variantSignature, findPackagingProfile, canonicalPackagingSignature} from './delivery-review-domain.ts';
+import {resolveOrderPackaging} from './delivery-review-domain.ts';
 
 function checked(result:any){if(result.error)throw Error(result.error.message);return result.data;}
 export async function reviewContext(db:any,orderId:string){
@@ -35,59 +35,7 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
   const review=checked(await db.from('wc_delivery_reviews').select('*').eq('order_id',orderId).single());
   const components=reviewComponents(order,rules),signature=reviewSignature(order,rules);
   let packages=review.packages||[];
-  if(!packages.length){
-   const modularProducts=await db.from('wc_shipping_products').select('id,wix_product_id,product_name,product_type,active').eq('active',true);
-   const products=checked(modularProducts)||[];
-   const hasCart=reviewItems(order,rules).some(item=>products.some((product:any)=>componentNormal(product.product_type||'')==='cart'&&(productId(item)?product.wix_product_id===productId(item):!product.wix_product_id&&componentNormal(product.product_name||'')===componentNormal(item.product_name||''))));
-   if(hasCart){
-    const [modularPackages,modularRules,mainVariants]=await Promise.all([
-     db.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no'),
-     db.from('wc_shipping_rules').select('*').eq('active',true),
-     db.from('wc_delivery_packaging_profiles').select('*').eq('template_item->>profile_scope','cart-main'),
-    ]);
-    const modular=composeModularPackages(order,products,checked(modularPackages)||[],checked(modularRules)||[],rules,checked(mainVariants)||[]);
-    if(!packagingError(modular,components))packages=modular;
-   }else{
-    const profile=checked(await findPackagingProfile(db,signature));
-    if(profile)packages=restoreReviewPackages(profile.packages,components);
-    else {
-    const variantPackages:any[]=[];
-    for(const item of reviewItems(order,rules)){
-     const variant=checked(await findPackagingProfile(db,variantSignature(item)));
-     if(variant)variantPackages.push(...expandVariant(variant.packages,item,rules));
-    }
-    if(!packagingError(variantPackages,components))packages=variantPackages;
-    if(!packages.length){
-    // Existing exact composition profiles created in Fulfilment are reusable.
-    const templates=checked(await db.from('wc_shipping_packages').select('*').eq('active',true).eq('source_type','Base').order('package_no'))||[];
-    const groups=new Map<string,any[]>();
-    for(const p of templates)groups.set(p.shipping_product_id,[...(groups.get(p.shipping_product_id)||[]),p]);
-    for(const group of groups.values()){
-     if(group.every(p=>p.contents?.length&&p.contents.every((c:any)=>canonicalPackagingSignature(c.profile_signature||'')===signature))){
-      const candidate=restoreReviewPackages(group,components);
-      if(!packagingError(candidate,components)){packages=candidate;break;}
-     }
-    }
-    // Legacy product-only templates are safe to expand only when the item has
-    // no separately packable addons. Never guess which box holds an addon.
-    if(!packages.length){
-     const products=checked(await db.from('wc_shipping_products').select('id,wix_product_id,product_name').eq('active',true))||[];
-     const candidate:any[]=[];
-     for(const item of reviewItems(order,rules)){
-      if(hasSizeOption(item))continue; // Never apply size-agnostic legacy boxes.
-      const units=components.filter(c=>c.order_item_id===item.id);
-      if(units.some(c=>c.component_key!=='main'))continue;
-      const product=products.find((p:any)=>productId(item)?p.wix_product_id===productId(item):!p.wix_product_id&&componentNormal(p.product_name)===componentNormal(item.product_name||''));
-      const base=product&&groups.get(product.id);
-      if(!base?.length||base.some((p:any)=>p.contents?.some((c:any)=>c.profile_signature)))continue;
-      for(const unit of units)for(const p of base)candidate.push({...p,contents:[unit]});
-     }
-     if(!packagingError(candidate,components))packages=candidate;
-    }
-    }
-   }
-   }
-  }
+  if(!packages.length)packages=await resolveOrderPackaging(db,order,rules);
   const error=packagingError(packages,components);
   if(error){await save({state:'packaging_required',error,token:null});return;}
   let request:any;
