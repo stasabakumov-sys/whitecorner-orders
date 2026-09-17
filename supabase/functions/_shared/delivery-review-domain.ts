@@ -291,10 +291,10 @@ export function reviewOutcome(review:any,order:any,currentKey?:string){
 export const hasSizeOption=(item:any)=>orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).some(label=>componentNormal(label.split(':')[0])==='size');
 
 /** Read-only assembly. Callers retain approval, persistence and quote guards. */
-export async function resolveOrderPackaging(db:any,order:any,ignoredRules:any[]=[]){
+export async function resolveOrderPackaging(db:any,order:any,ignoredRules:any[]=[],catalogOnly=false){
  const checked=(result:any)=>{if(result.error)throw Error('Could not load saved packaging. Please retry.');return result.data;};
  const components=reviewComponents(order,ignoredRules),signature=reviewSignature(order,ignoredRules);
- const exact=checked(await findPackagingProfile(db,signature));
+ const exact=catalogOnly?null:checked(await findPackagingProfile(db,signature));
  if(exact){
   const boxes=restoreReviewPackages(exact.packages,components);
   if(packagingError(boxes,components))throw Error('The saved combination is incomplete. Review its packaging in Products.');
@@ -310,7 +310,7 @@ export async function resolveOrderPackaging(db:any,order:any,ignoredRules:any[]=
  // Historical composition templates must match the entire order, not merely a product.
  const groups=new Map<string,any[]>();
  for(const p of allTemplates)groups.set(p.shipping_product_id,[...(groups.get(p.shipping_product_id)||[]),p]);
- for(const group of groups.values()){
+ for(const group of catalogOnly?[]:groups.values()){
   if(group.every(p=>p.contents?.length&&p.contents.every((c:any)=>canonicalPackagingSignature(c.profile_signature||'')===signature))){
    const restored=restoreReviewPackages(group,components);
    if(!packagingError(restored,components))return restored;
@@ -321,6 +321,7 @@ export async function resolveOrderPackaging(db:any,order:any,ignoredRules:any[]=
  // A cross-item saved combination is indivisible. Otherwise an exact item
  // profile takes precedence over reusable Base/option boxes for that item.
  for(const item of reviewItems(order,ignoredRules)){
+  if(catalogOnly)continue; // Order snapshots must not mask current Product measurements.
   const existing=boxes.filter(box=>box.contents.some(c=>c.order_item_id===item.id));
   if(existing.some(box=>box.contents.some(c=>c.order_item_id!==item.id)))continue;
   const variant=checked(await findPackagingProfile(db,variantSignature(item)));

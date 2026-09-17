@@ -51,8 +51,8 @@ export class DeliveryReviewService {
   if(!product)throw Error('The shipping product is unavailable. Add boxes here to prepare this order.');
   return {productId:product.id,signature};
  }
- async previewCartPackaging(order:any){
-  const boxes=await resolveOrderPackaging(this.supabase.client,order,this.rules());
+ async previewCartPackaging(order:any,catalogOnly=false){
+  const boxes=await resolveOrderPackaging(this.supabase.client,order,this.rules(),catalogOnly);
   const issue=packagingError(boxes,reviewComponents(order,this.rules()));
   if(issue)throw Error(`Main and add-on packaging is incomplete: ${issue} Configure the missing packaging in Products.`);
   return boxes;
