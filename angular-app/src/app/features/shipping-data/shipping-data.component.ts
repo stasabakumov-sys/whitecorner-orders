@@ -177,7 +177,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             @if(!isCart(p)){@for(profile of visiblePackingProfiles(p);track profile.signature){
              <section class="shipsection"><div class="packaging-profile-heading"><h3>Packaging and box drawings · {{profileOptions(profile)}}</h3></div>
              <p class="small">@if(isBackdrop(p)){Dimensions and drawing are shared for this size and folding option. Weight belongs only to this model and size.}@else{Used automatically for matching size, structural options and quantity. Colour (including Raw) does not change packaging. This is the saved profile, not a second copy.}</p>
-             <app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" [backdrop]="isBackdrop(p)" [sharedSize]="sharedSize(profile,p)" [sharedSizeLabel]="sizeLabel(sharedSize(profile,p))" [fallbackOptions]="backdropProfileOptions(profile,p)" [backdropDimensions]="backdropDimension(profile,p)" (profileSaved)="storeCartMainProfile(p,$event)" />
+             <app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" [backdrop]="isBackdrop(p)" [sharedSize]="sharedSize(profile,p)" [sharedSizeLabel]="sizeLabel(sharedSize(profile,p))" [fallbackOptions]="backdropProfileOptions(profile,p)" [backdropDimensions]="backdropDimension(profile,p)" (dimensionsSaved)="storeBackdropDimensions($event)" (profileSaved)="storeCartMainProfile(p,$event)" />
              </section>
             }}
             @if(!p.saved_only){
@@ -302,6 +302,7 @@ export class ShippingDataComponent implements OnInit {
   backdropDimensions=signal<Record<string,BackdropPackagingDimensions>>({});dimensionDrafts:Record<string,Partial<BackdropPackagingDimensions>>={};dimensionFeedback:Record<string,{ok:boolean;text:string}>={};dimensionSaving='';
   librarySizes(){return [...new Set([...this.extraSizes(),...Object.keys(this.backdropDimensions()),...this.products().filter(p=>this.isBackdrop(p)).flatMap(p=>(p.saved_profiles||[]).map(profile=>this.sharedSize(profile,p)).filter(Boolean))])].sort();}
   backdropDimension(profile:any,p:ShippingProduct){return this.backdropDimensions()[this.sharedSize(profile,p)]||null;}
+  storeBackdropDimensions(value:BackdropPackagingDimensions){this.backdropDimensions.update(rows=>({...rows,[value.size_key]:value}));}
   backdropProfileOptions(profile:any,p:ShippingProduct){if(!this.isBackdrop(p)||profile?.template_item?.wix_options)return{};const key=this.sharedSize(profile,p),size=packagingSizes(profile,p.product_name)[0]||'';return key&&size?{Size:size,Foldable:key.endsWith(':foldable')?'YES':'NO'}:{};}
   dimensionValue(key:string,field:keyof BackdropPackagingDimensions){return (this.dimensionDrafts[key] as any)?.[field]??(this.backdropDimensions()[key] as any)?.[field]??'';}
   setDimensionDraft(key:string,field:keyof BackdropPackagingDimensions,value:any){const numeric=['length_mm','width_mm','height_mm'].includes(field);this.dimensionDrafts[key]={...(this.dimensionDrafts[key]||{}),[field]:numeric?(value===''?null:Number(value)):value};delete this.dimensionFeedback[key];}
