@@ -7,7 +7,7 @@ const signature=JSON.stringify([[itemKey,'main',1]]);
 const literal=v=>"'"+String(v).replaceAll("'","''")+"'";
 async function request(query,read_only){
  const r=await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/database/query',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({query,read_only})});
- if(!r.ok)throw Error(`Database request failed: HTTP ${r.status}`);
+ if(!r.ok){const detail=await r.text();throw Error(`Database request failed: HTTP ${r.status}; ${detail.slice(0,1500)}`);}
  return r.json();
 }
 const rows=await request(`select signature,shipping_product_id,packages from public.wc_delivery_packaging_profiles where signature=${literal(signature)}`,true);
