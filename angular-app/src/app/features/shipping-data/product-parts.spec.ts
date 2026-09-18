@@ -8,6 +8,24 @@ function setup(){
  return {component:new ProductPartsComponent({client:{from:()=>query,rpc}} as any),rpc,templates};
 }
 describe('Product-owned Shop Floor parts',()=>{
+ it('defaults new Backdrop estimates to Foldable and persists without clicking the option',async()=>{
+  const {component,rpc,templates}=setup();component.product={id:'main',product_name:'Hollow Arch Backdrop'};await component.load();
+  expect(component.folding).toBe('foldable');component.addPart();component.parts[0].name='Body';component.estimates={CNC:12};
+  rpc.mockImplementation(async(name,args)=>{if(name==='wc_shop_product_components')return {data:[{id:'main',product_name:'Backdrop',component_role:'Product'}],error:null} as any;
+   const row={id:'folded',product_id:args.p_product,name:args.p_name,parts:args.p_parts,estimates:args.p_estimates,version:1,size_key:null,folding:args.p_folding};templates.push(row);return {data:row,error:null};});
+  await component.save();expect(component.done).toBe(true);expect(rpc).toHaveBeenLastCalledWith('wc_shop_save_backdrop_template',expect.objectContaining({p_folding:'foldable',p_estimates:{CNC:12}}));
+  const reopened=new ProductPartsComponent((component as any).db);reopened.product=component.product;await reopened.load();expect(reopened.folding).toBe('foldable');expect(reopened.estimates).toEqual({CNC:12});expect(reopened.parts[0].name).toBe('Body');
+ });
+ it('opens Foldable first regardless of saved template ordering and preserves Non-foldable',async()=>{
+  const {component,templates}=setup();component.product={id:'main',product_name:'Arch Backdrop'};
+  templates.push({id:'flat',name:'A flat',folding:'nonfoldable',size_key:null,parts:[],estimates:{CNC:20},version:1},{id:'folded',name:'Z folded',folding:'foldable',size_key:null,parts:[],estimates:{CNC:10},version:1});
+  await component.load();expect(component.editingId).toBe('folded');component.chooseVariant('nonfoldable');expect(component.estimates).toEqual({CNC:20});await component.load();expect(component.folding).toBe('nonfoldable');
+ });
+ it('does not repurpose a Non-foldable template when opening a new Foldable estimate',async()=>{
+  const {component,templates}=setup();component.product={id:'main',product_type:'Backdrop'};templates.push({id:'flat',name:'Flat',folding:'nonfoldable',size_key:null,parts:[],estimates:{CNC:20},version:1});
+  await component.load();expect(component.folding).toBe('foldable');expect(component.editingId).toBe('');expect(component.estimates).toEqual({});component.chooseVariant('nonfoldable');expect(component.editingId).toBe('flat');
+  templates.length=0;component.product={id:'cart',product_type:'Cart'};await component.load();expect(component.folding).toBe('');
+ });
  it('offers a manually entered unitless size as centimetres',()=>{const {component}=setup();component.sizes=['190x100'];expect(component.sizeKeys()).toEqual(['1900x1000']);});
  it('retains independent folding drafts and saves one structural variant for every size',async()=>{const {component,rpc}=setup();component.product={id:'main',product_name:'Arch Backdrop'};component.sizes=['200cm x 100cm','180cm x 90cm'];await component.load();component.chooseVariant('foldable');component.addPart();component.parts[0].name='Folded body';component.estimates={CNC:10};component.chooseVariant('nonfoldable');expect(component.parts).toEqual([]);component.addPart();component.parts[0].name='Flat body';component.estimates={CNC:20};component.chooseVariant('foldable');expect(component.parts[0].name).toBe('Folded body');expect(component.estimates['CNC']).toBe(10);rpc.mockImplementation(async(name,args)=>({data:{id:'folded',product_id:args.p_product,name:args.p_name,parts:args.p_parts,estimates:args.p_estimates,version:1,size_key:null,folding:args.p_folding},error:null}));await component.save();expect(rpc).toHaveBeenCalledWith('wc_shop_save_backdrop_template',expect.objectContaining({p_folding:'foldable',p_estimates:{CNC:10}}));expect(rpc.mock.calls.at(-1)?.[1]).not.toHaveProperty('p_size');expect(component.done).toBe(true);component.chooseVariant('nonfoldable');expect(component.estimates['CNC']).toBe(20);});
  it('assigns new parts to the main product and saves explicit add-on ownership',async()=>{const {component,rpc,templates}=setup();component.product={id:'main',product_name:'Cart'};await component.load();component.addPart();component.parts[0].name='Body';component.parts.push({id:'shelf',name:'Shelf',component_product_id:'addon'});templates.push({id:'template',product_id:'main',name:'Cart standard',parts:structuredClone(component.parts),estimates:{},version:1});await component.save();expect(rpc).toHaveBeenCalledWith('wc_shop_save_product_template',expect.objectContaining({p_product:'main',p_parts:[expect.objectContaining({name:'Body',component_product_id:'main'}),expect.objectContaining({name:'Shelf',component_product_id:'addon'})]}));});
