@@ -20,7 +20,7 @@ if(drawings.length>1||drawings.some(d=>d.box_index!==0))throw Error('Unexpected 
 console.log('Owner-approved old linked drawing metadata:',JSON.stringify(drawings.map(d=>({filename:d.filename,size_bytes:d.size_bytes,revision:d.revision}))));
 await request(`begin;
 do $cleanup$ declare affected integer; begin
- if (select coalesce(jsonb_agg(to_jsonb(d) order by box_index),'[]'::jsonb) from public.wc_box_drawings d where profile_signature=${literal(signature)}) is distinct from ${literal(JSON.stringify(drawings))}::jsonb then raise exception 'Linked drawing changed; deletion stopped';end if;
+ if (select coalesce(jsonb_agg(jsonb_build_object('revision',revision,'object_path',object_path) order by box_index),'[]'::jsonb) from public.wc_box_drawings d where profile_signature=${literal(signature)}) is distinct from ${literal(JSON.stringify(drawings.map(d=>({revision:d.revision,object_path:d.object_path}))))}::jsonb then raise exception 'Linked drawing changed; deletion stopped';end if;
  delete from public.wc_delivery_packaging_profiles where signature=${literal(signature)} and shipping_product_id='${product}' and packages=${literal(JSON.stringify(boxes))}::jsonb;
  get diagnostics affected=row_count;
  if affected<>1 then raise exception 'Profile changed; deletion cancelled';end if;
