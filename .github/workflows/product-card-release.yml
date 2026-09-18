@@ -59,10 +59,3 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           CLEANUP_MODE: ${{ inputs.legacy_plane_drawing }}
         run: node .github/scripts/remove-legacy-plane-drawing.mjs
-      - uses: actions/upload-artifact@v4
-        if: ${{ always() && inputs.legacy_plane_drawing == 'remove' }}
-        with:
-          name: legacy-plane-drawing-recovery
-          path: legacy-plane-drawing-recovery.json
-          retention-days: 30
-          if-no-files-found: error
