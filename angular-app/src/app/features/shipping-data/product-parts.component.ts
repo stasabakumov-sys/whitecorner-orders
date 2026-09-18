@@ -69,11 +69,13 @@ export class ProductPartsComponent implements OnChanges{
    if(token!==this.loadToken)return;
    if(templates.error||components.error||!Array.isArray(templates.data)||!Array.isArray(components.data))throw Error('Could not load product parts.');
    this.templates=(templates.data as ShopTemplate[]).filter(t=>!this.isSizedCart||t.size_key===this.selectedSize);this.components=components.data as ProductComponent[];
-   const selected=this.templates.find(t=>t.id===this.editingId)||this.templates[0];selected?this.editTemplate(selected):this.newTemplate();
+   const selected=this.templates.find(t=>t.id===this.editingId)||(this.hasFolding
+    ?this.templates.find(t=>t.folding==='foldable'&&!t.size_key)||this.templates.find(t=>t.folding==='foldable')||this.templates.find(t=>!t.folding)
+    :this.templates[0]);selected?this.editTemplate(selected):this.newTemplate();
   }catch{if(token===this.loadToken){this.loadFailed=true;this.error='Could not load product parts. Your current entries are retained. Retry loading before saving.';}}
   finally{if(token===this.loadToken){this.loading=false;this.cdr?.markForCheck();}}
  }
- newTemplate(){this.editingId='';this.version=0;this.templateName=this.product?.short_name||this.product?.product_name||'';this.parts=[];this.estimates={};this.folding='';this.sizeKey=this.hasFolding?'':this.isSizedCart?this.selectedSize:(this.sizeKeys().length===1?this.sizeKeys()[0]:'');this.done=false;}
+ newTemplate(){this.editingId='';this.version=0;this.templateName=this.product?.short_name||this.product?.product_name||'';this.parts=[];this.estimates={};this.folding=this.hasFolding?'foldable':'';this.sizeKey=this.hasFolding?'':this.isSizedCart?this.selectedSize:(this.sizeKeys().length===1?this.sizeKeys()[0]:'');this.done=false;}
  editTemplate(t:ShopTemplate){const selectedFolding=this.folding;this.editingId=t.id;this.version=t.version;this.templateName=t.name;this.parts=structuredClone(t.parts) as AssignedPart[];this.estimates=Object.fromEntries(Object.entries(t.estimates||{}).filter(([key])=>!key.startsWith('Painting:')));this.folding=t.folding||(this.hasFolding?selectedFolding:'');this.sizeKey=this.hasFolding?'':t.size_key||(this.sizeKeys().length===1?this.sizeKeys()[0]:'');this.done=false;this.error='';}
  addPart(){this.parts=[...this.parts,{id:crypto.randomUUID(),name:'',component_product_id:this.product.id}];}
  removePart(id:string){this.parts=this.parts.filter(p=>p.id!==id);for(const stage of ['Assembly','Sanding'])delete this.estimates[stage+':'+id];}
