@@ -5,6 +5,11 @@ on:
     paths: ['.github/workflows/product-card-release.yml']
   workflow_dispatch:
     inputs:
+      legacy_plane_drawing:
+        description: 'Targeted old Plane Arch drawing cleanup'
+        type: choice
+        options: [none, inspect, remove]
+        default: none
       inspect_packaging:
         description: 'Read-only Backdrop packaging inspection (no migrations)'
         type: boolean
@@ -25,24 +30,39 @@ jobs:
         with:
           node-version: '22'
       - name: Verify Angular release
+        if: ${{ !inputs.legacy_plane_drawing || inputs.legacy_plane_drawing == 'none' }}
         working-directory: angular-app
         run: |
           npm ci
           npm test -- --watch=false
           npm run build
       - name: Rehearse targeted migrations
+        if: ${{ !inputs.legacy_plane_drawing || inputs.legacy_plane_drawing == 'none' }}
         run: |
           npm install --prefix "$RUNNER_TEMP/product-card-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
           node .github/scripts/box-drawings-migration.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/backdrop-drawing-links-migration.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
           node .github/scripts/hub-test-orders.test.mjs "$RUNNER_TEMP/product-card-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Inspect Backdrop packaging without writes
-        if: ${{ inputs.inspect_packaging == true }}
+        if: ${{ inputs.inspect_packaging == true && (!inputs.legacy_plane_drawing || inputs.legacy_plane_drawing == 'none') }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/backdrop-packaging-inspect.mjs
       - name: Apply owner-approved product card migrations
-        if: ${{ inputs.inspect_packaging != true }}
+        if: ${{ inputs.inspect_packaging != true && (!inputs.legacy_plane_drawing || inputs.legacy_plane_drawing == 'none') }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/product-card-release.mjs --apply
+      - name: Inspect or remove owner-selected legacy drawing
+        if: ${{ inputs.legacy_plane_drawing == 'inspect' || inputs.legacy_plane_drawing == 'remove' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          CLEANUP_MODE: ${{ inputs.legacy_plane_drawing }}
+        run: node .github/scripts/remove-legacy-plane-drawing.mjs
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && inputs.legacy_plane_drawing == 'remove' }}
+        with:
+          name: legacy-plane-drawing-recovery
+          path: legacy-plane-drawing-recovery.json
+          retention-days: 30
+          if-no-files-found: error
