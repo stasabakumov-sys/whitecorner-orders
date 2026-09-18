@@ -15,9 +15,12 @@ if(rows.length!==1||rows[0].shipping_product_id!==product)throw Error('Expected 
 const boxes=rows[0].packages;
 if(boxes.length!==1||boxes[0].weight_kg!==20||boxes[0].length_mm!==1230||boxes[0].width_mm!==1030||boxes[0].height_mm!==100||boxes[0].contents?.length!==1||boxes[0].contents[0].profile_item_key!==itemKey)throw Error('Profile differs from reviewed record; no deletion');
 console.log('Verified target: unsized Hollow Arch Plane profile, 1230 x 1030 x 100 mm, 20 kg.');
+const drawings=await request(`select * from public.wc_box_drawings where profile_signature=${literal(signature)} order by box_index`,true);
+if(drawings.length>1||drawings.some(d=>d.box_index!==0))throw Error('Unexpected linked drawings; no deletion');
+console.log('Owner-approved old linked drawing metadata:',JSON.stringify(drawings.map(d=>({filename:d.filename,size_bytes:d.size_bytes,revision:d.revision}))));
 await request(`begin;
 do $cleanup$ declare affected integer; begin
- if exists(select 1 from public.wc_box_drawings where profile_signature=${literal(signature)}) then raise exception 'Profile has a drawing; deletion stopped';end if;
+ if (select coalesce(jsonb_agg(to_jsonb(d) order by box_index),'[]'::jsonb) from public.wc_box_drawings d where profile_signature=${literal(signature)}) is distinct from ${literal(JSON.stringify(drawings))}::jsonb then raise exception 'Linked drawing changed; deletion stopped';end if;
  delete from public.wc_delivery_packaging_profiles where signature=${literal(signature)} and shipping_product_id='${product}' and packages=${literal(JSON.stringify(boxes))}::jsonb;
  get diagnostics affected=row_count;
  if affected<>1 then raise exception 'Profile changed; deletion cancelled';end if;
@@ -25,4 +28,4 @@ end $cleanup$;
 commit;`,false);
 const after=await request(`select count(*)::int as count from public.wc_delivery_packaging_profiles where signature=${literal(signature)}`,true);
 if(after[0]?.count!==0)throw Error('Profile still present');
-console.log('Verified: only the old unsized Hollow Arch Plane profile deleted; no product, drawing, size-specific profile or order snapshot modified.');
+console.log('Verified: old unsized Hollow Arch Plane profile and its linked drawing metadata deleted. Product, product drawings, shared drawings and order snapshots unchanged. The old storage file remains because Storage access was denied.');
