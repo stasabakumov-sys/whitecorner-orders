@@ -9,6 +9,7 @@ import { ShopPhoneService } from './core/services/shop-phone.service';
 
 @Component({
   selector: 'app-root',
+  host: {'[class.shop-floor-route]': "router.url.startsWith('/shop-floor')"},
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, LoginComponent],
   template: `
@@ -71,6 +72,7 @@ import { ShopPhoneService } from './core/services/shop-phone.service';
     .gmail-connect-bar{display:flex;align-items:center;gap:6px;flex:0 0 auto;background:#fff;border:1px solid #dfe3e8;border-radius:8px;padding:4px 6px;margin-bottom:5px;min-height:32px}.gmail-title{display:flex;align-items:center;gap:5px;margin-right:auto;white-space:nowrap}.gmail-title b{font-size:10px;color:#344054}.gmail-title small{font-size:9px;color:#98a2b3}.gmail-dot{width:8px;height:8px;border-radius:50%;background:#f59e0b}.gmail-dot.ok{background:#12b76a}.gmail-account{display:flex;align-items:center;gap:5px;border:1px solid #e4e7ec;border-radius:7px;padding:3px 6px;font-size:9px;color:#475467;background:#fafbfc}.gmail-account.connected{background:#f6fef9;border-color:#d1fadf}.gmail-account strong{font-size:8px;color:#067647}.gmail-account button,.refresh-mail{position:static!important;left:auto!important;right:auto!important;bottom:auto!important;width:auto!important;border:0!important;border-radius:6px!important;background:#172033!important;color:#fff!important;padding:3px 6px!important;font-size:8px!important;cursor:pointer}.gmail-account button.reconnect{background:transparent!important;color:#175cd3!important;border:1px solid #b2ccff!important;padding:2px 5px!important}.gmail-account button:disabled{opacity:.55;cursor:default}.refresh-mail{background:#eef2f6!important;color:#475467!important;padding:5px 7px!important}.gmail-error{width:100%;font-size:10px;color:#b42318;background:#fef3f2;border-radius:6px;padding:6px 8px}
     :host ::ng-deep app-fulfilment .head{align-items:flex-start!important;flex-direction:column!important;gap:12px!important}
     :host ::ng-deep app-fulfilment .tabs{margin-left:0!important}
+    @media(max-width:650px){:host.shop-floor-route aside{display:none}:host.shop-floor-route main{margin-left:0;height:100dvh}:host.shop-floor-route .content{height:100%;padding:12px}}
     @media(max-width:760px){.gmail-title{width:100%}.gmail-account{flex:1 1 100%}}
     @media(max-width:600px){aside{position:relative;width:100%;height:auto;display:flex;overflow-x:auto;align-items:center;padding:6px;gap:4px}.brand{display:none}aside a{white-space:nowrap;min-height:44px}aside button{position:static;min-height:44px;white-space:nowrap}main{margin-left:0;height:calc(100dvh - 60px)}.content{height:100%;padding:12px}}
 

@@ -8,11 +8,26 @@ import {ProductionService} from '../../core/services/production.service';
 import {ShopPhoneService} from '../../core/services/shop-phone.service';
 import {ProductionStatus} from '../../core/models/production.models';
 import {ShopFloorService} from './shop-floor.service';
-import {ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,isSameProductTask,onlyRemainingPartId,requiresSanding,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
+import {ShopProductChoice,ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,isSameProductTask,onlyRemainingPartId,requiresSanding,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
 import {catalogProductForItem,matchingProductTemplates,orderedFinish} from './shop-floor-selection';
 
 @Component({selector:'app-shop-floor',standalone:true,imports:[FormsModule,DatePipe,RouterLink],templateUrl:'./shop-floor.component.html',styleUrl:'./shop-floor.component.css'})
 export class ShopFloorComponent implements OnDestroy {
+ menuOpen=false;mobileStage:ProductionStatus='CNC';mobileDetail=false;
+ failedImages=new Set<string>();
+ mobileStages(){return this.production.statuses.filter(stage=>stage!=='New');}
+ mobileChoices(stage=this.mobileStage){return this.units().filter(v=>v.status===stage&&!this.s.confirmedData().units.find(u=>u.unit_id===v.unit.id)?.completed.includes(stage+':finished'));}
+ chooseStage(stage:ProductionStatus){this.mobileStage=stage;this.mobileDetail=false;}
+ chooseProduct(v:ShopProductChoice){this.unitId=v.unit.id;this.selectUnit();this.mobileDetail=true;}
+ remainingParts(){return this.snapshot()?.parts.filter(p=>!this.done(this.selected()?.status+':'+p.id))||[];}
+ image(v:ShopProductChoice){const item=this.liveUnits().find(u=>u.unit.id===v.unit.id)?.mainItem;return !item||this.failedImages.has(v.unit.id)?'':this.production.imageUrl(item);}
+ orderNumber(v:ShopProductChoice){return this.liveUnits().find(u=>u.unit.id===v.unit.id)?.order.order_number||v.code.replace(/^#/, '');}
+ pausedTask(){return this.active()?.stage==='Pause'?this.previous():undefined;}
+ dockTask(){return this.workRunning()?this.active():this.pausedTask();}
+ dockLabel(){const row=this.dockTask();return row?row.unit_id?this.label(row.unit_id):row.operation:this.mode==='other'?this.other:this.mobileDetail?this.label(this.unitId):'';}
+ dockHint(){const row=this.dockTask();return row?`${row.stage} · ${this.partName(row)||row.operation}`:this.mode==='other'?this.other:!this.mobileDetail?'Choose a stage and product':this.selected()?.status+' · '+(this.snapshot()?.parts.find(p=>p.id===this.partId)?.name||this.operation||'Choose work');}
+ dockSeconds(){const row=this.dockTask();if(!row)return 0;return this.s.data().intervals.filter(r=>r.unit_id===row.unit_id&&r.stage===row.stage&&r.part_id===row.part_id&&r.operation===row.operation).reduce((sum,r)=>sum+intervalSeconds(r,this.now()),0);}
+ async dockPrimary(){if(!this.shift()){await this.action('shift-start');return;}if(this.workRunning()){await this.action('pause');return;}if(this.pausedTask()){await this.resume();return;}await this.start();}
  now=signal(Date.now());private tick=setInterval(()=>this.now.set(Date.now()),1000);
  tab='timer';unitId='';stageFilter='';partId='';operation='';other='Cleaning';mode='product';
  templateId='';finish='';assigning=false;
@@ -34,15 +49,18 @@ export class ShopFloorComponent implements OnDestroy {
  selectedCatalogProduct(){return catalogProductForItem(this.selectedItem(),this.s.catalog());}
  selectedProductId(){return this.selectedCatalogProduct()?.id||'';}
  productTemplates(){return matchingProductTemplates(this.s.data().templates,this.selectedCatalogProduct(),this.selectedItem());}
- snapshot(){return this.s.data().units.find(v=>v.unit_id===this.unitId);}
+ snapshot(){return this.s.confirmedData().units.find(v=>v.unit_id===this.unitId);}
  shift(){return this.s.data().shifts.find(v=>!v.ended_at);}
  active(){return this.s.data().intervals.find(v=>!v.ended_at);}
- previous(){return [...this.s.data().intervals].filter(v=>v.stage!=='Pause').sort((a,b)=>b.started_at.localeCompare(a.started_at)).find(r=>{
+ previous(){const r=[...this.s.data().intervals].filter(v=>v.stage!=='Pause'&&v.shift_id===this.shift()?.id).sort((a,b)=>b.started_at.localeCompare(a.started_at))[0];if(!r)return undefined;
+  if(r.ended_at&&this.active()?.started_at===r.ended_at&&this.s.pending().some(c=>['finish-operation','finish-stage'].includes(c.action)))return undefined;
+  const valid=(()=>{
   if(!r.unit_id)return true;const u=this.s.data().units.find(u=>u.unit_id===r.unit_id),v=this.units().find(v=>v.unit.id===r.unit_id);
   return v?.status===r.stage&&!u?.completed.includes(r.stage+':finished')&&(r.operation==='Repaint'||!u?.completed.includes(r.stage+':'+(r.part_id||r.operation)));
- });}
+ })();return valid?r:undefined;}
  blocked(){return !this.phone.online()||this.s.busy()||this.moving||this.assigning||this.s.pending().length>0;}
  timerBlocked(){return this.s.busy()||this.moving||this.s.conflict()||!this.s.loaded();}
+ workRunning(){return !!this.active()&&this.active()?.stage!=='Pause';}
  oldShift(){return this.shift()&&brisbaneDate(this.shift()!.started_at)!==brisbaneDate();}
  async selectUnit(){const saved=this.snapshot(),stage=this.selected()?.status,item=this.selectedItem();this.partId=onlyRemainingPartId(saved,stage);this.operation='';const candidates=this.productTemplates();this.templateId=saved?.template_id||(candidates.length===1?candidates[0].id:'');this.finish=saved?.finish||orderedFinish(item?.wix_options,item?.product_name);if(!saved&&this.templateId&&this.finish&&this.phone.online()&&!this.s.busy()&&!this.s.pending().length){await this.assign();this.partId=onlyRemainingPartId(this.snapshot(),stage);}}
  label(id:string|null){const unit=this.units().find(v=>v.unit.id===id);return unit?`${unit.code} · ${unit.mainItem.product_name}`:id?'Production unit '+id.slice(0,8):'';}
@@ -51,7 +69,7 @@ export class ShopFloorComponent implements OnDestroy {
  estimate(){const v=this.selected();const key=v?.status==='Painting'?'Painting:'+this.operation:v?.status==='Assembly'||v?.status==='Sanding'?v.status+':'+this.partId:v?.status;return key?this.snapshot()?.estimates[key]:undefined;}
  productTime(stage:string,part?:string,operation?:string){return this.s.data().intervals.filter(r=>r.unit_id===this.unitId&&r.stage===stage&&(!part||r.part_id===part)&&(!operation||r.operation===operation)).reduce((sum,r)=>sum+intervalSeconds(r,this.now()),0);}
  selectedTaskActive(){return this.mode==='product'&&isSameProductTask(this.active(),this.unitId,this.selected()?.status,this.partId,this.operation);}
- canStart(){const v=this.selected(),u=this.snapshot();if(!this.shift()||this.oldShift()||this.timerBlocked())return false;if(this.mode==='other')return true;
+ canStart(){const v=this.selected(),u=this.s.data().units.find(u=>u.unit_id===this.unitId);if(!this.shift()||this.oldShift()||this.timerBlocked()||this.workRunning())return false;if(this.mode==='other')return true;
   if(!v||!u||this.selectedTaskActive()||u.completed.includes(v.status+':finished'))return false;
   if(v.status==='CNC')return true;
   if(v.status==='Assembly'||v.status==='Sanding')return !!this.partId&&!u.completed.includes(v.status+':'+this.partId);
@@ -62,13 +80,13 @@ export class ShopFloorComponent implements OnDestroy {
   await this.action('start',this.mode==='other'?{stage:'Other',operation:this.other}:{unitId:this.unitId,stage,partId:['Assembly','Sanding'].includes(stage||'')?this.partId:null,operation:stage==='Painting'?this.operation:stage});
  }
  async resume(){const row=this.previous();if(!row)return;this.unitId=row.unit_id||'';this.mode=row.stage==='Other'?'other':'product';this.partId=row.part_id||'';this.operation=row.operation;this.other=row.operation;await this.start();}
- async finishWork(stage=false){const unitId=this.active()?.unit_id;if(await this.action(stage?'finish-stage':'finish-operation')){if(unitId){this.unitId=unitId;this.partId=onlyRemainingPartId(this.snapshot(),this.selected()?.status);await this.advance();}}}
+ async finishWork(stage=false){if(this.timerBlocked()||!this.workRunning())return;const unitId=this.active()?.unit_id,oldStage=this.active()?.stage;if(await this.action(stage?'finish-stage':'finish-operation')){if(unitId){this.unitId=unitId;this.mobileStage=oldStage as ProductionStatus;this.partId=onlyRemainingPartId(this.snapshot(),this.selected()?.status);await this.advance();this.mobileDetail=this.selected()?.status===oldStage;}}}
  async finishPainting(){if(await this.action('finish-painting',{unitId:this.unitId}))await this.advance();}
  async advance(){const v=this.selected(),u=this.snapshot();if(!v||!u||!u.completed.includes(v.status+':finished'))return;
   const afterSanding:ProductionStatus=u.finish==='raw'?'Packing':'Painting';
   const next:Record<string,ProductionStatus>={CNC:'Assembly',Assembly:requiresSanding(u)?'Sanding':afterSanding,Sanding:afterSanding,Painting:'Packing'};
   if(!next[v.status])return;this.moving=true;
-  try{const live=this.liveUnits().find(x=>x.unit.id===v.unit.id);if(!this.phone.online()||!live)throw Error('Reconnect and refresh products before changing the board.');await this.production.changeStatus(live,next[v.status]);await this.cacheChoices();this.notice='Stage completed and board updated';this.partId='';this.operation='';}
+  try{const live=this.liveUnits().find(x=>x.unit.id===v.unit.id);if(!this.phone.online()||!live)throw Error('Reconnect and refresh products before changing the board.');await this.production.changeStatus(live,next[v.status]);await this.cacheChoices();this.notice='Stage completed and board updated';this.localError='';this.partId='';this.operation='';this.mobileDetail=false;}
   catch(e){this.localError='Work is saved, but the board could not advance. '+(e instanceof Error?e.message:'Retry the transition.');}finally{this.moving=false;}
  }
  async enterCnc(){const v=this.liveUnits().find(x=>x.unit.id===this.unitId);if(!v||!this.phone.online())return;this.moving=true;this.localError='';try{await this.production.changeStatus(v,'CNC');await this.cacheChoices();}catch(e){this.localError=e instanceof Error?e.message:'Could not move to CNC';}finally{this.moving=false;}}

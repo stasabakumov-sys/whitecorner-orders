@@ -7,6 +7,7 @@ import type {ShopCatalogProduct} from './shop-floor-selection';
 @Injectable({providedIn:'root'})
 export class ShopFloorService {
  private readonly serverData=signal<ShopData>({templates:[],units:[],shifts:[],intervals:[]});
+ readonly confirmedData=this.serverData.asReadonly();
  readonly data=computed(()=>projectCommands(this.serverData(),this.pending(),this.auth.session()?.user.id||''));
  readonly conflict=signal(false);
  readonly catalog=signal<ShopCatalogProduct[]>([]);

@@ -1,4 +1,4 @@
-<header><h1>Shop Floor</h1><p>One task at a time · {{auth.userEmail()}} · Brisbane time</p></header>
+<header><h1>Shop Floor</h1><button class="mobile-only" (click)="menuOpen=!menuOpen" [attr.aria-expanded]="menuOpen" aria-controls="shop-menu">Menu</button><p class="desktop-only">One task at a time · {{auth.userEmail()}} · Brisbane time</p></header>
 @if(!phone.installed()){
  <div class="controls">@if(phone.canInstall()){<button (click)="phone.install()" [disabled]="phone.installing()">Install Shop Floor</button>}
  <details><summary>Use on your phone</summary><p>Open this page in Safari on iPhone: Share → Add to Home Screen. On Android, open Chrome: menu → Install app / Add to Home screen.</p><p>Sign in and load your products while online before working offline. Keep this device until queued actions are synchronized.</p></details></div>
@@ -6,13 +6,15 @@
 @if(!phone.online()){<p class="warning" role="status">Offline · using products saved on this device. Timer actions will sync when the connection returns. Reconnect to edit or move products.</p>}
 @if(phone.error()){<p class="error" role="alert">{{phone.error()}}</p>}
 @if(phone.updateReady()){<p class="warning">An update is ready. Sync your actions before reloading. <button (click)="phone.reload()" [disabled]="s.busy()||!!s.pending().length||!phone.online()">Reload update</button></p>}
-<nav class="controls"><button (click)="tab='timer'" [class.selected]="tab==='timer'">Timer</button><button (click)="tab='journal'" [class.selected]="tab==='journal'">Shift & analytics</button><a routerLink="/production">Production Board</a><button (click)="refresh()" [disabled]="s.busy()">{{s.busy()?'Saving / loading…':'Refresh / retry sync'}}</button></nav>
-@if(s.error()||localError){<div class="error" role="alert">{{localError||s.error()}}</div>}
+
+<nav id="shop-menu" class="controls shop-menu" [class.open]="menuOpen"><button (click)="tab='timer';menuOpen=false" [class.selected]="tab==='timer'">Timer</button><button (click)="tab='journal';menuOpen=false" [class.selected]="tab==='journal'">Shift & analytics</button><a routerLink="/production">Production Board</a><a class="mobile-only" routerLink="/home">Hub home</a><button (click)="refresh()" [disabled]="s.busy()">{{s.busy()?'Saving / loading…':'Refresh / retry sync'}}</button>@if(shift()){<button class="mobile-only" (click)="action('shift-end')" [disabled]="timerBlocked()">End shift</button>}<small class="mobile-only">{{auth.userEmail()}} · Brisbane time</small></nav>
+<small class="mobile-only sync-status" role="status">{{s.busy()?'Saving / loading…':s.error()?'Sync needs attention':s.pending().length?'Awaiting server confirmation':s.loaded()?'Server data loaded':'Loading…'}}</small>
+@if(s.error()||localError){<div class="error" role="alert">{{localError||s.error()}} <button (click)="refresh()" [disabled]="s.busy()">Retry sync</button></div>}
 @if(notice){<p role="status">{{notice}}</p>}
 @if(s.pending().length){<div class="warning">{{s.pending().length}} action(s) stored on this device, awaiting server confirmation. Timer actions can continue offline; board transitions and edits wait for sync. <button (click)="s.discardPending()" [disabled]="s.busy()">Reload server state and discard queued actions</button></div>}
 @if(oldShift()){<div class="warning">Your previous shift is still open. Correct its actual end before starting more work. <button (click)="edit(shift()!,'shift')">Correct previous shift</button></div>}
 @if(tab==='timer'){
- <section class="panel live">
+ <section class="panel live desktop-only">
   <div><small>{{shift()?'SHIFT OPEN':'SHIFT CLOSED'}}</small><h2>{{active()?.stage==='Pause'?'Pause':active()?.operation||'Ready to start'}}</h2><p>{{label(active()?.unit_id||null)}} {{active()?partName(active()!):''}}</p><strong class="clock">{{format(active()?seconds(active()!,now()):0)}}</strong></div>
   <div class="controls">
    @if(!shift()){<button class="primary" (click)="action('shift-start')" [disabled]="timerBlocked()">Start shift</button>}
@@ -29,10 +31,17 @@
  </section>
  <div class="controls"><button (click)="mode='product'" [class.selected]="mode==='product'">Product</button><button (click)="mode='other'" [class.selected]="mode==='other'">Other</button></div>
  @if(mode==='other'){
-  <section class="panel"><h2>Other activity</h2><label>Activity<select [(ngModel)]="other">@for(op of others;track op){<option [value]="op">{{op}}</option>}</select></label><p>Rest is reported separately from work and pauses.</p><button class="primary" (click)="start()" [disabled]="!canStart()">Start activity</button></section>
+  <section class="panel"><h2>Other activity</h2><label>Activity<select [(ngModel)]="other">@for(op of others;track op){<option [value]="op">{{op}}</option>}</select></label><p>Rest is reported separately from work and pauses.</p>
+   @if(workRunning()){<p role="status">A task is already running. Pause or finish it above before starting another activity.</p>}
+   @else{<button class="primary desktop-only" (click)="start()" [disabled]="!canStart()">Start activity</button>}
+  </section>
  }@else{
-  <div class="controls"><label>Stage<select [(ngModel)]="stageFilter"><option value="">All stages</option>@for(stage of production.statuses;track stage){<option>{{stage}}</option>}</select></label><label class="wide">Product<select [(ngModel)]="unitId" (ngModelChange)="selectUnit()"><option value="">Select a product</option>@for(v of choices();track v.unit.id){<option [value]="v.unit.id">{{v.code}} · {{v.mainItem.product_name}} · {{v.status}}</option>}</select></label></div>
-  @if(selected();as v){<section class="panel"><h2>{{v.code}} · {{v.mainItem.product_name}}</h2><p>Current stage: <b>{{v.status}}</b></p>
+  <div class="mobile-only"><div class="controls stage-buttons" aria-label="Production stage">@for(stage of mobileStages();track stage){<button (click)="chooseStage(stage)" [class.selected]="mobileStage===stage" [attr.aria-pressed]="mobileStage===stage">{{stage}} <span>{{mobileChoices(stage).length}}</span></button>}</div>
+  @if(!mobileDetail){<div class="product-grid">@for(v of mobileChoices();track v.unit.id){<button class="product-card" (click)="chooseProduct(v)">@if(image(v)){<img [src]="image(v)" [alt]="v.mainItem.product_name" loading="lazy" (error)="failedImages.add(v.unit.id)">}@else{<span class="image-placeholder">No image</span>}<strong>Order #{{orderNumber(v)}}</strong><small>{{v.code}}</small><span class="product-name">{{v.mainItem.product_name}}</span></button>}@empty{<p class="empty-state">No products available in {{mobileStage}}.</p>}</div>}
+  @else{<button (click)="mobileDetail=false">← Products in {{mobileStage}}</button>}
+  </div>
+  <div class="controls desktop-only"><label>Stage<select [(ngModel)]="stageFilter"><option value="">All stages</option>@for(stage of production.statuses;track stage){<option>{{stage}}</option>}</select></label><label class="wide">Product<select [(ngModel)]="unitId" (ngModelChange)="selectUnit()"><option value="">Select a product</option>@for(v of choices();track v.unit.id){<option [value]="v.unit.id">{{v.code}} · {{v.mainItem.product_name}} · {{v.status}}</option>}</select></label></div>
+  @if(selected();as v){<section class="panel product-detail" [class.mobile-hidden]="!mobileDetail||v.status==='New'"><h2>{{v.code}} · {{v.mainItem.product_name}}</h2><p>Current stage: <b>{{v.status}}</b></p>@if(v.status==='Packing'||v.status==='Ready'){<p>Work for this stage is managed on the <a routerLink="/production">Production Board</a>.</p>}
    @if(!snapshot()) {<p class="warning">@if(assigning){Loading the saved product composition…}@else if(!productTemplates().length){No saved parts template matches this product's size and folding option. Check Estimated min in the Product card.}@else if(!finish){The order does not contain a clear finish. Choose it below.}@else{The product composition could not be assigned automatically. Review and retry below.}</p>
    <div class="controls"><label>Parts template<select [(ngModel)]="templateId"><option value="">Select template</option>@for(t of productTemplates();track t.id){<option [value]="t.id">{{t.name}}</option>}</select></label><label>Finish type<select [(ngModel)]="finish"><option value="">Choose finish</option><option value="raw">RAW</option><option value="painted">Painted</option></select></label><button (click)="assign()" [disabled]="blocked()||!templateId||!finish">Retry product composition</button>@if(selectedProductId()){<a routerLink="/shipping-data" [queryParams]="{productId:selectedProductId()}">Open Product card</a>}</div>}
    @if(snapshot();as u){
@@ -40,8 +49,8 @@
     <p>Recorded work on this stage: <b>{{format(productTime(v.status))}}</b> · all work sessions combined</p>
     @if(v.status==='New'){<button class="primary" (click)="enterCnc()" [disabled]="blocked()">Move to CNC</button>}
     @if(v.status==='Assembly'||v.status==='Sanding'){
-     <label>Part<select [(ngModel)]="partId"><option value="">Choose a part</option>@for(p of u.parts;track p.id){<option [value]="p.id" [disabled]="done(v.status+':'+p.id)">{{done(v.status+':'+p.id)?'✓ ':''}}{{p.name}}</option>}</select></label>
-     <table><thead><tr><th>Part</th><th>Recorded time</th><th>Status</th></tr></thead><tbody>@for(p of u.parts;track p.id){<tr><td>{{p.name}}</td><td>{{format(productTime(v.status,p.id))}}</td><td>{{done(v.status+':'+p.id)?'✓ Complete':'In progress / not started'}}</td></tr>}</tbody></table>
+     <div class="controls part-buttons" aria-label="Available parts">@for(p of remainingParts();track p.id){<button (click)="partId=p.id" [class.selected]="partId===p.id" [attr.aria-pressed]="partId===p.id">{{p.name}}</button>}@empty{<p>All parts complete for {{v.status}}.</p>}</div>
+     <details><summary>All parts and statuses</summary><table><thead><tr><th>Part</th><th>Recorded time</th><th>{{v.status}} status</th></tr></thead><tbody>@for(p of u.parts;track p.id){<tr><td>{{p.name}}</td><td>{{format(productTime(v.status,p.id))}}</td><td>{{done(v.status+':'+p.id)?'✓ Complete':'In progress / not started'}}</td></tr>}</tbody></table></details>
     }
     @if(v.status==='Painting'){
      <label>Painting operation<select [(ngModel)]="operation"><option value="">Choose operation</option>@for(op of paint;track op){<option [value]="op" [disabled]="!paintAvailable(op,u.completed,paint)">{{done('Painting:'+op)?'✓ ':''}}{{paintLabel(op,paint)}}</option>}<option value="Repaint">Repaint (optional)</option></select></label>
@@ -51,8 +60,8 @@
     }
     @if(['CNC','Assembly','Sanding','Painting'].includes(v.status)){
      <p>Estimated time: {{estimate()===undefined?'Not set':estimate()+' min'}}</p>
-     @if(selectedTaskActive()){<p role="status">Task is running. Use Pause, {{active()?.part_id?'Finish part':'Finish operation'}}, or End shift above.</p>}
-     @else{<button class="primary" (click)="start()" [disabled]="!canStart()">Start / continue task</button>}
+     @if(workRunning()){<p role="status">A task is already running. Use Pause, {{active()?.part_id?'Finish part':'Finish operation'}}, or End shift above before starting another task.</p>}
+     @else{<button class="primary desktop-only" (click)="start()" [disabled]="!canStart()">Start / continue task</button>}
     }
     @if(done(v.status+':finished')){<p>Stage complete. If the board has not advanced, retry below.</p><button (click)="advance()" [disabled]="blocked()">Move to next stage</button>}
    }
@@ -65,4 +74,11 @@
  <section class="panel"><h2>Shifts</h2>@for(row of shifts();track row.id){<div class="shift-row"><span>{{row.started_at|date:'dd MMM HH:mm':'+1000'}} → {{row.ended_at?(row.ended_at|date:'dd MMM HH:mm':'+1000'):'Open'}}</span><button (click)="edit(row,'shift')">Edit shift</button></div>}</section>
  <section class="panel table-wrap"><h2>Activity timeline</h2><table><thead><tr><th>Start · Brisbane</th><th>Task</th><th>Time in period</th><th></th></tr></thead><tbody>@for(row of logs();track row.id){<tr><td>{{row.started_at|date:'dd MMM HH:mm':'+1000'}}<small>{{row.ended_at?(row.ended_at|date:'HH:mm':'+1000'):'Running'}}</small></td><td>{{row.stage}} · {{row.operation}}<small>{{label(row.unit_id)}} {{partName(row)}}</small></td><td>{{format(seconds(row,now(),bounds()))}}</td><td><button (click)="edit(row,'interval')">Edit time</button></td></tr>}</tbody></table></section>
 }
+<section class="mobile-only task-dock" aria-label="Current task">
+ <div class="dock-summary"><div><strong>{{dockLabel()||'No work selected'}}</strong><small>{{dockHint()}}</small><small>{{s.busy()?'Saving…':s.pending().length?'Awaiting confirmation':workRunning()?'Running':pausedTask()?'Paused':'Ready'}}</small></div><strong class="dock-clock">{{format(dockSeconds())}}</strong></div>
+ <div class="dock-actions"><button class="primary" (click)="dockPrimary()" [disabled]="timerBlocked()||!!oldShift()||(!workRunning()&&!pausedTask()&&!!shift()&&(!canStart()||(mode==='product'&&!mobileDetail)))">{{!shift()?'Start shift':workRunning()?'Pause':pausedTask()?'Resume':'Start'}}</button>
+ @if(workRunning()){<button (click)="finishWork(active()?.stage==='CNC')" [disabled]="timerBlocked()">{{active()?.part_id?'Finish part':active()?.stage==='CNC'?'Finish CNC':'Finish task'}}</button>}
+ @else if(pausedTask()&&canStart()&&(mode==='other'||mobileDetail)){<button (click)="start()" [disabled]="timerBlocked()">Start selected work</button>}
+ </div>
+</section>
 @if(editId){<div class="modal-backdrop"><section class="panel modal" role="dialog" aria-modal="true" aria-labelledby="edit-title"><h2 id="edit-title">Correct {{editType}} time</h2><p>Brisbane time. Changes are recorded in the audit history. To close a forgotten task and shift together, edit the shift end.</p><label>Start<input type="datetime-local" step="0.001" [(ngModel)]="editStart"></label><label>End<input type="datetime-local" step="0.001" [(ngModel)]="editEnd"></label>@if(s.error()||localError){<p class="error" role="alert">{{localError||s.error()}}</p>}<div class="controls"><button class="primary" (click)="saveEdit()" [disabled]="blocked()">Save correction</button><button (click)="editId=''">Cancel</button></div></section></div>}
