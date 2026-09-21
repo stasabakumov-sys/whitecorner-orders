@@ -74,10 +74,24 @@ describe('Automatic modular packaging',()=>{
   s.tables['wc_shipping_rules'][1].size_key=null;
   expect(await s.service.previewCartPackaging(order)).toHaveLength(5);
  });
- it('works for other orders and rejects missing addon packaging',async()=>{
+ it('retains found boxes when addon packaging is missing and blocks quoting',async()=>{
   const s=setup();expect(await s.service.previewCartPackaging({...order,order_number:'10824'})).toHaveLength(5);
   s.tables['wc_shipping_rules']=s.tables['wc_shipping_rules'].filter(rule=>rule.rule_type!=='Add-on');
-  await expect(s.service.previewCartPackaging(order)).rejects.toThrow('Back panel');
+  const c=new DeliveryReviewComponent(s.service),row={order_id:'partial',state:'packaging_required',wc_orders:order,packages:[]};
+  s.service.rows.set([row]);await c.open(row);
+  expect(c.draft).toHaveLength(4);expect(s.service.error()).toBe('');
+  expect(c.packagingIssue(row)).toContain('Back panel');
+  c.confirmed=true;await c.save(row);expect(s.invoke).not.toHaveBeenCalled();
+ });
+ it('loads complete Main packaging without assignments for decorative style options',async()=>{
+  const s=setup(),size='Size I (W1200mm x H1200mm x D600mm)';
+  s.tables['wc_shipping_packages'].forEach(box=>box.size_key='size i w1200mm x h1200mm x d600mm');
+  const wc_orders={wc_order_items:[{...cart,wix_options:{Size:size,'Front Panel Style':'With Trim Frame','Lower Counter Edge':'Standard'}}]};
+  const row={order_id:'style-options',state:'packaging_required',wc_orders,packages:[]},c=new DeliveryReviewComponent(s.service);
+  s.service.rows.set([row]);await c.open(row);
+  expect(c.draft).toHaveLength(3);expect(s.service.components(row).map(component=>component.component_key)).toEqual(['main']);
+  await c.save(row);expect(s.invoke).not.toHaveBeenCalled();
+  expect(c.packagingIssue(row)).toBe('');
  });
  it('leaves the draft intact on read failure and replaces it without duplication on repeated success',async()=>{
   const s=setup(),c=new DeliveryReviewComponent(s.service),row={order_id:'trial',state:'packaging_required',wc_orders:order,packages:[]};

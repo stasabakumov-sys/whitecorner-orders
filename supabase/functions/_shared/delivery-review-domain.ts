@@ -118,17 +118,18 @@ export function backdropPackagingKey(item:OrderItemRow):string{
 export const isLogoFileInstruction=(text:string)=>/^(?:please )?email us (?:a )?ready to use svg\b/.test(componentNormal(text));
 export const isLogoOption=(name:string)=>/^(?:add )?logo(?: or personali[sz]ation)?$/.test(componentNormal(name));
 export const isPackagingColourOption=(name:string)=>/^colou?r$/.test(componentNormal(name));
-export const packagingOptionLabels=(item:OrderItemRow)=>orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).filter(label=>!isLogoOption(label.split(':')[0])&&!isPackagingColourOption(label.split(':')[0]));
+export const isPackagingDesignOption=(name:string)=>['front panel style','lower counter edge'].includes(componentNormal(name));
+export const packagingOptionLabels=(item:OrderItemRow)=>orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).filter(label=>!isLogoOption(label.split(':')[0])&&!isPackagingColourOption(label.split(':')[0])&&!isPackagingDesignOption(label.split(':')[0]));
 export function canonicalPackagingItemKey(key:string):string{
  try{
   const split=key.lastIndexOf(':'),parsed=JSON.parse(key.slice(0,split));
   if(!Array.isArray(parsed)||!Array.isArray(parsed[1]))return key;
-  parsed[1]=parsed[1].filter((label:string)=>!/^colou?r\s/.test(label));
+  parsed[1]=parsed[1].filter((label:string)=>!/^colou?r\s/.test(label)&&! /^(front panel style|lower counter edge)(?:\s|$)/.test(label));
   return JSON.stringify(parsed)+key.slice(split);
  }catch{return key;}
 }
 export function canonicalPackagingSignature(signature:string):string{
- try{return JSON.stringify(JSON.parse(signature).map((entry:any[])=>[canonicalPackagingItemKey(entry[0]),...entry.slice(1)]).sort());}
+ try{return JSON.stringify(JSON.parse(signature).filter((entry:any[])=>!isPackagingDesignOption(String(entry[1]||'').replace(/^option:/,''))).map((entry:any[])=>[canonicalPackagingItemKey(entry[0]),...entry.slice(1)]).sort());}
  catch{return signature;}
 }
 // Canonical profiles take precedence. Legacy colour-specific records are retained,
@@ -144,7 +145,7 @@ export async function findPackagingProfile(db:any,signature:string){
   matches.push(...(page.data||[]).filter((p:any)=>canonicalPackagingSignature(p.signature)===signature));
   if((page.data||[]).length<250)break;
  }
- if(matches.length>1)return {data:null,error:{message:'Multiple saved packaging profiles differ only by colour. Save one shared profile before using it.'}};
+ if(matches.length>1)return {data:null,error:{message:'Multiple saved packaging profiles differ only by colour or decorative design. Save one shared profile before using it.'}};
  return resolveBackdropProfileDimensions(db,matches[0]||null);
 }
 // Only explicitly referenced product profiles use live shared measurements.
@@ -169,7 +170,7 @@ const attribute=/^(colou?r|size|dimensions?|width|height|length|finish|foldable|
 export const isPartnerPansOption=(name:string)=>componentNormal(name)==='pans';
 export const isPartnerPansComponent=(c:{component_key?:string})=>c.component_key==='option:pans';
 export const isNonPackagingComponent=(c:{component_key?:string;component_name?:string})=>isPartnerPansComponent(c)||
- ((c.component_key||'').startsWith('option:')&&(isLogoOption(c.component_key!.slice(7))||isLogoFileInstruction(c.component_key!.slice(7))))||isLogoFileInstruction(c.component_name||'');
+ ((c.component_key||'').startsWith('option:')&&(isPackagingDesignOption(c.component_key!.slice(7))||isLogoOption(c.component_key!.slice(7))||isLogoFileInstruction(c.component_key!.slice(7))))||isLogoFileInstruction(c.component_name||'');
 export function partnerPans(item:OrderItemRow){
  const choices=[...new Set(orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).flatMap(label=>{
   const split=label.indexOf(':');if(split<0||!isPartnerPansOption(label.slice(0,split)))return [];
@@ -191,7 +192,7 @@ export function packageComponents(items:OrderItemRow[],ignored:(name:string,valu
   for(const label of labels){
    const split=label.indexOf(':');if(split<0)continue;
    const name=label.slice(0,split).trim(),value=label.slice(split+1).trim();
-   if(isPartnerPansOption(name)||attribute.test(name)||/^(no|none|false|not selected|not required|without|0)(\b|$)/i.test(value)||ignored(name,value))continue;
+   if(isPackagingDesignOption(name)||isPartnerPansOption(name)||attribute.test(name)||/^(no|none|false|not selected|not required|without|0)(\b|$)/i.test(value)||ignored(name,value))continue;
    const numeric=/^\d+$/.test(value)?Number(value):1;if(numeric<1)continue;
    const key='option:'+componentNormal(name);
    if(!components.has(key))components.set(key,{name:name+( /^(yes|true)$/i.test(value)?'':': '+value),count:numeric});
