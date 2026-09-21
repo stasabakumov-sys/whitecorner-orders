@@ -7,6 +7,7 @@ import {OrdersService} from '../../core/services/orders.service';
 import {ProductionService} from '../../core/services/production.service';
 import {ShopPhoneService} from '../../core/services/shop-phone.service';
 import {ProductionStatus} from '../../core/models/production.models';
+import {orderItemOptionLabels} from '../../core/utils/order-item-display';
 import {ShopFloorService} from './shop-floor.service';
 import {ShopProductChoice,ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,isSameProductTask,onlyRemainingPartId,requiresSanding,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
 import {catalogProductForItem,matchingProductTemplates,orderedFinish} from './shop-floor-selection';
@@ -22,6 +23,10 @@ export class ShopFloorComponent implements OnDestroy {
  remainingParts(){return this.snapshot()?.parts.filter(p=>!this.done(this.selected()?.status+':'+p.id))||[];}
  image(v:ShopProductChoice){const item=this.liveUnits().find(u=>u.unit.id===v.unit.id)?.mainItem;return !item||this.failedImages.has(v.unit.id)?'':this.production.imageUrl(item);}
  orderNumber(v:ShopProductChoice){return this.liveUnits().find(u=>u.unit.id===v.unit.id)?.order.order_number||v.code.replace(/^#/, '');}
+ shortProductName(name:string|null|undefined){return (name||'Product').split(/\s+[-–—]\s+|[–—]/,1)[0].trim();}
+ cardOptions(v:ShopProductChoice){const live=this.liveUnits().find(u=>u.unit.id===v.unit.id);return live?[...orderItemOptionLabels(live.mainItem,Infinity),...(live.addons||[]).flatMap(addon=>[`${addon.item.product_name||'Add-on'} × ${addon.quantity}`,...orderItemOptionLabels(addon.item,Infinity)])]:[];}
+ remainingPaint(){return this.paint.filter(op=>!this.done('Painting:'+op));}
+ paintingStatus(op:string){const active=this.active();if(active?.unit_id===this.unitId&&active.stage==='Painting'&&active.operation===op)return 'Running';if(this.done('Painting:'+op))return op==='Repaint'?'Recorded · repeatable':'✓ Complete';if(!availablePaint(op,this.snapshot()?.completed||[],this.paint))return 'Waiting for previous operations';return this.productTime('Painting',undefined,op)>0?'In progress':'Not started';}
  pausedTask(){return this.active()?.stage==='Pause'?this.previous():undefined;}
  dockTask(){return this.workRunning()?this.active():this.pausedTask();}
  dockLabel(){const row=this.dockTask();return row?row.unit_id?this.label(row.unit_id):row.operation:this.mode==='other'?this.other:this.mobileDetail?this.label(this.unitId):'';}
