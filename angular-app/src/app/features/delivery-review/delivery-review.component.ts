@@ -50,10 +50,12 @@ import {orderProducts} from '../../core/utils/order-products';
  <button (click)="loadCartPackaging(row,true)" [disabled]="variantLoading||s.busy()">Update packaging from Products</button>
  @if(cartPackagingLoading()){<p role="status">Loading Main + add-on packaging…</p>}
  @else if(s.error()){<button (click)="loadCartPackaging(row,true)" [disabled]="variantLoading||s.busy()">Retry packaging load</button>}
+ @if(!cartPackagingLoading()&&packagingIssue(row)){<p class="error" role="alert">{{packagingIssue(row)}} Open Contents on a box to assign the missing components, or add their packaging. Calculation remains blocked until all components are assigned.</p>}
  @if(packagingPreview();as preview){
  <section class="notice" role="status">
  <p>Replace the current draft with packaging from Products? Any manual changes in this draft will be replaced. Saved packaging and quotes will not change until you save and recalculate.</p>
  <p>{{draft.length}} boxes → {{preview.length}} boxes</p>
+ @if(previewIssue(row,preview)){<p class="error" role="alert">{{previewIssue(row,preview)}} You can load these boxes and complete their contents before calculating.</p>}
  @for(change of packagingChanges();track $index){<p>{{change}}</p>}
  <button (click)="applyPackagingPreview()" [disabled]="s.busy()||variantLoading">Replace draft</button>
  <button (click)="packagingPreview.set(null)" [disabled]="s.busy()">Keep current draft</button>
@@ -228,6 +230,7 @@ export class DeliveryReviewComponent implements OnInit {
  assigned(p:ReviewPackage,c:PackageComponent){return p.contents.some(x=>x.id===c.id);}
  toggle(p:ReviewPackage,c:PackageComponent,event:Event){if((event.target as HTMLInputElement).checked){if(!this.assigned(p,c))p.contents.push(c);}else p.contents=p.contents.filter(x=>x.id!==c.id);this.confirmed=false;}
  packagingIssue(row:any){return packagingError(this.draft,this.s.components(row));}
+ previewIssue(row:any,boxes:ReviewPackage[]){return packagingError(boxes,this.s.components(row));}
  orderTotal(row:any){return cents(row.wc_orders?.total);}
  invoice(row:any){return deliveryCents(row.wc_orders);}
  increase(row:any){const min=this.s.outcome(row).minimum_invoice_cents,invoice=this.invoice(row);return min==null||invoice==null?null:Math.max(0,min-invoice);}
