@@ -72,7 +72,7 @@ export class SavedPackingComponent implements OnChanges{
    const packages=structuredClone(this.draft).map((box:any)=>this.canonical(box)),stored=this.profile.template_item?.wix_options||{},options=Object.entries(Object.keys(stored).length?stored:this.fallbackOptions).map(([name,value])=>({name,value:String(value)}));
    const {data,error}=await this.db.client.functions.invoke('delivery-cost-review',{body:{action:'save-packaging-variant',productId:this.product.id,sourceItemId:this.profile.template_item?.source_item_id||'',existingSignature:this.profile.reference_only?'':this.profile.signature,options,packages}});
    if(error||!data?.ok){const detail=await error?.context?.json?.().catch(()=>null);throw Error(detail?.error||data?.error||error?.message||'Server did not confirm saving.');}
-   this.profileSaved.emit({...this.profile,reference_only:false,previousSignature:this.profile.signature,template_item:{...this.profile.template_item,wix_options:Object.fromEntries(options.map(option=>[option.name,option.value]))},signature:data.signature||this.profile.signature,packages});this.editing=false;this.replacing=false;this.saved.set(true);
+   this.profileSaved.emit({...this.profile,reference_only:false,previousSignature:this.profile.signature,template_item:data.template_item===undefined?{...this.profile.template_item,wix_options:Object.fromEntries(options.map(option=>[option.name,option.value]))}:data.template_item,signature:data.signature||this.profile.signature,packages:data.packages||packages});this.editing=false;this.replacing=false;this.saved.set(true);
   }catch(e:any){this.error.set('Could not save packaging: '+e.message+' Your edits are kept. Please retry.');}
   finally{this.saving.set(false);}
  }

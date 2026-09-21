@@ -369,7 +369,7 @@ export async function resolveOrderPackaging(db:any,order:any,ignoredRules:any[]=
   if(existing.some(box=>box.contents.some(c=>c.order_item_id!==item.id)))continue;
   const variant=checked(await findPackagingProfile(db,variantSignature(item)));
   const ownedProduct=(checked(products)||[]).find((product:any)=>product.id===variant?.shipping_product_id&&productForItem(item,[product]));
-  if(variant&&(!catalogOnly||ownedProduct&&variant.template_item)){
+  if(variant&&(!catalogOnly||ownedProduct)){
    const restored=expandVariant(variant.packages,item,ignoredRules);
    if(!restored.length)throw Error('The saved item packaging is incomplete. Review it in Products.');
    boxes=[...boxes.filter(box=>!existing.includes(box)),...restored];
@@ -464,3 +464,27 @@ export function expandVariant(packages:any[],item:any,rules:any[]=[]){
   return all.find(x=>x.component_key===c.component_key&&x.unit_index===index*perUnit+c.unit_index)!;
  })}))).flat();
 }
+// Editing measurements must not reconstruct a legacy profile's option identity.
+export function editedSavedPackages(profile:any, product:any, submitted:any[]) {
+ const contents:any[]=(profile.packages||[]).flatMap((box:any)=>box.contents||[]);
+ const keys=new Set(contents.map(c=>c.profile_item_key));
+ if(keys.size!==1||!contents.length||contents.some(c=>!c.profile_item_key))throw Error('This combined profile cannot be edited as a single product. Review its composition.');
+ if(profile.shipping_product_id&&profile.shipping_product_id!==product.id)throw Error('Packaging belongs to another product. Reload Products.');
+ if(!profile.shipping_product_id&&(!product.wix_product_id||contents.some(c=>c.wix_product_id!==product.wix_product_id)))throw Error('Packaging product identity could not be verified. Reload Products.');
+ const components=[...new Map(contents.map(c=>[componentIdentity(c),{...c,id:componentIdentity(c)}])).values()];
+ const lookup=new Map<string,any>();
+ for(const c of components){
+  const key=`${c.component_key||'main'}:${c.unit_index||1}`;
+  if(lookup.has(key))throw Error('Ambiguous package contents. Review the saved composition.');
+  lookup.set(key,c);
+ }
+ if(!Array.isArray(submitted))throw Error('Add packages before saving.');
+ const packages=submitted.map(box=>({package_name:String(box.package_name||'Package').slice(0,150),length_mm:Number(box.length_mm),width_mm:Number(box.width_mm),height_mm:Number(box.height_mm),weight_kg:Number(box.weight_kg),contents:(box.contents||[]).map((c:any)=>{
+  const saved=lookup.get(`${c.component_key||'main'}:${c.unit_index||1}`);
+  if(!saved)throw Error('Package contents changed. Reload Products before saving.');
+  return {...saved};
+ })}));
+ const issue=packagingError(packages,components);if(issue)throw Error(issue);
+ return packages;
+}
+

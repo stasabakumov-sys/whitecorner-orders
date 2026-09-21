@@ -3,6 +3,7 @@ import { productionDecision, setReviewedProductionStatus, unquotedApprovalStates
 import { courierReviewCall, processDeliveryReview, reviewContext } from '../_shared/delivery-review-worker.ts';
 import { backdropPackagingKey, componentNormal, deliveryCents, packagingError, packagingSignature, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../_shared/delivery-review-domain.ts';
 import { variantSignature, productId, resolveOrderPackaging } from '../_shared/delivery-review-domain.ts';
+import { editedSavedPackages } from '../_shared/delivery-review-domain.ts';
 const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,x-client-info,apikey,content-type','Access-Control-Allow-Methods':'POST,OPTIONS','Content-Type':'application/json'};
 Deno.serve(async(req)=>{
  if(req.method==='OPTIONS')return new Response('ok',{headers});
@@ -20,6 +21,18 @@ Deno.serve(async(req)=>{
    if(productError||!product)return json({error:'Shipping product unavailable'},422);
    if(!Array.isArray(body.options)||body.options.length>40||body.options.some((o:any)=>typeof o.name!=='string'||!o.name.trim()||typeof o.value!=='string'||!o.value.trim()||o.name.length>100||o.value.length>500))return json({error:'Complete every option name and value'},422);
    if(new Set(body.options.map((o:any)=>o.name.trim().toLowerCase())).size!==body.options.length)return json({error:'Duplicate option names'},422);
+   const editingExisting=typeof body.existingSignature==='string'&&body.existingSignature.length>0;
+   const backdropProduct=componentNormal(product.product_type||'')==='backdrop'||/backdrop/i.test(product.product_name||'');
+   if(editingExisting&&!backdropProduct){
+    if(body.existingSignature.length>2000)return json({error:'Invalid saved profile identity.'},422);
+    const {data:existing,error:readError}=await db.from('wc_delivery_packaging_profiles').select('*').eq('signature',body.existingSignature).maybeSingle();
+    if(readError||!existing)return json({error:'Saved packaging could not be loaded. Reload Products and retry.'},409);
+    let packages;
+    try{packages=editedSavedPackages(existing,product,body.packages);}catch(e){return json({error:(e as Error).message},422);}
+    const {data:saved,error:saveError}=await db.from('wc_delivery_packaging_profiles').update({packages,shipping_product_id:product.id,updated_at:new Date().toISOString()}).eq('signature',existing.signature).eq('updated_at',existing.updated_at).select('signature,packages,template_item').single();
+    if(saveError||!saved)return json({error:'Packaging changed or could not be saved. Reload Products and retry.'},409);
+    return json({ok:true,...saved});
+   }
    const cartMain=body.profileScope==='cart-main';
    if(body.profileScope!==undefined&&!cartMain)return json({error:'Unknown packaging profile scope'},422);
    let selectedAddOns:any[]=[];
