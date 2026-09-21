@@ -487,4 +487,3 @@ export function editedSavedPackages(profile:any, product:any, submitted:any[]) {
  const issue=packagingError(packages,components);if(issue)throw Error(issue);
  return packages;
 }
-
