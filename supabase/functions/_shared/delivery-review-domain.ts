@@ -284,8 +284,8 @@ export function buildReviewRequest(order:any,packages:ReviewPackage[]){
  items:packages.map(p=>({type:'box',weight:Number(p.weight_kg),length:Number(p.length_mm)/10,width:Number(p.width_mm)/10,height:Number(p.height_mm)/10,quantity:1,contents:'General'}))};
 }
 export function allowedCarrier(name:unknown){
- // Exact normalized aliases only; TNT is not implicitly FedEx.
- return ['aramex','couriers please','couriersplease','fedex','fed ex'].includes(String(name||'').trim().toLowerCase().replace(/\s+/g,' '));
+ // TNT is explicitly approved alongside FedEx. Keep the provider's name intact.
+ return ['aramex','couriers please','couriersplease','fedex','fed ex','tnt'].includes(String(name||'').trim().toLowerCase().replace(/\s+/g,' '));
 }
 export function insuranceFor(labels:unknown[],goodsIncludingGstCents:number){
  const value=Math.round(goodsIncludingGstCents/1.1);
@@ -305,6 +305,15 @@ export function evaluateQuotes(quotes:any[],insurance:ReturnType<typeof insuranc
   return {quote:q,eligible:!reason,reason,price_cents:price,insurance_fee_cents:insurance?.fee_cents??null,total_cents:price!==null&&insurance?price+insurance.fee_cents:null};
  });
 }
+export function currentReviewQuotes(review:any){
+ return (review.evaluated_quotes||[]).map((entry:any)=>{
+  // Apply the expanded carrier policy to saved TNT prices without another API
+  // call or changes to the historical response, insurance or quoted amounts.
+  const tnt=String(entry.quote?.courierName||'').trim().toLowerCase()==='tnt';
+  const valid=[entry.price_cents,entry.insurance_fee_cents,entry.total_cents].every(v=>Number.isInteger(v)&&v>=0)&&entry.total_cents===entry.price_cents+entry.insurance_fee_cents;
+  return tnt&&entry.reason==='Carrier excluded by policy'&&valid?{...entry,eligible:true,reason:null}:entry;
+ });
+}
 export function reviewOutcome(review:any,order:any,currentKey?:string){
  if(review.state==='approved_without_quote'){
   const a=review.approval;
@@ -312,7 +321,7 @@ export function reviewOutcome(review:any,order:any,currentKey?:string){
   return {status:valid?'approved_without_quote':'data_changed',best:null,minimum_invoice_cents:null};
  }
  if(review.state!=='quoted')return {status:review.state,best:null,minimum_invoice_cents:null};
- const best=(review.evaluated_quotes||[]).filter((q:any)=>q.eligible&&Number.isInteger(q.total_cents)).sort((a:any,b:any)=>a.total_cents-b.total_cents)[0]||null;
+ const best=currentReviewQuotes(review).filter((q:any)=>q.eligible&&Number.isInteger(q.total_cents)).sort((a:any,b:any)=>a.total_cents-b.total_cents)[0]||null;
  if(currentKey&&review.input_key!==currentKey)return {status:'data_changed',best,minimum_invoice_cents:null};
  if(!best)return {status:'no_eligible_quotes',best,minimum_invoice_cents:null};
  const invoice=deliveryCents(order);
