@@ -191,6 +191,32 @@ test('variant save is authenticated, canonical, and never quotes or changes orde
  assert.equal((await call(mainBody)).status,200);assert.equal(saved.template_item.profile_scope,'cart-main');assert.equal(JSON.stringify(saved.template_item.wix_options),JSON.stringify({Size:'Size II','Internal Shelf':'Yes'}));assert.equal(saved.template_item.merged_add_ons[0].match_name,'Internal Shelf');
 });
 
+test('editing a legacy profile updates its original key, preserves options, and rejects conflicts',async()=>{
+ let handler,conflict=false,authorized=true,writes=0;
+ const product={id:'counter',product_name:'Counter',wix_product_id:'catalog'};
+ const item={id:'source',product_name:'Counter',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Length:'1190mm',Height:'900mm'}};
+ let profile={signature:domain.variantSignature(item),updated_at:'version',template_item:null,packages:[{package_name:'Top',length_mm:1210,width_mm:615,height_mm:70,weight_kg:9,contents:domain.reviewComponents({wc_order_items:[item]})}]};
+ const signature=profile.signature;
+ const db={auth:{getUser:async()=>({data:{user:authorized?{id:'actor'}:null}})},from(table){
+  assert.ok(['wc_shipping_products','wc_delivery_packaging_profiles'].includes(table));let patch=null;const filters=[];
+  const q={select(){return q},eq(k,v){filters.push([k,v]);return q},update(value){patch=value;return q},maybeSingle:async()=>({data:profile}),single:async()=>{
+   if(table==='wc_shipping_products')return {data:product};
+   assert.ok(filters.some(([k,v])=>k==='signature'&&v===signature));assert.ok(filters.some(([k,v])=>k==='updated_at'&&v===profile.updated_at));
+   if(conflict)return {error:{message:'Concurrent change'}};
+   writes++;profile={...profile,...patch};return {data:profile};
+  }};return q;
+ }};
+ const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>db}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{throw Error('No external calls allowed')}});
+ const draft=JSON.parse(JSON.stringify(profile.packages));draft[0].width_mm=620;draft[0].contents[0].profile_item_key='lost options';
+ const body={action:'save-packaging-variant',productId:product.id,existingSignature:signature,options:[],packages:draft};
+ const call=()=>handler(new Request('http://fixture.invalid',{method:'POST',body:JSON.stringify(body)}));
+ authorized=false;assert.equal((await call()).status,401);authorized=true;
+ const response=await call();assert.equal(response.status,200);const saved=await response.json();
+ assert.equal(saved.signature,signature);assert.equal(profile.packages[0].width_mm,620);assert.equal(profile.shipping_product_id,product.id);
+ assert.equal(domain.expandVariant(profile.packages,item,[])[0].width_mm,620);assert.equal(saved.template_item,null);
+ conflict=true;assert.equal((await call()).status,409);assert.equal(writes,1);
+});
+
 test('Cart without a shelf replacement variant continues to use its reusable Main boxes',async()=>{
  const s=setup();s.review.packages=[];s.order.wc_order_items[0].wix_options={Size:'Size II'};
  const original=s.db.from.bind(s.db);s.db.from=table=>{if(!['wc_shipping_products','wc_shipping_packages'].includes(table))return original(table);const data=table==='wc_shipping_products'?[{id:'p',product_name:'Cart',product_type:'Cart'}]:[{shipping_product_id:'p',size_key:'size ii',source_type:'Base',package_name:'Reusable Main',length_mm:1000,width_mm:500,height_mm:100,weight_kg:10,contents:[]}];const q={select(){return q},eq(){return q},order(){return q},then:resolve=>resolve({data})};return q;};
