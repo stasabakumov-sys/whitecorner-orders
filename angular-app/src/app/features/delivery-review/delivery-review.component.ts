@@ -12,7 +12,7 @@ import {orderProducts} from '../../core/utils/order-products';
  template:`
  <header><div><h1>Delivery Cost Review</h1><p>Automatic estimates using packaging from Products. Target: delivery including insurance ≤ 90% of the invoice delivery charge. Amounts include GST.</p></div>
  <button (click)="reload()" [disabled]="s.loading()||s.busy()">Refresh saved data</button></header>
- <div class="notice">All courier quotes are saved. Only Aramex, Couriers Please and FedEx count toward the target. Initial estimates run automatically from Products. Saved estimates are not automatically repeated.</div>
+ <div class="notice">All courier quotes are saved. Only Aramex, Couriers Please, FedEx and TNT count toward the target. Initial estimates run automatically from Products. Saved estimates are not automatically repeated.</div>
  @if(s.error()){<p class="error" role="alert">{{s.error()}}</p>}
  <div class="toolbar"><label>Show <select [(ngModel)]="filter"><option value="all">All orders</option><option value="attention">Needs attention</option><option value="within_target">Within target</option><option value="approved_exception">Approved exceptions</option><option value="approved_without_quote">Approved without quote</option><option value="packaging_required">Packaging required</option></select></label>
  <span>{{visible().length}} orders</span></div>
@@ -81,7 +81,7 @@ import {orderProducts} from '../../core/utils/order-products';
  <p>Requested {{row.quote_attempted_at|date:'dd MMM yyyy, HH:mm'}}. This snapshot is kept for reference. Only an explicit packaging correction can request another estimate. Actual booking prices must be checked in Fulfilment.</p>
  <h3>Current courier quotes</h3>
  <div class="table-wrap"><table><thead><tr><th>Carrier / Service</th><th>Quote incl. GST</th><th>Insurance</th><th>Total</th><th>Assessment</th></tr></thead><tbody>
- @for(q of row.evaluated_quotes;track $index){<tr><td>{{q.quote.courierName||'Unknown'}}<small>{{q.quote.name}}</small></td><td>{{money(q.price_cents)}}</td><td>{{money(q.insurance_fee_cents)}}</td><td>{{money(q.total_cents)}}</td><td>{{q.eligible?'Eligible':q.reason}}@if(q.quote.notice?.body){<details><summary>Carrier conditions</summary><p>{{q.quote.notice.body}}</p></details>}</td></tr>}
+ @for(q of s.quotes(row);track $index){<tr><td>{{q.quote.courierName||'Unknown'}}<small>{{q.quote.name}}</small></td><td>{{money(q.price_cents)}}</td><td>{{money(q.insurance_fee_cents)}}</td><td>{{money(q.total_cents)}}</td><td>{{q.eligible?'Eligible':q.reason}}@if(q.quote.notice?.body){<details><summary>Carrier conditions</summary><p>{{q.quote.notice.body}}</p></details>}</td></tr>}
  @empty{<tr><td colspan="5">No quotes were returned or the response could not be saved. No automatic retry.</td></tr>}
  </tbody></table></div>
  <details><summary>Saved request, full response and insurance options</summary><pre>{{ {request:row.request,response:row.response,insurance:row.insurance_response,assumptions:row.snapshot?.assumptions}|json }}</pre></details>

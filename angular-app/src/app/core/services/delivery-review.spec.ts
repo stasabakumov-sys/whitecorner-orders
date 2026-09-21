@@ -1,10 +1,25 @@
 import {describe,it,expect,vi} from 'vitest';
-import {buildReviewRequest,deliveryCents,eligibleOrder,evaluateQuotes,insuranceFor,packagingError,restoreReviewPackages,reviewComponents,reviewInputKey,reviewOutcome,reviewSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {allowedCarrier,currentReviewQuotes,buildReviewRequest,deliveryCents,eligibleOrder,evaluateQuotes,insuranceFor,packagingError,restoreReviewPackages,reviewComponents,reviewInputKey,reviewOutcome,reviewSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {DeliveryReviewService} from './delivery-review.service';
 const order=()=>({id:'order',currency:'AUD',shipping:300,subtotal:1100,delivery_type:'Shipping',fulfillment_status:'NOT_FULFILLED',delivery_address:{city:'Test',subdivision:'AU-VIC',postalCode:'3000',country:'AU'},wc_order_items:[{id:'item',product_name:'Cart',quantity:2,unit_price:550,wix_options:{Shelf:'Yes','Side shelves':'Yes','Umbrella hole':'Yes','4 Castor Wheels':'Yes'},catalog_reference:{catalogItemId:'cart'}}]});
 const rules=['Umbrella hole','4 Castor Wheels'].map(match_name=>({match_name,match_value:'Yes',effect_type:'No effect',active:true}));
 const box=(contents:any[])=>({package_name:'Cart/Shelves',length_mm:1200,width_mm:600,height_mm:100,weight_kg:20,contents});
 describe('Delivery cost policy and durable snapshots',()=>{
+ it('includes TNT with insurance in the lowest eligible delivery total',()=>{
+  expect(allowedCarrier('  tNt  ')).toBe(true);expect(allowedCarrier('TNT other')).toBe(false);
+  const evaluated=evaluateQuotes([{courierName:'TNT',priceIncludingGst:226.39},{courierName:'Couriers Please',priceIncludingGst:337.47}],insuranceFor(['+$17.57 up to $1500'],140000));
+  const result=reviewOutcome({state:'quoted',evaluated_quotes:evaluated},{...order(),shipping:310});
+  expect(result.status).toBe('within_target');expect(result.best.quote.courierName).toBe('TNT');expect(result.best.total_cents).toBe(24396);expect(result.minimum_invoice_cents).toBe(27107);
+ });
+ it('applies TNT policy to valid saved quotes without altering the historical snapshot',()=>{
+  const entry={quote:{courierName:'TNT'},eligible:false,reason:'Carrier excluded by policy',price_cents:22639,insurance_fee_cents:1757,total_cents:24396};
+  const review={state:'quoted',evaluated_quotes:[entry]},original=structuredClone(review);
+  expect(currentReviewQuotes(review)[0].eligible).toBe(true);
+  expect(reviewOutcome(review,{...order(),shipping:310}).status).toBe('within_target');expect(review).toEqual(original);
+  for(const patch of [{insurance_fee_cents:null,total_cents:null},{price_cents:null},{total_cents:1},{reason:'Insufficient insurance cover'},{quote:{courierName:'Unknown'}}]){
+   expect(currentReviewQuotes({evaluated_quotes:[{...entry,...patch}]})[0].eligible).toBe(false);
+  }
+ });
  it('uses Wix after-tax invoice delivery without adding GST twice or multiplying line totals by quantity',()=>{
   const o={...order(),shipping:86.36,raw_order:{taxIncludedInPrices:true,shippingInfo:{cost:{totalPriceAfterTax:{amount:'95.00'}}}}};
   expect(deliveryCents(o)).toBe(9500);
@@ -16,7 +31,7 @@ describe('Delivery cost policy and durable snapshots',()=>{
  it('selects the lowest allowed carrier including insurance and retains every excluded quote',()=>{
   const insurance=insuranceFor(['Free up to $500','+$30 up to $1500'],110000);
   expect(insurance?.fee_cents).toBe(3000);
-  const raw=[{courierName:'TNT',priceIncludingGst:1},{courierName:'Aramex',priceIncludingGst:250},{courierName:'Couriers Please',priceIncludingGst:240},{courierName:'FedEx',priceIncludingGst:260},{courierName:'Unknown',priceIncludingGst:2}];
+  const raw=[{courierName:'Unapproved carrier',priceIncludingGst:1},{courierName:'Aramex',priceIncludingGst:250},{courierName:'Couriers Please',priceIncludingGst:240},{courierName:'FedEx',priceIncludingGst:260},{courierName:'Unknown',priceIncludingGst:2}];
   const evaluated=evaluateQuotes(raw,insurance),review={state:'quoted',input_key:'key',evaluated_quotes:evaluated};
   expect(evaluated).toHaveLength(5);expect(evaluated.map(x=>x.quote)).toEqual(raw);
   const result=reviewOutcome(review,order(),'key');expect(result.status).toBe('within_target');expect(result.best.quote.courierName).toBe('Couriers Please');expect(result.best.total_cents).toBe(27000);

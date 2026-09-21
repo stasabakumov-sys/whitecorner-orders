@@ -38,7 +38,7 @@ function setup(){
 }
 test('one concurrent claimant; all carriers and complete response persist; re-entry never quotes again',async()=>{
  const s=setup();await Promise.all([processDeliveryReview(s.db,'order',s.call),processDeliveryReview(s.db,'order',s.call)]);await processDeliveryReview(s.db,'order',s.call);
- assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);assert.equal(s.review.state,'quoted');assert.equal(s.review.response.body.orderId,'saved-draft');assert.equal(s.review.evaluated_quotes.length,2);assert.equal(s.review.evaluated_quotes[0].eligible,false);assert.equal(s.calls.find(c=>c.route==='quotes').payload.items[0].contents,'general');
+ assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);assert.equal(s.review.state,'quoted');assert.equal(s.review.response.body.orderId,'saved-draft');assert.equal(s.review.evaluated_quotes.length,2);assert.equal(s.review.evaluated_quotes[0].eligible,true);assert.equal(s.calls.find(c=>c.route==='quotes').payload.items[0].contents,'general');
 });
 test('backdrop resolves stale contents from live reference data and persists the exact value without changing packaging',async()=>{
  const {resolveCourierContents}=moduleAt(path.resolve('supabase/functions/_shared/courier-contents.ts'));

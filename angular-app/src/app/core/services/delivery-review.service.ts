@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { SupabaseService } from './supabase.service';
-import {variantSignature,findPackagingProfile,resolveOrderPackaging} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {variantSignature,findPackagingProfile,resolveOrderPackaging,currentReviewQuotes} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import { ReviewPackage, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 @Injectable({providedIn:'root'})
@@ -37,6 +37,7 @@ export class DeliveryReviewService {
   catch{return {status:'data_changed',best:null,minimum_invoice_cents:null};}
  }
  components(row:any){return reviewComponents(row.wc_orders,this.rules());}
+ quotes(row:any){return currentReviewQuotes(row);}
  async variantTarget(item:any,order?:any){
   let signature='',profile:any=null;
   for(const candidate of new Set([variantSignature(item),reviewSignature(order||{wc_order_items:[item]},this.rules())])){
