@@ -22,6 +22,7 @@ import {productId,componentNormal} from '../../../../../supabase/functions/_shar
 import {shippingProfileCatalog,savedProfileOptions} from '../../core/utils/shipping-profile-catalog';
 import {cartSizeFromOptions,cartSizeKey,cartSizeRows,isCartProduct} from './cart-size';
 import {CartMainPackagingComponent} from './cart-main-packaging.component';
+import {AddMainPackageComponent} from './add-main-package.component';
 import {BackdropPaintProfileComponent} from './backdrop-paint-profile.component';
 import {productFinishModes} from './product-finish';
 
@@ -105,7 +106,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[SavedPackingComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[AddMainPackageComponent,SavedPackingComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -200,6 +201,9 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             @if(isCart(p)){
             <div class="shipsection">
               <h3>{{isCart(p)?'Reusable Main packages':'Packages'}}</h3>
+              @for(editorKey of [p.id+':'+activeCartSize(p)];track editorKey){
+               <app-add-main-package [productId]="p.id" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" (packageSaved)="addSavedPackage($event)" />
+              }
               <div class="tablewrap">
                 <table class="shiptable">
                   <thead><tr><th>Source</th><th>Box</th><th>Name</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th></th></tr></thead>
@@ -420,6 +424,7 @@ export class ShippingDataComponent implements OnInit {
   }
 
   productPackages(id: string,sizeKey='') { return this.packages().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey)).sort((a,b)=>(a.package_no??0)-(b.package_no??0)); }
+  addSavedPackage(pkg:ShippingPackage){this.packages.update(rows=>[...rows.filter(row=>row.id!==pkg.id),pkg]);}
   basePackages(id: string,sizeKey='') { return this.productPackages(id,sizeKey).filter(x => x.source_type==='Base'); }
   productRules(id: string,sizeKey='') { return this.rules().filter(x => x.shipping_product_id===id&&(!sizeKey||x.size_key===sizeKey) && x.active!==false && x.effect_type!=='No effect' && (x.effect_type==='Replace profile'||Number(x.package_count_delta||0)!==0)); }
   addOnDescriptorKey(value:any){return [value?.rule_type,value?.match_name,value?.match_value].map(item=>componentNormal(item||'')).join(':');}
