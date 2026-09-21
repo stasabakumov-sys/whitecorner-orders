@@ -33,6 +33,73 @@ describe('Shop Floor mobile work selection',()=>{
   const {c,service,views,running}=await setup();running();c.chooseStage('CNC');c.chooseProduct(views[1]);
   expect(c.active()?.unit_id).toBe('u1');expect(c.dockLabel()).toContain('#TEST-1');expect(c.canStart()).toBe(false);expect(service.command).not.toHaveBeenCalled();
  });
+ it('distinguishes matching products by complete options and allocated add-ons',async()=>{
+  const {fixture,c,views}=await setup();
+  views[0].mainItem={product_name:'Essential Cart - Plywood Mobile Cart - Mobile Bar',wix_options:{Colour:'White',Size:'1300 mm','Side shelves':'Yes'},description_lines:[{name:{original:'Side shelves'},plainText:{original:'Yes'}}]};
+  views[1].mainItem={product_name:'Essential Cart - Plywood Mobile Cart',wix_options:{Colour:'Black',Size:'1300 mm','Side shelves':'No'}};
+  views[0].addons=[{item:{product_name:'Custom cutout',wix_options:{Shape:'Round'}},quantity:1}];
+  c.chooseStage('Assembly');fixture.changeDetectorRef.markForCheck();fixture.detectChanges();
+  const cards=fixture.nativeElement.querySelectorAll('.product-card');
+  expect(cards[0].querySelector('.product-name').textContent).toBe('Essential Cart');
+  expect(cards[1].querySelector('.product-name').textContent).toBe('Essential Cart');
+  expect(cards[0].textContent).toContain('Side shelves: Yes');
+  expect(cards[1].textContent).toContain('Side shelves: No');
+  expect(cards[0].textContent).toContain('Custom cutout × 1');
+  expect(cards[0].textContent).toContain('Shape: Round');
+  expect(cards[1].textContent).not.toContain('Custom cutout');
+  expect(c.cardOptions(views[0]).filter(x=>x==='Side shelves: Yes')).toHaveLength(1);
+  cards[1].click();expect(c.unitId).toBe('u2');
+ });
+ it('shows unfinished painting buttons, preserves sequence and keeps history collapsed',async()=>{
+  const {fixture,c,service,views}=await setup();views[0].status='Painting';
+  service.confirmedData.update(d=>({...d,units:d.units.map(u=>({...u,completed:['Painting:First primer']}))}));
+  service.data.set(structuredClone(service.confirmedData()));await c.chooseProduct(views[0]);fixture.changeDetectorRef.markForCheck();fixture.detectChanges();
+  const buttons=()=>Array.from(fixture.nativeElement.querySelectorAll('.painting-buttons button')) as HTMLButtonElement[];
+  expect(buttons().map(b=>b.textContent?.trim())).toEqual(['First sanding','Second primer','Second sanding','Finish coat','Repaint (optional)']);
+  expect(buttons()[0].disabled).toBe(false);expect(buttons()[1].disabled).toBe(true);
+  buttons()[0].click();fixture.detectChanges();expect(c.operation).toBe('First sanding');expect(buttons()[0].getAttribute('aria-pressed')).toBe('true');
+  const history=fixture.nativeElement.querySelector('.painting-statuses');expect(history.open).toBe(false);expect(history.textContent).toContain('First primer');expect(history.textContent).toContain('✓ Complete');
+  expect(c.paintingStatus('Second primer')).toBe('Waiting for previous operations');
+  // Optimistic offline completion must not hide an operation until confirmed.
+  service.data.update(d=>({...d,units:d.units.map(u=>({...u,completed:[...u.completed,'Painting:First sanding']}))}));fixture.detectChanges();
+  expect(buttons()[0].textContent).toContain('First sanding');
+  service.confirmedData.set(structuredClone(service.data()));fixture.detectChanges();
+  expect(buttons()[0].textContent).toContain('Second primer');expect(buttons()[0].disabled).toBe(false);
+ });
+ it('uses the saved backdrop painting sequence and reports active and repeatable work',async()=>{
+  const {fixture,c,service,views}=await setup();views[0].status='Painting';
+  service.confirmedData.update(d=>({...d,units:d.units.map(u=>({...u,paint_operations:['First primer','First sanding','Finish coat'],completed:['Painting:Repaint']}))}));
+  service.data.set(structuredClone(service.confirmedData()));await c.chooseProduct(views[0]);fixture.changeDetectorRef.markForCheck();fixture.detectChanges();
+  const buttons=fixture.nativeElement.querySelector('.painting-buttons');
+  expect(buttons.textContent).toContain('Primer');expect(buttons.textContent).not.toContain('Second');expect(buttons.textContent).toContain('Repaint again');
+  expect(fixture.nativeElement.querySelectorAll('.painting-statuses tbody tr')).toHaveLength(4);
+  const started=new Date().toISOString();service.data.update(d=>({...d,intervals:[{id:'paint',shift_id:'shift',worker_id:'worker',unit_id:'u1',stage:'Painting',operation:'First primer',part_id:null,started_at:started,ended_at:null}]}));
+  expect(c.paintingStatus('First primer')).toBe('Running');expect(c.paintingStatus('Repaint')).toBe('Recorded · repeatable');
+ });
+ it('keeps meaningful hyphens and handles missing names and options',async()=>{
+  const {c,views}=await setup();
+  expect(c.shortProductName('Fold-out Cart — Long description')).toBe('Fold-out Cart');
+  expect(c.shortProductName('Essential Cart – Plywood')).toBe('Essential Cart');
+  expect(c.shortProductName('Essential Cart')).toBe('Essential Cart');
+  expect(c.shortProductName(null)).toBe('Product');
+  expect(c.cardOptions(views[0])).toEqual([]);
+ });
+ it('shows the selected product photo and options in detail and handles a broken image',async()=>{
+  const {fixture,c,views,production}=await setup();
+  production.imageUrl=()=>'/test-product.png';
+  views[0].mainItem={product_name:'Essential Cart - Long description',wix_options:{'Side shelves':'Yes'}};
+  c.chooseProduct(views[0]);fixture.changeDetectorRef.markForCheck();fixture.detectChanges();
+  const heading=fixture.nativeElement.querySelector('.product-detail-heading');
+  const img=heading.querySelector('img');
+  expect(img.getAttribute('src')).toBe('/test-product.png');
+  expect(img.getAttribute('alt')).toBe('Essential Cart');
+  expect(heading.textContent).toContain('Order #TEST-1');
+  expect(heading.textContent).toContain('Side shelves: Yes');
+  img.dispatchEvent(new Event('error'));fixture.detectChanges();
+  expect(heading.querySelector('img')).toBeNull();
+  expect(heading.textContent).toContain('No image');
+  expect(c.unitId).toBe('u1');
+ });
  it('retains parts and selection until server confirmation, including queued failures',async()=>{
   const {c,service,views,running,fixture}=await setup();running();c.chooseProduct(views[0]);c.partId='body';
   const queued={id:'finish',action:'finish-operation',payload:{at:new Date().toISOString()}};
