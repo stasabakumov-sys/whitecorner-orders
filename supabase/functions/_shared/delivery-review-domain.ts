@@ -356,11 +356,11 @@ export async function resolveOrderPackaging(db:any,order:any,ignoredRules:any[]=
  // A cross-item saved combination is indivisible. Otherwise an exact item
  // profile takes precedence over reusable Base/option boxes for that item.
  for(const item of reviewItems(order,ignoredRules)){
-  if(catalogOnly)continue; // Order snapshots must not mask current Product measurements.
   const existing=boxes.filter(box=>box.contents.some(c=>c.order_item_id===item.id));
   if(existing.some(box=>box.contents.some(c=>c.order_item_id!==item.id)))continue;
   const variant=checked(await findPackagingProfile(db,variantSignature(item)));
-  if(variant){
+  const ownedProduct=(checked(products)||[]).find((product:any)=>product.id===variant?.shipping_product_id&&productForItem(item,[product]));
+  if(variant&&(!catalogOnly||ownedProduct&&variant.template_item)){
    const restored=expandVariant(variant.packages,item,ignoredRules);
    if(!restored.length)throw Error('The saved item packaging is incomplete. Review it in Products.');
    boxes=[...boxes.filter(box=>!existing.includes(box)),...restored];

@@ -10,9 +10,9 @@ import {orderProducts} from '../../core/utils/order-products';
 @Component({
  selector:'app-delivery-review',standalone:true,imports:[ProductLinkComponent,CommonModule,FormsModule],
  template:`
- <header><div><h1>Delivery Cost Review</h1><p>Saved estimates per order, with explicit recalculation after packaging corrections. Target: delivery including insurance ≤ 90% of the invoice delivery charge. Amounts include GST.</p></div>
+ <header><div><h1>Delivery Cost Review</h1><p>Automatic estimates using packaging from Products. Target: delivery including insurance ≤ 90% of the invoice delivery charge. Amounts include GST.</p></div>
  <button (click)="reload()" [disabled]="s.loading()||s.busy()">Refresh saved data</button></header>
- <div class="notice">All courier quotes are saved. Only Aramex, Couriers Please and FedEx count toward the target. Opening this report never requests a new quote.</div>
+ <div class="notice">All courier quotes are saved. Only Aramex, Couriers Please and FedEx count toward the target. Initial estimates run automatically from Products. Saved estimates are not automatically repeated.</div>
  @if(s.error()){<p class="error" role="alert">{{s.error()}}</p>}
  <div class="toolbar"><label>Show <select [(ngModel)]="filter"><option value="all">All orders</option><option value="attention">Needs attention</option><option value="within_target">Within target</option><option value="approved_exception">Approved exceptions</option><option value="approved_without_quote">Approved without quote</option><option value="packaging_required">Packaging required</option></select></label>
  <span>{{visible().length}} orders</span></div>
@@ -22,7 +22,7 @@ import {orderProducts} from '../../core/utils/order-products';
  <td>{{money(orderTotal(row))}}</td><td>{{money(invoice(row))}}</td><td>{{money(result.best?.total_cents)}}</td>
  <td>{{result.best?.quote?.courierName||'—'}}<small>{{result.best?.quote?.name}}</small></td>
  <td>{{money(increase(row))}}</td><td class="margin-cell"><span class="margin-badge" [attr.data-tone]="marginTone(row)">{{margin(row)}}</span></td><td><span class="badge" [attr.data-status]="result.status">{{label(result.status)}}</span></td>
- <td>@if(row.quoted_at){<span class="saved-date">{{row.quoted_at|date:'dd MMM yyyy'}}</span><span class="saved-time">{{row.quoted_at|date:'HH:mm'}}</span>}@else{—}</td><td><button (click)="open(row)">View / Packaging</button></td>
+ <td>@if(row.quoted_at){<span class="saved-date">{{row.quoted_at|date:'dd MMM yyyy'}}</span><span class="saved-time">{{row.quoted_at|date:'HH:mm'}}</span>}@else{—}</td><td><button (click)="open(row)">View report</button></td>
  </tr>}@empty{<tr><td colspan="10">{{s.loading()?'Loading…':'No new delivery orders to review.'}}</td></tr>}
  </tbody></table></div>
  @if(selected();as row){@let result=s.outcome(row);
@@ -46,30 +46,11 @@ import {orderProducts} from '../../core/utils/order-products';
  @if(row.approval_history?.length){<h3>Approval history</h3>@for(a of row.approval_history;track $index){<p>{{a.at|date:'dd MMM yyyy, HH:mm'}} · {{a.kind==='without_quote'?'Approved without quote':'Price exception'}} · {{a.reason}}<small>Approved by {{a.actor}}</small></p>}}
  <div class="address"><b>Delivery address:</b> {{address(row.wc_orders?.delivery_address)}}</div>
  <h3>Order composition &amp; packaging</h3>
- @if(editable(row)){
- <button (click)="loadCartPackaging(row,true)" [disabled]="variantLoading||s.busy()">Update packaging from Products</button>
- @if(cartPackagingLoading()){<p role="status">Loading Main + add-on packaging…</p>}
- @else if(s.error()){<button (click)="loadCartPackaging(row,true)" [disabled]="variantLoading||s.busy()">Retry packaging load</button>}
- @if(!cartPackagingLoading()&&packagingIssue(row)){<p class="error" role="alert">{{packagingIssue(row)}} Open Contents on a box to assign the missing components, or add their packaging. Calculation remains blocked until all components are assigned.</p>}
- @if(packagingPreview();as preview){
- <section class="notice" role="status">
- <p>Replace the current draft with packaging from Products? Any manual changes in this draft will be replaced. Saved packaging and quotes will not change until you save and recalculate.</p>
- <p>{{draft.length}} boxes → {{preview.length}} boxes</p>
- @if(previewIssue(row,preview)){<p class="error" role="alert">{{previewIssue(row,preview)}} You can load these boxes and complete their contents before calculating.</p>}
- @for(change of packagingChanges();track $index){<p>{{change}}</p>}
- <button (click)="applyPackagingPreview()" [disabled]="s.busy()||variantLoading">Replace draft</button>
- <button (click)="packagingPreview.set(null)" [disabled]="s.busy()">Keep current draft</button>
- </section>
- }
- }
- @if(!revising&&(canRequote(row)||result.status==='price_review_required')){
- <div class="review-actions">
- @if(canRequote(row)){<button (click)="startRevision(row)" [disabled]="s.busy()">Edit packaging and recalculate</button>}
- @if(result.status==='price_review_required'){<button (click)="approveCurrentPrice(row)" [disabled]="s.busy()">{{s.busy()?'Saving…':'Approve current delivery price'}}</button>}
- </div>
- }
- @if(revising){<p class="notice">Correct the boxes below. Saving requests one new estimate and archives the previous result. It does not book a shipment.</p><button (click)="cancelRevision(row)" [disabled]="s.busy()">Cancel changes</button>}
- <p>Assign packaging under each product. All {{packages(row).length}} boxes are sent together in one delivery quote for this order.</p>
+ <p class="notice">Packaging is managed in Products. Complete packaging is calculated automatically and the result is saved in this report.</p>
+ @if(automaticLoading()){<p role="status">Checking Products and calculating delivery…</p>}
+ @if(canRequote(row)){<button (click)="recalculateFromProducts(row)" [disabled]="s.busy()||automaticLoading()">Recalculate from Products</button>}
+ @if(result.status==='price_review_required'){<button (click)="approveCurrentPrice(row)" [disabled]="s.busy()">Approve current delivery price</button>}
+ <p>{{packages(row).length}} boxes in this order's estimate. To change packaging, open the product in Products.</p>
  @for(item of composition(row).unresolved;track item.id){<p role="alert">Composition review required: cannot assign {{item.product_name}} to a product. Its packaging components remain available below.</p>}
  @for(group of productGroups(row);track group.id){
  <section class="product-group" [attr.data-product-id]="group.id">
@@ -78,38 +59,22 @@ import {orderProducts} from '../../core/utils/order-products';
  @if(image(item)){<img [src]="image(item)" [alt]="item.product_name||'Product'" loading="lazy" />}
  <div class="product-description"><b><app-product-link [item]="item" /></b><div class="chips"><span>qty: {{item.quantity||1}}</span>@for(option of options(item);track option){<span>{{option}}</span>}</div></div>
  <span class="product-price">{{money(productTotal(item))}}</span>
- }@else{<b>Unassigned packaging — select its contents</b>}
+ }@else{<b>Unassigned packaging — review in Products</b>}
  </div>
  <div class="product-packages"><h4>{{group.boxes.length}} package(s)</h4>
  @for(source of group.sources;track source.id){
  @if(group.sources.length>1){<p><b><app-product-link [item]="source" /></b> · qty: {{source.quantity}}</p>}
- @if(editable(row)){<button [disabled]="s.busy()||variantLoading" (click)="configureVariant(source)">Configure packaging variant</button> <button [disabled]="s.busy()||variantLoading" (click)="loadVariant(source)">Load saved variant</button>
- @if(variantNotices()[source.id]){<p role="status">{{variantNotices()[source.id]}}</p>}}}
+ <p>Packaging: <app-product-link [item]="source" /></p>}
  @for(p of group.boxes;track p){
  <fieldset class="package-card" [disabled]="s.busy()"><legend>Package {{packageNumber(row,p)}}</legend>
- @if(editable(row)){
- <div class="package-fields"><label>Name<input [(ngModel)]="p.package_name" (ngModelChange)="confirmed=false" /></label>
- <label>L mm<input type="number" min="1" [(ngModel)]="p.length_mm" (ngModelChange)="confirmed=false" /></label><label>W mm<input type="number" min="1" [(ngModel)]="p.width_mm" (ngModelChange)="confirmed=false" /></label><label>H mm<input type="number" min="1" [(ngModel)]="p.height_mm" (ngModelChange)="confirmed=false" /></label><label>kg<input type="number" min="0.001" step="0.1" [(ngModel)]="p.weight_kg" (ngModelChange)="confirmed=false" /></label></div>
- }@else{<p><b>{{p.package_name}}</b> · {{p.length_mm}} × {{p.width_mm}} × {{p.height_mm}} mm · {{p.weight_kg}} kg</p>}
+ <p><b>{{p.package_name}}</b> · {{p.length_mm}} × {{p.width_mm}} × {{p.height_mm}} mm · {{p.weight_kg}} kg</p>
  <b>Assigned components:</b><ul>@for(c of p.contents;track c.id){<li>{{c.component_name}} · Unit {{c.unit_index}}</li>}@empty{<li>No components assigned</li>}</ul>
  @if(sharedBox(p)){<small>Shared box containing components from multiple products. Counted once in the order quote.</small>}
- @if(editable(row)){
- <details class="contents"><summary>Contents ({{p.contents.length}})</summary><div class="components">
- @for(c of s.components(row);track c.id){<label><input type="checkbox" [checked]="assigned(p,c)" (change)="toggle(p,c,$event)" />{{c.component_name}} · Unit {{c.unit_index}}<small>{{componentProduct(row,c)}}</small></label>}
- </div></details>
- <button (click)="removeBox(p)" [disabled]="s.busy()">Remove box</button>
- }
  </fieldset>
  }@empty{<p class="empty-packages">No packaging assigned to this product yet.</p>}
- @if(editable(row)&&group.item){<button (click)="addBox(group.sources[0].id)" [disabled]="s.busy()||cartPackagingLoading()">Add box</button>}
+
  @for(p of linkedBoxes(row,group.id);track p){<p class="shared-link">Also in shared package {{packageNumber(row,p)}}: {{p.package_name}} (shown under another product; counted once).</p>}
  </div></section>
- }
- @if(editable(row)){
- @if(packagingIssue(row)){<p class="error">{{packagingIssue(row)}}</p>}
- <label class="check"><input type="checkbox" [(ngModel)]="saveProfile" />Save packaging for the next identical order</label>
- <label class="check"><input type="checkbox" [(ngModel)]="confirmed" />I confirm all {{draft.length}} boxes and component assignments for this order's {{revising?'new':'initial'}} estimate.</label>
- <button class="primary" (click)="save(row)" [disabled]="s.busy()||!!packagingIssue(row)||!confirmed">{{s.busy()?'Saving and calculating…':(revising?'Save packaging and recalculate':'Save packaging and calculate once')}}</button>
  }
  @if(row.quote_attempted_at){
  <div class="summary"><div>Invoice delivery incl. GST<b>{{money(invoice(row))}}</b></div><div>Lowest eligible total<b>{{money(result.best?.total_cents)}}</b></div><div>Minimum invoice delivery incl. GST<b>{{money(result.minimum_invoice_cents)}}</b></div><div>Margin<b>{{margin(row)}}</b></div></div>
@@ -127,58 +92,13 @@ import {orderProducts} from '../../core/utils/order-products';
  styleUrl:'./delivery-review.component.css',
 })
 export class DeliveryReviewComponent implements OnInit {
- variantLoading=false;
- readonly cartPackagingLoading=signal(false);
- readonly packagingPreview=signal<ReviewPackage[]|null>(null);
- packagingChanges(){
-  const next=this.packagingPreview();if(!next)return [];
-  const describe=(p:ReviewPackage|undefined)=>p?`${p.package_name}: ${p.length_mm} × ${p.width_mm} × ${p.height_mm} mm, ${p.weight_kg} kg`:'—';
-  const identity=(p:ReviewPackage|undefined)=>JSON.stringify(p?[p.package_name,p.length_mm,p.width_mm,p.height_mm,p.weight_kg,p.contents.map(c=>[c.order_item_id,c.component_key,c.unit_index]).sort()]:null);
-  const changes=Array.from({length:Math.max(this.draft.length,next.length)},(_,i)=>identity(this.draft[i])===identity(next[i])?'':`Box ${i+1}: ${describe(this.draft[i])} → ${describe(next[i])}`).filter(Boolean);
-  return changes.length?changes:['Packaging already matches Products.'];
- }
- applyPackagingPreview(){
-  const boxes=this.packagingPreview();if(!boxes||this.s.busy()||this.variantLoading)return;
-  this.replacePackagingDraft(boxes);this.packagingPreview.set(null);
- }
- private replacePackagingDraft(boxes:ReviewPackage[]){
-  this.draft=boxes;this.boxOwners=new WeakMap();
-  for(const box of boxes)this.boxOwners.set(box,box.contents[0]?.order_item_id||'');
-  this.confirmed=false;this.saveProfile=false;
- }
- private packagingRequest=0;
- async loadCartPackaging(row:any,preview=false){
-  if(!this.editable(row)||this.variantLoading||this.s.busy())return;
-  const selected=this.selectedId(),request=++this.packagingRequest;this.variantLoading=true;this.cartPackagingLoading.set(true);this.packagingPreview.set(null);this.s.error.set('');
-  let timeout:ReturnType<typeof setTimeout>|undefined;
-  try{
-   const boxes=await Promise.race([this.s.previewCartPackaging(row.wc_orders,preview),new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(Error('Packaging loading timed out. Please retry.')),30000);})]);
-   if(this.selectedId()!==selected||request!==this.packagingRequest)return;
-   if(preview)this.packagingPreview.set(boxes);
-   else this.replacePackagingDraft(boxes);
-  }catch(e:any){if(this.selectedId()===selected&&request===this.packagingRequest)this.s.error.set(e.message);}
-  finally{clearTimeout(timeout);if(request===this.packagingRequest){this.variantLoading=false;this.cartPackagingLoading.set(false);}}
- }
- variantNotices=signal<Record<string,string>>({});
- async configureVariant(item:any){
-  if(this.variantLoading||this.s.busy())return;
-  this.variantLoading=true;const selected=this.selectedId();
-  this.variantNotices.update(messages=>({...messages,[item.id]:''}));
-  try{const target=await this.s.variantTarget(item,this.selected()?.wc_orders);if(this.selectedId()===selected)await this.router?.navigate(['/shipping-data'],{queryParams:target.productId?{productId:target.productId,variant:target.signature}:{product:target.productName,savedProfile:target.signature}});}
-  catch(e:any){this.variantNotices.update(messages=>({...messages,[item.id]:e.message}));}
-  finally{this.variantLoading=false;}
- }
- async loadVariant(item:any){
-  if(this.variantLoading||this.s.busy())return;
-  if(this.draft.some(p=>p.contents.some(c=>c.order_item_id===item.id)&&new Set(p.contents.map(c=>c.order_item_id)).size>1)){this.s.error.set('A box is shared with another product. Adjust its contents manually before loading a variant.');return;}
-  this.variantLoading=true;this.s.error.set('');
-  try{const boxes=await this.s.variantPackages(item);this.draft=[...this.draft.filter(p=>this.owner(p)!==item.id),...boxes];for(const p of boxes)this.boxOwners.set(p,item.id);this.confirmed=false;}
-  catch(e:any){this.s.error.set(e.message);}finally{this.variantLoading=false;}
- }
+ automaticLoading=signal(false);
+ async calculateFromProducts(row:any){if(this.automaticLoading()||row.quote_attempted_at||row.token)return;this.automaticLoading.set(true);try{await this.s.calculateFromProducts(row);}finally{this.automaticLoading.set(false);}}
+ async recalculateFromProducts(row:any){if(!this.canRequote(row)||this.automaticLoading())return;this.automaticLoading.set(true);try{await this.s.calculateFromProducts(row,true);}finally{this.automaticLoading.set(false);}}
 
  acceptUnknownCost=false;
  private boxOwners=new WeakMap<ReviewPackage,string>();
- filter='all';selectedId=signal<string|null>(null);reason='';draft:ReviewPackage[]=[];saveProfile=true;confirmed=false;
+ filter='all';selectedId=signal<string|null>(null);reason='';
  selected=computed(()=>this.s.rows().find(r=>r.order_id===this.selectedId())||null);
  constructor(public s:DeliveryReviewService, @Optional() private route?:ActivatedRoute,@Optional() private router?:Router){}
  ngOnInit(){void this.s.load().then(()=>{const number=this.route?.snapshot.queryParamMap.get('order');if(number){const row=this.s.rows().find(r=>String(r.wc_orders?.order_number)===number);if(row)this.open(row);}});}
@@ -193,19 +113,13 @@ export class DeliveryReviewComponent implements OnInit {
   }).sort((a,b)=>String(b.wc_orders?.order_number||'').localeCompare(String(a.wc_orders?.order_number||''),'en',{numeric:true})||String(a.order_id).localeCompare(String(b.order_id)));
  }
  async reload(){this.s.error.set('');await this.s.load();}
- revising=false;revisionVersion='';
  canRequote(row:any){return !row.token&&['failed','quoted','uncertain'].includes(row.state);}
- startRevision(row:any){if(!this.canRequote(row)||this.s.busy())return;this.open(row);this.revising=true;this.revisionVersion=row.updated_at;}
- cancelRevision(row:any){this.open(row);}
- async open(row:any){this.revising=false;this.revisionVersion='';this.acceptUnknownCost=false;this.selectedId.set(row.order_id);this.draft=structuredClone(row.packages||[]).map((p:ReviewPackage)=>({...p,contents:p.contents.filter(c=>!isNonPackagingComponent(c))}));this.boxOwners=new WeakMap();for(const p of this.draft)this.boxOwners.set(p,p.contents[0]?.order_item_id||'');this.reason='';this.confirmed=false;this.s.error.set('');
-  this.packagingRequest++;this.variantLoading=false;this.cartPackagingLoading.set(false);this.packagingPreview.set(null);
-  if(this.editable(row)&&!this.draft.length)await this.loadCartPackaging(row);
- }
- editable(row:any){return (this.revising&&this.canRequote(row))||!row.quote_attempted_at&&['pending','packaging_required','legacy_packaging_required','address_required','approved_without_quote'].includes(row.state);}
- canApproveWithoutQuote(row:any){return !this.revising&&!row.quote_attempted_at&&!row.token&&['pending','packaging_required','legacy_packaging_required','address_required','failed','approved_without_quote'].includes(row.state);}
+ async open(row:any){this.acceptUnknownCost=false;this.selectedId.set(row.order_id);this.reason='';this.s.error.set('');if(!row.quote_attempted_at)await this.calculateFromProducts(row);}
+ canApproveWithoutQuote(row:any){return !row.quote_attempted_at&&!row.token&&['pending','packaging_required','legacy_packaging_required','address_required','failed','approved_without_quote'].includes(row.state);}
  async approveWithoutQuote(row:any){if(this.canApproveWithoutQuote(row)&&this.acceptUnknownCost&&this.reason.trim().length>=3&&!this.s.busy())await this.s.approveWithoutQuote(row.order_id,this.reason);}
  packageNumbers=new WeakMap<ReviewPackage,number>();
- packages(row:any):ReviewPackage[]{const boxes=this.editable(row)?this.draft:(row.packages||[]).map((p:ReviewPackage)=>({...p,contents:(p.contents||[]).filter(c=>!isNonPackagingComponent(c))}));boxes.forEach((p:ReviewPackage,i:number)=>this.packageNumbers.set(p,i+1));return boxes;}
+ private displayedPackages=new WeakMap<object,ReviewPackage[]>();
+ packages(row:any):ReviewPackage[]{const source=row.packages||row;let boxes=this.displayedPackages.get(source);if(!boxes){boxes=(row.packages||[]).map((p:ReviewPackage)=>({...p,contents:(p.contents||[]).filter(c=>!isNonPackagingComponent(c))}));this.displayedPackages.set(source,boxes!);boxes!.forEach((p:ReviewPackage,i:number)=>this.packageNumbers.set(p,i+1));}return boxes!;}
  owner(p:ReviewPackage){return this.boxOwners.get(p)||p.contents[0]?.order_item_id||'';}
  composition(row:any){return orderProducts(row.wc_orders?.wc_order_items||[]);}
  productGroups(row:any){
@@ -219,18 +133,12 @@ export class DeliveryReviewComponent implements OnInit {
  }
  linkedBoxes(row:any,id:string){const group=this.productGroups(row).find(g=>g.id===id);return group?this.packages(row).filter(p=>!group.sources.some(s=>s.id===this.owner(p))&&p.contents.some(c=>group.sources.some(s=>s.id===c.order_item_id))):[];}
  sharedBox(p:ReviewPackage){return new Set(p.contents.map(c=>c.order_item_id)).size>1;}
- packageNumber(row:any,p:ReviewPackage){return this.packageNumbers.get(p)||(this.draft.indexOf(p)+1);}
+ packageNumber(row:any,p:ReviewPackage){return this.packageNumbers.get(p)||1;}
  componentProduct(row:any,c:PackageComponent){return row.wc_orders?.wc_order_items?.find((i:any)=>i.id===c.order_item_id)?.product_name||'';}
  options(item:any){return orderItemOptionLabels(item);}
  image(item:any){const x=item.image||{},r=item.raw_item||{};return x.url||x.imageUrl||x.imageInfo?.url||r.media?.url||r.image?.url||r.image?.imageInfo?.url||'';}
  productTotal(item:any){return cents(item.raw_item?.totalPriceAfterTax?.amount)??(cents(item.unit_price)===null?null:cents(item.unit_price)!*Math.max(1,Number(item.quantity)||1));}
  address(a:any){if(!a)return 'Not provided';const part=(v:any)=>typeof v==='object'?v?.name||v?.code||'':v;return [a.addressLine||a.addressLine1,a.city||a.suburb||a.locality,part(a.subdivision||a.state||a.region),a.postalCode||a.postcode||a.zipCode,part(a.country)].filter(Boolean).join(', ');}
- addBox(productId?:string){const p:ReviewPackage={package_name:'Package '+(this.draft.length+1),length_mm:0,width_mm:0,height_mm:0,weight_kg:0,contents:[]};this.boxOwners.set(p,productId||'');this.draft.push(p);this.confirmed=false;}
- removeBox(p:ReviewPackage){this.draft=this.draft.filter(box=>box!==p);this.confirmed=false;}
- assigned(p:ReviewPackage,c:PackageComponent){return p.contents.some(x=>x.id===c.id);}
- toggle(p:ReviewPackage,c:PackageComponent,event:Event){if((event.target as HTMLInputElement).checked){if(!this.assigned(p,c))p.contents.push(c);}else p.contents=p.contents.filter(x=>x.id!==c.id);this.confirmed=false;}
- packagingIssue(row:any){return packagingError(this.draft,this.s.components(row));}
- previewIssue(row:any,boxes:ReviewPackage[]){return packagingError(boxes,this.s.components(row));}
  orderTotal(row:any){return cents(row.wc_orders?.total);}
  invoice(row:any){return deliveryCents(row.wc_orders);}
  increase(row:any){const min=this.s.outcome(row).minimum_invoice_cents,invoice=this.invoice(row);return min==null||invoice==null?null:Math.max(0,min-invoice);}
@@ -238,7 +146,6 @@ export class DeliveryReviewComponent implements OnInit {
  margin(row:any){const invoice=this.invoice(row),best=this.s.outcome(row).best;return invoice&&best?`${((invoice-best.total_cents)/invoice*100).toFixed(1)}% (${this.money(invoice-best.total_cents)})`:'—';}
  money(value:number|null|undefined){return value==null?'—':new Intl.NumberFormat('en-AU',{style:'currency',currency:'AUD'}).format(value/100);}
  label(status:string){return ({importing:'Awaiting import',pending:'Awaiting calculation',packaging_required:'Packaging required',legacy_packaging_required:'Packaging required',address_required:'Address required',calculating:'Calculating',within_target:'Within target',price_review_required:'Price review required',approved_exception:'Approved exception',approved_without_quote:'Approved without quote',no_eligible_quotes:'No eligible quotes',failed:'Calculation failed',uncertain:'Response uncertain',data_changed:'Inputs changed — manual review',invoice_required:'Invoice delivery required'} as Record<string,string>)[status]||status;}
- async save(row:any){if(!this.confirmed||this.packagingIssue(row))return;if(this.s.busy())return;const ok=this.revising?await this.s.requotePackages({...row,updated_at:this.revisionVersion},this.draft,this.saveProfile):await this.s.savePackages(row.order_id,this.draft,this.saveProfile);if(ok)this.revising=false;}
  async approve(row:any){await this.s.approve(row.order_id,this.reason);}
  async approveCurrentPrice(row:any){if(this.s.outcome(row).status==='price_review_required'&&!this.s.busy())await this.s.approve(row.order_id,'Delivery price accepted for this order');}
 }

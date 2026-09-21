@@ -66,12 +66,12 @@ describe('Delivery cost policy and durable snapshots',()=>{
   const service=new DeliveryReviewService({client:{from:()=>q,functions:{invoke}}} as any);
   await service.load();await service.load();expect(invoke).not.toHaveBeenCalled();
  });
- it('blocks repeat packaging submissions while the first request is running',async()=>{
+ it('blocks concurrent automatic calculations while the first request is running',async()=>{
   let finish!:(value:any)=>void;
   const invoke=vi.fn(()=>new Promise(resolve=>finish=resolve));
   const service=new DeliveryReviewService({client:{functions:{invoke}}} as any);vi.spyOn(service,'load').mockResolvedValue();
-  const first=service.savePackages('order',[],false);
-  expect(service.busy()).toBe(true);expect(await service.savePackages('order',[],false)).toBe(false);
+  const first=service.calculateFromProducts({order_id:'order'});
+  expect(service.busy()).toBe(true);expect(await service.calculateFromProducts({order_id:'order'})).toBe(false);
   finish({data:{ok:true},error:null});expect(await first).toBe(true);expect(invoke).toHaveBeenCalledOnce();expect(service.busy()).toBe(false);
  });
 });
