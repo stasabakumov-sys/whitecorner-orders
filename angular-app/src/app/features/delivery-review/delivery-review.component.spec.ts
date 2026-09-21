@@ -11,29 +11,20 @@ describe('Delivery review UI',()=>{
   s.rows.set(rows);vi.spyOn(s,'outcome').mockImplementation((r:any)=>({status:r.status}) as any);
   expect(c.visible().map(r=>r.order_id)).toEqual(['b','c','a']);c.filter='attention';expect(c.visible().map(r=>r.order_id)).toEqual(['c','a']);expect(s.rows()).toEqual(rows);
  });
- it('opens a correction without quoting, preserves old packaging, and submits once with its original version',async()=>{
-  const service=new DeliveryReviewService({} as any);const requote=vi.spyOn(service,'requotePackages').mockResolvedValue(true);
-  const order={wc_order_items:[{id:'i',product_name:'Stand',quantity:1}]};
-  const row:any={order_id:'r',state:'failed',updated_at:'version1',quote_attempted_at:'date',wc_orders:order,packages:[{package_name:'Stand',length_mm:880,width_mm:730,height_mm:10,weight_kg:21,contents:reviewComponents(order)}]};
-  const c=new DeliveryReviewComponent(service);c.open(row);expect(c.editable(row)).toBe(false);
-  const boxes=c.packages(row);expect(c.packageNumber(row,boxes[0])).toBe(1);
-  c.startRevision(row);expect(c.editable(row)).toBe(true);expect(requote).not.toHaveBeenCalled();
-  c.draft[0].height_mm=100;expect(row.packages[0].height_mm).toBe(10);
-  await c.save(row);expect(requote).not.toHaveBeenCalled();c.confirmed=true;
-  await c.save({...row,updated_at:'version2'});
-  expect(requote).toHaveBeenCalledExactlyOnceWith({...row,updated_at:'version1'},c.draft,true);expect(c.revising).toBe(false);
-  expect(c.canRequote({...row,token:'active'})).toBe(false);
-  expect(c.canRequote({...row,state:'calculating'})).toBe(false);
-  c.startRevision(row);c.draft[0].height_mm=100;c.cancelRevision(row);expect(c.draft[0].height_mm).toBe(10);
+ it('calculates an unquoted order from Products and never recalculates a completed attempt on opening',async()=>{
+  const service=new DeliveryReviewService({} as any),calculate=vi.spyOn(service,'calculateFromProducts').mockResolvedValue(true),c=new DeliveryReviewComponent(service);
+  const row={order_id:'r',state:'packaging_required',updated_at:'v1',packages:[]};
+  await c.open(row);expect(calculate).toHaveBeenCalledExactlyOnceWith(row);
+  calculate.mockClear();const quoted={...row,state:'quoted',quote_attempted_at:'date'};await c.open(quoted);expect(calculate).not.toHaveBeenCalled();
+  await c.recalculateFromProducts(quoted);expect(calculate).toHaveBeenCalledExactlyOnceWith(quoted,true);
  });
  it('requires reason and risk acknowledgement for unquoted approval',async()=>{
   const s=new DeliveryReviewService({} as any);vi.spyOn(s,'load').mockResolvedValue();
-  const approve=vi.spyOn(s,'approveWithoutQuote').mockResolvedValue(true);
+  const approve=vi.spyOn(s,'approveWithoutQuote').mockResolvedValue(true);vi.spyOn(s,'calculateFromProducts').mockResolvedValue(true);
   const c=new DeliveryReviewComponent(s);const row:any={order_id:'order',state:'packaging_required',packages:[]};
   c.open(row);await c.approveWithoutQuote(row);expect(approve).not.toHaveBeenCalled();
   c.reason='First manufacture';await c.approveWithoutQuote(row);expect(approve).not.toHaveBeenCalled();
   c.acceptUnknownCost=true;await c.approveWithoutQuote(row);expect(approve).toHaveBeenCalledExactlyOnceWith('order','First manufacture');
-  expect(c.editable({...row,state:'approved_without_quote'})).toBe(true);
   expect(c.canApproveWithoutQuote({...row,quote_attempted_at:'2026-09-07'})).toBe(false);
   expect(c.canApproveWithoutQuote({...row,token:'worker'})).toBe(false);
  });
@@ -47,7 +38,7 @@ describe('Delivery review UI',()=>{
   outcome.mockReturnValue({best:{total_cents:0}} as any);expect(component.marginTone({wc_orders:{shipping:0}})).toBe('red');
  });
  it('groups packages by product but submits every physical box once in one order request',async()=>{
-  const service=new DeliveryReviewService({} as any);vi.spyOn(service,'load').mockResolvedValue();const save=vi.spyOn(service,'savePackages').mockResolvedValue(true);
+  const service=new DeliveryReviewService({} as any);vi.spyOn(service,'load').mockResolvedValue();const calculate=vi.spyOn(service,'calculateFromProducts').mockResolvedValue(true);
   const order={id:'grouped',currency:'AUD',shipping:100,total:540,delivery_address:{addressLine:'1 Test St',city:'TEST',state:'VIC',postalCode:'3000',country:'AU'},wc_order_items:[{id:'cart',product_name:'Cart',quantity:2,unit_price:110,wix_options:{Shelf:'Yes'}},{id:'stand',product_name:'Stand',quantity:1,unit_price:220}]};
   const components=reviewComponents(order),box=(contents:any[])=>({package_name:'Box',length_mm:500,width_mm:400,height_mm:300,weight_kg:5,contents});
   const packages=[box(components.filter(c=>c.order_item_id==='cart')),box(components.filter(c=>c.order_item_id==='stand')),box([components[0],components.at(-1)!])];
@@ -56,10 +47,13 @@ describe('Delivery review UI',()=>{
   const f=TestBed.createComponent(DeliveryReviewComponent);f.detectChanges();const c=f.componentInstance;c.open(row);f.detectChanges();
   expect(f.nativeElement.querySelectorAll('.product-group')).toHaveLength(2);expect(f.nativeElement.querySelectorAll('.package-card')).toHaveLength(3);
   expect(f.nativeElement.querySelector('[data-product-id="cart"]').textContent).toContain('Shelf: Yes');expect(f.nativeElement.querySelector('[data-product-id="stand"]').textContent).toContain('Also in shared package');
-  expect(c.productGroups(row).flatMap(g=>g.boxes)).toHaveLength(3);expect(c.packagingIssue(row)).toBe('');c.confirmed=true;await c.save(row);
-  expect(save).toHaveBeenCalledExactlyOnceWith('grouped',c.draft,true);
-  const request=buildReviewRequest(order,save.mock.calls[0][1]);expect(request.items).toHaveLength(3);expect(request.items.reduce((sum,i)=>sum+i.weight*i.quantity,0)).toBe(15);
-  c.addBox('stand');expect(c.productGroups(row).find(g=>g.id==='stand')!.boxes).toHaveLength(2);expect(c.confirmed).toBe(false);expect(c.packagingIssue(row)).not.toBe('');
+  expect(c.productGroups(row).flatMap(g=>g.boxes)).toHaveLength(3);
+  const request=buildReviewRequest(order,packages);expect(request.items).toHaveLength(3);expect(request.items.reduce((sum,i)=>sum+i.weight*i.quantity,0)).toBe(15);
+  const text=f.nativeElement.textContent;
+  for(const removed of ['Add box','Remove box','Save packaging for the next','I confirm all','Load saved variant','Configure packaging variant'])expect(text).not.toContain(removed);
+  expect(f.nativeElement.querySelectorAll('.package-card input')).toHaveLength(0);
+  expect(calculate).toHaveBeenCalledExactlyOnceWith(row);
+
  });
  it('shows excluded carriers in the persisted quote, displays the shortfall and requires an exception reason',async()=>{
   const service=new DeliveryReviewService({} as any);vi.spyOn(service,'load').mockResolvedValue();
@@ -71,7 +65,7 @@ describe('Delivery review UI',()=>{
   const body=f.nativeElement.textContent;expect(body).toContain('TNT');expect(body).toContain('Carrier excluded by policy');expect(body).toContain('$5.56');expect(body).toContain('Price review required');
   expect(body).toContain('Order total incl. GST');expect(body).toContain('$210.00');expect(body).toContain('Invoice delivery incl. GST');expect(body).toContain('$100.00');expect(body).not.toContain('$90.91');
   const button=[...f.nativeElement.querySelectorAll('button')].find((b:any)=>b.textContent.includes('Approve current')) as HTMLButtonElement;
-  const actions=button.closest('.review-actions')!;expect(actions.firstElementChild!.textContent).toContain('Edit packaging');expect(actions.lastElementChild).toBe(button);
+  expect(body).toContain('Recalculate from Products');expect(body).not.toContain('Edit packaging');
   const approve=vi.spyOn(service,'approve').mockResolvedValue(true);button.click();await f.whenStable();
   expect(approve).toHaveBeenCalledExactlyOnceWith('order','Delivery price accepted for this order');expect(service.load).toHaveBeenCalledOnce();
  });

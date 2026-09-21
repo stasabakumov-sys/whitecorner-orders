@@ -24,16 +24,8 @@ describe('Safe packaging variant navigation',()=>{
    const s=new DeliveryReviewService({client:{from}} as any);await expect(s.variantTarget(item)).rejects.toThrow('No packaging variant');expect(from).toHaveBeenCalledTimes(2);
   }
  });
- it('keeps the order and draft open on failure and suppresses repeated clicks',async()=>{
-  let reject:any;const variantTarget=vi.fn(()=>new Promise((_resolve,r)=>reject=r)),navigate=vi.fn();
-  const s={rows:signal([]),busy:signal(false),variantTarget};const c=new DeliveryReviewComponent(s as any,undefined,{navigate} as any);c.selectedId.set('order');c.draft=[{package_name:'Unfinished box'}] as any;
-  const pending=c.configureVariant(item);await c.configureVariant(item);expect(variantTarget).toHaveBeenCalledTimes(1);
-  reject(Error('No packaging variant'));await pending;expect(navigate).not.toHaveBeenCalled();expect(c.selectedId()).toBe('order');expect(c.draft[0].package_name).toBe('Unfinished box');expect(c.variantNotices()['item']).toBe('No packaging variant');
- });
- it('opens only the verified product and variant when the check succeeds',async()=>{
-  const navigate=vi.fn();const c=new DeliveryReviewComponent({rows:signal([]),busy:signal(false),variantTarget:async()=>({productId:'correct',signature:'exact'})} as any,undefined,{navigate} as any);await c.configureVariant(item);
-  expect(navigate).toHaveBeenCalledWith(['/shipping-data'],{queryParams:{productId:'correct',variant:'exact'}});
- });
+
+
  it('never defaults an explicit missing or ambiguous link to the first product',async()=>{
   const products=[{id:'first',product_name:'Other cart'},{id:'second',product_name:'Other cart'}];
   for(const params of [{product:'Missing cart'},{product:'Other cart'},{productId:'missing'},{productId:'second'},{}]){

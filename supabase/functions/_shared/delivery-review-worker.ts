@@ -23,6 +23,8 @@ export async function courierReviewCall(route:'quotes'|'insurance-list'|'package
 // The durable attempted_at guard is committed BEFORE the one permitted POST.
 // Even a timeout or failure to persist the response never reopens this guard.
 export async function processDeliveryReview(db:any,orderId:string,call:(route:'quotes'|'insurance-list'|'package-contents-list',payload:any)=>Promise<any>){
+ // Existing orders also become eligible once Products has complete packaging.
+ checked(await db.from('wc_delivery_reviews').update({state:'pending'}).eq('order_id',orderId).eq('state','legacy_packaging_required').is('quote_attempted_at',null).is('token',null));
  const token=crypto.randomUUID();
  const claimed=checked(await db.rpc('wc_claim_delivery_review',{p_order_id:orderId,p_token:token}));
  if(!claimed)return;
@@ -34,10 +36,9 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
   if(order.currency!=='AUD'){await save({state:'failed',error:'Only AUD orders can be evaluated.',token:null});return;}
   const review=checked(await db.from('wc_delivery_reviews').select('*').eq('order_id',orderId).single());
   const components=reviewComponents(order,rules),signature=reviewSignature(order,rules);
-  let packages=review.packages||[];
-  if(!packages.length)packages=await resolveOrderPackaging(db,order,rules);
+  const packages=await resolveOrderPackaging(db,order,rules,true);
   const error=packagingError(packages,components);
-  if(error){await save({state:'packaging_required',error,token:null});return;}
+  if(error){await save({state:'packaging_required',packages,error:`${error} Update packaging in Products; the initial estimate will run automatically when complete.`,token:null});return;}
   let request:any;
   try{request=buildReviewRequest(order,packages);}catch{await save({state:'address_required',error:'Complete the Australian delivery address in Wix. No quote has been requested.',packages,token:null});return;}
   try {
@@ -54,7 +55,7 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
   const snapshot={input_key:reviewInputKey(order,rules),signature,packages,insurance,goods_including_gst_cents:goodsCents(order),
    assumptions:{destination_building_type:'residential',pickup_tail_lift:false,dropoff_tail_lift:false,collection_date:'Not sent for this initial estimate; the existing quotes request has no collectionDate field.'}};
   const current=await reviewContext(db,orderId);
-  if(reviewInputKey(current.order,current.rules)!==snapshot.input_key){await save({state:'packaging_required',error:'Order inputs changed during preparation. Confirm packaging for the updated order.',packages:[],token:null});return;}
+  if(reviewInputKey(current.order,current.rules)!==snapshot.input_key){await save({state:'packaging_required',error:'Order inputs changed during preparation. Packaging will be checked again from Products.',packages:[],token:null});return;}
   // Atomic compare-and-set also protects against accidental future call-site retries.
   checked(await db.from('wc_delivery_reviews').update({state:'calculating',quote_attempted_at:new Date().toISOString(),request,snapshot,input_key:snapshot.input_key,packages,insurance_response:insuranceResponse,error:null})
    .eq('order_id',orderId).eq('token',token).is('quote_attempted_at',null).select('order_id').single());
@@ -73,7 +74,7 @@ export async function processDeliveryReview(db:any,orderId:string,call:(route:'q
 }
 
 export async function processDeliveryQueue(db:any,call:(route:'quotes'|'insurance-list'|'package-contents-list',payload:any)=>Promise<any>){
- const rows=checked(await db.from('wc_delivery_reviews').select('order_id').in('state',['pending','packaging_required','address_required','calculating']).is('quote_attempted_at',null).order('updated_at').limit(5))||[];
+ const rows=checked(await db.from('wc_delivery_reviews').select('order_id').in('state',['pending','packaging_required','legacy_packaging_required','address_required','calculating']).is('quote_attempted_at',null).order('updated_at').limit(5))||[];
  // Parallel independent orders; each has its own durable claim. A slow quote
  // cannot consume the entire worker lifetime before another order starts.
  await Promise.all(rows.map((r:any)=>processDeliveryReview(db,r.order_id,call)));

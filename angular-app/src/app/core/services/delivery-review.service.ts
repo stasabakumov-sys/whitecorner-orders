@@ -60,8 +60,7 @@ export class DeliveryReviewService {
  async variantPackages(item:any){
   return this.previewCartPackaging({wc_order_items:[item]});
  }
- async requotePackages(row:any,packages:ReviewPackage[],saveProfile:boolean){return this.perform({action:'requote-packages',orderId:row.order_id,expectedVersion:row.updated_at,confirmRequote:true,packages,saveProfile});}
- async savePackages(orderId:string,packages:ReviewPackage[],saveProfile:boolean){return this.perform({action:'packages',orderId,packages,saveProfile});}
+ async calculateFromProducts(row:any,recalculate=false){return this.perform({action:recalculate?'recalculate-from-products':'calculate-from-products',orderId:row.order_id,expectedVersion:row.updated_at});}
  async approve(orderId:string,reason:string){return this.perform({action:'approve',orderId,reason});}
  async approveWithoutQuote(orderId:string,reason:string){return this.perform({action:'approve-without-quote',orderId,reason});}
  private async perform(body:any){

@@ -25,15 +25,16 @@ function setup(){
  const order={id:'order',currency:'AUD',shipping:300,subtotal:110,fulfillment_status:'NOT_FULFILLED',delivery_type:'Shipping',delivery_address:{city:'Test',state:'VIC',postalCode:'3000'},wc_order_items:[{id:'item',product_name:'Cart',unit_price:110,quantity:1}]};
  const components=domain.reviewComponents(order);
  const review={order_id:'order',state:'pending',packages:[{package_name:'Cart',length_mm:1000,width_mm:500,height_mm:100,weight_kg:10,contents:components}],quote_attempted_at:null,token:null};
+ const catalog={boxes:structuredClone(review.packages)};
  const db={rpc:async(_name,args)=>{if(review.quote_attempted_at||review.token)return {data:false};review.token=args.p_token;return {data:true};},from:table=>{
   let patch=null,checks=[];const q={select:()=>q,eq:(k,v)=>{checks.push([k,v]);return q;},is:(k,v)=>{checks.push([k,v]);return q;},order:()=>q,range:async()=>({data:[]}),update:p=>{patch=p;return q;},single:async()=>result(),maybeSingle:async()=>result(),then:resolve=>resolve(result())};
-  function result(){if(table==='wc_orders')return {data:order};if(table==='wc_shipping_rules')return {data:[]};if(table==='wc_shipping_packages'||table==='wc_shipping_products')return {data:[]};if(table==='wc_delivery_packaging_profiles')return {data:null};
-   if(patch){if(checks.some(([k,v])=>review[k]!==v))return {error:{message:'CAS failed'}};Object.assign(review,patch);}
+  function result(){if(table==='wc_orders')return {data:order};if(table==='wc_shipping_rules')return {data:[]};if(table==='wc_shipping_products')return {data:[{id:'p',product_name:order.wc_order_items[0].product_name,active:true}]};if(table==='wc_shipping_packages')return {data:catalog.boxes.map((box,i)=>({...box,shipping_product_id:'p',source_type:'Base',size_key:'',package_no:i+1}))};if(table==='wc_delivery_packaging_profiles')return {data:null};
+   if(patch){if(checks.some(([k,v])=>review[k]!==v))return {data:null};Object.assign(review,patch);}
    return {data:review};
   }return q;
  }};
  let calls=[];const call=async(route,payload)=>{calls.push({route,payload});return route==='package-contents-list'?{http_status:200,body:{status:true,data:['general']}}:route==='insurance-list'?{http_status:200,body:{status:true,data:['Free up to $500']}}:{http_status:200,body:{status:true,orderId:'saved-draft',data:[{courierName:'TNT',priceIncludingGst:5},{courierName:'Aramex',priceIncludingGst:100}]}};};
- return {order,review,db,calls,call};
+ return {order,review,db,calls,call,catalog};
 }
 test('one concurrent claimant; all carriers and complete response persist; re-entry never quotes again',async()=>{
  const s=setup();await Promise.all([processDeliveryReview(s.db,'order',s.call),processDeliveryReview(s.db,'order',s.call)]);await processDeliveryReview(s.db,'order',s.call);
@@ -49,7 +50,7 @@ test('backdrop resolves stale contents from live reference data and persists the
   assert.equal(resolved.items[0].height,9);
  }
  const s=setup();s.order.wc_order_items[0].product_name='Event Full Arch Backdrop';
- s.review.packages=[{package_name:'Backdrop',length_mm:1030,width_mm:1030,height_mm:90,weight_kg:24,contents:domain.reviewComponents(s.order)}];
+ s.catalog.boxes=[{package_name:'Backdrop',length_mm:1030,width_mm:1030,height_mm:90,weight_kg:24,contents:domain.reviewComponents(s.order)}];
  await processDeliveryReview(s.db,'order',s.call);
  assert.equal(s.review.request.items[0].contents,'general');
  assert.equal(s.review.request.items[0].height,9);assert.equal(s.review.packages[0].package_name,'Backdrop');
@@ -74,9 +75,32 @@ test('timeout after POST remains uncertain and cannot cause a second POST',async
  await processDeliveryReview(s.db,'order',call);await processDeliveryReview(s.db,'order',call);assert.equal(s.review.state,'uncertain');assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);assert.ok(s.review.quote_attempted_at);
 });
 test('missing packaging waits without requests; adding complete packaging triggers exactly one quote',async()=>{
- const s=setup(),packages=s.review.packages;s.review.packages=[];
+ const s=setup(),packages=s.catalog.boxes;s.catalog.boxes=[];
  await processDeliveryReview(s.db,'order',s.call);assert.equal(s.review.state,'packaging_required');assert.equal(s.calls.length,0);
- s.review.packages=packages;s.review.state='pending';await processDeliveryReview(s.db,'order',s.call);assert.equal(s.review.state,'quoted');assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);
+ s.catalog.boxes=packages;await processDeliveryReview(s.db,'order',s.call);assert.equal(s.review.state,'quoted');assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);
+});
+test('initial calculation uses Products instead of a stale review snapshot',async()=>{
+ const s=setup();s.review.packages[0].weight_kg=99;s.catalog.boxes[0].weight_kg=12;
+ await processDeliveryReview(s.db,'order',s.call);
+ assert.equal(s.review.packages[0].weight_kg,12);assert.equal(s.review.request.items[0].weight,12);
+ assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);
+});
+test('legacy unquoted reviews enter automatic processing without packaging confirmation',async()=>{
+ const s=setup();s.review.state='legacy_packaging_required';
+ await processDeliveryReview(s.db,'order',s.call);await processDeliveryReview(s.db,'order',s.call);
+ assert.equal(s.review.state,'quoted');assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);
+});
+test('report calculation ignores client boxes and rejects the retired packaging editor action',async()=>{
+ const s=setup();s.order.id='00000000-0000-4000-8000-000000000001';s.review.order_id=s.order.id;
+ let handler;const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');
+ const output=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+ const client={...s.db,auth:{getUser:async()=>({data:{user:{id:'actor'}}})}};
+ vm.runInNewContext(output,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>client}:p.includes('delivery-review-worker')?{...moduleAt(path.resolve(path.dirname(file),p)),courierReviewCall:s.call}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:n=>n==='DELIVERY_REVIEW_ENABLED'?'true':'fixture'}},Response,Request,console});
+ const call=action=>handler(new Request('http://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'},body:JSON.stringify({action,orderId:s.order.id,packages:[{weight_kg:999}],saveProfile:true})}));
+ assert.equal((await call('packages')).status,409);assert.equal(s.calls.length,0);
+ assert.equal((await call('calculate-from-products')).status,200);
+ assert.equal(s.review.packages[0].weight_kg,10);assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);
+ assert.equal((await call('calculate-from-products')).status,200);assert.equal(s.calls.filter(c=>c.route==='quotes').length,1);
 });
 test('HTTP rejection response is retained with no repeat quote',async()=>{
  const s=setup();const call=async(route,p)=>route==='quotes'?(s.calls.push({route}),{http_status:422,body:{status:false,code:'TEST',data:[]}}):s.call(route,p);

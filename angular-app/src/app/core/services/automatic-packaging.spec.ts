@@ -1,7 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import {DeliveryReviewService} from './delivery-review.service';
-import {DeliveryReviewComponent} from '../../features/delivery-review/delivery-review.component';
-import {packagingError,reviewComponents,reviewSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {packagingError,reviewComponents,reviewSignature,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 // Catalogue measurements verified in Products; no customer/address payload.
 const cart={id:'main',product_name:'MDF Mobile Bar Cart with Decorative Wheels – Foldable Serving Cart',quantity:1,catalog_reference:{catalogItemId:'938e83e2-5331-9ddf-82b2-85721b4f3170'},wix_options:{Colour:'White','Internal Shelf':'Yes','Side shelves':'No'}};
@@ -24,29 +23,15 @@ function setup(){
  return {tables,invoke,from,fail:(table:string)=>fail=table,service:new DeliveryReviewService({client:{from,functions:{invoke}}} as any)};
 }
 describe('Automatic modular packaging',()=>{
- it('previews current Products measurements before replacing manual edits and never quotes',async()=>{
-  const s=setup(),c=new DeliveryReviewComponent(s.service),row={order_id:'trial',state:'packaging_required',wc_orders:order,packages:[]};
-  s.service.rows.set([row]);await c.open(row);c.draft[0].weight_kg=24;c.confirmed=true;
-  const original=c.draft;s.tables['wc_shipping_rules'][0].height_mm=40;
-  s.tables['wc_delivery_packaging_profiles']=[{signature:reviewSignature(order),packages:structuredClone(original)}];
-  await c.loadCartPackaging(row,true);
-  expect(c.draft).toBe(original);expect(c.draft[3].height_mm).toBe(4);
-  expect(c.packagingChanges().join(' ')).toContain('40 mm');
-  c.packagingPreview.set(null);expect(c.draft[0].weight_kg).toBe(24);
-  await c.loadCartPackaging(row,true);c.applyPackagingPreview();
-  expect(c.draft[3].height_mm).toBe(40);expect(c.draft[0].weight_kg).toBe(22.5);
-  expect(c.confirmed).toBe(false);expect(c.saveProfile).toBe(false);expect(s.invoke).not.toHaveBeenCalled();
-  c.draft[3].height_mm=45;expect(c.draft[3].height_mm).toBe(45);
+ it('uses the current product-owned profile while ignoring an old order-only snapshot',async()=>{
+  const s=setup(),single={wc_order_items:[cart]},contents=reviewComponents(single);
+  s.tables['wc_delivery_packaging_profiles']=[{signature:variantSignature(cart),packages:[{...dimensions('Old order snapshot',999,999,999,99),contents}]}];
+  expect((await s.service.previewCartPackaging(single,true))[0].package_name).toBe('Front/Sides/MDF wheels');
+  s.tables['wc_delivery_packaging_profiles'][0]={signature:variantSignature(cart),shipping_product_id:'product',template_item:cart,packages:[{...dimensions('Product profile',1200,600,120,24),contents}]};
+  const boxes=await s.service.previewCartPackaging(single,true);expect(boxes).toHaveLength(1);expect(boxes[0].package_name).toBe('Product profile');expect(packagingError(boxes,contents)).toBe('');
  });
- it('preserves the draft on sync failure and clears a pending preview when another order opens',async()=>{
-  const s=setup(),c=new DeliveryReviewComponent(s.service),row={order_id:'trial',state:'packaging_required',wc_orders:order,packages:[]};
-  s.service.rows.set([row]);await c.open(row);const original=c.draft;
-  s.fail('wc_shipping_rules');await c.loadCartPackaging(row,true);
-  expect(c.draft).toBe(original);expect(c.packagingPreview()).toBeNull();expect(s.service.error()).toContain('Could not load');
-  s.fail('');await c.loadCartPackaging(row,true);
-  await c.open({...row,order_id:'another',packages:original});
-  expect(c.packagingPreview()).toBeNull();
- });
+
+
  it('loads three Main boxes, selected Shelf and separate Back panel without a Size or custom combination',async()=>{
   const s=setup(),boxes=await s.service.previewCartPackaging(order);
   expect(boxes.map(box=>[box.package_name,box.contents[0].order_item_id,box.contents[0].component_key])).toEqual([
@@ -74,40 +59,10 @@ describe('Automatic modular packaging',()=>{
   s.tables['wc_shipping_rules'][1].size_key=null;
   expect(await s.service.previewCartPackaging(order)).toHaveLength(5);
  });
- it('retains found boxes when addon packaging is missing and blocks quoting',async()=>{
-  const s=setup();expect(await s.service.previewCartPackaging({...order,order_number:'10824'})).toHaveLength(5);
-  s.tables['wc_shipping_rules']=s.tables['wc_shipping_rules'].filter(rule=>rule.rule_type!=='Add-on');
-  const c=new DeliveryReviewComponent(s.service),row={order_id:'partial',state:'packaging_required',wc_orders:order,packages:[]};
-  s.service.rows.set([row]);await c.open(row);
-  expect(c.draft).toHaveLength(4);expect(s.service.error()).toBe('');
-  expect(c.packagingIssue(row)).toContain('Back panel');
-  c.confirmed=true;await c.save(row);expect(s.invoke).not.toHaveBeenCalled();
- });
- it('loads complete Main packaging without assignments for decorative style options',async()=>{
-  const s=setup(),size='Size I (W1200mm x H1200mm x D600mm)';
-  s.tables['wc_shipping_packages'].forEach(box=>box.size_key='size i w1200mm x h1200mm x d600mm');
-  const wc_orders={wc_order_items:[{...cart,wix_options:{Size:size,'Front Panel Style':'With Trim Frame','Lower Counter Edge':'Standard'}}]};
-  const row={order_id:'style-options',state:'packaging_required',wc_orders,packages:[]},c=new DeliveryReviewComponent(s.service);
-  s.service.rows.set([row]);await c.open(row);
-  expect(c.draft).toHaveLength(3);expect(s.service.components(row).map(component=>component.component_key)).toEqual(['main']);
-  await c.save(row);expect(s.invoke).not.toHaveBeenCalled();
-  expect(c.packagingIssue(row)).toBe('');
- });
- it('leaves the draft intact on read failure and replaces it without duplication on repeated success',async()=>{
-  const s=setup(),c=new DeliveryReviewComponent(s.service),row={order_id:'trial',state:'packaging_required',wc_orders:order,packages:[]};
-  s.service.rows.set([row]);await c.open(row);c.addBox('main');const original=c.draft;
-  s.fail('wc_shipping_rules');await c.loadCartPackaging(row);expect(c.draft).toBe(original);expect(s.service.error()).toContain('Could not load');
-  s.fail('');await c.loadCartPackaging(row);await c.loadCartPackaging(row);
-  expect(c.draft).toHaveLength(5);expect(c.packagingIssue(row)).toBe('');expect(c.confirmed).toBe(false);expect(c.saveProfile).toBe(false);expect(s.invoke).not.toHaveBeenCalled();
- });
- it('automatically loads on opening any order, but preserves saved packages',async()=>{
-  const s=setup(),c=new DeliveryReviewComponent(s.service),row={order_id:'trial',state:'packaging_required',wc_orders:order,packages:[] as any[]};
-  s.service.rows.set([row]);await c.open(row);
-  expect(c.draft).toHaveLength(5);expect(c.cartPackagingLoading()).toBe(false);expect(c.confirmed).toBe(false);expect(s.invoke).not.toHaveBeenCalled();
-  const preview=vi.spyOn(s.service,'previewCartPackaging');
-  await c.open({...row,packages:c.draft});expect(preview).not.toHaveBeenCalled();expect(c.draft).toHaveLength(5);
-  await c.open({...row,wc_orders:{...order,order_number:'10824'}});expect(preview).toHaveBeenCalledOnce();expect(c.draft).toHaveLength(5);
- });
+
+
+
+
  it('uses generic catalogue IDs and product types, multiplies quantity and excludes unselected options',async()=>{
   const s=setup(),other={...cart,id:'other',quantity:2,catalog_reference:{catalogItemId:'another-product'},wix_options:{'Internal Shelf':'No','Side shelves':'No'}};
   s.tables['wc_shipping_products'][0].wix_product_id='another-product';
