@@ -2,23 +2,27 @@ import {ChangeDetectorRef, Component, Input, OnChanges, Optional, SimpleChanges}
 import {FormsModule} from '@angular/forms';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {ShopPart} from '../shop-floor/shop-floor.models';
+import {Folding,foldingLabel} from '../costing/production-cost';
 
 interface CncSheet {
- id:string; product_id:string; sheet_number:number; name:string; material_id:string|null; parts:ShopPart[]; comment:string;
+ id:string; product_id:string; sheet_number:number; name:string; material_id:string|null; folding:Folding|null; parts:ShopPart[]; comment:string;
  object_path:string|null; filename:string|null; size_bytes:number|null; revision:string;
 }
 
 @Component({selector:'app-product-cnc',standalone:true,imports:[FormsModule],template:`
  <section class="cnc">
-  <div class="heading"><div><h3>CNC · cutting sheets</h3><p>Each row is one physical sheet of material. Attach the parts to cut from it and its .crv3d file.</p></div><button (click)="add()" [disabled]="loading||busy||!productId">Add sheet</button></div>
+  <div class="heading"><div><h3>CNC · cutting sheets</h3><p>Each row is one physical sheet of material. Attach the parts to cut from it and its .crv3d file.</p></div><button (click)="add()" [disabled]="loading||busy||!productId||(backdrop&&requireOrderFolding&&!orderFolding)">Add sheet</button></div>
   @if(loading){<p role="status">Loading cutting sheets…</p>}
   @if(materialsLoading){<p role="status">Loading materials…</p>}
   @if(partsLoading){<p role="status">Loading Assembling parts…</p>}
   @if(busy){<p role="status">{{activity==='upload'?'Uploading and saving CNC file…':'Saving cutting sheet…'}}</p>}
   @if(error){<p class="error" role="alert">{{error}} @if(loadError){<button (click)="load()" [disabled]="loading||busy">Retry load</button>}</p>}
   @if(success){<p role="status">{{success}}</p>}
-  @if(!loading){<div class="table-wrap"><table><thead><tr><th>No</th><th>Name</th><th>Material</th><th>Parts from Assembling</th><th>CNC file</th><th>Comment</th><th></th></tr></thead><tbody>
-   @for(row of sheets;track $index){<tr>
+  @if(backdrop && !orderFolding){<nav class="folding-tabs" aria-label="Backdrop CNC folding option"><button type="button" [class.active]="activeFolding==='foldable'" [attr.aria-pressed]="activeFolding==='foldable'" (click)="activeFolding='foldable'">Foldable</button><button type="button" [class.active]="activeFolding==='nonfoldable'" [attr.aria-pressed]="activeFolding==='nonfoldable'" (click)="activeFolding='nonfoldable'">Non-foldable</button></nav>}
+  @if(backdrop && orderFolding){<p class="variant-note">{{foldingLabel(orderFolding)}} CNC sheets for this order</p>}
+  @if(backdrop && requireOrderFolding && !orderFolding){<p class="error" role="alert">This order has no clear Foldable option. Check its product options before using CNC sheets.</p>}
+  @if(!loading && (!backdrop || !requireOrderFolding || orderFolding)){<div class="table-wrap"><table><thead><tr><th>No</th><th>Name</th><th>Material</th><th>Parts from Assembling</th><th>CNC file</th><th>Comment</th><th></th></tr></thead><tbody>
+   @for(row of visibleSheets();track row.id || $index){<tr>
     <td><input type="number" min="1" step="1" aria-label="Cutting sheet number" [(ngModel)]="row.sheet_number"></td>
     <td><input aria-label="Cutting sheet name" maxlength="150" [(ngModel)]="row.name" placeholder="Enter name"></td>
     <td><select aria-label="Cutting sheet material" [(ngModel)]="row.material_id" [disabled]="materialsLoading"><option [ngValue]="null">{{materialsLoading?'Loading materials…':'Choose material'}}</option>@for(material of materialOptions(row);track material.id){<option [ngValue]="material.id">{{material.name}} · {{material.unit}}{{material.active?'':' (archived)'}}</option>}</select></td>
@@ -37,6 +41,7 @@ interface CncSheet {
  </section>`,styles:[`
  :host{display:block;min-width:0;container-type:inline-size}
  .cnc{min-width:0}.heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.heading h3{margin:0 0 4px}.heading p{margin:0;color:var(--wc-muted);font-size:.875rem}
+ .folding-tabs{display:flex;gap:6px;margin:0 0 12px}.folding-tabs button{border:1px solid var(--wc-border);border-radius:6px;background:var(--wc-surface);padding:6px 10px;cursor:pointer}.folding-tabs button.active{border-color:var(--p-primary-color);color:var(--p-primary-color);font-weight:600}.variant-note{margin:0 0 10px;color:var(--wc-muted)}
  .table-wrap{border:1px solid var(--wc-border);border-radius:12px;background:var(--wc-surface)}table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:.875rem}
  th,td{padding:5px 4px;text-align:left;vertical-align:middle;border-bottom:1px solid var(--wc-border);min-width:0;overflow-wrap:anywhere}th{line-height:1.2}tr:last-child td{border-bottom:0}
  th:nth-child(1){width:7%}th:nth-child(2){width:16%}th:nth-child(3){width:19%}th:nth-child(4){width:18%}th:nth-child(5){width:17%}th:nth-child(6){width:17%}th:nth-child(7){width:6%}
@@ -51,18 +56,23 @@ interface CncSheet {
  @container (max-width:760px){table,tbody{display:block}thead{display:none}tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;padding:8px}tr+tr{border-top:1px solid var(--wc-border)}td{display:block;width:100%;padding:0;border:0}td:nth-child(3),td:nth-child(4),td:nth-child(6),td[colspan]{grid-column:1/-1}td:not(:last-child)::before{display:block;margin-bottom:3px;color:var(--wc-muted);font-size:.8rem;font-weight:600}td:nth-child(1)::before{content:'No'}td:nth-child(2)::before{content:'Name'}td:nth-child(3)::before{content:'Material'}td:nth-child(4)::before{content:'Parts from Assembling'}td:nth-child(5)::before{content:'CNC file'}td:nth-child(6)::before{content:'Comment'}td:last-child{align-self:end}}
  `]})
 export class ProductCncComponent implements OnChanges {
- @Input() productId=''; @Input() parts:ShopPart[]|null=null;
- sheets:CncSheet[]=[]; catalogParts:ShopPart[]=[]; materials:{id:string;name:string;unit:string;active:boolean}[]=[]; loading=false; materialsLoading=false; partsLoading=false; loadError=false; busy=''; activity:''|'save'|'upload'=''; error=''; success=''; private generation=0;private loadedProductId='';
+ @Input() productId=''; @Input() parts:ShopPart[]|null=null; @Input() backdrop=false; @Input() orderFolding:Folding|''=''; @Input() requireOrderFolding=false;
+ sheets:CncSheet[]=[]; catalogParts:ShopPart[]=[]; variantParts:Record<Folding,ShopPart[]>={foldable:[],nonfoldable:[]}; activeFolding:Folding='foldable'; foldingLabel=foldingLabel;
+ materials:{id:string;name:string;unit:string;active:boolean}[]=[]; loading=false; materialsLoading=false; partsLoading=false; loadError=false; busy=''; activity:''|'save'|'upload'=''; error=''; success=''; private generation=0;private loadedProductId='';
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
  private refresh(){this.cdr?.markForCheck();}
- ngOnChanges(changes:SimpleChanges){if(changes['productId'])void this.load();}
- async load(){const generation=++this.generation;this.loading=true;this.materialsLoading=true;this.partsLoading=this.parts===null;this.loadError=false;this.error='';this.success='';if(this.loadedProductId!==this.productId){this.sheets=[];this.catalogParts=[];this.materials=[];this.loadedProductId=this.productId;}
+ ngOnChanges(changes:SimpleChanges){if(changes['productId']||changes['orderFolding'])this.activeFolding=this.orderFolding||'foldable';if(changes['productId'])void this.load();}
+ visibleSheets(){const folding=this.orderFolding||this.activeFolding;return this.sheets.filter(row=>this.backdrop?row.folding===folding:!row.folding);}
+ async load(){const generation=++this.generation;this.loading=true;this.materialsLoading=true;this.partsLoading=this.parts===null;this.loadError=false;this.error='';this.success='';if(this.loadedProductId!==this.productId){this.sheets=[];this.catalogParts=[];this.variantParts={foldable:[],nonfoldable:[]};this.materials=[];this.loadedProductId=this.productId;}
   if(!this.productId){this.sheets=[];this.loading=false;this.materialsLoading=false;this.partsLoading=false;this.refresh();return;}
   const materialLoad=this.loadMaterials().then(data=>{if(generation===this.generation)this.materials=data;})
    .catch(e=>{if(generation===this.generation){this.error+=` Could not load materials. ${this.message(e)} Retry load.`;this.loadError=true;}})
    .finally(()=>{if(generation===this.generation){this.materialsLoading=false;this.refresh();}});
-  const templates=this.parts===null?this.db.client.from('wc_shop_templates').select('parts').eq('product_id',this.productId):Promise.resolve({data:[],error:null});
-  const templateLoad=Promise.resolve(templates).then(({data,error})=>{if(error)throw error;if(generation===this.generation)this.catalogParts=[...new Map((data||[]).flatMap((t:{parts:ShopPart[]})=>t.parts||[]).map((p:ShopPart)=>[p.id,p])).values()];})
+  const templates=this.parts===null?this.db.client.from('wc_shop_templates').select('parts,folding').eq('product_id',this.productId):Promise.resolve({data:[],error:null});
+  const templateLoad=Promise.resolve(templates).then(({data,error})=>{if(error)throw error;if(generation===this.generation){const rows=(data||[]) as {parts:ShopPart[];folding:Folding|null}[];
+    this.catalogParts=[...new Map(rows.flatMap(t=>t.parts||[]).map(p=>[p.id,p])).values()];
+    this.variantParts={foldable:[...new Map(rows.filter(t=>t.folding==='foldable').flatMap(t=>t.parts||[]).map(p=>[p.id,p])).values()],nonfoldable:[...new Map(rows.filter(t=>t.folding==='nonfoldable').flatMap(t=>t.parts||[]).map(p=>[p.id,p])).values()]};
+   }})
    .catch(e=>{if(generation===this.generation&&this.parts===null){this.error+=` Could not load Assembling parts. ${this.message(e)} Retry load.`;this.loadError=true;}})
    .finally(()=>{if(generation===this.generation){this.partsLoading=false;this.refresh();}});
   try{const sheets=await this.db.client.from('wc_product_cnc_sheets').select('*').eq('product_id',this.productId).order('sheet_number');
@@ -74,14 +84,16 @@ export class ProductCncComponent implements OnChanges {
  }
  private async loadMaterials(){const all:{id:string;name:string;unit:string;active:boolean}[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.from('wc_materials').select('id,name,unit,active').order('name').order('id').range(start,start+249);if(error)throw error;all.push(...(data||[]));if((data||[]).length<250)return all;}}
  materialOptions(row:CncSheet){return this.materials.filter(m=>m.active||m.id===row.material_id);}
- add(){this.error='';this.success='';this.sheets=[...this.sheets,{id:'',product_id:this.productId,sheet_number:Math.max(0,...this.sheets.map(s=>Number(s.sheet_number)||0))+1,name:'',material_id:null,parts:[],comment:'',object_path:null,filename:null,size_bytes:null,revision:''}];}
- availableParts(row:CncSheet){return (this.parts??this.catalogParts).filter(p=>!row.parts.some(x=>x.id===p.id));}
- addPart(row:CncSheet,id:string){const part=(this.parts??this.catalogParts).find(p=>p.id===id);if(part)row.parts=[...row.parts,{id:part.id,name:part.name}];}
+ add(){if(this.backdrop&&this.requireOrderFolding&&!this.orderFolding)return;this.error='';this.success='';const folding=this.backdrop?(this.orderFolding||this.activeFolding):null;
+  this.sheets=[...this.sheets,{id:'',product_id:this.productId,sheet_number:Math.max(0,...this.sheets.filter(s=>s.folding===folding).map(s=>Number(s.sheet_number)||0))+1,name:'',material_id:null,folding,parts:[],comment:'',object_path:null,filename:null,size_bytes:null,revision:''}];}
+ private partsFor(row:CncSheet){return this.parts??(this.backdrop&&row.folding?this.variantParts[row.folding]:this.catalogParts);}
+ availableParts(row:CncSheet){return this.partsFor(row).filter(p=>!row.parts.some(x=>x.id===p.id));}
+ addPart(row:CncSheet,id:string){const part=this.partsFor(row).find(p=>p.id===id);if(part)row.parts=[...row.parts,{id:part.id,name:part.name}];}
  removePart(row:CncSheet,id:string){row.parts=row.parts.filter(p=>p.id!==id);}
  async save(row:CncSheet){if(this.busy)return;this.error='';this.loadError=false;this.success='';if(!Number.isSafeInteger(Number(row.sheet_number))||Number(row.sheet_number)<1){this.error='Enter a positive whole sheet number, then retry.';return;}
   if(!row.material_id||!this.materialOptions(row).some(m=>m.id===row.material_id)){this.error='Choose a material from the list, then retry.';return;}
   const draft={sheet_number:Number(row.sheet_number),name:row.name,material_id:row.material_id,parts:structuredClone(row.parts),comment:row.comment};
-  this.busy=row.id||'new';this.activity='save';try{const {data,error}=await this.db.client.rpc('wc_save_product_cnc_sheet',{p_id:row.id||null,p_product:this.productId,p_number:draft.sheet_number,p_name:draft.name,p_material:draft.material_id,p_parts:draft.parts,p_comment:draft.comment,p_expected:row.revision||null});if(error)throw error;
+  this.busy=row.id||'new';this.activity='save';try{const {data,error}=await this.db.client.rpc('wc_save_product_cnc_sheet',{p_id:row.id||null,p_product:this.productId,p_number:draft.sheet_number,p_name:draft.name,p_material:draft.material_id,p_parts:draft.parts,p_comment:draft.comment,p_folding:row.folding,p_expected:row.revision||null});if(error)throw error;
    if(!data?.id)throw Error('Server did not confirm the saved sheet');row.id=data.id;row.revision=data.revision;
    if(row.sheet_number===draft.sheet_number)row.sheet_number=data.sheet_number;
    if(row.name===draft.name)row.name=data.name;

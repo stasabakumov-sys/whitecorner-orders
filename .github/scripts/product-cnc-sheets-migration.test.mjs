@@ -11,7 +11,7 @@ try{
  await db.exec(`create role anon; create role authenticated; create schema auth; create schema storage;
  create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
  create function storage.foldername(path text) returns text[] language sql immutable as $$select string_to_array(path,'/')$$;
- create table public.wc_shipping_products(id uuid primary key, product_name text);
+ create table public.wc_shipping_products(id uuid primary key, product_name text, product_type text);
  create table public.wc_materials(id uuid primary key, name text not null, unit text not null, active boolean not null default true);
  create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
  create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text,metadata jsonb);
@@ -19,9 +19,9 @@ try{
  grant usage on schema public,storage,auth to authenticated;
  grant select,insert,delete on storage.objects to authenticated;`);
  await db.exec(await readFile('supabase/migrations/20260922000100_product_cnc_sheets.sql','utf8'));
- const actor=randomUUID(),product=randomUUID(),other=randomUUID();
+ const actor=randomUUID(),product=randomUUID(),other=randomUUID(),backdropProduct=randomUUID();
  await db.query("select set_config('test.actor',$1,false)",[actor]);
- await db.query('insert into public.wc_shipping_products values($1,$2),($3,$4)',[product,'Market Table',other,'Other Product']);
+ await db.query('insert into public.wc_shipping_products(id,product_name) values($1,$2),($3,$4),($5,$6)',[product,'Market Table',other,'Other Product',backdropProduct,'Plane Arch Backdrop']);
  const parts=[{id:'side-panel',name:'Side panel'}];
  const saved=(await db.query('select to_jsonb(public.wc_save_product_cnc_sheet(null,$1,1,$2,$3,$4,null)) value',[product,'Birch sheet',parts,'Cut along grain'])).rows[0].value;
  assert.equal(saved.product_id,product);assert.deepEqual(saved.parts,parts);assert.equal(saved.comment,'Cut along grain');
@@ -76,5 +76,20 @@ try{
  const crv=(await db.query('select to_jsonb(public.wc_attach_product_cnc_file($1,$2,$3,456,$4)) value',[saved.id,crvPath,'cut.crv3d',crc.revision])).rows[0].value;
  assert.equal(crv.filename,'cut.crv3d');assert.equal(crv.object_path,crvPath);
  await db.exec('reset role');
- console.log('CNC cutting sheets: schema, product scope, revisions, historical TAP and CRC3D, new CRV3D, material and RLS passed.');
+ const oldBackdrop=(await db.query('select to_jsonb(public.wc_save_product_cnc_sheet(null,$1,1,$2,$3,$4,$5,null)) value',[backdropProduct,'Old unassigned sheet',parts,'Re-enter later',material])).rows[0].value;
+ await db.exec(await readFile('supabase/migrations/20260922000500_product_cnc_backdrop_folding.sql','utf8'));
+ assert.equal((await db.query('select count(*)::int n from public.wc_product_cnc_sheets where product_id=$1',[backdropProduct])).rows[0].n,0);
+ assert.equal((await db.query('select count(*)::int n from public.wc_product_cnc_sheets where id=$1',[saved.id])).rows[0].n,1);
+ await assert.rejects(async()=>db.query('select public.wc_save_product_cnc_sheet(null,$1,1,$2,$3,$4,$5,null,null)',[backdropProduct,'Missing option',parts,'',material]),/correct CNC folding option/);
+ await assert.rejects(async()=>db.query('select public.wc_save_product_cnc_sheet(null,$1,3,$2,$3,$4,$5,$6,null)',[product,'Wrong option',parts,'',material,'foldable']),/correct CNC folding option/);
+ const folded=(await db.query('select to_jsonb(public.wc_save_product_cnc_sheet(null,$1,1,$2,$3,$4,$5,$6,null)) value',[backdropProduct,'Foldable sheet',parts,'',material,'foldable'])).rows[0].value;
+ const flat=(await db.query('select to_jsonb(public.wc_save_product_cnc_sheet(null,$1,1,$2,$3,$4,$5,$6,null)) value',[backdropProduct,'Non-foldable sheet',parts,'',material,'nonfoldable'])).rows[0].value;
+ assert.equal(folded.sheet_number,flat.sheet_number);assert.notEqual(folded.id,flat.id);
+ await assert.rejects(async()=>db.query('select public.wc_save_product_cnc_sheet($1,$2,1,$3,$4,$5,$6,$7,$8)',[folded.id,backdropProduct,'Wrong tab',parts,'',material,'nonfoldable',folded.revision]),/another folding option/);
+ await assert.rejects(async()=>db.query('select public.wc_save_product_cnc_sheet(null,$1,1,$2,$3,$4,$5,$6,null)',[backdropProduct,'Duplicate',parts,'',material,'foldable']),/duplicate key/);
+ await db.exec('set role authenticated');
+ await assert.rejects(async()=>db.query("update public.wc_product_cnc_sheets set folding='nonfoldable' where id=$1",[folded.id]),/permission denied/);
+ await db.exec('reset role');
+ assert.notEqual(oldBackdrop.id,folded.id);
+ console.log('CNC cutting sheets: historical files, Backdrop folding isolation and re-entry, material, revisions and RLS passed.');
 }catch(error){console.error(error.message,error.where||'',error.position||'');process.exitCode=1;}finally{await db.close();}

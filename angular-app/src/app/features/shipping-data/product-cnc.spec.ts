@@ -15,6 +15,25 @@ function setup(){
 }
 
 describe('Product CNC cutting sheets',()=>{
+ it('separates Foldable and Non-foldable sheets and Assembling parts',()=>{
+  const {component}=setup();component.backdrop=true;
+  component.variantParts={foldable:[{id:'fold',name:'Folding hinge'}],nonfoldable:[{id:'flat',name:'Flat brace'}]};
+  component.add();const folded=component.sheets[0];component.activeFolding='nonfoldable';component.add();const flat=component.sheets[1];
+  expect(folded.folding).toBe('foldable');expect(flat.folding).toBe('nonfoldable');expect(folded.sheet_number).toBe(1);expect(flat.sheet_number).toBe(1);
+  expect(component.visibleSheets()).toEqual([flat]);expect(component.availableParts(flat).map(p=>p.id)).toEqual(['flat']);
+  component.orderFolding='foldable';expect(component.visibleSheets()).toEqual([folded]);expect(component.availableParts(folded).map(p=>p.id)).toEqual(['fold']);
+ });
+ it('shows separate Backdrop tabs while retaining non-Backdrop rows',()=>{
+  const fixture=TestBed.configureTestingModule({imports:[ProductCncComponent],providers:[{provide:SupabaseService,useValue:{client:{}}}]}).createComponent(ProductCncComponent);
+  const component=fixture.componentInstance;component.productId='product';component.backdrop=true;component.add();component.activeFolding='nonfoldable';component.add();fixture.detectChanges();
+  const root=fixture.nativeElement as HTMLElement;
+  expect(root.querySelectorAll('.folding-tabs button')).toHaveLength(2);expect(root.querySelectorAll('tbody tr')).toHaveLength(1);
+  expect(root.querySelector('.folding-tabs button.active')?.textContent).toBe('Non-foldable');
+  const regularFixture=TestBed.createComponent(ProductCncComponent);
+  regularFixture.componentInstance.productId='regular-product';regularFixture.componentInstance.add();regularFixture.detectChanges();
+  const regularRoot=regularFixture.nativeElement as HTMLElement;
+  expect(regularRoot.querySelector('.folding-tabs')).toBeNull();expect(regularRoot.querySelectorAll('tbody tr')).toHaveLength(1);
+ });
  it('places icon actions beside the filename and uses the short sheet header',()=>{
   const fixture=TestBed.configureTestingModule({imports:[ProductCncComponent],providers:[{provide:SupabaseService,useValue:{client:{}}}]}).createComponent(ProductCncComponent);
   const component=fixture.componentInstance;component.productId='product';component.add();

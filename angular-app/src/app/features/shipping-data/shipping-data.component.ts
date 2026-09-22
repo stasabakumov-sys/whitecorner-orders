@@ -267,7 +267,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" (catalogUpdated)="updateCatalog(p.id,$event)" /></section>
             }
             @if(detailTab==='cnc'){
-              <section class="shipsection">@if(p.saved_only){<p class="mut">Save this product in Products before adding CNC sheets.</p>}@else{<app-product-cnc [productId]="p.id" />}</section>
+              <section class="shipsection">@if(p.saved_only){<p class="mut">Save this product in Products before adding CNC sheets.</p>}@else{<app-product-cnc [productId]="p.id" [backdrop]="isBackdrop(p)" />}</section>
             }
           } @else {
             <div class="mut">No products in this filter.</div>
