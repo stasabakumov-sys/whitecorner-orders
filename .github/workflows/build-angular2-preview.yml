@@ -31,6 +31,8 @@ on:
       - 'supabase/migrations/*_shop_floor_skip_zero_sanding.sql'
       - '.github/scripts/shop-floor-zero-sanding*'
       - 'supabase/migrations/*_shop_floor_cnc_auto_snapshot.sql'
+      - 'supabase/migrations/*_product_cnc_sheets.sql'
+      - '.github/scripts/product-cnc-sheets*'
       - '.github/scripts/shop-floor-cnc-auto-snapshot*'
       - '.github/workflows/shop-floor-cnc-auto-snapshot-release.yml'
       - 'supabase/migrations/*_backdrop_default_raw_finish.sql'
@@ -81,6 +83,8 @@ on:
       - 'supabase/migrations/*_shop_floor_skip_zero_sanding.sql'
       - '.github/scripts/shop-floor-zero-sanding*'
       - 'supabase/migrations/*_shop_floor_cnc_auto_snapshot.sql'
+      - 'supabase/migrations/*_product_cnc_sheets.sql'
+      - '.github/scripts/product-cnc-sheets*'
       - '.github/scripts/shop-floor-cnc-auto-snapshot*'
       - '.github/workflows/shop-floor-cnc-auto-snapshot-release.yml'
       - 'supabase/migrations/*_backdrop_default_raw_finish.sql'
@@ -163,6 +167,8 @@ jobs:
         run: node .github/scripts/shop-floor-zero-sanding.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse automatic CNC snapshot
         run: node .github/scripts/shop-floor-cnc-auto-snapshot.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Rehearse CNC cutting sheets
+        run: node .github/scripts/product-cnc-sheets-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse Hub-only test orders
         run: node .github/scripts/hub-test-orders.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Publish clean preview path
