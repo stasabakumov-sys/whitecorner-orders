@@ -17,7 +17,7 @@ interface CncSheet {
   @if(busy){<p role="status">{{activity==='upload'?'Uploading and saving CNC file…':'Saving cutting sheet…'}}</p>}
   @if(error){<p class="error" role="alert">{{error}} @if(loadError){<button (click)="load()" [disabled]="loading||busy">Retry load</button>}</p>}
   @if(success){<p role="status">{{success}}</p>}
-  @if(!loading){<div class="table-wrap"><table><thead><tr><th>Sheet no.</th><th>Name</th><th>Material</th><th>Parts from Assembling</th><th>CNC file</th><th>Comment</th><th></th></tr></thead><tbody>
+  @if(!loading){<div class="table-wrap"><table><thead><tr><th>No</th><th>Name</th><th>Material</th><th>Parts from Assembling</th><th>CNC file</th><th>Comment</th><th></th></tr></thead><tbody>
    @for(row of sheets;track $index){<tr>
     <td><input type="number" min="1" step="1" aria-label="Cutting sheet number" [(ngModel)]="row.sheet_number"></td>
     <td><input aria-label="Cutting sheet name" maxlength="150" [(ngModel)]="row.name" placeholder="Enter name"></td>
@@ -25,24 +25,30 @@ interface CncSheet {
     <td><div class="parts">@for(part of row.parts;track part.id){<span>{{part.name}} <button type="button" [attr.aria-label]="'Remove '+part.name" (click)="removePart(row,part.id)">×</button></span>}</div>
       <select aria-label="Add Assembling part" #partSelect (change)="addPart(row,partSelect.value);partSelect.value=''" [disabled]="parts===null&&partsLoading"><option value="">{{parts===null&&partsLoading?'Loading parts…':'Add part…'}}</option>@for(part of availableParts(row);track part.id){<option [value]="part.id">{{part.name}}</option>}</select>
     </td>
-    <td>@if(row.filename){<button class="filename" (click)="download(row)" [disabled]="busy">{{row.filename}}</button><small>{{fileSize(row.size_bytes||0)}}</small>}
-      @if(row.id){<label class="upload">{{busy===row.id&&activity==='upload'?'Uploading…':row.filename?'Replace .crv3d':'Upload .crv3d'}}<input type="file" accept=".crv3d" [disabled]="busy" (change)="upload(row,$event)"></label>}
+    <td>@if(row.filename){<div class="file-line"><button type="button" class="filename" (click)="download(row)" [disabled]="busy">{{row.filename}}</button>
+      @if(row.id){<label class="icon-control replace-icon" title="Replace CNC file"><i class="pi pi-refresh" [class.pi-spin]="busy===row.id&&activity==='upload'" aria-hidden="true"></i><input type="file" accept=".crv3d" aria-label="Replace CNC file" [disabled]="busy" (change)="upload(row,$event)"></label>}</div><small>{{fileSize(row.size_bytes||0)}}</small>}
+      @else if(row.id){<label class="upload">{{busy===row.id&&activity==='upload'?'Uploading…':'Upload .crv3d'}}<input type="file" accept=".crv3d" aria-label="Upload CNC file" [disabled]="busy" (change)="upload(row,$event)"></label>}
       @else{<small>Save the sheet first</small>}
     </td>
     <td><textarea aria-label="Cutting sheet comment" maxlength="4000" rows="2" [(ngModel)]="row.comment" placeholder="Comment"></textarea></td>
-    <td><button (click)="save(row)" [disabled]="busy">{{busy===row.id?'Saving…':'Save'}}</button></td>
+    <td><button type="button" class="icon-control save-icon" (click)="save(row)" [disabled]="busy" [attr.aria-label]="busy===row.id?'Saving cutting sheet':'Save cutting sheet'" [attr.title]="busy===row.id?'Saving cutting sheet':'Save cutting sheet'"><i class="pi pi-save" aria-hidden="true"></i></button></td>
    </tr>}@empty{<tr><td colspan="7">No cutting sheets yet.</td></tr>}
   </tbody></table></div>}
  </section>`,styles:[`
  :host{display:block;min-width:0;container-type:inline-size}
  .cnc{min-width:0}.heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.heading h3{margin:0 0 4px}.heading p{margin:0;color:var(--wc-muted);font-size:.875rem}
  .table-wrap{border:1px solid var(--wc-border);border-radius:12px;background:var(--wc-surface)}table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:.875rem}
- th,td{padding:7px 5px;text-align:left;vertical-align:top;border-bottom:1px solid var(--wc-border);min-width:0;overflow-wrap:anywhere}th{line-height:1.25}tr:last-child td{border-bottom:0}
- th:nth-child(1){width:8%}th:nth-child(2){width:15%}th:nth-child(3){width:20%}th:nth-child(4){width:17%}th:nth-child(5){width:14%}th:nth-child(6){width:17%}th:nth-child(7){width:9%}
- td input:not([type=file]),td select,td textarea{box-sizing:border-box;width:100%;min-width:0;max-width:100%;padding:6px;font-size:inherit}td textarea{resize:vertical}td:last-child button{width:100%;min-width:0;padding:6px 3px;font-size:inherit;white-space:nowrap}
- .parts{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px}.parts span{background:var(--wc-ground);border-radius:5px;padding:3px 5px;overflow-wrap:anywhere}.parts button{padding:0 3px;border:0;background:transparent}
- .upload{display:block;position:relative;overflow:hidden;border:1px solid var(--wc-border);border-radius:6px;padding:6px 3px;cursor:pointer;width:100%;text-align:center;white-space:nowrap}.upload input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}.filename{display:block;max-width:100%;overflow-wrap:anywhere;text-align:left}.error{color:#991b1b;background:#fff1f1;border:1px solid #fecaca;padding:9px;border-radius:6px}small{display:block;color:var(--wc-muted)}
- @container (max-width:760px){table,tbody{display:block}thead{display:none}tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px;padding:10px}tr+tr{border-top:1px solid var(--wc-border)}td{display:block;width:100%;padding:0;border:0}td:nth-child(3),td:nth-child(4),td:nth-child(6),td[colspan]{grid-column:1/-1}td:not(:last-child)::before{display:block;margin-bottom:4px;color:var(--wc-muted);font-size:.8rem;font-weight:600}td:nth-child(1)::before{content:'Sheet no.'}td:nth-child(2)::before{content:'Name'}td:nth-child(3)::before{content:'Material'}td:nth-child(4)::before{content:'Parts from Assembling'}td:nth-child(5)::before{content:'CNC file'}td:nth-child(6)::before{content:'Comment'}td textarea{min-height:58px}td:last-child{align-self:end}}
+ th,td{padding:5px 4px;text-align:left;vertical-align:top;border-bottom:1px solid var(--wc-border);min-width:0;overflow-wrap:anywhere}th{line-height:1.2}tr:last-child td{border-bottom:0}
+ th:nth-child(1){width:7%}th:nth-child(2){width:16%}th:nth-child(3){width:19%}th:nth-child(4){width:18%}th:nth-child(5){width:17%}th:nth-child(6){width:17%}th:nth-child(7){width:6%}
+ td input:not([type=file]),td select,td textarea{box-sizing:border-box;width:100%;min-width:0;max-width:100%;padding:4px 6px;font-size:inherit;border:1px solid var(--wc-border);border-radius:6px;background:var(--wc-surface);color:inherit;box-shadow:none}
+ td input:not([type=file]),td select{height:30px}td textarea{min-height:42px;resize:vertical}td:last-child{text-align:center}
+ .parts{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:3px}.parts span{background:var(--wc-ground);border-radius:5px;padding:2px 4px;overflow-wrap:anywhere}.parts button{padding:0 2px;border:0;background:transparent}
+ .upload{display:inline-block;position:relative;overflow:hidden;border:1px solid var(--wc-border);border-radius:6px;padding:5px 7px;cursor:pointer;max-width:100%;text-align:center;white-space:nowrap}
+ .upload input,.replace-icon input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}.upload:focus-within,.replace-icon:focus-within{outline:2px solid currentColor;outline-offset:2px}
+ .file-line{display:flex;align-items:flex-start;gap:4px;min-width:0}.filename{flex:0 1 auto;min-width:0;max-width:calc(100% - 32px);padding:0;border:0;background:transparent;color:inherit;font-weight:600;overflow-wrap:anywhere;text-align:left;text-decoration:underline;cursor:pointer}
+ .icon-control{display:inline-grid;place-items:center;flex:none;width:28px;height:28px;padding:0;border:1px solid var(--wc-border);border-radius:6px;background:var(--wc-surface);color:inherit;cursor:pointer;font-size:13px}.icon-control:hover,.upload:hover{background:var(--wc-ground)}.icon-control:disabled{opacity:.5;cursor:default}.replace-icon{position:relative;overflow:hidden}.replace-icon:has(input:disabled){opacity:.5;cursor:default}
+ .error{color:#991b1b;background:#fff1f1;border:1px solid #fecaca;padding:9px;border-radius:6px}small{display:block;margin-top:2px;color:var(--wc-muted);font-size:.75rem}
+ @container (max-width:760px){table,tbody{display:block}thead{display:none}tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;padding:8px}tr+tr{border-top:1px solid var(--wc-border)}td{display:block;width:100%;padding:0;border:0}td:nth-child(3),td:nth-child(4),td:nth-child(6),td[colspan]{grid-column:1/-1}td:not(:last-child)::before{display:block;margin-bottom:3px;color:var(--wc-muted);font-size:.8rem;font-weight:600}td:nth-child(1)::before{content:'No'}td:nth-child(2)::before{content:'Name'}td:nth-child(3)::before{content:'Material'}td:nth-child(4)::before{content:'Parts from Assembling'}td:nth-child(5)::before{content:'CNC file'}td:nth-child(6)::before{content:'Comment'}td textarea{min-height:44px}td:last-child{align-self:end}}
  `]})
 export class ProductCncComponent implements OnChanges {
  @Input() productId=''; @Input() parts:ShopPart[]|null=null;

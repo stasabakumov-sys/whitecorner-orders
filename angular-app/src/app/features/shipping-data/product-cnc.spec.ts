@@ -15,6 +15,20 @@ function setup(){
 }
 
 describe('Product CNC cutting sheets',()=>{
+ it('places icon actions beside the filename and uses the short sheet header',()=>{
+  const fixture=TestBed.configureTestingModule({imports:[ProductCncComponent],providers:[{provide:SupabaseService,useValue:{client:{}}}]}).createComponent(ProductCncComponent);
+  const component=fixture.componentInstance;component.productId='product';component.add();
+  Object.assign(component.sheets[0],{id:'sheet-1',filename:'front.crv3d',size_bytes:1024,object_path:'worker/front'});
+  fixture.detectChanges();
+  const root=fixture.nativeElement as HTMLElement;
+  expect(root.querySelector('th')?.textContent).toBe('No');
+  const fileLine=root.querySelector('.file-line')!;
+  expect(fileLine.querySelector('.filename')?.textContent).toBe('front.crv3d');
+  expect(fileLine.querySelector('input[aria-label="Replace CNC file"]')).not.toBeNull();
+  expect(fileLine.querySelector('.pi-refresh')).not.toBeNull();
+  expect(root.querySelector('.save-icon[aria-label="Save cutting sheet"] .pi-save')).not.toBeNull();
+  expect(root.textContent).not.toContain('Replace .crv3d');
+ });
  it('renders editable name, material and comment during a pending save',async()=>{
   const fixture=TestBed.configureTestingModule({imports:[ProductCncComponent],providers:[{provide:SupabaseService,useValue:{client:{}}}]}).createComponent(ProductCncComponent);
   fixture.componentInstance.productId='product';fixture.componentInstance.materials=[{id:'birch',name:'Birch plywood',unit:'sheet',active:true}];fixture.componentInstance.add();fixture.componentInstance.busy='new';fixture.detectChanges();
