@@ -52,6 +52,27 @@ describe('Product CNC cutting sheets',()=>{
   expect(root.querySelector('td small')).toBeNull();
   expect(root.textContent).not.toContain('Replace .crv3d');
  });
+ it('shows only the first part, reveals all names on hover and edits every selected part',()=>{
+  const fixture=TestBed.configureTestingModule({imports:[ProductCncComponent],providers:[{provide:SupabaseService,useValue:{client:{}}}]}).createComponent(ProductCncComponent);
+  const component=fixture.componentInstance;component.productId='product';component.parts=[{id:'body',name:'Body'},{id:'side',name:'Side panel'}];component.add();
+  const sheet=component.sheets[0];component.addPart(sheet,'body');fixture.detectChanges();
+  const root=fixture.nativeElement as HTMLElement,cell=root.querySelector('.parts-cell')!;
+  expect([...root.querySelectorAll('th')].map(th=>th.textContent)).toContain('Parts');
+  expect(root.textContent).not.toContain('Parts from Assembling');
+  expect((cell.querySelector('[aria-label="First selected part"]') as HTMLInputElement).value).toBe('Body');
+  expect(cell.getAttribute('title')).toBe('Body');
+  const summary=cell.querySelector('.part-summary')!;
+  expect(summary.children[1].getAttribute('aria-label')).toBe('Add part');
+  (summary.querySelector('[aria-label="Add part"]') as HTMLButtonElement).click();fixture.detectChanges();
+  const select=cell.querySelector('[aria-label="Part to add"]') as HTMLSelectElement;select.value='side';select.dispatchEvent(new Event('change'));fixture.detectChanges();
+  (cell.querySelector('[aria-label="Confirm add part"]') as HTMLButtonElement).click();fixture.detectChanges();
+  const names=[...cell.querySelectorAll('[aria-label^="Part name"]')] as HTMLInputElement[];
+  expect(names.map(input=>input.value)).toEqual(['Body','Side panel']);
+  names[1].value='Side shelves';names[1].dispatchEvent(new Event('input'));fixture.detectChanges();
+  (cell.querySelector('[aria-label="Close parts editor"]') as HTMLButtonElement).click();fixture.detectChanges();
+  expect(cell.getAttribute('title')).toBe('Body\nSide shelves');
+  expect((cell.querySelector('[aria-label="First selected part"]') as HTMLInputElement).value).toBe('Body');
+ });
  it('renders editable name, material and comment during a pending save',async()=>{
   const fixture=TestBed.configureTestingModule({imports:[ProductCncComponent],providers:[{provide:SupabaseService,useValue:{client:{}}}]}).createComponent(ProductCncComponent);
   fixture.componentInstance.productId='product';fixture.componentInstance.materials=[{id:'birch',name:'Birch plywood',unit:'sheet',active:true}];fixture.componentInstance.add();fixture.componentInstance.busy='new';fixture.detectChanges();
