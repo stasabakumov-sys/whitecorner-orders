@@ -18,15 +18,19 @@ describe('Product CNC cutting sheets',()=>{
  it('places icon actions beside the filename and uses the short sheet header',()=>{
   const fixture=TestBed.configureTestingModule({imports:[ProductCncComponent],providers:[{provide:SupabaseService,useValue:{client:{}}}]}).createComponent(ProductCncComponent);
   const component=fixture.componentInstance;component.productId='product';component.add();
-  Object.assign(component.sheets[0],{id:'sheet-1',filename:'front.crv3d',size_bytes:1024,object_path:'worker/front'});
+  Object.assign(component.sheets[0],{id:'sheet-1',filename:'front and side shelves.crv3d',size_bytes:1024,object_path:'worker/front',comment:'Cut front and side shelves from this sheet'});
   fixture.detectChanges();
   const root=fixture.nativeElement as HTMLElement;
   expect(root.querySelector('th')?.textContent).toBe('No');
   const fileLine=root.querySelector('.file-line')!;
-  expect(fileLine.querySelector('.filename')?.textContent).toBe('front.crv3d');
+  expect(fileLine.querySelector('.filename')?.textContent).toBe('front and side shelves.crv3d');
+  expect(fileLine.querySelector('.filename')?.getAttribute('title')).toContain('front and side shelves.crv3d');
   expect(fileLine.querySelector('input[aria-label="Replace CNC file"]')).not.toBeNull();
-  expect(fileLine.querySelector('.pi-refresh')).not.toBeNull();
-  expect(root.querySelector('.save-icon[aria-label="Save cutting sheet"] .pi-save')).not.toBeNull();
+  expect(fileLine.querySelector('.replace-icon svg path')).not.toBeNull();
+  expect(root.querySelector('.save-icon[aria-label="Save cutting sheet"] svg path')).not.toBeNull();
+  const comment=root.querySelector('[aria-label="Cutting sheet comment"]') as HTMLTextAreaElement;
+  expect(comment.rows).toBe(1);expect(comment.wrap).toBe('off');expect(comment.title).toBe('Cut front and side shelves from this sheet');
+  expect(root.querySelector('td small')).toBeNull();
   expect(root.textContent).not.toContain('Replace .crv3d');
  });
  it('renders editable name, material and comment during a pending save',async()=>{
