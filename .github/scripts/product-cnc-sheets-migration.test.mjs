@@ -58,5 +58,14 @@ try{
  assert.equal((await db.query('select material_id from public.wc_product_cnc_sheets where id=$1',[saved.id])).rows[0].material_id,material);
  await assert.rejects(async()=>db.query('update public.wc_product_cnc_sheets set material_id=$1',[inactive]),/permission denied/);
  await db.exec('reset role');
- console.log('CNC cutting sheets: schema, product scope, revisions, TAP attachment, material and RLS passed.');
+ await db.exec(await readFile('supabase/migrations/20260922000300_product_cnc_crc3d_file.sql','utf8'));
+ assert.equal((await db.query('select filename from public.wc_product_cnc_sheets where id=$1',[saved.id])).rows[0].filename,'cut.tap');
+ const crcPath=`${actor}/${randomUUID()}`;
+ await db.query("insert into storage.objects(bucket_id,name,metadata) values('cnc-files',$1,$2)",[crcPath,{size:321}]);
+ await assert.rejects(async()=>db.query('select public.wc_attach_product_cnc_file($1,$2,$3,321,$4)',[saved.id,crcPath,'cut.tap',withMaterial.revision]),/Invalid or missing CRC3D/);
+ await db.exec('set role authenticated');
+ const crc=(await db.query('select to_jsonb(public.wc_attach_product_cnc_file($1,$2,$3,321,$4)) value',[saved.id,crcPath,'cut.crc3d',withMaterial.revision])).rows[0].value;
+ assert.equal(crc.filename,'cut.crc3d');assert.equal(crc.object_path,crcPath);
+ await db.exec('reset role');
+ console.log('CNC cutting sheets: schema, product scope, revisions, historical TAP, new CRC3D, material and RLS passed.');
 }catch(error){console.error(error.message,error.where||'',error.position||'');process.exitCode=1;}finally{await db.close();}

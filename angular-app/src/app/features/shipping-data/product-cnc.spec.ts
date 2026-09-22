@@ -59,25 +59,30 @@ describe('Product CNC cutting sheets',()=>{
   const {component,rpc,upload,remove}=setup();component.materials=[{id:'birch',name:'Birch plywood',unit:'sheet',active:true}];component.add();const sheet=component.sheets[0];sheet.name='Retry me';sheet.material_id='birch';
   rpc.mockResolvedValueOnce({data:null,error:{message:'offline'}});await component.save(sheet);
   expect(sheet.name).toBe('Retry me');expect(component.error).toContain('offline');
-  Object.assign(sheet,{id:'sheet-1',revision:'rev-1',filename:'previous.tap',object_path:'old/path'});
+  Object.assign(sheet,{id:'sheet-1',revision:'rev-1',filename:'previous.crc3d',object_path:'old/path'});
   upload.mockResolvedValue({error:{message:'network unavailable'}});
-  const input={files:[new File(['G21'], 'new.tap')],value:'selected'} as unknown as HTMLInputElement;
+  const input={files:[new File(['design'], 'new.crc3d')],value:'selected'} as unknown as HTMLInputElement;
   await component.upload(sheet,{target:input} as unknown as Event);
-  expect(sheet.filename).toBe('previous.tap');expect(sheet.object_path).toBe('old/path');expect(component.error).toContain('network unavailable');expect(remove).not.toHaveBeenCalled();
+  expect(sheet.filename).toBe('previous.crc3d');expect(sheet.object_path).toBe('old/path');expect(component.error).toContain('network unavailable');expect(remove).not.toHaveBeenCalled();
  });
- it('keeps unsaved text while attaching a confirmed TAP file',async()=>{
+ it('keeps unsaved text while attaching a confirmed CRC3D file',async()=>{
   const {component,rpc,upload}=setup();component.add();const sheet=component.sheets[0];
   Object.assign(sheet,{id:'sheet-1',revision:'rev-1',name:'Draft name',comment:'Draft comment'});
-  upload.mockResolvedValue({error:null});rpc.mockResolvedValue({data:{object_path:'worker/file',filename:'cut.tap',size_bytes:3,revision:'rev-2',name:'Older name',comment:''},error:null});
-  await component.upload(sheet,{target:{files:[new File(['G21'],'cut.tap')],value:'selected'}} as unknown as Event);
-  expect(sheet.filename).toBe('cut.tap');expect(sheet.revision).toBe('rev-2');
+  upload.mockResolvedValue({error:null});rpc.mockResolvedValue({data:{object_path:'worker/file',filename:'cut.crc3d',size_bytes:6,revision:'rev-2',name:'Older name',comment:''},error:null});
+  await component.upload(sheet,{target:{files:[new File(['design'],'cut.crc3d')],value:'selected'}} as unknown as Event);
+  expect(sheet.filename).toBe('cut.crc3d');expect(sheet.revision).toBe('rev-2');
   expect(sheet.name).toBe('Draft name');expect(sheet.comment).toBe('Draft comment');
  });
  it('rejects an oversized file with its name and limit before uploading',async()=>{
   const {component,upload}=setup();component.add();const sheet=component.sheets[0];sheet.id='sheet-1';
-  const file={name:'cut.tap',size:20971521} as File;
+  const file={name:'cut.crc3d',size:20971521} as File;
   await component.upload(sheet,{target:{files:[file],value:''}} as unknown as Event);
-  expect(component.error).toContain('cut.tap');expect(component.error).toContain('20 MB');expect(upload).not.toHaveBeenCalled();
+  expect(component.error).toContain('cut.crc3d');expect(component.error).toContain('20 MB');expect(upload).not.toHaveBeenCalled();
+ });
+ it('rejects old TAP files before upload',async()=>{
+  const {component,upload}=setup();component.add();const sheet=component.sheets[0];sheet.id='sheet-1';
+  await component.upload(sheet,{target:{files:[new File(['G21'],'cut.tap')],value:''}} as unknown as Event);
+  expect(component.error).toContain('.crc3d');expect(upload).not.toHaveBeenCalled();
  });
  it('keeps name and material editable while saving and preserves later edits',async()=>{
   const {component,rpc}=setup();component.materials=[{id:'birch',name:'Birch plywood',unit:'sheet',active:true},{id:'mdf',name:'MDF',unit:'sheet',active:true}];component.add();const sheet=component.sheets[0];sheet.name='Original';sheet.material_id='birch';
