@@ -12,6 +12,7 @@ try{
  create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
  create function storage.foldername(path text) returns text[] language sql immutable as $$select string_to_array(path,'/')$$;
  create table public.wc_shipping_products(id uuid primary key, product_name text);
+ create table public.wc_materials(id uuid primary key, name text not null, unit text not null, active boolean not null default true);
  create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
  create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text,metadata jsonb);
  alter table storage.objects enable row level security;
@@ -41,5 +42,21 @@ try{
  await assert.rejects(async()=>{await db.query("update public.wc_product_cnc_sheets set name='bypass'");},/permission denied/);
  assert.equal((await db.query("select public.wc_save_product_cnc_sheet($1,$2,2,'Allowed',$3,'', $4) is not null ok",[saved.id,product,parts,attached.revision])).rows[0].ok,true);
  await db.exec('reset role');
- console.log('CNC cutting sheets: schema, product scope, revisions, TAP attachment and RLS passed.');
+ const material=randomUUID(),inactive=randomUUID();
+ await db.query('insert into public.wc_materials values($1,$2,$3,true),($4,$5,$6,false)',[material,'Birch plywood','sheet',inactive,'Retired MDF','sheet']);
+ await db.exec(await readFile('supabase/migrations/20260922000200_product_cnc_sheet_material.sql','utf8'));
+ assert.equal((await db.query('select material_id from public.wc_product_cnc_sheets where id=$1',[saved.id])).rows[0].material_id,null);
+ assert.equal((await db.query("select to_regprocedure('public.wc_save_product_cnc_sheet(uuid,uuid,integer,text,jsonb,text,uuid)') is null gone")).rows[0].gone,true);
+ await assert.rejects(async()=>db.query('select public.wc_save_product_cnc_sheet(null,$1,3,$2,$3,$4,null,null)',[product,'No material',parts,'']),/Choose an active material/);
+ await assert.rejects(async()=>db.query('select public.wc_save_product_cnc_sheet(null,$1,3,$2,$3,$4,$5,null)',[product,'Inactive material',parts,'',inactive]),/Choose an active material/);
+ const current=(await db.query('select revision from public.wc_product_cnc_sheets where id=$1',[saved.id])).rows[0];
+ const withMaterial=(await db.query('select to_jsonb(public.wc_save_product_cnc_sheet($1,$2,2,$3,$4,$5,$6,$7)) value',[saved.id,product,'Cutting sheet',parts,'Keep comment',material,current.revision])).rows[0].value;
+ assert.equal(withMaterial.material_id,material);assert.equal(withMaterial.name,'Cutting sheet');
+ await assert.rejects(async()=>db.query('select public.wc_save_product_cnc_sheet($1,$2,2,$3,$4,$5,$6,$7)',[saved.id,product,'Wrong',parts,'',inactive,withMaterial.revision]),/Choose an active material/);
+ await assert.rejects(async()=>db.query('delete from public.wc_materials where id=$1',[material]),/foreign key/);
+ await db.exec('set role authenticated');
+ assert.equal((await db.query('select material_id from public.wc_product_cnc_sheets where id=$1',[saved.id])).rows[0].material_id,material);
+ await assert.rejects(async()=>db.query('update public.wc_product_cnc_sheets set material_id=$1',[inactive]),/permission denied/);
+ await db.exec('reset role');
+ console.log('CNC cutting sheets: schema, product scope, revisions, TAP attachment, material and RLS passed.');
 }catch(error){console.error(error.message,error.where||'',error.position||'');process.exitCode=1;}finally{await db.close();}
