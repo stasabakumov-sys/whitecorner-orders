@@ -1,5 +1,12 @@
 name: CNC cutting sheets production release
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Verify current CNC schema, or apply the migration
+        type: choice
+        options: [verify, apply]
+        default: verify
 permissions:
   contents: read
 concurrency:
@@ -19,7 +26,12 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/cnc-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
           node .github/scripts/product-cnc-sheets-migration.test.mjs "$RUNNER_TEMP/cnc-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Read-only production schema check
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/product-cnc-sheets-release.mjs --verify
       - name: Apply owner-approved CNC migration
+        if: inputs.mode == 'apply'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/product-cnc-sheets-release.mjs --apply

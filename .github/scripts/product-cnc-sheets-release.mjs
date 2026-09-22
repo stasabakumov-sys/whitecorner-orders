@@ -10,7 +10,7 @@ const verify=`select
  to_regprocedure('public.wc_save_product_cnc_sheet(uuid,uuid,integer,text,jsonb,text,uuid)') is not null save_rpc,
  to_regprocedure('public.wc_attach_product_cnc_file(uuid,text,text,integer,uuid)') is not null attach_rpc,
  coalesce((select not public from storage.buckets where id='cnc-files'),false) private_bucket,
- coalesce((select rowsecurity from pg_class where oid=to_regclass('public.wc_product_cnc_sheets')),false) rls_enabled;`;
+ coalesce((select relrowsecurity from pg_class where oid=to_regclass('public.wc_product_cnc_sheets')),false) rls_enabled;`;
 const sql=`begin;select pg_advisory_xact_lock(${version});do $release$ begin
  if to_regclass('public.wc_shipping_products') is null or to_regclass('public.wc_shop_templates') is null then raise exception 'Product and Assembling schema required';end if;
  if to_regclass('storage.objects') is null or to_regclass('storage.buckets') is null then raise exception 'Private storage schema required';end if;
@@ -25,4 +25,5 @@ async function query(statement,read_only){const response=await fetch('https://ap
 const before=(await query(`select to_regclass('public.wc_shipping_products') is not null products_ready,to_regclass('public.wc_shop_templates') is not null parts_ready,to_regclass('storage.objects') is not null storage_ready;`,true))[0];
 console.log('Preflight:',JSON.stringify(before));
 if(!before?.products_ready||!before?.parts_ready||!before?.storage_ready)throw Error('Production prerequisites missing');
+if(process.argv.includes('--verify')){console.log('Read-only CNC state:',JSON.stringify((await query(verify,true))[0]));process.exit(0);}
 if(process.argv.includes('--apply')){await query(sql,false);const after=(await query(verify,true))[0];if(!after?.registered||!after?.sheets_table||!after?.save_rpc||!after?.attach_rpc||!after?.private_bucket||!after?.rls_enabled)throw Error('CNC migration postflight failed');console.log('Verified:',JSON.stringify(after));}
