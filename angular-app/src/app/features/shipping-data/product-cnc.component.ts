@@ -10,7 +10,7 @@ interface CncSheet {
 
 @Component({selector:'app-product-cnc',standalone:true,imports:[FormsModule],template:`
  <section class="cnc">
-  <div class="heading"><div><h3>CNC · cutting sheets</h3><p>Each row is one physical sheet of material. Attach the parts to cut from it and its .tap file.</p></div><button (click)="add()" [disabled]="loading||busy||!productId">Add sheet</button></div>
+  <div class="heading"><div><h3>CNC · cutting sheets</h3><p>Each row is one physical sheet of material. Attach the parts to cut from it and its .crc3d file.</p></div><button (click)="add()" [disabled]="loading||busy||!productId">Add sheet</button></div>
   @if(loading){<p role="status">Loading cutting sheets…</p>}
   @if(materialsLoading){<p role="status">Loading materials…</p>}
   @if(partsLoading){<p role="status">Loading Assembling parts…</p>}
@@ -26,7 +26,7 @@ interface CncSheet {
       <select aria-label="Add Assembling part" #partSelect (change)="addPart(row,partSelect.value);partSelect.value=''" [disabled]="parts===null&&partsLoading"><option value="">{{parts===null&&partsLoading?'Loading parts…':'Add part…'}}</option>@for(part of availableParts(row);track part.id){<option [value]="part.id">{{part.name}}</option>}</select>
     </td>
     <td>@if(row.filename){<button class="filename" (click)="download(row)" [disabled]="busy">{{row.filename}}</button><small>{{fileSize(row.size_bytes||0)}}</small>}
-      @if(row.id){<label class="upload">{{busy===row.id&&activity==='upload'?'Uploading…':row.filename?'Replace .tap':'Upload .tap'}}<input type="file" accept=".tap" [disabled]="busy" (change)="upload(row,$event)"></label>}
+      @if(row.id){<label class="upload">{{busy===row.id&&activity==='upload'?'Uploading…':row.filename?'Replace .crc3d':'Upload .crc3d'}}<input type="file" accept=".crc3d" [disabled]="busy" (change)="upload(row,$event)"></label>}
       @else{<small>Save the sheet first</small>}
     </td>
     <td><textarea aria-label="Cutting sheet comment" maxlength="4000" rows="2" [(ngModel)]="row.comment" placeholder="Comment"></textarea></td>
@@ -34,7 +34,15 @@ interface CncSheet {
    </tr>}@empty{<tr><td colspan="7">No cutting sheets yet.</td></tr>}
   </tbody></table></div>}
  </section>`,styles:[`
- :host{display:block}.cnc{min-width:0}.heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.heading h3{margin:0 0 4px}.heading p{margin:0;color:var(--wc-muted);font-size:.875rem}.table-wrap{overflow:auto;border:1px solid var(--wc-border);border-radius:12px;background:var(--wc-surface)}table{width:100%;min-width:960px;border-collapse:collapse}th,td{padding:9px;text-align:left;vertical-align:top;border-bottom:1px solid var(--wc-border)}th{white-space:nowrap}tr:last-child td{border-bottom:0}input[type=number]{width:75px}input:not([type=file]),select,textarea{box-sizing:border-box;max-width:100%}td:nth-child(2) input{width:145px}td:nth-child(3) select{width:190px}td:nth-child(4){min-width:170px}td:nth-child(5){min-width:140px}textarea{width:180px;resize:vertical}.parts{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px}.parts span{background:var(--wc-ground);border-radius:5px;padding:3px 5px}.parts button{padding:0 3px;border:0;background:transparent}.upload{display:block;position:relative;overflow:hidden;border:1px solid var(--wc-border);border-radius:6px;padding:5px 8px;cursor:pointer;width:max-content;max-width:100%;margin-top:5px}.upload input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}.filename{display:block;max-width:180px;overflow-wrap:anywhere;text-align:left}.error{color:#991b1b;background:#fff1f1;border:1px solid #fecaca;padding:9px;border-radius:6px}small{display:block;color:var(--wc-muted)}
+ :host{display:block;min-width:0;container-type:inline-size}
+ .cnc{min-width:0}.heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.heading h3{margin:0 0 4px}.heading p{margin:0;color:var(--wc-muted);font-size:.875rem}
+ .table-wrap{border:1px solid var(--wc-border);border-radius:12px;background:var(--wc-surface)}table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:.875rem}
+ th,td{padding:7px 5px;text-align:left;vertical-align:top;border-bottom:1px solid var(--wc-border);min-width:0;overflow-wrap:anywhere}th{line-height:1.25}tr:last-child td{border-bottom:0}
+ th:nth-child(1){width:8%}th:nth-child(2){width:15%}th:nth-child(3){width:20%}th:nth-child(4){width:17%}th:nth-child(5){width:14%}th:nth-child(6){width:17%}th:nth-child(7){width:9%}
+ td input:not([type=file]),td select,td textarea{box-sizing:border-box;width:100%;min-width:0;max-width:100%;padding:6px;font-size:inherit}td textarea{resize:vertical}td:last-child button{width:100%;min-width:0;padding:6px 3px;font-size:inherit;white-space:nowrap}
+ .parts{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px}.parts span{background:var(--wc-ground);border-radius:5px;padding:3px 5px;overflow-wrap:anywhere}.parts button{padding:0 3px;border:0;background:transparent}
+ .upload{display:block;position:relative;overflow:hidden;border:1px solid var(--wc-border);border-radius:6px;padding:6px 3px;cursor:pointer;width:100%;text-align:center;white-space:nowrap}.upload input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}.filename{display:block;max-width:100%;overflow-wrap:anywhere;text-align:left}.error{color:#991b1b;background:#fff1f1;border:1px solid #fecaca;padding:9px;border-radius:6px}small{display:block;color:var(--wc-muted)}
+ @container (max-width:760px){table,tbody{display:block}thead{display:none}tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px;padding:10px}tr+tr{border-top:1px solid var(--wc-border)}td{display:block;width:100%;padding:0;border:0}td:nth-child(3),td:nth-child(4),td:nth-child(6),td[colspan]{grid-column:1/-1}td:not(:last-child)::before{display:block;margin-bottom:4px;color:var(--wc-muted);font-size:.8rem;font-weight:600}td:nth-child(1)::before{content:'Sheet no.'}td:nth-child(2)::before{content:'Name'}td:nth-child(3)::before{content:'Material'}td:nth-child(4)::before{content:'Parts from Assembling'}td:nth-child(5)::before{content:'CNC file'}td:nth-child(6)::before{content:'Comment'}td textarea{min-height:58px}td:last-child{align-self:end}}
  `]})
 export class ProductCncComponent implements OnChanges {
  @Input() productId=''; @Input() parts:ShopPart[]|null=null;
@@ -78,7 +86,7 @@ export class ProductCncComponent implements OnChanges {
   }catch(e){this.error=`Could not save sheet ${row.sheet_number}. ${this.message(e)} Check the details and retry.`;}finally{this.busy='';this.activity='';this.refresh();}
  }
  async upload(row:CncSheet,event:Event){const input=event.target as HTMLInputElement,file=input.files?.[0];input.value='';if(!file||this.busy)return;this.error='';this.loadError=false;this.success='';
-  if(!/\.tap$/i.test(file.name)){this.error=`${file.name}: choose a .tap CNC file.`;return;}
+  if(!/\.crc3d$/i.test(file.name)){this.error=`${file.name}: choose a .crc3d CNC file.`;return;}
   if(!file.size||file.size>20971520){this.error=`${file.name} (${this.fileSize(file.size)}) cannot be uploaded. File must be non-empty and at most 20 MB. Choose another file.`;return;}
   if(file.name.length>255){this.error=`${file.name}: filename is over 255 characters. Rename it and retry.`;return;}
   const generation=this.generation,previous=row.object_path;this.busy=row.id;this.activity='upload';let path='',uploaded=false,attaching=false;
@@ -94,7 +102,7 @@ export class ProductCncComponent implements OnChanges {
    if(uploaded&&!attaching)await this.db.client.storage.from('cnc-files').remove([path]);
   }finally{this.busy='';this.activity='';this.refresh();}
  }
- async download(row:CncSheet){if(!row.object_path)return;this.error='';try{const {data,error}=await this.db.client.storage.from('cnc-files').createSignedUrl(row.object_path,60,{download:row.filename||'cutting.tap'});if(error||!data)throw error||Error('File unavailable');const link=document.createElement('a');link.href=data.signedUrl;link.download=row.filename||'cutting.tap';link.rel='noopener';link.click();}catch(e){this.error=`Could not download ${row.filename}. ${this.message(e)} Retry.`;}finally{this.refresh();}}
+ async download(row:CncSheet){if(!row.object_path)return;this.error='';try{const {data,error}=await this.db.client.storage.from('cnc-files').createSignedUrl(row.object_path,60,{download:row.filename||'cutting.crc3d'});if(error||!data)throw error||Error('File unavailable');const link=document.createElement('a');link.href=data.signedUrl;link.download=row.filename||'cutting.crc3d';link.rel='noopener';link.click();}catch(e){this.error=`Could not download ${row.filename}. ${this.message(e)} Retry.`;}finally{this.refresh();}}
  fileSize(bytes:number){return bytes>=1048576?`${(bytes/1048576).toFixed(1)} MB`:`${Math.ceil(bytes/1024)} KB`;}
  private message(e:unknown){return e instanceof Error?e.message:(e as {message?:string})?.message||'Connection or server error.';}
 }
