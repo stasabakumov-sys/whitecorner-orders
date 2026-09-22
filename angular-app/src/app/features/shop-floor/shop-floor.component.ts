@@ -9,10 +9,11 @@ import {ShopPhoneService} from '../../core/services/shop-phone.service';
 import {ProductionStatus} from '../../core/models/production.models';
 import {orderItemOptionLabels} from '../../core/utils/order-item-display';
 import {ShopFloorService} from './shop-floor.service';
+import {ProductCncComponent} from '../shipping-data/product-cnc.component';
 import {ShopProductChoice,ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,isSameProductTask,onlyRemainingPartId,requiresSanding,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
 import {catalogProductForItem,matchingProductTemplates,orderedFinish} from './shop-floor-selection';
 
-@Component({selector:'app-shop-floor',standalone:true,imports:[FormsModule,DatePipe,RouterLink],templateUrl:'./shop-floor.component.html',styleUrl:'./shop-floor.component.css'})
+@Component({selector:'app-shop-floor',standalone:true,imports:[FormsModule,DatePipe,RouterLink,ProductCncComponent],templateUrl:'./shop-floor.component.html',styleUrl:'./shop-floor.component.css'})
 export class ShopFloorComponent implements OnDestroy {
  menuOpen=false;mobileStage:ProductionStatus='CNC';mobileDetail=false;
  failedImages=new Set<string>();

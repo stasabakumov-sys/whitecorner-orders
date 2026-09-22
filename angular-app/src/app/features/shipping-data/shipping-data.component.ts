@@ -12,6 +12,7 @@ import { SupabaseService } from '../../core/services/supabase.service';
 import {BoxDrawingComponent} from './box-drawing.component';
 import {ProductDetailsComponent} from './product-details.component';
 import {ProductPartsComponent} from './product-parts.component';
+import {ProductCncComponent} from './product-cnc.component';
 import {PackagingVariantsComponent,BackdropPackagingDimensions} from './packaging-variants.component';
 import {backdropReferenceProfiles} from './backdrop-packing-reference';
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
@@ -106,7 +107,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[AddMainPackageComponent,SavedPackingComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[AddMainPackageComponent,SavedPackingComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -160,7 +161,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             @if(activeProductSize(p)){<details><summary class="small">Previous shared product drawing</summary><app-box-drawing [productId]="p.id" /></details>}
             </app-product-details></section>
             @if(activeProductSize(p)){<p class="small">Selected size: {{activeProductSize(p)}}</p>}
-            <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button><button [class.on]="detailTab==='wix'" (click)="detailTab='wix'">Wix catalogue</button></nav>
+            <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button><button [class.on]="detailTab==='wix'" (click)="detailTab='wix'">Wix catalogue</button><button [class.on]="detailTab==='cnc'" (click)="detailTab='cnc'">CNC</button></nav>
             @if(detailTab==='cost'){
             <section class="shipsection"><app-product-work-cost [product]="p" [availableFinishes]="finishModes(p)" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" [manualSizes]="!wixSizes(p).length" [materialProfiles]="costProfiles(p.id,activeCartSize(p))" [materials]="costing.materials()" /></section>
             <section class="shipsection"><h3>Product cost · incl. GST</h3>
@@ -265,6 +266,9 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             @if(detailTab==='wix'){
               <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" (catalogUpdated)="updateCatalog(p.id,$event)" /></section>
             }
+            @if(detailTab==='cnc'){
+              <section class="shipsection">@if(p.saved_only){<p class="mut">Save this product in Products before adding CNC sheets.</p>}@else{<app-product-cnc [productId]="p.id" />}</section>
+            }
           } @else {
             <div class="mut">No products in this filter.</div>
           }
@@ -275,7 +279,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
   styleUrl: './shipping-data.component.css',
 })
 export class ShippingDataComponent implements OnInit {
-  search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'='cost';selectedCartSize='';selectedPackingSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
+  search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'|'cnc'='cost';selectedCartSize='';selectedPackingSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
   openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.selectedPackingSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
   finishCatalog=signal<{id:string;source:any}|null>(null);
   catalogProducts=signal<Record<string,any>>({});
