@@ -50,6 +50,16 @@ describe('Shop Floor mobile work selection',()=>{
   expect(c.cardOptions(views[0]).filter(x=>x==='Side shelves: Yes')).toHaveLength(1);
   cards[1].click();expect(c.unitId).toBe('u2');
  });
+ it('selects Other activities with buttons without starting work until Start is pressed',async()=>{
+  const {fixture,c,service}=await setup();
+  c.mode='other';fixture.changeDetectorRef.markForCheck();fixture.detectChanges();
+  const buttons=Array.from(fixture.nativeElement.querySelectorAll('.other-buttons button')) as HTMLButtonElement[];
+  expect(buttons.map(b=>b.textContent?.trim())).toEqual(c.others);
+  buttons.find(b=>b.textContent?.trim()==='Rest')!.click();fixture.detectChanges();
+  expect(c.other).toBe('Rest');expect(buttons.find(b=>b.textContent?.trim()==='Rest')!.getAttribute('aria-pressed')).toBe('true');
+  expect(service.command).not.toHaveBeenCalled();
+  await c.start();expect(service.command).toHaveBeenCalledWith('start',{stage:'Other',operation:'Rest'});
+ });
  it('shows unfinished painting buttons, preserves sequence and keeps history collapsed',async()=>{
   const {fixture,c,service,views}=await setup();views[0].status='Painting';
   service.confirmedData.update(d=>({...d,units:d.units.map(u=>({...u,completed:['Painting:First primer']}))}));
@@ -93,8 +103,8 @@ describe('Shop Floor mobile work selection',()=>{
   const img=heading.querySelector('img');
   expect(img.getAttribute('src')).toBe('/test-product.png');
   expect(img.getAttribute('alt')).toBe('Essential Cart');
-  expect(heading.textContent).toContain('Order #TEST-1');
-  expect(heading.textContent).toContain('Side shelves: Yes');
+  expect(heading.textContent).toContain('#TEST-1');
+  expect(fixture.nativeElement.querySelector('.product-detail > .product-options').textContent).toContain('Side shelves: Yes');
   img.dispatchEvent(new Event('error'));fixture.detectChanges();
   expect(heading.querySelector('img')).toBeNull();
   expect(heading.textContent).toContain('No image');
