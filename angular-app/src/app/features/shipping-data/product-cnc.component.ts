@@ -10,7 +10,7 @@ interface CncSheet {
 
 @Component({selector:'app-product-cnc',standalone:true,imports:[FormsModule],template:`
  <section class="cnc">
-  <div class="heading"><div><h3>CNC · cutting sheets</h3><p>Each row is one physical sheet of material. Attach the parts to cut from it and its .crc3d file.</p></div><button (click)="add()" [disabled]="loading||busy||!productId">Add sheet</button></div>
+  <div class="heading"><div><h3>CNC · cutting sheets</h3><p>Each row is one physical sheet of material. Attach the parts to cut from it and its .crv3d file.</p></div><button (click)="add()" [disabled]="loading||busy||!productId">Add sheet</button></div>
   @if(loading){<p role="status">Loading cutting sheets…</p>}
   @if(materialsLoading){<p role="status">Loading materials…</p>}
   @if(partsLoading){<p role="status">Loading Assembling parts…</p>}
@@ -26,7 +26,7 @@ interface CncSheet {
       <select aria-label="Add Assembling part" #partSelect (change)="addPart(row,partSelect.value);partSelect.value=''" [disabled]="parts===null&&partsLoading"><option value="">{{parts===null&&partsLoading?'Loading parts…':'Add part…'}}</option>@for(part of availableParts(row);track part.id){<option [value]="part.id">{{part.name}}</option>}</select>
     </td>
     <td>@if(row.filename){<button class="filename" (click)="download(row)" [disabled]="busy">{{row.filename}}</button><small>{{fileSize(row.size_bytes||0)}}</small>}
-      @if(row.id){<label class="upload">{{busy===row.id&&activity==='upload'?'Uploading…':row.filename?'Replace .crc3d':'Upload .crc3d'}}<input type="file" accept=".crc3d" [disabled]="busy" (change)="upload(row,$event)"></label>}
+      @if(row.id){<label class="upload">{{busy===row.id&&activity==='upload'?'Uploading…':row.filename?'Replace .crv3d':'Upload .crv3d'}}<input type="file" accept=".crv3d" [disabled]="busy" (change)="upload(row,$event)"></label>}
       @else{<small>Save the sheet first</small>}
     </td>
     <td><textarea aria-label="Cutting sheet comment" maxlength="4000" rows="2" [(ngModel)]="row.comment" placeholder="Comment"></textarea></td>
@@ -86,7 +86,7 @@ export class ProductCncComponent implements OnChanges {
   }catch(e){this.error=`Could not save sheet ${row.sheet_number}. ${this.message(e)} Check the details and retry.`;}finally{this.busy='';this.activity='';this.refresh();}
  }
  async upload(row:CncSheet,event:Event){const input=event.target as HTMLInputElement,file=input.files?.[0];input.value='';if(!file||this.busy)return;this.error='';this.loadError=false;this.success='';
-  if(!/\.crc3d$/i.test(file.name)){this.error=`${file.name}: choose a .crc3d CNC file.`;return;}
+  if(!/\.crv3d$/i.test(file.name)){this.error=`${file.name}: choose a .crv3d CNC file.`;return;}
   if(!file.size||file.size>20971520){this.error=`${file.name} (${this.fileSize(file.size)}) cannot be uploaded. File must be non-empty and at most 20 MB. Choose another file.`;return;}
   if(file.name.length>255){this.error=`${file.name}: filename is over 255 characters. Rename it and retry.`;return;}
   const generation=this.generation,previous=row.object_path;this.busy=row.id;this.activity='upload';let path='',uploaded=false,attaching=false;
@@ -102,7 +102,7 @@ export class ProductCncComponent implements OnChanges {
    if(uploaded&&!attaching)await this.db.client.storage.from('cnc-files').remove([path]);
   }finally{this.busy='';this.activity='';this.refresh();}
  }
- async download(row:CncSheet){if(!row.object_path)return;this.error='';try{const {data,error}=await this.db.client.storage.from('cnc-files').createSignedUrl(row.object_path,60,{download:row.filename||'cutting.crc3d'});if(error||!data)throw error||Error('File unavailable');const link=document.createElement('a');link.href=data.signedUrl;link.download=row.filename||'cutting.crc3d';link.rel='noopener';link.click();}catch(e){this.error=`Could not download ${row.filename}. ${this.message(e)} Retry.`;}finally{this.refresh();}}
+ async download(row:CncSheet){if(!row.object_path)return;this.error='';try{const {data,error}=await this.db.client.storage.from('cnc-files').createSignedUrl(row.object_path,60,{download:row.filename||'cutting.crv3d'});if(error||!data)throw error||Error('File unavailable');const link=document.createElement('a');link.href=data.signedUrl;link.download=row.filename||'cutting.crv3d';link.rel='noopener';link.click();}catch(e){this.error=`Could not download ${row.filename}. ${this.message(e)} Retry.`;}finally{this.refresh();}}
  fileSize(bytes:number){return bytes>=1048576?`${(bytes/1048576).toFixed(1)} MB`:`${Math.ceil(bytes/1024)} KB`;}
  private message(e:unknown){return e instanceof Error?e.message:(e as {message?:string})?.message||'Connection or server error.';}
 }

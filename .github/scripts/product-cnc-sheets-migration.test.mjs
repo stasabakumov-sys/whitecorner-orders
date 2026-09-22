@@ -67,5 +67,14 @@ try{
  const crc=(await db.query('select to_jsonb(public.wc_attach_product_cnc_file($1,$2,$3,321,$4)) value',[saved.id,crcPath,'cut.crc3d',withMaterial.revision])).rows[0].value;
  assert.equal(crc.filename,'cut.crc3d');assert.equal(crc.object_path,crcPath);
  await db.exec('reset role');
- console.log('CNC cutting sheets: schema, product scope, revisions, historical TAP, new CRC3D, material and RLS passed.');
+ await db.exec(await readFile('supabase/migrations/20260922000400_product_cnc_crv3d_file.sql','utf8'));
+ assert.equal((await db.query('select filename from public.wc_product_cnc_sheets where id=$1',[saved.id])).rows[0].filename,'cut.crc3d');
+ const crvPath=`${actor}/${randomUUID()}`;
+ await db.query("insert into storage.objects(bucket_id,name,metadata) values('cnc-files',$1,$2)",[crvPath,{size:456}]);
+ await assert.rejects(async()=>db.query('select public.wc_attach_product_cnc_file($1,$2,$3,456,$4)',[saved.id,crvPath,'cut.crc3d',crc.revision]),/Invalid or missing CRV3D/);
+ await db.exec('set role authenticated');
+ const crv=(await db.query('select to_jsonb(public.wc_attach_product_cnc_file($1,$2,$3,456,$4)) value',[saved.id,crvPath,'cut.crv3d',crc.revision])).rows[0].value;
+ assert.equal(crv.filename,'cut.crv3d');assert.equal(crv.object_path,crvPath);
+ await db.exec('reset role');
+ console.log('CNC cutting sheets: schema, product scope, revisions, historical TAP and CRC3D, new CRV3D, material and RLS passed.');
 }catch(error){console.error(error.message,error.where||'',error.position||'');process.exitCode=1;}finally{await db.close();}
