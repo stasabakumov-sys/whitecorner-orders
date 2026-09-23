@@ -64,6 +64,12 @@ export class DeliveryReviewService {
  async calculateFromProducts(row:any,recalculate=false){return this.perform({action:recalculate?'recalculate-from-products':'calculate-from-products',orderId:row.order_id,expectedVersion:row.updated_at});}
  async approve(orderId:string,reason:string){return this.perform({action:'approve',orderId,reason});}
  async approveWithoutQuote(orderId:string,reason:string){return this.perform({action:'approve-without-quote',orderId,reason});}
+ async orderItemSizeChoices(orderId:string,itemId:string):Promise<string[]>{
+  const {data,error}=await this.supabase.client.functions.invoke('delivery-cost-review',{body:{action:'order-item-size-choices',orderId,itemId}});
+  if(error||data?.error||!Array.isArray(data?.choices))throw Error(data?.error||'Product sizes could not be loaded. Reload the report and retry.');
+  return data.choices;
+ }
+ async setOrderItemSize(orderId:string,itemId:string,size:string){return this.perform({action:'set-order-item-size',orderId,itemId,size});}
  private async perform(body:any){
   if(this.busy())return false;
   this.busy.set(true);this.error.set('');

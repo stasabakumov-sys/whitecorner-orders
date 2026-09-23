@@ -217,6 +217,27 @@ test('editing a legacy profile updates its original key, preserves options, and 
  conflict=true;assert.equal((await call()).status,409);assert.equal(writes,1);
 });
 
+test('order item size exception validates Wix identity and saved catalogue choices, without rewriting Wix options',async()=>{
+ let handler,authorized=true,attempted=false,writes=0;
+ const id='00000000-0000-4000-8000-000000000001',item={id:'wavy-item',order_id:id,product_name:'Double Wavy Backdrop',catalog_reference:{catalogItemId:'wavy-wix'},wix_options:{Colour:'Raw',Foldable:'NO'},size:null};
+ const order={id,wc_order_items:[item]},review={state:'packaging_required',quote_attempted_at:null,token:null};
+ const db={auth:{getUser:async()=>({data:{user:authorized?{id:'actor'}:null}})},from(table){
+  let patch=null;const q={select(){return q},eq(){return q},is(){return q},update(value){patch=value;return q},single:async()=>({data:table==='wc_orders'?order:review,error:null}),maybeSingle:async()=>{
+   if(table==='wc_wix_catalog_products')return {data:{source_product:{variants:[{choices:{Size:'180cm x 100cm'}},{choices:{Size:'200cm x 100cm'}}]}},error:null};
+   if(table==='wc_order_items'){writes++;Object.assign(item,patch);return {data:{size:item.size},error:null};}
+   return {data:review,error:null};
+  },then:resolve=>resolve({data:[],error:null})};return q;
+ }};
+ const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>db}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{attempted=true;throw Error('No upstream calls')}});
+ const call=body=>handler(new Request('http://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'},body:JSON.stringify({orderId:id,itemId:item.id,...body})}));
+ authorized=false;assert.equal((await call({action:'set-order-item-size',size:'180cm x 100cm'})).status,401);authorized=true;
+ assert.deepEqual(JSON.parse(await (await call({action:'order-item-size-choices'})).text()).choices,['180cm x 100cm','200cm x 100cm']);
+ assert.equal((await call({action:'set-order-item-size',size:'190cm x 100cm'})).status,422);assert.equal(writes,0);
+ assert.equal((await call({action:'set-order-item-size',size:'180cm x 100cm'})).status,200);assert.equal(item.size,'180cm x 100cm');assert.deepEqual(item.wix_options,{Colour:'Raw',Foldable:'NO'});assert.equal(writes,1);
+ review.quote_attempted_at='quoted';assert.equal((await call({action:'set-order-item-size',size:'200cm x 100cm'})).status,409);assert.equal(writes,1);assert.equal(attempted,false);
+});
+
 test('Cart without a shelf replacement variant continues to use its reusable Main boxes',async()=>{
  const s=setup();s.review.packages=[];s.order.wc_order_items[0].wix_options={Size:'Size II'};
  const original=s.db.from.bind(s.db);s.db.from=table=>{if(!['wc_shipping_products','wc_shipping_packages'].includes(table))return original(table);const data=table==='wc_shipping_products'?[{id:'p',product_name:'Cart',product_type:'Cart'}]:[{shipping_product_id:'p',size_key:'size ii',source_type:'Base',package_name:'Reusable Main',length_mm:1000,width_mm:500,height_mm:100,weight_kg:10,contents:[]}];const q={select(){return q},eq(){return q},order(){return q},then:resolve=>resolve({data})};return q;};

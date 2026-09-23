@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { productionDecision, setReviewedProductionStatus, unquotedApprovalStates } from '../_shared/delivery-production-gate.ts';
 import { courierReviewCall, processDeliveryReview, reviewContext } from '../_shared/delivery-review-worker.ts';
 import { backdropPackagingKey, componentNormal, deliveryCents, packagingError, packagingSignature, reviewComponents, reviewInputKey, reviewOutcome, reviewSignature } from '../_shared/delivery-review-domain.ts';
-import { variantSignature, productId, resolveOrderPackaging } from '../_shared/delivery-review-domain.ts';
+import { variantSignature, productId, resolveOrderPackaging, catalogSizeChoices, orderItemOptionLabels } from '../_shared/delivery-review-domain.ts';
 import { editedSavedPackages } from '../_shared/delivery-review-domain.ts';
 const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,x-client-info,apikey,content-type','Access-Control-Allow-Methods':'POST,OPTIONS','Content-Type':'application/json'};
 Deno.serve(async(req)=>{
@@ -103,6 +103,26 @@ Deno.serve(async(req)=>{
    catch(e){return json({error:(e as Error).message},409);}
   }
   if(!review)return json({error:'Delivery review unavailable'},404);
+  if(body.action==='order-item-size-choices'||body.action==='set-order-item-size'){
+   const item=order.wc_order_items?.find((entry:any)=>entry.id===body.itemId);
+   if(!item)return json({error:'Order item was not found. Reload the report.'},404);
+   if(orderItemOptionLabels({...item,size:null},Number.MAX_SAFE_INTEGER).some(label=>componentNormal(label.split(':')[0])==='size'))return json({error:'This order item already has a Wix size. Review the order in Wix.'},409);
+   const wixId=productId(item);
+   if(!wixId)return json({error:'This order item has no Wix product identity. Review the order manually.'},422);
+   const {data:catalog,error:catalogError}=await db.from('wc_wix_catalog_products').select('source_product').eq('wix_product_id',wixId).maybeSingle();
+   if(catalogError)return json({error:'Product sizes could not be loaded. Retry.'},503);
+   const choices=catalogSizeChoices(catalog?.source_product);
+   if(!choices.length)return json({error:'No Wix sizes are saved for this product. Open its card in Products to refresh, then retry.'},422);
+   if(body.action==='order-item-size-choices')return json({ok:true,choices});
+   if(review.quote_attempted_at||review.token)return json({error:'This delivery estimate is already in progress or quoted. Reload and review it before changing the size.'},409);
+   if(typeof body.size!=='string'||!choices.includes(body.size))return json({error:'Choose a size from this product’s Wix catalogue.'},422);
+   if(item.size===body.size)return json({ok:true,size:item.size});
+   let update=db.from('wc_order_items').update({size:body.size}).eq('id',item.id).eq('order_id',order.id);
+   update=item.size?update.eq('size',item.size):update.is('size',null);
+   const {data:saved,error:saveError}=await update.select('size').maybeSingle();
+   if(saveError||!saved)return json({error:'Order item changed or size could not be saved. Reload and retry.'},409);
+   return json({ok:true,size:saved.size});
+  }
   if(body.action==='approve-without-quote'){
    if(review.quote_attempted_at||review.token||!unquotedApprovalStates.includes(review.state))return json({error:'An unquoted, idle delivery review is required.'},409);
    if(typeof body.reason!=='string'||body.reason.trim().length<3||body.reason.length>2000)return json({error:'Enter an approval reason (3–2000 characters).'},422);

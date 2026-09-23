@@ -1,6 +1,7 @@
 // Shared by Hub and Edge Functions; no Angular or external runtime dependencies.
 export interface OrderItemRow {
  id:string; product_name?:string|null; quantity?:number|null; unit_price?:number|null;
+ size?:string|null;
  wix_options?:Record<string,unknown>|null; custom_text_fields?:Record<string,unknown>|null;
  description_lines?:unknown[]|null; catalog_reference?:Record<string,unknown>|null; raw_item?:Record<string,unknown>|null;
 }
@@ -89,7 +90,10 @@ export function orderItemOptionLabels(item: OrderItemRow, limit = 12): string[] 
     }
   }
 
-  return [...new Set(out.map(x => x.trim()).filter(x=>!!x&&!isLogoFileInstruction(x)))].slice(0, limit);
+  // Hub's confirmed size is a per-order exception. Wix order snapshots remain intact.
+  const size=typeof item.size==='string'?item.size.trim():'';
+  const labels=size?out.filter(label=>!/^size\s*:/i.test(label)).concat(`Size: ${size}`):out;
+  return [...new Set(labels.map(x => x.trim()).filter(x=>!!x&&!isLogoFileInstruction(x)))].slice(0, limit);
 }
 
 
@@ -333,6 +337,12 @@ export function reviewOutcome(review:any,order:any,currentKey?:string){
 
 
 export const hasSizeOption=(item:any)=>orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER).some(label=>componentNormal(label.split(':')[0])==='size');
+export function catalogSizeChoices(source:any):string[]{
+ const scalar=(value:any):string=>typeof value==='string'?value:value&&typeof value==='object'?scalar(value.description??value.value??value.original??value.name):'';
+ const options=(source?.productOptions||[]).filter((option:any)=>['size','dimension','dimensions'].includes(componentNormal(option?.name||''))).flatMap((option:any)=>(option.choices||[]).map(scalar));
+ const variants=(source?.variants||[]).flatMap((variant:any)=>Object.entries(variant.choices||{}).filter(([name])=>['size','dimension','dimensions'].includes(componentNormal(name))).map(([,value])=>scalar(value)));
+ return [...new Map([...options,...variants].map(value=>value.trim()).filter(Boolean).map(value=>[componentNormal(value),value])).values()];
+}
 
 /** Read-only assembly. Callers retain approval, persistence and quote guards. */
 export async function resolveOrderPackaging(db:any,order:any,ignoredRules:any[]=[],catalogOnly=false){
