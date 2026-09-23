@@ -6,12 +6,18 @@ import { ActivityService } from './core/services/activity.service';
 import { EmailService } from './core/services/email.service';
 import { LoginComponent } from './shared/login/login.component';
 import { ShopPhoneService } from './core/services/shop-phone.service';
+import { HubMembersService } from './core/services/hub-members.service';
+import { SetPasswordComponent } from './shared/set-password/set-password.component';
+
+// Supabase invitation links may return to the configured Site URL if a more
+// specific redirect is not allowed. The fragment still identifies the invite.
+const inviteEntry = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'invite';
 
 @Component({
   selector: 'app-root',
   host: {'[class.shop-floor-route]': "router.url.startsWith('/shop-floor')"},
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, LoginComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, LoginComponent, SetPasswordComponent],
   template: `
     @if (!auth.ready()) {
       <div class="boot">Loading…</div>
@@ -20,6 +26,7 @@ import { ShopPhoneService } from './core/services/shop-phone.service';
     } @else if (!workspaceReady()) {
       <div class="boot"><div><b>White Corner Hub</b><span>Loading workspace…</span></div></div>
     } @else {
+      @if(passwordSetup){<app-set-password />}
       <aside>
         <div class="brand">White Corner<small>Hub</small></div>
         <a routerLink="/home" routerLinkActive="active"><span>⌂</span>Home</a>
@@ -27,6 +34,7 @@ import { ShopPhoneService } from './core/services/shop-phone.service';
         <a routerLink="/customers" routerLinkActive="active"><span>♙</span>Customers</a>
         <a routerLink="/production" routerLinkActive="active"><span>▦</span>Production Board</a>
         <a routerLink="/shop-floor" routerLinkActive="active"><span>◷</span>Shop Floor</a>
+        <details class="packing-menu" [open]="router.url.startsWith('/packing')"><summary><span>▣</span>Packing</summary><div class="packing-submenu">@if(members.manager()){<a routerLink="/packing/manage" routerLinkActive="active">Manage Packing</a>}<a routerLink="/packing/work" routerLinkActive="active">Packing work</a></div></details>
         <a routerLink="/delivery-cost-review" routerLinkActive="active"><span>↗</span>Delivery Cost Review</a>
         <a routerLink="/partner-pans" routerLinkActive="active"><span>▤</span>Partner Pans</a>
         <a routerLink="/fulfilment" routerLinkActive="active"><span>✓</span>Fulfilment</a>
@@ -37,6 +45,7 @@ import { ShopPhoneService } from './core/services/shop-phone.service';
         <a routerLink="/work-rates" routerLinkActive="active"><span>◷</span>Work Rates</a>
         <a routerLink="/product-costing" routerLinkActive="active"><span>▤</span>Order Costing</a>
         <a routerLink="/shipping-data" routerLinkActive="active"><span>⇄</span>Products</a>
+        @if(members.manager()){<a routerLink="/users" routerLinkActive="active"><span>♙</span>Users</a>}
         <button (click)="auth.signOut()">Sign out</button>
       </aside>
       <main>
@@ -66,6 +75,7 @@ import { ShopPhoneService } from './core/services/shop-phone.service';
     .boot{position:fixed;inset:0;display:grid;place-items:center;background:#f4f6f8}.boot>div{display:flex;flex-direction:column;gap:8px;text-align:center}.boot span{color:#758198;font-size:12px}
     aside{position:fixed;inset:0 auto 0 0;width:205px;background:#17191f;color:#fff;padding:16px 9px}.brand{padding:2px 11px 18px;font-size:16px}.brand small{display:block;color:#9097a5;font-size:10px}
     aside a{color:#dfe4ec;text-decoration:none;padding:8px 11px;border-radius:8px;display:flex;gap:9px;margin:2px 0;align-items:center;font-size:12px}aside a.active{background:#2b3039;color:#fff}
+    .packing-menu{color:#dfe4ec;font-size:12px}.packing-menu summary{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:8px;cursor:pointer;list-style:none}.packing-menu summary::-webkit-details-marker{display:none}.packing-menu summary::after{content:'⌄';margin-left:auto}.packing-menu[open] summary{background:#2b3039}.packing-submenu{padding-left:20px}.packing-submenu a{padding:7px 10px}
     aside button{position:absolute;bottom:20px;left:18px;right:18px;background:transparent;color:#fff;border:1px solid #454b57;border-radius:8px;padding:8px}
     main{margin-left:205px;height:100vh;overflow:hidden;background:#f4f6f8}.content{height:100vh;overflow:auto;padding:12px 16px 24px}.content.email-content{overflow:hidden;padding:6px 10px 8px;display:flex;flex-direction:column}:host ::ng-deep .content.email-content app-email{display:block;flex:1 1 auto;min-height:0;height:100%;overflow:hidden}
     .content.finance-content{overflow:hidden;padding:0}:host ::ng-deep .content.finance-content app-finance{display:block;height:100%;min-height:0}
@@ -74,13 +84,15 @@ import { ShopPhoneService } from './core/services/shop-phone.service';
     :host ::ng-deep app-fulfilment .tabs{margin-left:0!important}
     @media(max-width:650px){:host.shop-floor-route aside{display:none}:host.shop-floor-route main{margin-left:0;height:100dvh}:host.shop-floor-route .content{height:100%;padding:12px}}
     @media(max-width:760px){.gmail-title{width:100%}.gmail-account{flex:1 1 100%}}
-    @media(max-width:600px){aside{position:relative;width:100%;height:auto;display:flex;overflow-x:auto;align-items:center;padding:6px;gap:4px}.brand{display:none}aside a{white-space:nowrap;min-height:44px}aside button{position:static;min-height:44px;white-space:nowrap}main{margin-left:0;height:calc(100dvh - 60px)}.content{height:100%;padding:12px}}
+    @media(max-width:600px){aside{position:relative;width:100%;height:auto;display:flex;overflow-x:auto;align-items:center;padding:6px;gap:4px}.brand{display:none}aside a{white-space:nowrap;min-height:44px}.packing-menu{flex:none}.packing-menu summary{min-height:44px;box-sizing:border-box;white-space:nowrap}.packing-submenu{position:fixed;z-index:20;left:6px;top:55px;background:#17191f;border:1px solid #454b57;border-radius:8px;padding:5px;box-shadow:0 10px 25px #0004}.packing-submenu a{min-height:36px}aside button{position:static;min-height:44px;white-space:nowrap}main{margin-left:0;height:calc(100dvh - 60px)}.content{height:100%;padding:12px}}
 
 }`],
 })
 export class AppComponent {
   readonly workspaceReady = signal(false);
+  readonly passwordSetup=new URLSearchParams(window.location.search).has('setup')||inviteEntry;
   private preloading = false;
+  private preloaded = false;
 
   constructor(
     readonly auth: AuthService,
@@ -89,15 +101,19 @@ export class AppComponent {
     readonly email: EmailService,
     readonly router: Router,
     readonly phone: ShopPhoneService,
+    readonly members: HubMembersService,
   ) {
     void auth.initialize();
     effect(() => {
       const session = auth.session();
       if (!session) {
+        this.members.clear();
         this.workspaceReady.set(false);
         this.preloading = false;
+        this.preloaded = false;
         return;
       }
+      if (!this.preloaded) {this.preloaded = true;void this.members.load();}
       if (this.workspaceReady() || this.preloading) return;
       if (!this.phone.online()) { this.workspaceReady.set(true); return; }
       this.preloading = true;
