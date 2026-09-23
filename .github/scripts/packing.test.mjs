@@ -29,17 +29,20 @@ try{
   grant usage on schema auth,storage to authenticated,anon;
  `);
  const managerA=randomUUID(),managerB=randomUUID(),worker=randomUUID();
- const product=randomUUID(),order=randomUUID(),item=randomUUID(),unit=randomUUID(),newUnit=randomUUID();
+ const product=randomUUID(),order=randomUUID(),item=randomUUID(),unit=randomUUID(),newUnit=randomUUID(),deliveryItem=randomUUID(),deliveryUnit=randomUUID();
  await db.query('insert into auth.users(id,email) values($1,$2),($3,$4)',[managerA,'owner@example.test',managerB,'manager@example.test']);
  await db.exec(await readFile('supabase/migrations/20260923000500_box_rd_files.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20260923000600_packing_tasks.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20260923000800_packing_exclude_delivery.sql','utf8'));
  await db.query('insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3)',[worker,'worker@example.test',{full_name:'Worker'}]);
  assert.equal((await db.query("select count(*)::int n from wc_hub_members where role='manager'")).rows[0].n,2);
  assert.equal((await db.query('select role from wc_hub_members where user_id=$1',[worker])).rows[0].role,'worker');
  await db.query('insert into wc_orders(id,order_number,wix_created_at) values($1,$2,now())',[order,'10001']);
  await db.query('insert into wc_order_items(id,order_id,product_name,product_id,wix_options) values($1,$2,$3,$4,$5)',[item,order,'Backdrop',product,{}]);
+ await db.query('insert into wc_order_items(id,order_id,product_name,product_id,wix_options) values($1,$2,$3,$4,$5)',[deliveryItem,order,'Delivery',product,{}]);
  await db.query("insert into wc_production_units(id,order_item_id,production_status) values($1,$2,'Packing')",[unit,item]);
  await db.query("insert into wc_production_units(id,order_item_id,production_status) values($1,$2,'New')",[newUnit,item]);
+ await db.query("insert into wc_production_units(id,order_item_id,production_status) values($1,$2,'New')",[deliveryUnit,deliveryItem]);
  await db.query('insert into wc_delivery_packaging_profiles(signature,shipping_product_id,packages) values($1,$2,$3)',
   ['profile',product,[{package_name:'Box 1'},{package_name:'Box 2'}]]);
  const pathA=`${managerA}/${randomUUID()}`,pathB=`${managerA}/${randomUUID()}`;
@@ -55,6 +58,7 @@ try{
  await db.query("select set_config('test.actor',$1,false)",[managerA]);
  await assert.rejects(db.query('select wc_assign_packing_task($1,$2,$3)',[unit,'profile',worker]),/Box 2 has no RD files/);
  await db.query('select wc_save_box_rd_file(null,$1,1,$2,$3,4,3,null)',['profile',pathB,'cut-b.rd']);
+ await assert.rejects(db.query('select wc_assign_packing_task($1,$2,$3)',[deliveryUnit,'profile',worker]),/Product is unavailable/);
  const task=(await db.query('select to_jsonb(wc_assign_packing_task($1,$2,$3)) result',[unit,'profile',worker])).rows[0].result;
  assert.equal(task.files.length,2);assert.deepEqual(task.files.map(file=>file.copies),[2,3]);
  await db.query("select set_config('test.actor',$1,false)",[worker]);

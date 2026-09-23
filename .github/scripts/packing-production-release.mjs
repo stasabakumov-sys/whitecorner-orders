@@ -5,6 +5,7 @@ const project='zgvnrpspwluapaxnycrg';
 const migrations=[
  ['20260923000500','box_rd_files'],
  ['20260923000600','packing_tasks'],
+ ['20260923000800','packing_exclude_delivery'],
 ];
 const sources=await Promise.all(migrations.map(async([version,name])=>({
  version,name,source:(await readFile(`supabase/migrations/${version}_${name}.sql`,'utf8')).replaceAll('\r',''),
@@ -28,6 +29,7 @@ const preflight=`select
  exists(select 1 from supabase_migrations.schema_migrations where version='20260923000500') rd_registered,
  exists(select 1 from supabase_migrations.schema_migrations where version='20260923000600') packing_registered;`;
 const verification=`select
+ exists(select 1 from supabase_migrations.schema_migrations where version='20260923000800') delivery_filter_registered,
  to_regclass('public.wc_box_rd_files') is not null rd_table,
  to_regclass('public.wc_hub_members') is not null members_table,
  to_regclass('public.wc_packing_tasks') is not null tasks_table,
