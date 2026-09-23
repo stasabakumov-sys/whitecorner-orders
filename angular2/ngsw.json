@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "timestamp": 1790124296365,
+  "timestamp": 1790125774119,
   "index": "/whitecorner-orders/angular2/index.html",
   "assetGroups": [
     {
@@ -13,7 +13,7 @@
       "urls": [
         "/whitecorner-orders/angular2/aura-hub.css",
         "/whitecorner-orders/angular2/chunk-5DQK3TMG.js",
-        "/whitecorner-orders/angular2/chunk-7QIE5UTT.js",
+        "/whitecorner-orders/angular2/chunk-7Y5C432H.js",
         "/whitecorner-orders/angular2/chunk-BNREAGWS.js",
         "/whitecorner-orders/angular2/chunk-BRDVBVJZ.js",
         "/whitecorner-orders/angular2/chunk-FK6H3RFT.js",
@@ -36,7 +36,7 @@
         "/whitecorner-orders/angular2/icons/shop-floor-192.png",
         "/whitecorner-orders/angular2/icons/shop-floor-512.png",
         "/whitecorner-orders/angular2/index.html",
-        "/whitecorner-orders/angular2/main-3A4O7RKH.js",
+        "/whitecorner-orders/angular2/main-IVO7HIBN.js",
         "/whitecorner-orders/angular2/manifest.webmanifest",
         "/whitecorner-orders/angular2/styles-FOU4VRG6.css"
       ],
@@ -47,7 +47,7 @@
   "hashTable": {
     "/whitecorner-orders/angular2/aura-hub.css": "0a94ca79f286abfdb3dfbe13dc6225737c61f1fb",
     "/whitecorner-orders/angular2/chunk-5DQK3TMG.js": "6675def56f4d2c8d7b6132055476854aa8989c16",
-    "/whitecorner-orders/angular2/chunk-7QIE5UTT.js": "b67b6e7a7bdfd1a32d3159d0d3dadca77dcc71c9",
+    "/whitecorner-orders/angular2/chunk-7Y5C432H.js": "5e0ed41543126b4824502424250116f00703f30a",
     "/whitecorner-orders/angular2/chunk-BNREAGWS.js": "d32992563a00f0429201c423545284bc06287980",
     "/whitecorner-orders/angular2/chunk-BRDVBVJZ.js": "4252c0e1581b689ec89d3e355456107585c8a16b",
     "/whitecorner-orders/angular2/chunk-FK6H3RFT.js": "3c538698719f1cf34410542b8c702bc484e025ee",
@@ -69,8 +69,8 @@
     "/whitecorner-orders/angular2/icons/shop-floor-180.png": "4edf6ae16a6952a9dede30f48cafe74e6090facf",
     "/whitecorner-orders/angular2/icons/shop-floor-192.png": "62f14130c0fe1ec7a6297116e53ca796ee760b96",
     "/whitecorner-orders/angular2/icons/shop-floor-512.png": "1da90b9f76817259e80313c796ee4c476f849578",
-    "/whitecorner-orders/angular2/index.html": "c34ce7c3f90edf2901672f4995108bd7a816926a",
-    "/whitecorner-orders/angular2/main-3A4O7RKH.js": "cfd9bddd90724934c80b79b88cd6fc884e0b5f6e",
+    "/whitecorner-orders/angular2/index.html": "ef1f35388a0c412f5d6f447abc18d260e1c8a12b",
+    "/whitecorner-orders/angular2/main-IVO7HIBN.js": "623c148e7e9f99323c91f53fe7e3b5ad5073d6fa",
     "/whitecorner-orders/angular2/manifest.webmanifest": "b10211c029db79496e5bdb52036c4591c89ccd60",
     "/whitecorner-orders/angular2/styles-FOU4VRG6.css": "0b4c8c3600955a3918f165b94932e4ebf0aadc11"
   },
