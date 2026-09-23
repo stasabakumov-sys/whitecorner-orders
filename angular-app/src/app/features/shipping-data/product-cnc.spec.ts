@@ -73,6 +73,17 @@ describe('Product CNC cutting sheets',()=>{
   expect(cell.getAttribute('title')).toBe('Body\nSide shelves');
   expect((cell.querySelector('[aria-label="First selected part"]') as HTMLInputElement).value).toBe('Body');
  });
+ it('renders Shop Flow reference rows as read-only while keeping the CNC file downloadable',()=>{
+  const fixture=TestBed.configureTestingModule({imports:[ProductCncComponent],providers:[{provide:SupabaseService,useValue:{client:{}}}]}).createComponent(ProductCncComponent);
+  const component=fixture.componentInstance;component.productId='product';component.readonly=true;component.materials=[{id:'mdf',name:'MDF 12mm',unit:'sheet',active:true}];component.add();
+  Object.assign(component.sheets[0],{id:'sheet-1',name:'Backdrop body',material_id:'mdf',parts:[{id:'body',name:'Body'}],filename:'body.crv3d',object_path:'worker/body',size_bytes:1024,comment:'Cut once'});
+  fixture.detectChanges();const root=fixture.nativeElement as HTMLElement;
+  expect(root.querySelector('table')?.classList.contains('readonly')).toBe(true);
+  expect(root.textContent).toContain('Backdrop body');expect(root.textContent).toContain('MDF 12mm · sheet');expect(root.textContent).toContain('Body');expect(root.textContent).toContain('Cut once');
+  expect(root.querySelector('.filename')?.textContent).toBe('body.crv3d');
+  expect(root.querySelector('[aria-label="Add part"]')).toBeNull();expect(root.querySelector('[aria-label="Save cutting sheet"]')).toBeNull();expect(root.querySelector('[aria-label="Replace CNC file"]')).toBeNull();
+  expect([...root.querySelectorAll('button')].some(button=>button.textContent?.trim()==='Add sheet')).toBe(false);
+ });
  it('renders editable name, material and comment during a pending save',async()=>{
   const fixture=TestBed.configureTestingModule({imports:[ProductCncComponent],providers:[{provide:SupabaseService,useValue:{client:{}}}]}).createComponent(ProductCncComponent);
   fixture.componentInstance.productId='product';fixture.componentInstance.materials=[{id:'birch',name:'Birch plywood',unit:'sheet',active:true}];fixture.componentInstance.add();fixture.componentInstance.busy='new';fixture.detectChanges();

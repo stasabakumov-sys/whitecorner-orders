@@ -11,7 +11,7 @@ interface CncSheet {
 
 @Component({selector:'app-product-cnc',standalone:true,imports:[FormsModule],template:`
  <section class="cnc">
-  <div class="heading"><div><h3>CNC · cutting sheets</h3><p>Each row is one physical sheet of material. Attach the parts to cut from it and its .crv3d file.</p></div><button (click)="add()" [disabled]="loading||busy||!productId||(backdrop&&requireOrderFolding&&!orderFolding)">Add sheet</button></div>
+  <div class="heading"><div><h3>CNC · cutting sheets</h3><p>Each row is one physical sheet of material. Attach the parts to cut from it and its .crv3d file.</p></div>@if(!readonly){<button (click)="add()" [disabled]="loading||busy||!productId||(backdrop&&requireOrderFolding&&!orderFolding)">Add sheet</button>}</div>
   @if(loading){<p role="status">Loading cutting sheets…</p>}
   @if(materialsLoading){<p role="status">Loading materials…</p>}
   @if(partsLoading){<p role="status">Loading Assembling parts…</p>}
@@ -21,12 +21,12 @@ interface CncSheet {
   @if(backdrop && !orderFolding){<nav class="folding-tabs" aria-label="Backdrop CNC folding option"><button type="button" [class.active]="activeFolding==='foldable'" [attr.aria-pressed]="activeFolding==='foldable'" (click)="activeFolding='foldable'">Foldable</button><button type="button" [class.active]="activeFolding==='nonfoldable'" [attr.aria-pressed]="activeFolding==='nonfoldable'" (click)="activeFolding='nonfoldable'">Non-foldable</button></nav>}
   @if(backdrop && orderFolding){<p class="variant-note">{{foldingLabel(orderFolding)}} CNC sheets for this order</p>}
   @if(backdrop && requireOrderFolding && !orderFolding){<p class="error" role="alert">This order has no clear Foldable option. Check its product options before using CNC sheets.</p>}
-  @if(!loading && (!backdrop || !requireOrderFolding || orderFolding)){<div class="table-wrap"><table><thead><tr><th>No</th><th>Name</th><th>Material</th><th>Parts</th><th>CNC file</th><th>Comment</th><th></th></tr></thead><tbody>
+  @if(!loading && (!backdrop || !requireOrderFolding || orderFolding)){<div class="table-wrap"><table [class.readonly]="readonly"><thead><tr><th>No</th><th>Name</th><th>Material</th><th>Parts</th><th>CNC file</th><th>Comment</th>@if(!readonly){<th></th>}</tr></thead><tbody>
    @for(row of visibleSheets();track row.id || $index){<tr>
-    <td><input type="number" min="1" step="1" aria-label="Cutting sheet number" [(ngModel)]="row.sheet_number"></td>
-    <td><input aria-label="Cutting sheet name" maxlength="150" [(ngModel)]="row.name" placeholder="Enter name"></td>
-    <td><select aria-label="Cutting sheet material" [(ngModel)]="row.material_id" [disabled]="materialsLoading"><option [ngValue]="null">{{materialsLoading?'Loading materials…':'Choose material'}}</option>@for(material of materialOptions(row);track material.id){<option [ngValue]="material.id">{{material.name}} · {{material.unit}}{{material.active?'':' (archived)'}}</option>}</select></td>
-    <td class="parts-cell" [title]="partsTitle(row)"><div class="part-summary">
+    <td>@if(readonly){<span class="cell-text">{{row.sheet_number}}</span>}@else{<input type="number" min="1" step="1" aria-label="Cutting sheet number" [(ngModel)]="row.sheet_number">}</td>
+    <td>@if(readonly){<span class="cell-text" [title]="row.name">{{row.name||'—'}}</span>}@else{<input aria-label="Cutting sheet name" maxlength="150" [(ngModel)]="row.name" placeholder="Enter name">}</td>
+    <td>@if(readonly){<span class="cell-text">{{materialName(row)}}</span>}@else{<select aria-label="Cutting sheet material" [(ngModel)]="row.material_id" [disabled]="materialsLoading"><option [ngValue]="null">{{materialsLoading?'Loading materials…':'Choose material'}}</option>@for(material of materialOptions(row);track material.id){<option [ngValue]="material.id">{{material.name}} · {{material.unit}}{{material.active?'':' (archived)'}}</option>}</select>}</td>
+    <td class="parts-cell" [title]="partsTitle(row)">@if(readonly){<span class="cell-text">{{row.parts[0]?.name||'—'}}</span>}@else{<div class="part-summary">
       <input readonly aria-label="First selected part" [value]="row.parts[0]?.name||''" placeholder="No parts">
       <button type="button" class="icon-control" aria-label="Add part" title="Add part" (click)="openParts(row,'add')" [disabled]="parts===null&&partsLoading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       @if(row.parts.length){<button type="button" class="icon-control" aria-label="Edit parts" title="Edit parts" (click)="openParts(row,'edit')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4"/></svg></button>}
@@ -34,16 +34,17 @@ interface CncSheet {
      @if(partsEditor===row){<div class="parts-editor" role="dialog" aria-label="Edit cutting sheet parts">
       @for(part of row.parts;track part.id){<div class="part-edit-row"><input maxlength="150" [value]="part.name" (input)="renamePart(part,$event)" [attr.aria-label]="'Part name '+($index+1)"><button type="button" class="icon-control remove-part" [attr.aria-label]="'Remove '+part.name" [attr.title]="'Remove '+part.name" (click)="removePart(row,part.id)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 7l1 13h6l1-13"/></svg></button></div>}
       <div class="part-add-row"><select aria-label="Part to add" [(ngModel)]="pendingPartId" [disabled]="parts===null&&partsLoading"><option value="">{{parts===null&&partsLoading?'Loading parts…':'Choose part'}}</option>@for(part of availableParts(row);track part.id){<option [value]="part.id">{{part.name}}</option>}</select><button type="button" class="icon-control" aria-label="Confirm add part" title="Add selected part" (click)="addSelectedPart(row)" [disabled]="!pendingPartId"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><button type="button" class="icon-control" aria-label="Close parts editor" title="Close" (click)="closeParts()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-     </div>}
+     </div>}}
     </td>
     <td>@if(row.filename){<div class="file-line"><button type="button" class="filename" (click)="download(row)" [disabled]="busy" [title]="row.filename + ' · ' + fileSize(row.size_bytes||0)">{{row.filename}}</button>
-      @if(row.id){<label class="icon-control replace-icon" title="Replace CNC file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.35-5.66M20 4v7h-7"/></svg><input type="file" accept=".crv3d" aria-label="Replace CNC file" [disabled]="busy" (change)="upload(row,$event)"></label>}</div>}
+      @if(row.id&&!readonly){<label class="icon-control replace-icon" title="Replace CNC file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.35-5.66M20 4v7h-7"/></svg><input type="file" accept=".crv3d" aria-label="Replace CNC file" [disabled]="busy" (change)="upload(row,$event)"></label>}</div>}
+      @else if(readonly){<span class="cell-text">—</span>}
       @else if(row.id){<label class="upload">{{busy===row.id&&activity==='upload'?'Uploading…':'Upload .crv3d'}}<input type="file" accept=".crv3d" aria-label="Upload CNC file" [disabled]="busy" (change)="upload(row,$event)"></label>}
       @else{<small>Save the sheet first</small>}
     </td>
-    <td><textarea aria-label="Cutting sheet comment" maxlength="4000" rows="1" wrap="off" [(ngModel)]="row.comment" [title]="row.comment" placeholder="Comment"></textarea></td>
-    <td><button type="button" class="icon-control save-icon" (click)="save(row)" [disabled]="busy" [attr.aria-label]="busy===row.id?'Saving cutting sheet':'Save cutting sheet'" [attr.title]="busy===row.id?'Saving cutting sheet':'Save cutting sheet'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button></td>
-   </tr>}@empty{<tr><td colspan="7">No cutting sheets yet.</td></tr>}
+    <td>@if(readonly){<span class="cell-text" [title]="row.comment">{{row.comment||'—'}}</span>}@else{<textarea aria-label="Cutting sheet comment" maxlength="4000" rows="1" wrap="off" [(ngModel)]="row.comment" [title]="row.comment" placeholder="Comment"></textarea>}</td>
+    @if(!readonly){<td><button type="button" class="icon-control save-icon" (click)="save(row)" [disabled]="busy" [attr.aria-label]="busy===row.id?'Saving cutting sheet':'Save cutting sheet'" [attr.title]="busy===row.id?'Saving cutting sheet':'Save cutting sheet'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button></td>}
+   </tr>}@empty{<tr><td [attr.colspan]="readonly?6:7">No cutting sheets yet.</td></tr>}
   </tbody></table></div>}
  </section>`,styles:[`
  :host{display:block;min-width:0;container-type:inline-size}
@@ -52,6 +53,7 @@ interface CncSheet {
  .table-wrap{border:1px solid var(--wc-border);border-radius:12px;background:var(--wc-surface)}table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:.875rem}
  th,td{padding:5px 4px;text-align:left;vertical-align:middle;border-bottom:1px solid var(--wc-border);min-width:0;overflow-wrap:anywhere}th{line-height:1.2}tr:last-child td{border-bottom:0}
  th:nth-child(1){width:7%}th:nth-child(2){width:16%}th:nth-child(3){width:19%}th:nth-child(4){width:18%}th:nth-child(5){width:17%}th:nth-child(6){width:17%}th:nth-child(7){width:6%}
+ .readonly th:nth-child(1){width:7%}.readonly th:nth-child(2){width:16%}.readonly th:nth-child(3){width:20%}.readonly th:nth-child(4){width:18%}.readonly th:nth-child(5){width:20%}.readonly th:nth-child(6){width:19%}.cell-text{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  td input:not([type=file]),td select,td textarea{box-sizing:border-box;width:100%;min-width:0;max-width:100%;padding:4px 6px;font-size:inherit;border:1px solid var(--wc-border);border-radius:6px;background:var(--wc-surface);color:inherit;box-shadow:none}
  td input:not([type=file]),td select,td textarea{height:30px}td textarea{min-height:30px;max-height:30px;resize:none;overflow-x:auto;overflow-y:hidden;white-space:nowrap;text-overflow:ellipsis}td:last-child{text-align:center}
  .parts-cell{position:relative}.part-summary,.part-edit-row,.part-add-row{display:flex;align-items:center;gap:4px;min-width:0}.part-summary>input{flex:1;width:auto!important;text-overflow:ellipsis}.parts-editor{position:absolute;z-index:5;top:calc(100% - 2px);left:4px;width:min(330px,calc(100vw - 48px));padding:7px;border:1px solid var(--wc-border);border-radius:8px;background:var(--wc-surface);box-shadow:0 8px 24px rgba(15,23,42,.16)}.part-edit-row+.part-edit-row,.part-add-row{margin-top:5px}.part-edit-row>input,.part-add-row>select{flex:1;width:auto!important}.remove-part{color:#991b1b}
@@ -63,7 +65,7 @@ interface CncSheet {
  @container (max-width:760px){table,tbody{display:block}thead{display:none}tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;padding:8px}tr+tr{border-top:1px solid var(--wc-border)}td{display:block;width:100%;padding:0;border:0}td:nth-child(3),td:nth-child(4),td:nth-child(6),td[colspan]{grid-column:1/-1}td:not(:last-child)::before{display:block;margin-bottom:3px;color:var(--wc-muted);font-size:.8rem;font-weight:600}td:nth-child(1)::before{content:'No'}td:nth-child(2)::before{content:'Name'}td:nth-child(3)::before{content:'Material'}td:nth-child(4)::before{content:'Parts'}td:nth-child(5)::before{content:'CNC file'}td:nth-child(6)::before{content:'Comment'}td:last-child{align-self:end}.parts-editor{position:static;width:auto;margin-top:5px}}
  `]})
 export class ProductCncComponent implements OnChanges {
- @Input() productId=''; @Input() parts:ShopPart[]|null=null; @Input() backdrop=false; @Input() orderFolding:Folding|''=''; @Input() requireOrderFolding=false;
+ @Input() productId=''; @Input() parts:ShopPart[]|null=null; @Input() backdrop=false; @Input() orderFolding:Folding|''=''; @Input() requireOrderFolding=false; @Input() readonly=false;
  sheets:CncSheet[]=[]; catalogParts:ShopPart[]=[]; variantParts:Record<Folding,ShopPart[]>={foldable:[],nonfoldable:[]}; activeFolding:Folding='foldable'; foldingLabel=foldingLabel;
  materials:{id:string;name:string;unit:string;active:boolean}[]=[]; partsEditor:CncSheet|null=null; pendingPartId=''; loading=false; materialsLoading=false; partsLoading=false; loadError=false; busy=''; activity:''|'save'|'upload'=''; error=''; success=''; private generation=0;private loadedProductId='';
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
@@ -91,6 +93,7 @@ export class ProductCncComponent implements OnChanges {
  }
  private async loadMaterials(){const all:{id:string;name:string;unit:string;active:boolean}[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.from('wc_materials').select('id,name,unit,active').order('name').order('id').range(start,start+249);if(error)throw error;all.push(...(data||[]));if((data||[]).length<250)return all;}}
  materialOptions(row:CncSheet){return this.materials.filter(m=>m.active||m.id===row.material_id);}
+ materialName(row:CncSheet){const material=this.materials.find(item=>item.id===row.material_id);return material?`${material.name} · ${material.unit}`:'—';}
  add(){if(this.backdrop&&this.requireOrderFolding&&!this.orderFolding)return;this.error='';this.success='';const folding=this.backdrop?(this.orderFolding||this.activeFolding):null;
   this.sheets=[...this.sheets,{id:'',product_id:this.productId,sheet_number:Math.max(0,...this.sheets.filter(s=>s.folding===folding).map(s=>Number(s.sheet_number)||0))+1,name:'',material_id:null,folding,parts:[],comment:'',object_path:null,filename:null,size_bytes:null,revision:''}];}
  private partsFor(row:CncSheet){return this.parts??(this.backdrop&&row.folding?this.variantParts[row.folding]:this.catalogParts);}
