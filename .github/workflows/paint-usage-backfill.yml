@@ -1,0 +1,33 @@
+name: Backfill Sep 23 paint usage
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Verify candidates or apply the reviewed historical paint volumes
+        type: choice
+        options: [verify, apply]
+        default: verify
+permissions:
+  contents: read
+concurrency:
+  group: paint-usage-backfill-production
+  cancel-in-progress: false
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify candidate intervals
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/paint-usage-backfill-release.mjs --verify
+      - name: Apply and verify paint volumes
+        if: inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/paint-usage-backfill-release.mjs --apply
