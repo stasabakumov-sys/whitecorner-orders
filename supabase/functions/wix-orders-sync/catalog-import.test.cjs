@@ -1,16 +1,34 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const ts=require('../../../angular-app/node_modules/typescript');
-function load(file){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(__dirname+'/'+file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports,require:()=>load('order-history.ts'),fetch,AbortSignal,Set});return exports;}
+function load(file){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(__dirname+'/'+file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports,require:()=>load('order-history.ts'),fetch,AbortSignal,Set,console});return exports;}
 const mod=load('catalog-import.ts');
 test('single product refresh selects by Wix identity, preserves other data and rejects concurrent writes',async()=>{
  const id='00000000-0000-4000-8000-000000000001',source={id:'wix-cart',name:'Test dessert cart',variants:[{id:'three',choices:{Cutouts:'3',Pans:'With 3 pans'},variant:{priceData:{price:500}}}]};
  let patch,filters=[],conflict=false,reads=0;
- const db={from:table=>{assert.equal(table,'wc_wix_catalog_products');let updating=false;const q={select:()=>q,eq:(k,v)=>{filters.push([k,v]);return q;},update:p=>{updating=true;patch=p;return q;},maybeSingle:async()=>({data:updating?(conflict?null:{source_product:patch.source_product,synced_at:patch.synced_at}):{wix_product_id:'wix-cart',synced_at:'old'}})};return q;}};
+ const db={from:table=>{let updating=false;const q={select:()=>q,eq:(k,v)=>{filters.push([k,v]);return q;},update:p=>{updating=true;if(table==='wc_wix_catalog_products')patch=p;else assert.equal(p.product_name,source.name);return q;},maybeSingle:async()=>({data:updating?(conflict?null:{source_product:patch.source_product,synced_at:patch.synced_at}):{wix_product_id:'wix-cart',synced_at:'old'}}),then:resolve=>resolve({error:null})};return q;}};
  const call=async(url,init)=>{reads++;if(url.endsWith('/version'))return Response.json({catalogVersion:'V1_CATALOG'});const request=JSON.parse(init.body);assert.deepEqual(JSON.parse(request.query.filter),{id:{$hasSome:['wix-cart']}});assert.equal(request.includeVariants,true);return Response.json({totalResults:1,products:[source]});};
  const result=await mod.refreshCatalogProduct(db,{},'site',id,call);
  assert.equal(result.source_product.variants[0].choices.Cutouts,'3');assert.deepEqual(Object.keys(patch).sort(),['source_json','source_product','synced_at']);assert.ok(filters.some(([k,v])=>k==='synced_at'&&v==='old'));assert.equal(reads,2);
  conflict=true;await assert.rejects(()=>mod.refreshCatalogProduct(db,{},'site',id,call),/another import/);
  patch=null;await assert.rejects(()=>mod.refreshCatalogProduct(db,{},'site',id,async url=>Response.json(url.endsWith('/version')?{catalogVersion:'V1_CATALOG'}:{totalResults:1,products:[{...source,id:'wrong'}]})),/exact linked/);assert.equal(patch,null);
+});
+test('automatic refresh rotates linked cards and continues after a missing Wix product',async()=>{
+ const ids=['00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002'];
+ let selectedRange,updated=[];
+ const db={from:table=>{let patch,head=false;const q={
+  select:(_fields,options)=>{head=!!options?.head;return q;},
+  eq:(field,value)=>{if(field==='shipping_product_id')q.id=value;return q;},
+  order:()=>q,range:async(first,last)=>{selectedRange=[first,last];return {data:ids.map((id,i)=>({shipping_product_id:id,wix_product_id:'wix-'+i})),error:null};},
+  update:value=>{patch=value;if(table==='wc_wix_catalog_products')updated.push(value);return q;},
+  maybeSingle:async()=>({data:patch?{source_product:patch.source_product,synced_at:patch.synced_at}:{wix_product_id:q.id===ids[0]?'wix-0':'wix-1',synced_at:'old'},error:null}),
+  then:resolve=>resolve(head?{count:7,error:null}:{error:null})
+ };return q;}};
+ const call=async(url,init)=>{if(url.endsWith('/version'))return Response.json({catalogVersion:'V1_CATALOG'});
+  const id=JSON.parse(init.body).query.filter.includes('wix-0')?'wix-0':'wix-1';
+  return Response.json(id==='wix-0'?{totalResults:1,products:[{id,name:'New name',variants:[{id:'size',choices:{Size:'200cm x 100cm'}}]}]}:{totalResults:0,products:[]});};
+ const result=await mod.autoRefreshCatalogBatch(db,{},'site',call,0);
+ assert.deepEqual(selectedRange,[0,4]);assert.equal(result.updated,1);assert.equal(result.failed,1);
+ assert.equal(updated[0].source_product.variants[0].choices.Size,'200cm x 100cm');
 });
 test('backdrop source preserves colour variants, pricing and invalid Unicode exact source',()=>{
  const p={id:'backdrop',name:'Backdrop',description:'bad\0😀',variants:[{id:'raw',choices:{Colour:'Raw'},variant:{priceData:{price:100}}},{id:'white',choices:{Colour:'White'},variant:{priceData:{price:150}}}]};

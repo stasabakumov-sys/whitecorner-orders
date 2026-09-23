@@ -30,7 +30,36 @@ export async function refreshCatalogProduct(db:any,headers:Record<string,string>
   const {data:updated,error:saveError}=await db.from('wc_wix_catalog_products').update({source_product:snapshot.product,source_json:snapshot.source_json,synced_at:new Date().toISOString()})
     .eq('shipping_product_id',productId).eq('site_id',site).eq('wix_product_id',saved.wix_product_id).eq('synced_at',saved.synced_at).select('source_product,synced_at').maybeSingle();
   if(saveError||!updated)throw Error('Product refresh could not be confirmed, or another import changed it. Reload the card before retrying.');
+  const {error:nameError}=await db.from('wc_shipping_products').update({product_name:snapshot.product.name})
+    .eq('id',productId).eq('wix_product_id',saved.wix_product_id);
+  if(nameError)throw Error('Wix product was refreshed, but its name could not be updated. Retry the refresh.');
   return {ok:true,...updated};
+}
+
+// Rotate a five-card window every five minutes, matching the existing order
+// cron. A bad Wix product never blocks later cards or deletes its last snapshot.
+export async function autoRefreshCatalogBatch(db:any,headers:Record<string,string>,site:string,call:typeof fetch=fetch,now=Date.now()){
+  const {count,error:countError}=await db.from('wc_wix_catalog_products')
+    .select('wix_product_id',{count:'exact',head:true}).eq('site_id',site);
+  if(countError||!Number.isSafeInteger(count)||count<0)throw Error('Could not count catalogue cards for automatic refresh');
+  if(count===0)return {attempted:0,updated:0,failed:0};
+  const batches=Math.ceil(count/5);
+  const batch=Math.floor(now/300000)%batches;
+  const {data:cards,error}=await db.from('wc_wix_catalog_products')
+    .select('shipping_product_id,wix_product_id').eq('site_id',site)
+    .order('wix_product_id').range(batch*5,batch*5+4);
+  if(error)throw Error('Could not select catalogue cards for automatic refresh');
+  const results=await Promise.all((cards||[]).map(async(card:any)=>{
+    try{
+      await refreshCatalogProduct(db,headers,site,card.shipping_product_id,call);
+      return true;
+    }catch(error){
+      console.warn('WIX_CATALOG_AUTO_REFRESH_FAILED',JSON.stringify({wixProductId:card.wix_product_id,error:error instanceof Error?error.message:'Unknown error'}));
+      return false;
+    }
+  }));
+  const updated=results.filter(Boolean).length;
+  return {attempted:results.length,updated,failed:results.length-updated};
 }
 
 export async function importCatalogPage(db: any, headers: Record<string,string>, site: string, body: Record<string,unknown>, call: typeof fetch = fetch) {
