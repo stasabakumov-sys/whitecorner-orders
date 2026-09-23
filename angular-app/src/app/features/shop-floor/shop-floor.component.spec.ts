@@ -94,6 +94,21 @@ describe('Shop Floor mobile work selection',()=>{
   const started=new Date().toISOString();service.data.update(d=>({...d,intervals:[{id:'paint',shift_id:'shift',worker_id:'worker',unit_id:'u1',stage:'Painting',operation:'First primer',part_id:null,started_at:started,ended_at:null}]}));
   expect(c.paintingStatus('First primer')).toBe('Running');expect(c.paintingStatus('Repaint')).toBe('Recorded · repeatable');
  });
+ it('requires paint used before completing a primer and sends the amount with the timer command',async()=>{
+  const {fixture,c,service,views}=await setup();views[0].status='Painting';await c.chooseProduct(views[0]);
+  const started=new Date().toISOString();service.data.update(d=>({...d,intervals:[{id:'paint',shift_id:'shift',worker_id:'worker',unit_id:'u1',stage:'Painting',operation:'First primer',part_id:null,started_at:started,ended_at:null}]}));
+  fixture.detectChanges();await c.finishWork();fixture.detectChanges();
+  expect(c.paintFinishOpen).toBe(true);expect(fixture.nativeElement.querySelector('[aria-label="Paint used in millilitres"]')).not.toBeNull();
+  expect(service.command).not.toHaveBeenCalled();
+  await c.confirmPaintFinish();expect(c.paintVolumeError).toContain('Enter paint used');expect(service.command).not.toHaveBeenCalled();
+  c.paintVolumeMl='125.5';service.command.mockResolvedValueOnce(true);await c.confirmPaintFinish();
+  expect(service.command).toHaveBeenCalledWith('finish-operation',{paintVolumeMl:125.5});expect(c.paintFinishOpen).toBe(false);
+ });
+ it('finishes painting sanding without a paint amount',async()=>{
+  const {c,service,views}=await setup();views[0].status='Painting';await c.chooseProduct(views[0]);
+  const started=new Date().toISOString();service.data.update(d=>({...d,intervals:[{id:'sand',shift_id:'shift',worker_id:'worker',unit_id:'u1',stage:'Painting',operation:'First sanding',part_id:null,started_at:started,ended_at:null}]}));
+  await c.finishWork();expect(c.paintFinishOpen).toBe(false);expect(service.command).toHaveBeenCalledWith('finish-operation',{});
+ });
  it('keeps meaningful hyphens and handles missing names and options',async()=>{
   const {c,views}=await setup();
   expect(c.shortProductName('Fold-out Cart — Long description')).toBe('Fold-out Cart');

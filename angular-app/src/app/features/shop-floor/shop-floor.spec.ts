@@ -1,4 +1,4 @@
-import {availablePaint,PAINT_OPERATIONS,BACKDROP_PAINT_OPERATIONS,paintOperations,paintLabel,rangeBounds,intervalSeconds,brisbaneDate,localInput,fromLocalInput,csvCell,isSameProductTask,ShopInterval,onlyRemainingPartId,projectCommands,requiresSanding,ShopData} from './shop-floor.models';
+import {availablePaint,PAINT_OPERATIONS,BACKDROP_PAINT_OPERATIONS,paintOperations,paintLabel,needsPaintVolume,parsePaintVolume,rangeBounds,intervalSeconds,brisbaneDate,localInput,fromLocalInput,csvCell,isSameProductTask,ShopInterval,onlyRemainingPartId,projectCommands,requiresSanding,ShopData} from './shop-floor.models';
 describe('Shop Floor timing rules',()=>{
  it('skips Sanding only when every saved part has an explicit zero estimate',()=>{
   const parts=[{id:'body',name:'Body'},{id:'base',name:'Base'}];
@@ -56,6 +56,19 @@ describe('Shop Floor timing rules',()=>{
 });
 
 describe('Backdrop painting route',()=>{
+ it('requires a positive paint amount for coats but not sanding',()=>{
+  expect(needsPaintVolume('First primer')).toBe(true);expect(needsPaintVolume('Second primer')).toBe(true);
+  expect(needsPaintVolume('Finish coat')).toBe(true);expect(needsPaintVolume('Repaint')).toBe(true);
+  expect(needsPaintVolume('First sanding')).toBe(false);
+  expect(parsePaintVolume('12.5')).toBe(12.5);expect(parsePaintVolume('')).toBeNull();
+  expect(parsePaintVolume('0')).toBeNull();expect(parsePaintVolume('-1')).toBeNull();expect(parsePaintVolume('1.234')).toBeNull();
+ });
+ it('keeps paint used on a queued offline completion',()=>{
+  const started='2026-09-23T00:00:00Z';
+  const base:ShopData={templates:[],units:[{unit_id:'u',template_id:'t',parts:[],estimates:{},finish:'painted',completed:[]}],shifts:[{id:'s',worker_id:'w',started_at:started,ended_at:null}],intervals:[{id:'i',shift_id:'s',worker_id:'w',unit_id:'u',stage:'Painting',operation:'Finish coat',part_id:null,started_at:started,ended_at:null}]};
+  const projected=projectCommands(base,[{id:'done',action:'finish-operation',payload:{at:'2026-09-23T00:01:00Z',paintVolumeMl:80}}],'w');
+  expect(projected.intervals[0].paint_volume_ml).toBe(80);expect(base.intervals[0].paint_volume_ml).toBeUndefined();
+ });
  it('uses Primer, Sanding and Finish coat for backdrops and retains the standard route elsewhere',()=>{
   expect(paintOperations('Arch Backdrop')).toEqual(BACKDROP_PAINT_OPERATIONS);
   expect(BACKDROP_PAINT_OPERATIONS.map(op=>paintLabel(op,BACKDROP_PAINT_OPERATIONS))).toEqual(['Primer','Sanding','Finish coat']);

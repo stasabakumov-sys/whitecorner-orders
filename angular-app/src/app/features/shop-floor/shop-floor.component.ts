@@ -10,7 +10,7 @@ import {ProductionStatus} from '../../core/models/production.models';
 import {orderItemOptionLabels} from '../../core/utils/order-item-display';
 import {ShopFloorService} from './shop-floor.service';
 import {ProductCncComponent} from '../shipping-data/product-cnc.component';
-import {ShopProductChoice,ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,isSameProductTask,onlyRemainingPartId,requiresSanding,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
+import {ShopProductChoice,ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,needsPaintVolume,parsePaintVolume,OTHER_OPERATIONS,availablePaint,isSameProductTask,onlyRemainingPartId,requiresSanding,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
 import {catalogProductForItem,matchingProductTemplates,orderedFinish,orderedFolding} from './shop-floor-selection';
 
 @Component({selector:'app-shop-floor',standalone:true,imports:[FormsModule,DatePipe,RouterLink,ProductCncComponent],templateUrl:'./shop-floor.component.html',styleUrl:'./shop-floor.component.css'})
@@ -38,7 +38,8 @@ export class ShopFloorComponent implements OnDestroy {
  tab='timer';unitId='';stageFilter='';partId='';operation='';other='Cleaning';mode='product';
  templateId='';finish='';assigning=false;
  date=brisbaneDate();period='day';editId='';editType='interval';editStart='';editEnd='';notice='';localError='';moving=false;
- get paint(){return this.snapshot()?.paint_operations||PAINT_OPERATIONS;}paintLabel=paintLabel;others=OTHER_OPERATIONS;format=duration;seconds=intervalSeconds;paintAvailable=availablePaint;
+ paintFinishOpen=false;paintFinishIntervalId='';paintVolumeMl='';paintVolumeError='';
+ get paint(){return this.snapshot()?.paint_operations||PAINT_OPERATIONS;}paintLabel=paintLabel;needsPaintVolume=needsPaintVolume;others=OTHER_OPERATIONS;format=duration;seconds=intervalSeconds;paintAvailable=availablePaint;
  private reconnect=()=>{void this.refresh();};
  constructor(readonly s:ShopFloorService,readonly auth:AuthService,readonly orders:OrdersService,readonly production:ProductionService,route:ActivatedRoute,readonly phone:ShopPhoneService){
   this.unitId=route.snapshot.queryParamMap.get('unit')||'';void s.load().then(async()=>{await this.cacheChoices();this.selectUnit();});
@@ -76,6 +77,7 @@ export class ShopFloorComponent implements OnDestroy {
  done(key:string){return this.snapshot()?.completed.includes(key)||false;}
  estimate(){const v=this.selected();const key=v?.status==='Painting'?'Painting:'+this.operation:v?.status==='Assembly'||v?.status==='Sanding'?v.status+':'+this.partId:v?.status;return key?this.snapshot()?.estimates[key]:undefined;}
  productTime(stage:string,part?:string,operation?:string){return this.s.data().intervals.filter(r=>r.unit_id===this.unitId&&r.stage===stage&&(!part||r.part_id===part)&&(!operation||r.operation===operation)).reduce((sum,r)=>sum+intervalSeconds(r,this.now()),0);}
+ paintUsed(operation:string){return this.s.data().intervals.filter(r=>r.unit_id===this.unitId&&r.stage==='Painting'&&r.operation===operation).reduce((sum,r)=>sum+(r.paint_volume_ml||0),0);}
  selectedTaskActive(){return this.mode==='product'&&isSameProductTask(this.active(),this.unitId,this.selected()?.status,this.partId,this.operation);}
  canStart(){const v=this.selected(),u=this.s.data().units.find(u=>u.unit_id===this.unitId);if(!this.shift()||this.oldShift()||this.timerBlocked()||this.workRunning())return false;if(this.mode==='other')return true;
   if(!v||!u||this.selectedTaskActive()||u.completed.includes(v.status+':finished'))return false;
@@ -88,7 +90,9 @@ export class ShopFloorComponent implements OnDestroy {
   await this.action('start',this.mode==='other'?{stage:'Other',operation:this.other}:{unitId:this.unitId,stage,partId:['Assembly','Sanding'].includes(stage||'')?this.partId:null,operation:stage==='Painting'?this.operation:stage});
  }
  async resume(){const row=this.previous();if(!row)return;this.unitId=row.unit_id||'';this.mode=row.stage==='Other'?'other':'product';this.partId=row.part_id||'';this.operation=row.operation;this.other=row.operation;await this.start();}
- async finishWork(stage=false){if(this.timerBlocked()||!this.workRunning())return;const unitId=this.active()?.unit_id,oldStage=this.active()?.stage;if(await this.action(stage?'finish-stage':'finish-operation')){if(unitId){this.unitId=unitId;this.mobileStage=oldStage as ProductionStatus;this.partId=onlyRemainingPartId(this.snapshot(),this.selected()?.status);await this.advance();this.mobileDetail=this.selected()?.status===oldStage;}}}
+ async finishWork(stage=false,paintVolumeMl?:number){if(this.timerBlocked()||!this.workRunning())return;const row=this.active();if(row?.stage==='Painting'&&needsPaintVolume(row.operation)&&paintVolumeMl===undefined){this.paintFinishIntervalId=row.id;this.paintVolumeMl='';this.paintVolumeError='';this.paintFinishOpen=true;return;}
+  const unitId=row?.unit_id,oldStage=row?.stage;if(await this.action(stage?'finish-stage':'finish-operation',paintVolumeMl===undefined?{}:{paintVolumeMl})){this.paintFinishOpen=false;this.paintFinishIntervalId='';this.paintVolumeMl='';this.paintVolumeError='';if(unitId){this.unitId=unitId;this.mobileStage=oldStage as ProductionStatus;this.partId=onlyRemainingPartId(this.snapshot(),this.selected()?.status);await this.advance();this.mobileDetail=this.selected()?.status===oldStage;}}}
+ async confirmPaintFinish(){if(this.active()?.id!==this.paintFinishIntervalId){this.paintVolumeError='The active task changed. Close this dialog and review the timer.';return;}const volume=parsePaintVolume(this.paintVolumeMl);if(volume===null){this.paintVolumeError='Enter paint used in mL, greater than zero (up to 100,000 mL).';return;}this.paintVolumeError='';await this.finishWork(false,volume);}
  async finishPainting(){if(await this.action('finish-painting',{unitId:this.unitId}))await this.advance();}
  async advance(){const v=this.selected(),u=this.snapshot();if(!v||!u||!u.completed.includes(v.status+':finished'))return;
   const live=this.liveUnits().find(x=>x.unit.id===v.unit.id);
@@ -109,7 +113,7 @@ export class ShopFloorComponent implements OnDestroy {
  shifts(){const [a,b]=this.bounds();return this.s.data().shifts.filter(r=>Date.parse(r.started_at)<b&&Date.parse(r.ended_at||new Date(this.now()).toISOString())>=a).sort((x,y)=>y.started_at.localeCompare(x.started_at));}
  edit(row:ShopInterval|ShopShift,type:string){this.editId=row.id;this.editType=type;this.editStart=localInput(row.started_at);this.editEnd=localInput(row.ended_at||new Date().toISOString());}
  async saveEdit(){try{if(await this.action('edit-'+this.editType,{id:this.editId,start:fromLocalInput(this.editStart),end:fromLocalInput(this.editEnd)}))this.editId='';}catch{this.localError='Enter valid start and end times.';}}
- export(type:string){const rows=this.logs();const text=type==='csv'?'\uFEFF'+[['Start (UTC)','End (UTC)','Employee','Product','Stage','Operation','Part','Seconds in period'],...rows.map(r=>[r.started_at,r.ended_at||'',this.auth.userEmail(),this.label(r.unit_id),r.stage,r.operation,this.partName(r),Math.round(intervalSeconds(r,this.now(),this.bounds()))])].map(r=>r.map(csvCell).join(',')).join('\r\n'):JSON.stringify({exportDate:new Date().toISOString(),timezone:'Australia/Brisbane',dateFilter:this.date,period:this.period,logs:rows,boardState:this.s.data().units},null,2);
+ export(type:string){const rows=this.logs();const text=type==='csv'?'\uFEFF'+[['Start (UTC)','End (UTC)','Employee','Product','Stage','Operation','Part','Seconds in period','Paint used (mL)'],...rows.map(r=>[r.started_at,r.ended_at||'',this.auth.userEmail(),this.label(r.unit_id),r.stage,r.operation,this.partName(r),Math.round(intervalSeconds(r,this.now(),this.bounds())),r.paint_volume_ml??''])].map(r=>r.map(csvCell).join(',')).join('\r\n'):JSON.stringify({exportDate:new Date().toISOString(),timezone:'Australia/Brisbane',dateFilter:this.date,period:this.period,logs:rows,boardState:this.s.data().units},null,2);
   const url=URL.createObjectURL(new Blob([text],{type:type==='csv'?'text/csv;charset=utf-8':'application/json'}));const a=document.createElement('a');a.href=url;a.download=`shop-floor-${this.date}.${type}`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }
 }

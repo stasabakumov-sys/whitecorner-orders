@@ -14,30 +14,33 @@ export interface WixContact {
 export class CustomersService {
   readonly contacts=signal<WixContact[]>([]);
   readonly loading=signal(false);readonly error=signal('');readonly loaded=signal(false);
-  readonly progress=signal(0);readonly expected=signal<number|null>(null);
+  readonly syncing=signal(false);readonly syncedAt=signal<string|null>(null);
   constructor(private readonly supabase:SupabaseService){}
-  async load(){
+  async load(refresh=false){
     if(this.loading())return;
-    this.loading.set(true);this.error.set('');this.progress.set(0);this.expected.set(null);
-    const contacts=new Map<string,WixContact>();let offset=0;
+    this.loading.set(true);this.error.set('');this.syncing.set(false);
     try{
-      while(true){
-        const {data,error}=await this.supabase.client.functions.invoke(environment.wixSyncFunction,{body:{action:'queryContacts',offset}});
-        if(error){const detail=await error.context?.json?.().catch(()=>null);throw new Error(detail?.error||'Could not load Wix contacts. Please try again.');}
-        if(data?.error)throw new Error(data.error);
-        if(!Array.isArray(data?.contacts))throw new Error('Invalid contacts response.');
-        const before=contacts.size;
-        for(const contact of data.contacts){if(!contact.id)throw new Error('Contact ID is missing.');contacts.set(contact.id,contact);}
-        this.progress.set(contacts.size);this.expected.set(data.total??null);
-        if(data.nextOffset===null){
-          if(data.total!=null&&contacts.size!==data.total)throw new Error('The contact list changed during loading. Refresh to retrieve the complete list.');
-          break;
-        }
-        if(!Number.isSafeInteger(data.nextOffset)||data.nextOffset<=offset||contacts.size===before)throw new Error('Contact pagination stopped. Refresh to try again.');
-        offset=data.nextOffset;
+      const {data:state,error:stateError}=await this.supabase.client.from('wc_wix_contacts_sync').select('total,synced_at').maybeSingle();
+      if(stateError)throw new Error('Could not read saved contact status. Check the database migration and retry.');
+      if(refresh||!state){
+        this.syncing.set(true);
+        const {data,error}=await this.supabase.client.functions.invoke(environment.wixSyncFunction,{body:{action:'syncContacts'}});
+        if(error){const detail=await error.context?.json?.().catch(()=>null);throw new Error(detail?.error||'Could not update contacts from Wix. Try again.');}
+        if(data?.error||!data?.ok)throw new Error(data?.error||'Wix contact update was not confirmed. Try again.');
       }
-      this.contacts.set([...contacts.values()]);this.loaded.set(true);
+      const {data:current,error:currentError}=await this.supabase.client.from('wc_wix_contacts_sync').select('total,synced_at').maybeSingle();
+      if(currentError||!current)throw new Error('Saved contact status is unavailable. Try again.');
+      const contacts:WixContact[]=[];
+      for(let start=0;start<current.total;start+=500){
+        const {data,error}=await this.supabase.client.from('wc_wix_contacts').select('wix_contact_id,contact').order('wix_contact_id').range(start,start+499);
+        if(error||!data)throw new Error('Could not read saved contacts. Try again.');
+        contacts.push(...data.map(row=>row.contact as WixContact));
+      }
+      if(contacts.length!==current.total||new Set(contacts.map(c=>c.id)).size!==current.total)throw new Error('Saved contacts are incomplete. Try again.');
+      const {data:after,error:afterError}=await this.supabase.client.from('wc_wix_contacts_sync').select('total,synced_at').maybeSingle();
+      if(afterError||after?.synced_at!==current.synced_at||after?.total!==current.total)throw new Error('Contacts changed while loading. Try again.');
+      this.contacts.set(contacts);this.syncedAt.set(current.synced_at);this.loaded.set(true);
     }catch(error){this.error.set(error instanceof Error?error.message:'Could not load contacts.');}
-    finally{this.loading.set(false);}
+    finally{this.loading.set(false);this.syncing.set(false);}
   }
 }

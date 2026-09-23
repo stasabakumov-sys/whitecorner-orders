@@ -1,19 +1,35 @@
 import {CustomersService} from './customers.service';
-describe('Wix contacts loading',()=>{
-  it('loads every page beyond 1000 contacts, preserves Wix IDs, and publishes only a complete list',async()=>{
-    const offsets:number[]=[];
-    const service=new CustomersService({client:{functions:{invoke:async(_name:string,{body}:any)=>{
-      expect(body.action).toBe('queryContacts');offsets.push(body.offset);
-      expect(service.contacts()).toEqual([]);
-      const count=Math.min(500,1506-body.offset);
-      return {data:{contacts:Array.from({length:count},(_,i)=>({id:`contact-${body.offset+i}`})),total:1506,nextOffset:body.offset+count===1506?null:body.offset+count},error:null};
-    }}}} as any);
+
+describe('saved Wix contacts',()=>{
+  it('reads every saved page without requesting Wix again',async()=>{
+    const reads:number[]=[];
+    const client={
+      from:(table:string)=>table==='wc_wix_contacts_sync'
+        ? {select:()=>({maybeSingle:async()=>({data:{total:1002,synced_at:'2026-09-23T00:00:00Z'},error:null})})}
+        : {select:()=>({order:()=>({range:async(start:number)=>{
+          reads.push(start);
+          const count=Math.min(500,1002-start);
+          return {data:Array.from({length:count},(_,i)=>({contact:{id:`contact-${start+i}`}})),error:null};
+        }})})},
+      functions:{invoke:async()=>{throw Error('Wix should not be called');}},
+    };
+    const service=new CustomersService({client} as any);
     await service.load();
-    expect(offsets).toEqual([0,500,1000,1500]);expect(service.contacts().length).toBe(1506);expect(service.loaded()).toBe(true);
+    expect(reads).toEqual([0,500,1000]);
+    expect(service.contacts().length).toBe(1002);
+    expect(service.loaded()).toBe(true);
   });
-  it('retains the previous complete list when a page fails or repeats',async()=>{
-    const service=new CustomersService({client:{functions:{invoke:async()=>({data:{contacts:[{id:'repeat'}],total:3,nextOffset:1}})}}} as any);
-    service.contacts.set([{id:'previous'}]);await service.load();
-    expect(service.contacts()).toEqual([{id:'previous'}]);expect(service.error()).toContain('pagination stopped');expect(service.loading()).toBe(false);
+
+  it('keeps the previous list when manual refresh fails',async()=>{
+    const client={
+      from:()=>({select:()=>({maybeSingle:async()=>({data:{total:1,synced_at:'2026-09-23T00:00:00Z'},error:null})})}),
+      functions:{invoke:async()=>({data:{error:'Wix unavailable'},error:null})},
+    };
+    const service=new CustomersService({client} as any);
+    service.contacts.set([{id:'previous'}]);service.loaded.set(true);
+    await service.load(true);
+    expect(service.contacts()).toEqual([{id:'previous'}]);
+    expect(service.error()).toContain('Wix unavailable');
+    expect(service.loading()).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { courierReviewCall, processDeliveryQueue } from '../_shared/delivery-review-worker.ts';
 import { syncShippingFulfillment } from "./shipping-fulfillment.ts";
 import { queryContactsPage } from './contacts.ts';
+import { syncContacts } from './contacts-sync.ts';
 import { queryCatalogPage } from './catalog.ts';
 import { autoRefreshCatalogBatch, importCatalogPage, refreshCatalogProduct } from './catalog-import.ts';
 import { importOrderHistory } from './order-history.ts';
@@ -126,6 +127,16 @@ Deno.serve(async (req) => {
       if(authError||!user.user)return new Response(JSON.stringify({error:'Authentication required'}),{status:401,headers:jsonHeaders});
       try{return new Response(JSON.stringify(await queryContactsPage(requestBody,wixHeaders)),{headers:jsonHeaders});}
       catch(error){return new Response(JSON.stringify({error:error instanceof Error?error.message:'Contacts could not be loaded'}),{status:502,headers:jsonHeaders});}
+    }
+
+    if (requestBody?.action === 'syncContacts') {
+      const jwt=req.headers.get('Authorization')?.replace(/^Bearer\s+/i,'')||'';
+      if(jwt!==serviceRole){
+        const {data:user,error:authError}=await db.auth.getUser(jwt);
+        if(authError||!user.user)return new Response(JSON.stringify({error:'Authentication required'}),{status:401,headers:jsonHeaders});
+      }
+      try{return new Response(JSON.stringify(await syncContacts(db,wixHeaders,wixSiteId)),{headers:jsonHeaders});}
+      catch(error){return new Response(JSON.stringify({error:error instanceof Error?error.message:'Contacts synchronization failed'}),{status:502,headers:jsonHeaders});}
     }
 
     if (requestBody?.action === "fulfillShipping") {
@@ -379,6 +390,22 @@ Deno.serve(async (req) => {
     try { catalogRefresh = await autoRefreshCatalogBatch(db,wixHeaders,wixSiteId); }
     catch { console.warn('WIX_CATALOG_AUTO_REFRESH_UNAVAILABLE'); }
 
+    // The existing five-minute order cron also keeps the saved contacts fresh.
+    // Run in the background so a Contacts API failure never delays order sync.
+    let contactsRefreshScheduled = false;
+    try {
+      const {data:contactState,error:contactStateError}=await db.from('wc_wix_contacts_sync')
+        .select('synced_at').eq('site_id',wixSiteId).maybeSingle();
+      if(contactStateError)throw contactStateError;
+      if(!contactState||Date.now()-Date.parse(contactState.synced_at)>6*60*60*1000){
+        const work=syncContacts(db,wixHeaders,wixSiteId)
+          .catch(()=>console.warn('WIX_CONTACTS_AUTO_REFRESH_FAILED'));
+        const runtime=(globalThis as any).EdgeRuntime;
+        if(runtime?.waitUntil){runtime.waitUntil(work);contactsRefreshScheduled=true;}
+        else {await work;contactsRefreshScheduled=true;}
+      }
+    } catch { console.warn('WIX_CONTACTS_AUTO_REFRESH_UNAVAILABLE'); }
+
     const result = {
       ok: true,
       wixPagesScanned: pagesScanned,
@@ -388,6 +415,7 @@ Deno.serve(async (req) => {
       lineItemsUpserted: itemCount,
       productionUnitsEnsured: unitCount,
       catalogRefresh,
+      contactsRefreshScheduled,
       excludedOrders: [...EXCLUDED_ORDER_NUMBERS],
       syncedAt: new Date().toISOString(),
     };

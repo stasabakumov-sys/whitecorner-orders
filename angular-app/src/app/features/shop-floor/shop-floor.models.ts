@@ -2,6 +2,11 @@ export const PAINT_OPERATIONS = ['First primer', 'First sanding', 'Second primer
 export const BACKDROP_PAINT_OPERATIONS = ['First primer', 'First sanding', 'Finish coat'];
 export function paintOperations(productName:string){return /backdrop/i.test(productName||'')?BACKDROP_PAINT_OPERATIONS:PAINT_OPERATIONS;}
 export function paintLabel(operation:string,operations:string[]){return operations.length===3?({'First primer':'Primer','First sanding':'Sanding'} as Record<string,string>)[operation]||operation:operation;}
+export function needsPaintVolume(operation:string){return ['First primer','Second primer','Finish coat','Repaint'].includes(operation);}
+export function parsePaintVolume(value:string):number|null {
+ const input=value.trim();if(!/^(?:\d+)(?:\.\d{1,2})?$/.test(input))return null;
+ const amount=Number(input);return Number.isFinite(amount)&&amount>0&&amount<=100000?amount:null;
+}
 export const OTHER_OPERATIONS = ['Cleaning', 'Design', 'Administration', 'Development', 'Rest'];
 export interface ShopPart { id: string; name: string; component_product_id?: string }
 export interface ShopProductChoice { unit:{id:string}; order:{id:string}; mainItem:{product_name:string}; code:string; status:string }
@@ -11,7 +16,7 @@ export function productChoice(view:ShopProductChoice):ShopProductChoice {
 export interface ShopTemplate { id: string; product_id?: string|null; name: string; parts: ShopPart[]; estimates: Record<string, number>; version: number; size_key?:string|null; folding?:'foldable'|'nonfoldable'|null }
 export interface ShopUnit { unit_id: string; template_id: string; parts: ShopPart[]; estimates: Record<string, number>; finish: 'raw'|'painted'; completed: string[]; paint_operations?:string[] }
 export interface ShopShift { id: string; worker_id: string; started_at: string; ended_at: string|null }
-export interface ShopInterval extends ShopShift { shift_id: string; unit_id: string|null; stage: string; operation: string; part_id: string|null }
+export interface ShopInterval extends ShopShift { shift_id: string; unit_id: string|null; stage: string; operation: string; part_id: string|null; paint_volume_ml?:number|null }
 export interface ShopData { templates: ShopTemplate[]; units: ShopUnit[]; shifts: ShopShift[]; intervals: ShopInterval[] }
 export interface ShopCommand { id: string; action: string; payload: Record<string, unknown> }
 export function requiresSanding(unit: Pick<ShopUnit,'parts'|'estimates'>): boolean {
@@ -60,6 +65,9 @@ export function projectCommands(base:ShopData,commands:ShopCommand[],worker:stri
   if(c.action==='shift-start'){shift={id:c.id,worker_id:worker,started_at:at,ended_at:null};data.shifts.push(shift);}
   if(!shift)continue;
   if(active)active.ended_at=at;
+  if(active&&['finish-operation','finish-stage'].includes(c.action)&&active.stage==='Painting'&&needsPaintVolume(active.operation)){
+   const volume=Number(c.payload['paintVolumeMl']);if(Number.isFinite(volume)&&volume>0)active.paint_volume_ml=volume;
+  }
   if(['finish-operation','finish-stage'].includes(c.action)&&active?.unit_id){
    const u=data.units.find(u=>u.unit_id===active.unit_id);
    if(u){
