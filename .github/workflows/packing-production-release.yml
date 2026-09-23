@@ -1,0 +1,54 @@
+name: Packing production release
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect production or apply Packing schema and function
+        type: choice
+        options: [verify, apply]
+        default: verify
+permissions:
+  contents: read
+concurrency:
+  group: packing-production-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.6
+      - name: Check invitation function
+        run: deno check --no-lock supabase/functions/hub-users/index.ts
+      - name: Rehearse Packing migrations in isolated PostgreSQL
+        run: |
+          npm install --prefix "$RUNNER_TEMP/packing-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/packing.test.mjs "$RUNNER_TEMP/packing-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Verify production prerequisites
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/packing-production-release.mjs --verify
+      - name: Apply and verify Packing migration
+        if: inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/packing-production-release.mjs --apply
+      - uses: supabase/setup-cli@v1
+        if: inputs.mode == 'apply'
+        with:
+          version: latest
+      - name: Configure invitation return URL
+        if: inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase secrets set 'HUB_INVITE_REDIRECT_URL=https://stasabakumov-sys.github.io/whitecorner-orders/angular2/?setup=1' --project-ref zgvnrpspwluapaxnycrg
+      - name: Deploy invitation function
+        if: inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy hub-users --project-ref zgvnrpspwluapaxnycrg
