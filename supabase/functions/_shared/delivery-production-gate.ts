@@ -23,7 +23,7 @@ export async function setReviewedProductionStatus(db:any,order:any,rules:any[],r
  });
  if(error){
   const message=String(error.message||'');
-  if(/^(Add and assign product parts in Shop Floor|Finish the current stage in Shop Floor|Complete the next production stage in order|RAW skips Painting|No Product card matches|No Estimated min template matches|Multiple Estimated min templates match|The order finish is unclear)/.test(message))throw Error(message);
+  if(/^(Add and assign product parts in Shop Floor|Finish the current stage in Shop Floor|Complete the next production stage in order|RAW skips Painting|No Product card matches|No Estimated min template matches|Multiple Estimated min templates match|Foldable choice is missing or conflicting|The order finish is unclear)/.test(message))throw Error(message);
   throw Error('Order or delivery review changed. Reload before changing production status.');
  }
  return data;

@@ -227,6 +227,8 @@ test('production explains Shop Floor refusals without exposing other database er
  const request={unitId:'00000000-0000-4000-8000-000000000001',next:'CNC'};
  s.db.rpc=async()=>({error:{message:'Add and assign product parts in Shop Floor before CNC'}});
  await assert.rejects(production.setReviewedProductionStatus(s.db,s.order,[],null,request,'actor'),/Add and assign product parts/);
+ s.db.rpc=async()=>({error:{message:'Foldable choice is missing or conflicting in this order. Review its Wix options before CNC'}});
+ await assert.rejects(production.setReviewedProductionStatus(s.db,s.order,[],null,request,'actor'),/Foldable choice is missing or conflicting/);
  s.db.rpc=async()=>({error:{message:'private database detail'}});
  await assert.rejects(production.setReviewedProductionStatus(s.db,s.order,[],null,request,'actor'),/Order or delivery review changed/);
 });
