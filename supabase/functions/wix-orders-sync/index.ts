@@ -3,7 +3,7 @@ import { courierReviewCall, processDeliveryQueue } from '../_shared/delivery-rev
 import { syncShippingFulfillment } from "./shipping-fulfillment.ts";
 import { queryContactsPage } from './contacts.ts';
 import { queryCatalogPage } from './catalog.ts';
-import { importCatalogPage, refreshCatalogProduct } from './catalog-import.ts';
+import { autoRefreshCatalogBatch, importCatalogPage, refreshCatalogProduct } from './catalog-import.ts';
 import { importOrderHistory } from './order-history.ts';
 
 const corsHeaders = {
@@ -373,6 +373,12 @@ Deno.serve(async (req) => {
       } catch { console.warn('DELIVERY_REVIEW_QUEUE_UNAVAILABLE'); }
     }
 
+    // Catalogue refresh is best effort: Wix catalogue access must not block
+    // order synchronization or erase the last validated product snapshot.
+    let catalogRefresh = {attempted:0,updated:0,failed:0};
+    try { catalogRefresh = await autoRefreshCatalogBatch(db,wixHeaders,wixSiteId); }
+    catch { console.warn('WIX_CATALOG_AUTO_REFRESH_UNAVAILABLE'); }
+
     const result = {
       ok: true,
       wixPagesScanned: pagesScanned,
@@ -381,6 +387,7 @@ Deno.serve(async (req) => {
       ordersUpserted: insertedOrUpdated,
       lineItemsUpserted: itemCount,
       productionUnitsEnsured: unitCount,
+      catalogRefresh,
       excludedOrders: [...EXCLUDED_ORDER_NUMBERS],
       syncedAt: new Date().toISOString(),
     };
