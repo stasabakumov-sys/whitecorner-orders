@@ -42,11 +42,6 @@ jobs:
         if: inputs.mode == 'apply'
         with:
           version: latest
-      - name: Configure invitation return URL
-        if: inputs.mode == 'apply'
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase secrets set 'HUB_INVITE_REDIRECT_URL=https://stasabakumov-sys.github.io/whitecorner-orders/angular2/?setup=1' --project-ref zgvnrpspwluapaxnycrg
       - name: Deploy invitation function
         if: inputs.mode == 'apply'
         env:
