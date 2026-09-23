@@ -19,7 +19,7 @@ interface CncSheet {
   @if(error){<p class="error" role="alert">{{error}} @if(loadError){<button (click)="load()" [disabled]="loading||busy">Retry load</button>}</p>}
   @if(success){<p role="status">{{success}}</p>}
   @if(backdrop && !orderFolding){<nav class="folding-tabs" aria-label="Backdrop CNC folding option"><button type="button" [class.active]="activeFolding==='foldable'" [attr.aria-pressed]="activeFolding==='foldable'" (click)="activeFolding='foldable'">Foldable</button><button type="button" [class.active]="activeFolding==='nonfoldable'" [attr.aria-pressed]="activeFolding==='nonfoldable'" (click)="activeFolding='nonfoldable'">Non-foldable</button></nav>}
-  @if(backdrop && orderFolding){<p class="variant-note">{{foldingLabel(orderFolding)}} CNC sheets for this order</p>}
+  @if(backdrop && orderFolding){<p class="variant-note">{{foldingLabel(orderFolding)}} CNC sheets for the selected variant</p>}
   @if(backdrop && requireOrderFolding && !orderFolding){<p class="error" role="alert">This order has no clear Foldable option. Check its product options before using CNC sheets.</p>}
   @if(!loading && (!backdrop || !requireOrderFolding || orderFolding)){<div class="table-wrap"><table [class.readonly]="readonly"><thead><tr><th>No</th><th>Name</th><th>Material</th><th>Parts</th><th>CNC file</th><th>Comment</th>@if(!readonly){<th></th>}</tr></thead><tbody>
    @for(row of visibleSheets();track row.id || $index){<tr>
