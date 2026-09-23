@@ -9,6 +9,7 @@ import {FormsModule} from '@angular/forms';
 import {catalogSizes,backdropSizeKey,backdropDrawingKey,qualifiedDrawingKey,optionSizes,packagingSizeGroups,packagingSizes,sizeKeyLabel} from './product-sizes';
 import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
+import {environment} from '../../../environments/environment';
 import {BoxDrawingComponent} from './box-drawing.component';
 import {PackageDrawingsComponent} from './package-drawings.component';
 import {ProductDetailsComponent} from './product-details.component';
@@ -156,6 +157,9 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               <span class="badge">{{reusableProfileCount(p)}} reusable profile(s)</span>
             </div>
 
+            @if(catalogUpdating()){<p class="small" role="status">Checking this product for Wix changes…</p>}
+            @if(catalogRefreshError()){<p class="error" role="alert">{{catalogRefreshError()}} <button type="button" (click)="loadFinishCatalog(p.id)">Retry</button></p>}
+
             <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" [selectedSize]="activeProductSize(p)" [backdrop]="isBackdrop(p)" [selectedFolding]="selectedBackdropFolding" (selectedSizeChange)="selectProductSize(p,$event)" (selectedFoldingChange)="selectedBackdropFolding=$event" (saved)="updateDetails($event)">
             <span class="product-drawing-label">Product drawing · {{activeProductSize(p)||'All sizes'}}@if(isBackdrop(p)){ · shared by folding options}</span>
             <app-box-drawing [productId]="p.id" [variantKey]="productDrawingKey(p)" />
@@ -297,12 +301,34 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 export class ShippingDataComponent implements OnInit {
   search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'|'cnc'='cost';selectedCartSize='';selectedPackingSize='';selectedBackdropFolding:Folding='foldable';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
   openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.selectedPackingSize='';this.selectedBackdropFolding='foldable';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
+  catalogUpdating=signal(false);catalogRefreshError=signal('');private catalogRequest=0;
   finishCatalog=signal<{id:string;source:any}|null>(null);
   catalogProducts=signal<Record<string,any>>({});
   updateCatalog(id:string,source:any){this.catalogProducts.update(rows=>({...rows,[id]:source}));this.finishCatalog.set({id,source});}
   finishModes(p:ShippingProduct){const catalog=this.finishCatalog();return productFinishModes(p,catalog?.id===p.id?catalog.source:null,this.costProfiles(p.id,this.activeCartSize(p)));}
   hasPainting(p:ShippingProduct){return this.finishModes(p).includes(true);}
-  async loadFinishCatalog(id:string){this.finishCatalog.set(null);if(id.startsWith('saved:'))return;try{const {data,error}=await this.supabase.client.from('wc_wix_catalog_products').select('source_product').eq('shipping_product_id',id).maybeSingle();if(this.selectedId()!==id)return;if(error)throw error;this.updateCatalog(id,data?.source_product||null);}catch{this.error.set('Could not load current product sizes and finishes. Reopen the product to retry.');}finally{this.cdr?.markForCheck();}}
+  async loadFinishCatalog(id:string){
+    const request=++this.catalogRequest;this.finishCatalog.set(null);this.catalogRefreshError.set('');this.catalogUpdating.set(false);
+    if(id.startsWith('saved:'))return;
+    try{
+      const {data,error}=await this.supabase.client.from('wc_wix_catalog_products').select('source_product').eq('shipping_product_id',id).maybeSingle();
+      if(request!==this.catalogRequest||this.selectedId()!==id)return;
+      if(error)throw error;
+      this.updateCatalog(id,data?.source_product||null);
+      if(!data?.source_product)return;
+      this.catalogUpdating.set(true);
+      const refreshed=await this.supabase.client.functions.invoke(environment.wixSyncFunction,{body:{action:'refreshCatalogProduct',productId:id}});
+      if(request!==this.catalogRequest||this.selectedId()!==id)return;
+      if(refreshed.error||!refreshed.data?.ok||!refreshed.data?.source_product)throw Error('Wix update failed. Saved product data is still available.');
+      this.updateCatalog(id,refreshed.data.source_product);
+      this.products.update(rows=>rows.map(p=>p.id===id?{...p,product_name:refreshed.data.source_product.name}:p));
+    }catch{
+      if(request===this.catalogRequest&&this.selectedId()===id)this.catalogRefreshError.set('Could not check Wix changes. Saved product data is shown.');
+    }finally{
+      if(request===this.catalogRequest)this.catalogUpdating.set(false);
+      this.cdr?.markForCheck();
+    }
+  }
   isBackdrop(p?:ShippingProduct){return componentNormal(p?.product_type||'')==='backdrop'||/backdrop/i.test(p?.product_name||'');}
   isCart(p?:ShippingProduct){return isCartProduct(p);}
   packagingScope(p?:ShippingProduct){return this.isBackdrop(p)?'shared-backdrop' as const:'product' as const;}
