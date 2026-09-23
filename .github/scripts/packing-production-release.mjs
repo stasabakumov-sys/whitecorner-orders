@@ -1,8 +1,7 @@
-// Release only the reviewed Packing migrations and invitation redirect.
+// Release only the reviewed Packing migrations.
 import {readFile} from 'node:fs/promises';
 
 const project='zgvnrpspwluapaxnycrg';
-const redirect='https://stasabakumov-sys.github.io/whitecorner-orders/angular2/?setup=1';
 const migrations=[
  ['20260923000500','box_rd_files'],
  ['20260923000600','packing_tasks'],
@@ -41,11 +40,9 @@ const verification=`select
  coalesce((select relrowsecurity from pg_class where oid=to_regclass('public.wc_packing_tasks')),false) tasks_rls;`;
 const before=(await sql(preflight))[0];
 console.log('Preflight:',JSON.stringify(before));
+console.log('Auth redirect allow list requires separate verification; this token has database access only.');
 if(!before?.profiles_ready||!before?.units_ready||!before?.product_rpc_ready||!before?.main_rpc_ready)throw Error('Packing prerequisites are missing');
 if(!before.packing_registered&&before.user_count!==2)throw Error('Expected exactly two existing Auth users before assigning manager roles');
-const auth=await request('/config/auth');
-const allowed=String(auth.uri_allow_list||'').split(',').map(value=>value.trim()).filter(Boolean);
-console.log('Invitation redirect already listed:',allowed.includes(redirect));
 if(process.argv.includes('--verify')){
  if(before.rd_registered&&before.packing_registered)console.log('Packing state:',JSON.stringify((await sql(verification))[0]));
  process.exit(0);
@@ -61,9 +58,3 @@ await sql(`begin;select pg_advisory_xact_lock(20260923,6);do $release$ begin ${b
 const after=(await sql(verification))[0];
 if(!after||Object.entries(after).some(([key,value])=>key==='manager_count'?value!==2:value!==true))throw Error(`Packing postflight failed: ${JSON.stringify(after)}`);
 console.log('Packing database verified:',JSON.stringify(after));
-if(!allowed.includes(redirect)){
- await request('/config/auth','PATCH',{uri_allow_list:[...allowed,redirect].join(',')});
- const updated=await request('/config/auth');
- if(!String(updated.uri_allow_list||'').split(',').map(value=>value.trim()).includes(redirect))throw Error('Invitation redirect was not saved');
- console.log('Invitation redirect added to Auth allow list.');
-}
