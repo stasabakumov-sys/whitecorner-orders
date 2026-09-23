@@ -33,6 +33,14 @@ describe('Shop Floor mobile work selection',()=>{
   const {c,service,views,running}=await setup();running();c.chooseStage('CNC');c.chooseProduct(views[1]);
   expect(c.active()?.unit_id).toBe('u1');expect(c.dockLabel()).toContain('#TEST-1');expect(c.canStart()).toBe(false);expect(service.command).not.toHaveBeenCalled();
  });
+ it('keeps CNC reference data desktop-only and shows the total time counter on every layout',async()=>{
+  const {fixture,c,views}=await setup();views[0].status='CNC';await c.chooseProduct(views[0]);fixture.changeDetectorRef.markForCheck();fixture.detectChanges();
+  const root=fixture.nativeElement as HTMLElement,time=root.querySelector('.stage-time')!;
+  expect(time.getAttribute('aria-label')).toBe('Total CNC time');expect(time.textContent).toContain('0:00:00');
+  expect(root.querySelector('.cnc-reference')?.classList.contains('desktop-only')).toBe(true);
+  const hidden=Array.from(root.querySelectorAll('.mobile-cnc-hidden')).map(element=>element.textContent||'').join(' ');
+  expect(hidden).toContain('Saved parts');expect(hidden).toContain('Estimated time');
+ });
  it('distinguishes matching products by complete options and allocated add-ons',async()=>{
   const {fixture,c,views}=await setup();
   views[0].mainItem={product_name:'Essential Cart - Plywood Mobile Cart - Mobile Bar',wix_options:{Colour:'White',Size:'1300 mm','Side shelves':'Yes'},description_lines:[{name:{original:'Side shelves'},plainText:{original:'Yes'}}]};

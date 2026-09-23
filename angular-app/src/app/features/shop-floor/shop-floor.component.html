@@ -41,17 +41,17 @@
   @else{<button (click)="mobileDetail=false">← Products in {{mobileStage}}</button>}
   </div>
   <div class="controls desktop-only"><label>Stage<select [(ngModel)]="stageFilter"><option value="">All stages</option>@for(stage of production.statuses;track stage){<option>{{stage}}</option>}</select></label><label class="wide">Product<select [(ngModel)]="unitId" (ngModelChange)="selectUnit()"><option value="">Select a product</option>@for(v of choices();track v.unit.id){<option [value]="v.unit.id">{{v.code}} · {{v.mainItem.product_name}} · {{v.status}}</option>}</select></label></div>
-  @if(selected();as v){<section class="panel product-detail" [class.mobile-hidden]="!mobileDetail||v.status==='New'"><div class="product-detail-heading">@if(image(v)){<img class="product-thumbnail" [src]="image(v)" [alt]="shortProductName(v.mainItem.product_name)" (error)="failedImages.add(v.unit.id)">}@else{<span class="product-thumbnail image-placeholder">No image</span>}<div class="product-card-info"><strong>{{v.code}}</strong><h2>{{shortProductName(v.mainItem.product_name)}}</h2></div></div><div class="product-options">@for(option of cardOptions(v);track $index){<span>{{option}}</span>}</div><p>Current stage: <b>{{v.status}}</b></p>@if(v.status==='Packing'||v.status==='Ready'){<p>Work for this stage is managed on the <a routerLink="/production">Production Board</a>.</p>}
+  @if(selected();as v){<section class="panel product-detail" [class.mobile-hidden]="!mobileDetail||v.status==='New'"><div class="product-detail-heading">@if(image(v)){<img class="product-thumbnail" [src]="image(v)" [alt]="shortProductName(v.mainItem.product_name)" (error)="failedImages.add(v.unit.id)">}@else{<span class="product-thumbnail image-placeholder">No image</span>}<div class="product-card-info"><strong>{{v.code}}</strong><h2>{{shortProductName(v.mainItem.product_name)}}</h2></div></div><div class="product-options">@for(option of cardOptions(v);track $index){<span>{{option}}</span>}</div><p>Current stage: <b>{{v.status}}</b></p>@if(v.status==='CNC'){<div class="stage-time" aria-label="Total CNC time"><span>Total CNC time</span><strong>{{format(productTime('CNC'))}}</strong></div>}@if(v.status==='Packing'||v.status==='Ready'){<p>Work for this stage is managed on the <a routerLink="/production">Production Board</a>.</p>}
    @if(v.status==='CNC'){
-    @if(!phone.online()){<p class="warning">Reconnect to view or edit CNC cutting sheets.</p>}
-    @else if(selectedProductId()){<app-product-cnc [productId]="selectedProductId()" [parts]="snapshot()?.parts||[]" [backdrop]="cncBackdrop()" [orderFolding]="cncFolding()" [requireOrderFolding]="cncBackdrop()" />}
-    @else{<p class="warning">The product card could not be matched to this order. Open Products to check its catalogue link.</p>}
+    <div class="desktop-only cnc-reference">@if(!phone.online()){<p class="warning">Reconnect to view CNC cutting sheets and download files.</p>}
+    @else if(selectedProductId()){<app-product-cnc [productId]="selectedProductId()" [parts]="snapshot()?.parts||[]" [backdrop]="cncBackdrop()" [orderFolding]="cncFolding()" [requireOrderFolding]="cncBackdrop()" [readonly]="true" />}
+    @else{<p class="warning">The product card could not be matched to this order. Open Products to check its catalogue link.</p>}</div>
    }
-   @if(!snapshot()) {<p class="warning">@if(assigning){Loading the saved product composition…}@else if(!productTemplates().length){No saved parts template matches this product's size and folding option. Check Estimated min in the Product card.}@else if(!finish){The order does not contain a clear finish. Choose it below.}@else{The product composition could not be assigned automatically. Review and retry below.}</p>
-   <div class="controls"><label>Parts template<select [(ngModel)]="templateId"><option value="">Select template</option>@for(t of productTemplates();track t.id){<option [value]="t.id">{{t.name}}</option>}</select></label><label>Finish type<select [(ngModel)]="finish"><option value="">Choose finish</option><option value="raw">RAW</option><option value="painted">Painted</option></select></label><button (click)="assign()" [disabled]="blocked()||!templateId||!finish">Retry product composition</button>@if(selectedProductId()){<a routerLink="/shipping-data" [queryParams]="{productId:selectedProductId()}">Open Product card</a>}</div>}
+   @if(!snapshot()) {<div [class.mobile-cnc-hidden]="v.status==='CNC'"><p class="warning">@if(assigning){Loading the saved product composition…}@else if(!productTemplates().length){No saved parts template matches this product's size and folding option. Check Estimated min in the Product card.}@else if(!finish){The order does not contain a clear finish. Choose it below.}@else{The product composition could not be assigned automatically. Review and retry below.}</p>
+   <div class="controls"><label>Parts template<select [(ngModel)]="templateId"><option value="">Select template</option>@for(t of productTemplates();track t.id){<option [value]="t.id">{{t.name}}</option>}</select></label><label>Finish type<select [(ngModel)]="finish"><option value="">Choose finish</option><option value="raw">RAW</option><option value="painted">Painted</option></select></label><button (click)="assign()" [disabled]="blocked()||!templateId||!finish">Retry product composition</button>@if(selectedProductId()){<a routerLink="/shipping-data" [queryParams]="{productId:selectedProductId()}">Open Product card</a>}</div></div>}
    @if(snapshot();as u){
-    <p>Saved parts: @for(p of u.parts;track p.id){<span>{{p.name}} · </span>} Finish: {{u.finish}}</p>
-    <p>Recorded work on this stage: <b>{{format(productTime(v.status))}}</b> · all work sessions combined</p>
+    <p [class.mobile-cnc-hidden]="v.status==='CNC'">Saved parts: @for(p of u.parts;track p.id){<span>{{p.name}} · </span>} Finish: {{u.finish}}</p>
+    @if(v.status!=='CNC'){<p>Recorded work on this stage: <b>{{format(productTime(v.status))}}</b> · all work sessions combined</p>}
     @if(v.status==='New'){<button class="primary" (click)="enterCnc()" [disabled]="blocked()">Move to CNC</button>}
     @if(v.status==='Assembly'||v.status==='Sanding'){
      <div class="controls part-buttons" aria-label="Available parts">@for(p of remainingParts();track p.id){<button (click)="partId=p.id" [class.selected]="partId===p.id" [attr.aria-pressed]="partId===p.id">{{p.name}}</button>}@empty{<p>All parts complete for {{v.status}}.</p>}</div>
@@ -67,12 +67,12 @@
      @if(operation){<p>{{operation}}: {{format(productTime('Painting',undefined,operation))}} recorded</p>}
      <button (click)="finishPainting()" [disabled]="blocked()||!done('Painting:Finish coat')||done('Painting:finished')">Finish Painting</button>
     }
-    @if(['CNC','Assembly','Sanding','Painting'].includes(v.status)){
+    @if(['CNC','Assembly','Sanding','Painting'].includes(v.status)){<div [class.mobile-cnc-hidden]="v.status==='CNC'">
      <p>Estimated time: {{estimate()===undefined?'Not set':estimate()+' min'}}</p>
      @if(workRunning()){<p role="status">A task is already running. Use Pause, {{active()?.part_id?'Finish part':'Finish operation'}}, or End shift above before starting another task.</p>}
      @else{<button class="primary desktop-only" (click)="start()" [disabled]="!canStart()">Start / continue task</button>}
-    }
-    @if(done(v.status+':finished')){<p>Stage complete. If the board has not advanced, retry below.</p><button (click)="advance()" [disabled]="blocked()">Move to next stage</button>}
+    </div>}
+    @if(done(v.status+':finished')){<div [class.mobile-cnc-hidden]="v.status==='CNC'"><p>Stage complete. If the board has not advanced, retry below.</p><button (click)="advance()" [disabled]="blocked()">Move to next stage</button></div>}
    }
   </section>}
  }
