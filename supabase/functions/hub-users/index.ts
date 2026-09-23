@@ -28,7 +28,7 @@ Deno.serve(async request=>{
   const name=String(body.name||'').trim();
   if(email.length>254||!/^\S+@\S+\.\S+$/.test(email))return reply({error:'Enter a valid employee email'},422);
   if(name.length<1||name.length>100)return reply({error:'Enter the employee name (up to 100 characters)'},422);
-  const redirect=Deno.env.get('HUB_INVITE_REDIRECT_URL');
+  const redirect=Deno.env.get('HUB_INVITE_REDIRECT_URL')||'https://stasabakumov-sys.github.io/whitecorner-orders/angular2/?setup=1';
   if(!redirect||!/^https:\/\//i.test(redirect)||!new URL(redirect).searchParams.has('setup')){
    return reply({error:'Invitation return URL is not configured. Ask the administrator to set it before inviting staff.'},503);
   }
