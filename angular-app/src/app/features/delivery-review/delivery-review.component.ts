@@ -1,10 +1,10 @@
 import {ProductLinkComponent} from '../../shared/product-link/product-link.component';
-import { Component, computed, OnInit, signal, Optional } from '@angular/core';
+import { ChangeDetectorRef, Component, computed, OnInit, signal, Optional } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DeliveryReviewService } from '../../core/services/delivery-review.service';
-import { isNonPackagingComponent, cents, deliveryCents, orderItemOptionLabels, reviewItems, packagingError, PackageComponent, ReviewPackage } from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import { isNonPackagingComponent, cents, deliveryCents, orderItemOptionLabels, productId, reviewItems, packagingError, PackageComponent, ReviewPackage } from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {orderProducts} from '../../core/utils/order-products';
 
 @Component({
@@ -57,7 +57,9 @@ import {orderProducts} from '../../core/utils/order-products';
  <div class="product-card">
  @if(group.item;as item){
  @if(image(item)){<img [src]="image(item)" [alt]="item.product_name||'Product'" loading="lazy" />}
- <div class="product-description"><b><app-product-link [item]="item" /></b><div class="chips"><span>qty: {{item.quantity||1}}</span>@for(option of options(item);track option){<span>{{option}}</span>}</div></div>
+ <div class="product-description"><b><app-product-link [item]="item" /></b><div class="chips"><span>qty: {{item.quantity||1}}</span>@for(option of options(item);track option){<span>{{option}}</span>}</div>
+ @if(sizeChoices[item.id]?.length){<div class="size-exception"><label>Confirmed size for this order <select [ngModel]="sizeDraft[item.id]||item.size||''" (ngModelChange)="sizeDraft[item.id]=$event" [disabled]="s.busy()"><option value="">Choose size</option>@for(size of sizeChoices[item.id];track size){<option [value]="size">{{size}}</option>}</select></label><button (click)="saveSize(row,item)" [disabled]="s.busy()||!sizeDraft[item.id]||sizeDraft[item.id]===item.size">Save size</button></div>}
+ </div>
  <span class="product-price">{{money(productTotal(item))}}</span>
  }@else{<b>Unassigned packaging — review in Products</b>}
  </div>
@@ -92,6 +94,7 @@ import {orderProducts} from '../../core/utils/order-products';
  styleUrl:'./delivery-review.component.css',
 })
 export class DeliveryReviewComponent implements OnInit {
+ sizeChoices:Record<string,string[]>={};sizeDraft:Record<string,string>={};
  automaticLoading=signal(false);
  async calculateFromProducts(row:any){if(this.automaticLoading()||row.quote_attempted_at||row.token)return;this.automaticLoading.set(true);try{await this.s.calculateFromProducts(row);}finally{this.automaticLoading.set(false);}}
  async recalculateFromProducts(row:any){if(!this.canRequote(row)||this.automaticLoading())return;this.automaticLoading.set(true);try{await this.s.calculateFromProducts(row,true);}finally{this.automaticLoading.set(false);}}
@@ -100,7 +103,7 @@ export class DeliveryReviewComponent implements OnInit {
  private boxOwners=new WeakMap<ReviewPackage,string>();
  filter='all';selectedId=signal<string|null>(null);reason='';
  selected=computed(()=>this.s.rows().find(r=>r.order_id===this.selectedId())||null);
- constructor(public s:DeliveryReviewService, @Optional() private route?:ActivatedRoute,@Optional() private router?:Router){}
+ constructor(public s:DeliveryReviewService, @Optional() private route?:ActivatedRoute,@Optional() private router?:Router,@Optional() private cdr?:ChangeDetectorRef){}
  ngOnInit(){void this.s.load().then(()=>{const number=this.route?.snapshot.queryParamMap.get('order');if(number){const row=this.s.rows().find(r=>String(r.wc_orders?.order_number)===number);if(row)this.open(row);}});}
  visible(){
   const resolved=(r:any)=>['within_target','approved_exception','approved_without_quote'].includes(this.s.outcome(r).status);
@@ -114,7 +117,22 @@ export class DeliveryReviewComponent implements OnInit {
  }
  async reload(){this.s.error.set('');await this.s.load();}
  canRequote(row:any){return !row.token&&['failed','quoted','uncertain'].includes(row.state);}
- async open(row:any){this.acceptUnknownCost=false;this.selectedId.set(row.order_id);this.reason='';this.s.error.set('');if(!row.quote_attempted_at)await this.calculateFromProducts(row);}
+ async open(row:any){this.acceptUnknownCost=false;this.selectedId.set(row.order_id);this.reason='';this.s.error.set('');void this.loadSizeChoices(row);if(!row.quote_attempted_at)await this.calculateFromProducts(row);}
+ async loadSizeChoices(row:any){
+  if(!row.wc_orders)return;
+  for(const item of reviewItems(row.wc_orders,this.s.rules())){
+   if(row.quote_attempted_at||!productId(item)||orderItemOptionLabels({...item,size:null},Number.MAX_SAFE_INTEGER).some(label=>/^size\s*:/i.test(label)))continue;
+   try{this.sizeChoices[item.id]=await this.s.orderItemSizeChoices(row.order_id,item.id);this.sizeDraft[item.id]=item.size||'';this.cdr?.markForCheck();}
+   catch(e:any){this.s.error.set(e?.message||'Product sizes could not be loaded. Reload and retry.');}
+  }
+ }
+ async saveSize(row:any,item:any){
+  const size=this.sizeDraft[item.id];if(!size||!this.sizeChoices[item.id]?.includes(size))return;
+  if(await this.s.setOrderItemSize(row.order_id,item.id,size)){
+   const current=this.s.rows().find(candidate=>candidate.order_id===row.order_id);
+   if(current&&!current.quote_attempted_at)await this.calculateFromProducts(current);
+  }
+ }
  canApproveWithoutQuote(row:any){return !row.quote_attempted_at&&!row.token&&['pending','packaging_required','legacy_packaging_required','address_required','failed','approved_without_quote'].includes(row.state);}
  async approveWithoutQuote(row:any){if(this.canApproveWithoutQuote(row)&&this.acceptUnknownCost&&this.reason.trim().length>=3&&!this.s.busy())await this.s.approveWithoutQuote(row.order_id,this.reason);}
  packageNumbers=new WeakMap<ReviewPackage,number>();

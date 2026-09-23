@@ -2,9 +2,26 @@ import {TestBed} from '@angular/core/testing';
 import {describe,it,expect,vi} from 'vitest';
 import {DeliveryReviewComponent} from './delivery-review.component';
 import {DeliveryReviewService} from '../../core/services/delivery-review.service';
-import {buildReviewRequest,evaluateQuotes,insuranceFor,reviewComponents,reviewInputKey} from '../../../../../supabase/functions/_shared/delivery-review-domain';
+import {buildReviewRequest,catalogSizeChoices,evaluateQuotes,insuranceFor,orderItemOptionLabels,reviewComponents,reviewInputKey,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 describe('Delivery review UI',()=>{
+ it('uses a confirmed Hub size without changing the Wix order snapshot',()=>{
+  const item={id:'wavy',product_name:'Wavy Backdrop',catalog_reference:{catalogItemId:'wix-wavy'},wix_options:{Colour:'Raw',Foldable:'NO'},size:'180cm x 100cm'};
+  expect(orderItemOptionLabels(item)).toContain('Size: 180cm x 100cm');
+  expect(item.wix_options).not.toHaveProperty('Size');
+  expect(variantSignature(item)).toBe(variantSignature({...item,size:null,wix_options:{...item.wix_options,Size:'180cm x 100cm'}}));
+  expect(catalogSizeChoices({variants:[{choices:{Size:'180cm x 100cm'}},{choices:{Size:'200cm x 100cm'}}]})).toEqual(['180cm x 100cm','200cm x 100cm']);
+ });
+ it('saves a selected size for one order item and recalculates its unquoted report',async()=>{
+  const s=new DeliveryReviewService({} as any),c=new DeliveryReviewComponent(s);
+  const item={id:'wavy',size:null,wix_options:{Foldable:'NO'}};
+  const row={order_id:'order',wc_orders:{wc_order_items:[item]},state:'packaging_required'};
+  s.rows.set([row]);c.sizeChoices[item.id]=['180cm x 100cm'];c.sizeDraft[item.id]='180cm x 100cm';
+  const save=vi.spyOn(s,'setOrderItemSize').mockResolvedValue(true),calculate=vi.spyOn(c,'calculateFromProducts').mockResolvedValue();
+  await c.saveSize(row,item);
+  expect(save).toHaveBeenCalledExactlyOnceWith('order','wavy','180cm x 100cm');
+  expect(calculate).toHaveBeenCalledExactlyOnceWith(row);
+ });
  it('sorts order numbers descending regardless of outcome and retains that order after filtering',()=>{
   const s=new DeliveryReviewService({} as any),c=new DeliveryReviewComponent(s);
   const rows=[{order_id:'a',wc_orders:{order_number:'10825'},status:'failed'},{order_id:'b',wc_orders:{order_number:'10839'},status:'within_target'},{order_id:'c',wc_orders:{order_number:'10838'},status:'failed'}];

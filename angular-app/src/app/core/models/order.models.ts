@@ -13,6 +13,7 @@ export interface OrderItemRow {
   quantity?: number | null;
   unit_price?: number | null;
   wix_options?: Record<string, unknown> | null;
+  size?: string | null;
   custom_text_fields?: Record<string, unknown> | null;
   description_lines?: unknown[] | null;
   image?: Record<string, unknown> | null;
