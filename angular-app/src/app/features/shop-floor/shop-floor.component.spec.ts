@@ -140,6 +140,17 @@ describe('Shop Floor mobile work selection',()=>{
   service.command.mockImplementation(async()=>{const data=projectCommands(service.data(),[{id:'finish',action:'finish-operation',payload:{at:new Date().toISOString()}}],'worker');service.data.set(data);service.confirmedData.set(structuredClone(data));return true;});
   await c.finishWork();expect(c.partId).toBe('base');expect(c.mobileDetail).toBe(true);expect(production.changeStatus).not.toHaveBeenCalled();
  });
+ it('sends Pickup products directly to Ready instead of Packing',async()=>{
+  const {c,service,views,production}=await setup();
+  views[0].order.delivery_type='Pickup';views[0].status='Painting';c.chooseProduct(views[0]);
+  service.confirmedData.update(d=>({...d,units:d.units.map(u=>({...u,finish:'painted',completed:['Painting:finished']}))}));
+  service.data.set(structuredClone(service.confirmedData()));
+  await c.advance();
+  expect(production.changeStatus).toHaveBeenCalledWith(views[0],'Ready');
+  production.changeStatus.mockClear();views[0].order.delivery_type='Shipping';
+  await c.advance();
+  expect(production.changeStatus).toHaveBeenCalledWith(views[0],'Packing');
+ });
  it('keeps a saved final part accessible when advancing the board fails',async()=>{
   const {c,service,views,running,production}=await setup();running();
   service.data.update(d=>({...d,units:d.units.map(u=>({...u,completed:['Assembly:base']}))}));

@@ -92,10 +92,13 @@ export class ShopFloorComponent implements OnDestroy {
  async finishWork(stage=false){if(this.timerBlocked()||!this.workRunning())return;const unitId=this.active()?.unit_id,oldStage=this.active()?.stage;if(await this.action(stage?'finish-stage':'finish-operation')){if(unitId){this.unitId=unitId;this.mobileStage=oldStage as ProductionStatus;this.partId=onlyRemainingPartId(this.snapshot(),this.selected()?.status);await this.advance();this.mobileDetail=this.selected()?.status===oldStage;}}}
  async finishPainting(){if(await this.action('finish-painting',{unitId:this.unitId}))await this.advance();}
  async advance(){const v=this.selected(),u=this.snapshot();if(!v||!u||!u.completed.includes(v.status+':finished'))return;
-  const afterSanding:ProductionStatus=u.finish==='raw'?'Packing':'Painting';
-  const next:Record<string,ProductionStatus>={CNC:'Assembly',Assembly:requiresSanding(u)?'Sanding':afterSanding,Sanding:afterSanding,Painting:'Packing'};
+  const live=this.liveUnits().find(x=>x.unit.id===v.unit.id);
+  const pickup=/pick[ -]?up/i.test(`${live?.order.delivery_type||''} ${live?.order.delivery_title||''}`);
+  const dispatchStage:ProductionStatus=pickup?'Ready':'Packing';
+  const afterSanding:ProductionStatus=u.finish==='raw'?dispatchStage:'Painting';
+  const next:Record<string,ProductionStatus>={CNC:'Assembly',Assembly:requiresSanding(u)?'Sanding':afterSanding,Sanding:afterSanding,Painting:dispatchStage};
   if(!next[v.status])return;this.moving=true;
-  try{const live=this.liveUnits().find(x=>x.unit.id===v.unit.id);if(!this.phone.online()||!live)throw Error('Reconnect and refresh products before changing the board.');await this.production.changeStatus(live,next[v.status]);await this.cacheChoices();this.notice='Stage completed and board updated';this.localError='';this.partId='';this.operation='';this.mobileDetail=false;}
+  try{if(!this.phone.online()||!live)throw Error('Reconnect and refresh products before changing the board.');await this.production.changeStatus(live,next[v.status]);await this.cacheChoices();this.notice='Stage completed and board updated';this.localError='';this.partId='';this.operation='';this.mobileDetail=false;}
   catch(e){this.localError='Work is saved, but the board could not advance. '+(e instanceof Error?e.message:'Retry the transition.');}finally{this.moving=false;}
  }
  async enterCnc(){const v=this.liveUnits().find(x=>x.unit.id===this.unitId);if(!v||!this.phone.online())return;this.moving=true;this.localError='';try{await this.production.changeStatus(v,'CNC');await this.cacheChoices();}catch(e){this.localError=e instanceof Error?e.message:'Could not move to CNC';}finally{this.moving=false;}}
