@@ -77,7 +77,7 @@ const inviteEntry = new URLSearchParams(window.location.hash.replace(/^#/, '')).
     .boot{position:fixed;inset:0;display:grid;place-items:center;background:#f4f6f8}.boot>div{display:flex;flex-direction:column;gap:8px;text-align:center}.boot span{color:#758198;font-size:12px}
     aside{position:fixed;inset:0 auto 0 0;width:205px;background:#17191f;color:#fff;padding:16px 9px}.brand{padding:2px 11px 18px;font-size:16px}.brand small{display:block;color:#9097a5;font-size:10px}
     aside a{color:#dfe4ec;text-decoration:none;padding:8px 11px;border-radius:8px;display:flex;gap:9px;margin:2px 0;align-items:center;font-size:12px}aside a.active{background:#2b3039;color:#fff}
-    .nav-menu{color:#dfe4ec;font-size:12px}.nav-menu summary{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:8px;cursor:pointer;list-style:none}.nav-menu summary::-webkit-details-marker{display:none}.nav-menu summary::after{content:'⌄';margin-left:auto}.nav-menu[open] summary{background:#2b3039}.nav-submenu{padding-left:20px}.nav-submenu a{padding:7px 10px}.packing-submenu a{font-size:10px}
+    .nav-menu{color:#dfe4ec;font-size:12px}.nav-menu summary{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:8px;cursor:pointer;list-style:none}.nav-menu summary::-webkit-details-marker{display:none}.nav-menu summary::after{content:'⌄';margin-left:auto}.nav-menu[open] summary{background:#2b3039}.nav-submenu{padding-left:20px}.nav-submenu a{padding:7px 10px}
     aside button{position:absolute;bottom:20px;left:18px;right:18px;background:transparent;color:#fff;border:1px solid #454b57;border-radius:8px;padding:8px}
     main{margin-left:205px;height:100vh;overflow:hidden;background:#f4f6f8}.content{height:100vh;overflow:auto;padding:12px 16px 24px}.content.email-content{overflow:hidden;padding:6px 10px 8px;display:flex;flex-direction:column}:host ::ng-deep .content.email-content app-email{display:block;flex:1 1 auto;min-height:0;height:100%;overflow:hidden}
     .content.finance-content{overflow:hidden;padding:0}:host ::ng-deep .content.finance-content app-finance{display:block;height:100%;min-height:0}
@@ -88,7 +88,8 @@ const inviteEntry = new URLSearchParams(window.location.hash.replace(/^#/, '')).
     @media(max-width:760px){.gmail-title{width:100%}.gmail-account{flex:1 1 100%}}
     @media(max-width:600px){aside{position:relative;width:100%;height:auto;display:flex;overflow-x:auto;align-items:center;padding:6px;gap:4px}.brand{display:none}aside a{white-space:nowrap;min-height:44px}.nav-menu{flex:none}.nav-menu summary{min-height:44px;box-sizing:border-box;white-space:nowrap}.nav-submenu{position:fixed;z-index:20;left:6px;top:55px;background:#17191f;border:1px solid #454b57;border-radius:8px;padding:5px;box-shadow:0 10px 25px #0004}.nav-submenu a{min-height:36px}aside button{position:static;min-height:44px;white-space:nowrap}main{margin-left:0;height:calc(100dvh - 60px)}.content{height:100%;padding:12px}}
 
-}`],
+}
+:host .packing-submenu a{font-size:10px}`],
 })
 export class AppComponent {
   readonly workspaceReady = signal(false);
