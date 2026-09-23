@@ -10,6 +10,7 @@ describe('Delivery review UI',()=>{
   expect(orderItemOptionLabels(item)).toContain('Size: 180cm x 100cm');
   expect(item.wix_options).not.toHaveProperty('Size');
   expect(variantSignature(item)).toBe(variantSignature({...item,size:null,wix_options:{...item.wix_options,Size:'180cm x 100cm'}}));
+  expect(orderItemOptionLabels({...item,wix_options:{...item.wix_options,Size:'200cm x 100cm'}})).toEqual(['Colour: Raw','Foldable: NO','Size: 200cm x 100cm']);
   expect(catalogSizeChoices({variants:[{choices:{Size:'180cm x 100cm'}},{choices:{Size:'200cm x 100cm'}}]})).toEqual(['180cm x 100cm','200cm x 100cm']);
  });
  it('saves a selected size for one order item and recalculates its unquoted report',async()=>{

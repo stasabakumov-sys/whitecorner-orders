@@ -91,8 +91,9 @@ export function orderItemOptionLabels(item: OrderItemRow, limit = 12): string[] 
   }
 
   // Hub's confirmed size is a per-order exception. Wix order snapshots remain intact.
-  const size=typeof item.size==='string'?item.size.trim():'';
-  const labels=size?out.filter(label=>!/^size\s*:/i.test(label)).concat(`Size: ${size}`):out;
+  const hasWixSize=out.some(label=>/^size\s*:/i.test(label));
+  const size=!hasWixSize&&typeof item.size==='string'?item.size.trim():'';
+  const labels=size?out.concat(`Size: ${size}`):out;
   return [...new Set(labels.map(x => x.trim()).filter(x=>!!x&&!isLogoFileInstruction(x)))].slice(0, limit);
 }
 
