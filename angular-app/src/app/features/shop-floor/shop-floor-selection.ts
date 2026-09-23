@@ -2,6 +2,7 @@ import type {ShopTemplate} from './shop-floor.models';
 import {foldingOption,optionFinish,productionSize} from '../costing/production-cost';
 import {manualBackdropSizeKey,optionSizes} from '../shipping-data/product-sizes';
 import {cartSizeFromOptions} from '../shipping-data/cart-size';
+import {orderItemOptionLabels} from '../../core/utils/order-item-display';
 
 export type ShopCatalogProduct={id:string;wix_product_id?:string|null;product_name:string;product_type?:string|null;manual_sizes?:string|null};
 
@@ -24,8 +25,23 @@ export function orderedFinish(options:any,productName=''):'raw'|'painted'|''{
  const finish=optionFinish(options);return finish===null?'raw':finish||'';
 }
 
+export function orderedFolding(item:any){
+ if(!item)return '';
+ const values=orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER)
+  .filter(label=>/^foldable\s*:/i.test(label))
+  .map(label=>foldingOption({Foldable:label.slice(label.indexOf(':')+1).trim()}));
+ return values.length&&values.every(value=>value&&value===values[0])?values[0]:'';
+}
+
 export function matchingProductTemplates(templates:ShopTemplate[],product:ShopCatalogProduct|undefined,item:any){
  if(!product)return [];
- const size=resolvedProductionSize(item,product),folding=foldingOption(item?.wix_options);
- return templates.filter(template=>template.product_id===product.id&&(template.size_key?template.size_key===size&&(folding?template.folding===folding:!template.folding):!/backdrop/i.test(item?.product_name||'')));
+ const size=resolvedProductionSize(item,product),folding=orderedFolding(item);
+ const backdrop=String(product.product_type||'').toLowerCase()==='backdrop'||/backdrop/i.test(product.product_name);
+ const owned=templates.filter(template=>template.product_id===product.id);
+ if(backdrop){
+  if(!folding)return [];
+  const shared=owned.filter(template=>!template.size_key&&template.folding===folding);
+  return shared.length?shared:owned.filter(template=>!!size&&template.size_key===size&&template.folding===folding);
+ }
+ return owned.filter(template=>template.size_key?template.size_key===size&&(folding?template.folding===folding:!template.folding):true);
 }

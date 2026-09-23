@@ -1,0 +1,25 @@
+name: Shop Floor order folding release
+on: workflow_dispatch
+permissions:
+  contents: read
+concurrency:
+  group: shop-floor-order-folding-release
+  cancel-in-progress: false
+jobs:
+  verify-and-migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rehearse migration
+        run: |
+          npm install --prefix "$RUNNER_TEMP/shop-folding-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/backdrop-shared-costs-migration.test.mjs "$RUNNER_TEMP/shop-folding-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Apply order folding migration
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/shop-floor-order-folding-release.mjs --apply

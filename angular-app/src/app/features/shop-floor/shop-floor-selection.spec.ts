@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {catalogProductForItem,matchingProductTemplates,orderedFinish,resolvedProductionSize} from './shop-floor-selection';
+import {catalogProductForItem,matchingProductTemplates,orderedFinish,orderedFolding,resolvedProductionSize} from './shop-floor-selection';
 
 const product={id:'product',wix_product_id:'wix-product',product_name:'Plywood Hollow Event Backdrop',manual_sizes:'190x100'};
 const item=(options:any={Foldable:'YES',Colour:'White'})=>({product_name:product.product_name,catalog_reference:{catalogItemId:'wix-product'},wix_options:options});
@@ -10,6 +10,21 @@ describe('Automatic Shop Floor product composition',()=>{
   expect(catalogProductForItem(item(),[product])).toBe(product);
   expect(resolvedProductionSize(item(),product)).toBe('1900x1000');
   expect(matchingProductTemplates([template],product,item())).toEqual([template]);
+ });
+ it('reuses the saved Foldable Backdrop template across sizes and prefers it over an old size-specific template',()=>{
+  const shared={...template,id:'shared',size_key:null};
+  const other={...template,id:'nonfoldable',size_key:null,folding:'nonfoldable'};
+  const order=item({Size:'200cm x 120cm',Foldable:'YES'});
+  expect(matchingProductTemplates([template,shared,other],product,order)).toEqual([shared]);
+  expect(matchingProductTemplates([shared,other],product,item({Size:'200cm x 120cm',Foldable:'NO'}))).toEqual([other]);
+  expect(matchingProductTemplates([shared],product,item({Size:'200cm x 120cm'}))).toEqual([]);
+ });
+ it('reads the visible Wix folding choice when the imported options object is empty',()=>{
+  const shared={...template,id:'shared',size_key:null};
+  const order={...item({}),description_lines:[{name:{original:'Foldable'},plainText:{original:'YES'}}]};
+  expect(orderedFolding(order)).toBe('foldable');
+  expect(matchingProductTemplates([shared],product,order)).toEqual([shared]);
+  expect(orderedFolding({...order,wix_options:{Foldable:'NO'}})).toBe('');
  });
  it('keeps an explicit order size authoritative and does not guess between multiple manual sizes',()=>{
   expect(resolvedProductionSize(item({Size:'200cm x 100cm',Foldable:'YES'}),product)).toBe('2000x1000');

@@ -10,9 +10,8 @@ import {ProductionStatus} from '../../core/models/production.models';
 import {orderItemOptionLabels} from '../../core/utils/order-item-display';
 import {ShopFloorService} from './shop-floor.service';
 import {ProductCncComponent} from '../shipping-data/product-cnc.component';
-import {foldingOption} from '../costing/production-cost';
 import {ShopProductChoice,ShopInterval,ShopShift,PAINT_OPERATIONS,paintLabel,OTHER_OPERATIONS,availablePaint,isSameProductTask,onlyRemainingPartId,requiresSanding,brisbaneDate,rangeBounds,intervalSeconds,duration,localInput,fromLocalInput,csvCell} from './shop-floor.models';
-import {catalogProductForItem,matchingProductTemplates,orderedFinish} from './shop-floor-selection';
+import {catalogProductForItem,matchingProductTemplates,orderedFinish,orderedFolding} from './shop-floor-selection';
 
 @Component({selector:'app-shop-floor',standalone:true,imports:[FormsModule,DatePipe,RouterLink,ProductCncComponent],templateUrl:'./shop-floor.component.html',styleUrl:'./shop-floor.component.css'})
 export class ShopFloorComponent implements OnDestroy {
@@ -56,7 +55,7 @@ export class ShopFloorComponent implements OnDestroy {
  selectedCatalogProduct(){return catalogProductForItem(this.selectedItem(),this.s.catalog());}
  selectedProductId(){return this.selectedCatalogProduct()?.id||'';}
  cncBackdrop(){const product=this.selectedCatalogProduct();return String(product?.product_type||'').trim().toLowerCase()==='backdrop'||/backdrop/i.test(product?.product_name||this.selectedItem()?.product_name||'');}
- cncFolding(){return foldingOption(this.selectedItem()?.wix_options);}
+ cncFolding(){return orderedFolding(this.selectedItem());}
  productTemplates(){return matchingProductTemplates(this.s.data().templates,this.selectedCatalogProduct(),this.selectedItem());}
  snapshot(){return this.s.confirmedData().units.find(v=>v.unit_id===this.unitId);}
  shift(){return this.s.data().shifts.find(v=>!v.ended_at);}
