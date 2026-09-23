@@ -10,6 +10,7 @@ import {catalogSizes,backdropSizeKey,backdropDrawingKey,qualifiedDrawingKey,opti
 import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
 import {BoxDrawingComponent} from './box-drawing.component';
+import {PackageDrawingsComponent} from './package-drawings.component';
 import {ProductDetailsComponent} from './product-details.component';
 import {ProductPartsComponent} from './product-parts.component';
 import {ProductCncComponent} from './product-cnc.component';
@@ -107,7 +108,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[AddMainPackageComponent,SavedPackingComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[AddMainPackageComponent,SavedPackingComponent,PackageDrawingsComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -186,8 +187,16 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             }}
             @if(isBackdrop(p)&&!p.saved_only){@for(key of missingBackdropPacking(p);track key){
              <section class="shipsection"><h3>Packaging and box drawings · {{sizeLabel(key)}}</h3>
-              <p class="small">No packing is configured for this size and folding option. Save the shared box dimensions, then enter this product's weight and drawing.</p>
-              <div class="dimension-fields"><input aria-label="Package name" placeholder="Package name" [ngModel]="dimensionValue(key,'package_name')" (ngModelChange)="setDimensionDraft(key,'package_name',$event)"><input aria-label="Length mm" type="number" min="1" placeholder="L mm" [ngModel]="dimensionValue(key,'length_mm')" (ngModelChange)="setDimensionDraft(key,'length_mm',$event)"><input aria-label="Width mm" type="number" min="1" placeholder="W mm" [ngModel]="dimensionValue(key,'width_mm')" (ngModelChange)="setDimensionDraft(key,'width_mm',$event)"><input aria-label="Height mm" type="number" min="1" placeholder="H mm" [ngModel]="dimensionValue(key,'height_mm')" (ngModelChange)="setDimensionDraft(key,'height_mm',$event)"><button (click)="saveBackdropDimensions(key)" [disabled]="dimensionSaving===key">{{dimensionSaving===key?'Saving…':'Save dimensions'}}</button></div>
+              <p class="small">Dimensions and drawing are shared for this size and folding option. Weight belongs only to this model and size.</p>
+              <div class="missing-packing-table"><table><colgroup><col style="width:15%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:20%"><col style="width:32%"></colgroup><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Drawing</th></tr></thead><tbody><tr>
+               <td><input aria-label="Box name" placeholder="Box name" [ngModel]="dimensionValue(key,'package_name')" (ngModelChange)="setDimensionDraft(key,'package_name',$event)" [disabled]="dimensionSaving===key"></td>
+               <td><input aria-label="Length mm" type="number" min="1" placeholder="L mm" [ngModel]="dimensionValue(key,'length_mm')" (ngModelChange)="setDimensionDraft(key,'length_mm',$event)" [disabled]="dimensionSaving===key"></td>
+               <td><input aria-label="Width mm" type="number" min="1" placeholder="W mm" [ngModel]="dimensionValue(key,'width_mm')" (ngModelChange)="setDimensionDraft(key,'width_mm',$event)" [disabled]="dimensionSaving===key"></td>
+               <td><input aria-label="Height mm" type="number" min="1" placeholder="H mm" [ngModel]="dimensionValue(key,'height_mm')" (ngModelChange)="setDimensionDraft(key,'height_mm',$event)" [disabled]="dimensionSaving===key"></td>
+               <td><input aria-label="Weight kg" type="number" placeholder="—" title="Save dimensions before entering weight" disabled></td>
+               <td><app-package-drawings [backdrop]="true" [sharedSize]="key" [sizeLabel]="sizeLabel(key)" /></td>
+              </tr></tbody></table></div>
+              <div class="missing-packing-actions"><button type="button" (click)="saveBackdropDimensions(key)" [disabled]="!!dimensionSaving">{{dimensionSaving===key?'Saving…':'Save dimensions'}}</button><button type="button" (click)="resetDimensionDraft(key)" [disabled]="!!dimensionSaving">Cancel</button></div>
               @if(dimensionFeedback[key]){<p [attr.role]="dimensionFeedback[key].ok?'status':'alert'">{{dimensionFeedback[key].text}}</p>}
              </section>
             }}
@@ -330,6 +339,7 @@ export class ShippingDataComponent implements OnInit {
   backdropProfileOptions(profile:any,p:ShippingProduct){if(!this.isBackdrop(p)||profile?.template_item?.wix_options)return{};const key=this.sharedSize(profile,p),size=packagingSizes(profile,p.product_name)[0]||'';return key&&size?{Size:size,Foldable:key.endsWith(':foldable')?'YES':'NO'}:{};}
   dimensionValue(key:string,field:keyof BackdropPackagingDimensions){return (this.dimensionDrafts[key] as any)?.[field]??(this.backdropDimensions()[key] as any)?.[field]??'';}
   setDimensionDraft(key:string,field:keyof BackdropPackagingDimensions,value:any){const numeric=['length_mm','width_mm','height_mm'].includes(field);this.dimensionDrafts[key]={...(this.dimensionDrafts[key]||{}),[field]:numeric?(value===''?null:Number(value)):value};delete this.dimensionFeedback[key];}
+  resetDimensionDraft(key:string){delete this.dimensionDrafts[key];delete this.dimensionFeedback[key];}
   async saveBackdropDimensions(key:string){if(this.dimensionSaving)return;const current=this.backdropDimensions()[key],value=(field:keyof BackdropPackagingDimensions)=>this.dimensionValue(key,field),name=String(value('package_name')).trim(),length=Number(value('length_mm')),width=Number(value('width_mm')),height=Number(value('height_mm'));if(!name||![length,width,height].every(n=>Number.isFinite(n)&&n>0)){this.dimensionFeedback[key]={ok:false,text:'Complete the package name and positive L, W and H values.'};return;}this.dimensionSaving=key;try{const {data,error}=await this.supabase.client.rpc('wc_save_backdrop_packaging_dimensions',{p_size:key,p_package_name:name,p_length:length,p_width:width,p_height:height,p_expected:current?.revision||null});if(error||!data?.revision)throw Error(error?.message||'The server did not confirm saving.');this.backdropDimensions.update(rows=>({...rows,[key]:data}));delete this.dimensionDrafts[key];this.dimensionFeedback[key]={ok:true,text:'Shared dimensions saved.'};}catch(e:any){this.dimensionFeedback[key]={ok:false,text:'Could not save dimensions: '+(e?.message||'Check the connection and retry.')};}finally{this.dimensionSaving='';this.cdr?.markForCheck();}}
   addLibrarySize(){const size=backdropSizeKey(this.newSize);if(!size||!['foldable','nonfoldable'].includes(this.newFolding))return;const key=size+':'+this.newFolding;this.libraryMessage=this.librarySizes().includes(key)?'This size and folding option already exists. Use its drawing below.':'';this.extraSizes.update(s=>[...new Set([...s,key])]);}
   async openLibrary(){this.libraryOpen=true;this.libraryLoading=true;this.libraryError='';this.libraryMessage='';try{const [drawings,dimensions]=await Promise.all([this.supabase.client.from('wc_backdrop_box_drawings').select('size_key,revision'),this.supabase.client.from('wc_backdrop_packaging_dimensions').select('*')]);if(drawings.error||dimensions.error)throw drawings.error||dimensions.error;this.legacyRevisions=Object.fromEntries((drawings.data||[]).map(d=>[d.size_key,d.revision]));this.backdropDimensions.set(Object.fromEntries((dimensions.data||[]).map(row=>[row.size_key,row])));this.extraSizes.update(s=>[...new Set([...s.filter(qualifiedDrawingKey),...(drawings.data||[]).map(d=>d.size_key),...(dimensions.data||[]).map(d=>d.size_key)])]);}catch{this.libraryError='Could not load the Backdrop dimensions and drawing library. Please reopen to retry.';}finally{this.libraryLoading=false;this.cdr?.markForCheck();}}
