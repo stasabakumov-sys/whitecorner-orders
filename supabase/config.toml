@@ -11,3 +11,6 @@ verify_jwt = true
 
 [functions.email-ai]
 verify_jwt = true
+
+[functions.hub-users]
+verify_jwt = true
