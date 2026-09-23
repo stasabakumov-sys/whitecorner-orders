@@ -21,6 +21,13 @@ describe('Product-owned Shop Floor parts',()=>{
   templates.push({id:'flat',name:'A flat',folding:'nonfoldable',size_key:null,parts:[],estimates:{CNC:20},version:1},{id:'folded',name:'Z folded',folding:'foldable',size_key:null,parts:[],estimates:{CNC:10},version:1});
   await component.load();expect(component.editingId).toBe('folded');component.chooseVariant('nonfoldable');expect(component.estimates).toEqual({CNC:20});await component.load();expect(component.folding).toBe('nonfoldable');
  });
+ it('uses the construction chosen above the product tabs and keeps each draft',async()=>{
+  const {component,templates}=setup();component.product={id:'main',product_type:'Backdrop'};component.selectedFolding='nonfoldable';
+  templates.push({id:'flat',name:'Flat',folding:'nonfoldable',size_key:null,parts:[],estimates:{CNC:20},version:1},{id:'folded',name:'Folded',folding:'foldable',size_key:null,parts:[],estimates:{CNC:10},version:1});
+  await component.load();expect(component.editingId).toBe('flat');component.estimates['CNC']=25;
+  component.selectedFolding='foldable';component.ngOnChanges({selectedFolding:{}} as any);expect(component.editingId).toBe('folded');expect(component.estimates['CNC']).toBe(10);
+  component.selectedFolding='nonfoldable';component.ngOnChanges({selectedFolding:{}} as any);expect(component.estimates['CNC']).toBe(25);
+ });
  it('does not repurpose a Non-foldable template when opening a new Foldable estimate',async()=>{
   const {component,templates}=setup();component.product={id:'main',product_type:'Backdrop'};templates.push({id:'flat',name:'Flat',folding:'nonfoldable',size_key:null,parts:[],estimates:{CNC:20},version:1});
   await component.load();expect(component.folding).toBe('foldable');expect(component.editingId).toBe('');expect(component.estimates).toEqual({});component.chooseVariant('nonfoldable');expect(component.editingId).toBe('flat');

@@ -8,6 +8,10 @@ describe('Product card Backdrop production cost',()=>{
   component.sizes=['190x100','180cm x 90cm'];
   expect(component.comparison()).toHaveLength(2);expect(component.comparison().every(row=>!row.painted)).toBe(true);
  });
+ it('shows only the selected construction in the product card',()=>{
+  const component=new ProductWorkCostComponent({} as any);component.product={id:'product',product_name:'Plane Backdrop'};component.selectedFolding='nonfoldable';
+  expect(component.visibleComparison().map(row=>row.folding)).toEqual(['nonfoldable']);
+ });
  it('shows Painted only when the Backdrop is explicitly labelled Painted',()=>{
   const component=new ProductWorkCostComponent({} as any);component.product={id:'product',product_name:'Event Arch painted',product_type:'Backdrop'};
   expect(component.comparison()).toHaveLength(2);expect(component.comparison().every(row=>row.painted)).toBe(true);

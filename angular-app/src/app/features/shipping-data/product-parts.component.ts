@@ -17,9 +17,10 @@ type AssignedPart=ShopPart&{component_product_id:string};
  @else if(loadFailed){<button type="button" (click)="load()">Retry loading parts</button>}
  @else {
   @if(hasFolding){
-   <nav class="template-tabs" aria-label="Estimated time folding option">@for(fold of folds;track fold){<button type="button" [class.active]="folding===fold" [attr.aria-pressed]="folding===fold" (click)="chooseVariant(fold)" [disabled]="busy">{{foldingLabel(fold)}}</button>}</nav>
+   @if(!selectedFolding){<nav class="template-tabs" aria-label="Estimated time folding option">@for(fold of folds;track fold){<button type="button" [class.active]="folding===fold" [attr.aria-pressed]="folding===fold" (click)="chooseVariant(fold)" [disabled]="busy">{{foldingLabel(fold)}}</button>}</nav>}
+   @else{<p class="mut">Showing {{foldingLabel(selectedFolding)}} for the variant selected above.</p>}
    @if(unassigned().length){<p class="mut">Previously saved estimates need a folding option. Open a saved template to assign it; its parts and minutes are retained.</p><div class="template-tabs">@for(t of unassigned();track t.id){<button type="button" [disabled]="busy" (click)="editTemplate(t)">Unassigned · {{t.name}}</button>}</div>}
-   @if(editingId&&!templates.find(isAssignedEditing)){<label>Assign saved estimates to<select aria-label="Assign saved folding option" [(ngModel)]="folding" [disabled]="busy"><option value="">Choose folding option</option>@for(fold of folds;track fold){<option [value]="fold">{{foldingLabel(fold)}}</option>}</select></label>}
+   @if(editingId&&!templates.find(isAssignedEditing)&&!selectedFolding){<label>Assign saved estimates to<select aria-label="Assign saved folding option" [(ngModel)]="folding" [disabled]="busy"><option value="">Choose folding option</option>@for(fold of folds;track fold){<option [value]="fold">{{foldingLabel(fold)}}</option>}</select></label>}
   }@else{
    <div class="template-tabs"><button type="button" (click)="newTemplate()" [disabled]="busy">New template</button>@for(t of templates;track t.id){<button type="button" [class.active]="editingId===t.id" [attr.aria-pressed]="editingId===t.id" [disabled]="busy" (click)="editTemplate(t)">{{t.name}}</button>}</div>
   }
@@ -37,7 +38,7 @@ type AssignedPart=ShopPart&{component_product_id:string};
  :host{display:block}.mut{color:var(--wc-muted);font-size:.875rem}.template-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.template-tabs button.active{border-color:var(--p-primary-color);color:var(--p-primary-color)}label{display:flex;flex-direction:column;gap:5px;margin:10px 0}.table-wrap{overflow:auto;margin:12px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;border-bottom:1px solid var(--wc-border);padding:8px;min-width:125px}th:first-child,td:first-child{min-width:180px}input,select{width:100%;box-sizing:border-box}.estimate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}.primary{background:var(--p-primary-color);color:#fff}.error{color:var(--p-red-600)}.success{color:var(--p-green-700)}
  `]})
 export class ProductPartsComponent implements OnChanges{
- @Input() product:any;@Input() sizes:string[]=[];@Input() selectedSize='';
+ @Input() product:any;@Input() sizes:string[]=[];@Input() selectedSize='';@Input() selectedFolding:Folding|''='';
  folding:Folding|''='';sizeKey='';folds:Folding[]=['foldable','nonfoldable'];foldingLabel=foldingLabel;sizeLabel=sizeKeyLabel;
  private drafts=new Map<string,any>();
  get hasFolding(){return String(this.product?.product_type||'').toLowerCase()==='backdrop'||/backdrop/i.test(this.product?.product_name||'');}
@@ -57,7 +58,7 @@ export class ProductPartsComponent implements OnChanges{
  templateName='';editingId='';version=0;loading=false;busy=false;error='';done=false;private loadToken=0;
  loadFailed=false;private loadedProductId='';
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
- ngOnChanges(changes:SimpleChanges){const change=changes['product'];if((change&&(change.firstChange||change.previousValue?.id!==change.currentValue?.id||change.previousValue?.saved_only!==change.currentValue?.saved_only))||changes['selectedSize'])void this.load();}
+ ngOnChanges(changes:SimpleChanges){const change=changes['product'];if((change&&(change.firstChange||change.previousValue?.id!==change.currentValue?.id||change.previousValue?.saved_only!==change.currentValue?.saved_only))||changes['selectedSize'])void this.load();else if(changes['selectedFolding']&&this.hasFolding&&this.selectedFolding&&this.templates.length&&this.folding!==this.selectedFolding)this.chooseVariant(this.selectedFolding);}
  async load(){const id=this.product?.id,token=++this.loadToken;this.error='';this.done=false;this.loadFailed=false;
   if(this.loadedProductId!==id){this.templates=[];this.components=[];this.drafts.clear();this.newTemplate();this.loadedProductId=id;}
   if(!id||this.product.saved_only){this.loading=false;return;}this.loading=true;
@@ -69,13 +70,13 @@ export class ProductPartsComponent implements OnChanges{
    if(token!==this.loadToken)return;
    if(templates.error||components.error||!Array.isArray(templates.data)||!Array.isArray(components.data))throw Error('Could not load product parts.');
    this.templates=(templates.data as ShopTemplate[]).filter(t=>!this.isSizedCart||t.size_key===this.selectedSize);this.components=components.data as ProductComponent[];
-   const selected=this.templates.find(t=>t.id===this.editingId)||(this.hasFolding
-    ?this.templates.find(t=>t.folding==='foldable'&&!t.size_key)||this.templates.find(t=>t.folding==='foldable')||this.templates.find(t=>!t.folding)
+   const fold=this.selectedFolding||'foldable',selected=this.templates.find(t=>t.id===this.editingId&&(!this.hasFolding||!this.selectedFolding||t.folding===this.selectedFolding))||(this.hasFolding
+    ?this.templates.find(t=>t.folding===fold&&!t.size_key)||this.templates.find(t=>t.folding===fold)||this.templates.find(t=>!t.folding)
     :this.templates[0]);selected?this.editTemplate(selected):this.newTemplate();
   }catch{if(token===this.loadToken){this.loadFailed=true;this.error='Could not load product parts. Your current entries are retained. Retry loading before saving.';}}
   finally{if(token===this.loadToken){this.loading=false;this.cdr?.markForCheck();}}
  }
- newTemplate(){this.editingId='';this.version=0;this.templateName=this.product?.short_name||this.product?.product_name||'';this.parts=[];this.estimates={};this.folding=this.hasFolding?'foldable':'';this.sizeKey=this.hasFolding?'':this.isSizedCart?this.selectedSize:(this.sizeKeys().length===1?this.sizeKeys()[0]:'');this.done=false;}
+ newTemplate(){this.editingId='';this.version=0;this.templateName=this.product?.short_name||this.product?.product_name||'';this.parts=[];this.estimates={};this.folding=this.hasFolding?this.selectedFolding||'foldable':'';this.sizeKey=this.hasFolding?'':this.isSizedCart?this.selectedSize:(this.sizeKeys().length===1?this.sizeKeys()[0]:'');this.done=false;}
  editTemplate(t:ShopTemplate){const selectedFolding=this.folding;this.editingId=t.id;this.version=t.version;this.templateName=t.name;this.parts=structuredClone(t.parts) as AssignedPart[];this.estimates=Object.fromEntries(Object.entries(t.estimates||{}).filter(([key])=>!key.startsWith('Painting:')));this.folding=t.folding||(this.hasFolding?selectedFolding:'');this.sizeKey=this.hasFolding?'':t.size_key||(this.sizeKeys().length===1?this.sizeKeys()[0]:'');this.done=false;this.error='';}
  addPart(){this.parts=[...this.parts,{id:crypto.randomUUID(),name:'',component_product_id:this.product.id}];}
  removePart(id:string){this.parts=this.parts.filter(p=>p.id!==id);for(const stage of ['Assembly','Sanding'])delete this.estimates[stage+':'+id];}

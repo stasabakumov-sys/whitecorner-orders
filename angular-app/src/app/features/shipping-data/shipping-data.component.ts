@@ -155,20 +155,20 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               <span class="badge">{{reusableProfileCount(p)}} reusable profile(s)</span>
             </div>
 
-            <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" [selectedSize]="activeProductSize(p)" (selectedSizeChange)="selectProductSize(p,$event)" (saved)="updateDetails($event)">
-            <span class="product-drawing-label">Product drawing · {{activeProductSize(p)||'All sizes'}}</span>
+            <section class="shipsection"><app-product-details [product]="p" [wixSizes]="wixSizes(p)" [selectedSize]="activeProductSize(p)" [backdrop]="isBackdrop(p)" [selectedFolding]="selectedBackdropFolding" (selectedSizeChange)="selectProductSize(p,$event)" (selectedFoldingChange)="selectedBackdropFolding=$event" (saved)="updateDetails($event)">
+            <span class="product-drawing-label">Product drawing · {{activeProductSize(p)||'All sizes'}}@if(isBackdrop(p)){ · shared by folding options}</span>
             <app-box-drawing [productId]="p.id" [variantKey]="productDrawingKey(p)" />
             @if(activeProductSize(p)){<details><summary class="small">Previous shared product drawing</summary><app-box-drawing [productId]="p.id" /></details>}
             </app-product-details></section>
-            @if(activeProductSize(p)){<p class="small">Selected size: {{activeProductSize(p)}}</p>}
+            @if(activeProductSize(p)){<p class="small">Selected variant: {{activeProductSize(p)}}@if(isBackdrop(p)){ · {{selectedBackdropFolding==='foldable'?'Foldable':'Non-foldable'}}}</p>}
             <nav class="product-card-tabs" aria-label="Product card sections"><button [class.on]="detailTab==='cost'" (click)="detailTab='cost'">Product cost</button><button [class.on]="detailTab==='packing'" (click)="detailTab='packing'">Packing</button><button [class.on]="detailTab==='minutes'" (click)="detailTab='minutes'">Estimated min</button><button [class.on]="detailTab==='wix'" (click)="detailTab='wix'">Wix catalogue</button><button [class.on]="detailTab==='cnc'" (click)="detailTab='cnc'">CNC</button></nav>
             @if(detailTab==='cost'){
-            <section class="shipsection"><app-product-work-cost [product]="p" [availableFinishes]="finishModes(p)" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" [manualSizes]="!wixSizes(p).length" [materialProfiles]="costProfiles(p.id,activeCartSize(p))" [materials]="costing.materials()" /></section>
+            <section class="shipsection"><app-product-work-cost [product]="p" [availableFinishes]="finishModes(p)" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" [selectedFolding]="isBackdrop(p)?selectedBackdropFolding:''" [manualSizes]="!wixSizes(p).length" [materialProfiles]="costProfiles(p.id,activeCartSize(p))" [materials]="costing.materials()" /></section>
             <section class="shipsection"><h3>Product cost · incl. GST</h3>
             <p class="small">Add materials here. Planned work is calculated above from Estimated min and Work Rates. Order Costing shows the combined order summary.</p>
             @if(costing.error()){<p role="alert">{{costing.error()}}</p>}
             @if(hasPainting(p)){<p class="small">Painting is stored once for the whole product and is used only for Painted orders.</p>}
-            @for(part of costProfiles(p.id,activeCartSize(p));track part.variant_key){<details><summary>Edit materials · {{costProfileLabel(part,p.id)}}</summary><app-catalog-cost-editor [part]="part" [showWork]="false" [hideColour]="isBackdrop(p)" /></details>}
+            @for(part of visibleCostProfiles(p);track part.variant_key){<details><summary>Edit materials · {{costProfileLabel(part,p.id)}}</summary><app-catalog-cost-editor [part]="part" [showWork]="false" [hideColour]="isBackdrop(p)" /></details>}
             @empty{<p class="mut">No order variant available yet. Open Add materials on an order to define its costs.</p>}
             @if(!p.saved_only&&hasPainting(p)){<app-backdrop-paint-profile mode="materials" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" />}
             </section>
@@ -184,6 +184,13 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
              <app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" [backdrop]="isBackdrop(p)" [sharedSize]="sharedSize(profile,p)" [sharedSizeLabel]="sizeLabel(sharedSize(profile,p))" [fallbackOptions]="backdropProfileOptions(profile,p)" [backdropDimensions]="backdropDimension(profile,p)" (dimensionsSaved)="storeBackdropDimensions($event)" (profileSaved)="storeCartMainProfile(p,$event)" />
              </section>
             }}
+            @if(isBackdrop(p)&&!p.saved_only){@for(key of missingBackdropPacking(p);track key){
+             <section class="shipsection"><h3>Packaging and box drawings · {{sizeLabel(key)}}</h3>
+              <p class="small">No packing is configured for this size and folding option. Save the shared box dimensions, then enter this product's weight and drawing.</p>
+              <div class="dimension-fields"><input aria-label="Package name" placeholder="Package name" [ngModel]="dimensionValue(key,'package_name')" (ngModelChange)="setDimensionDraft(key,'package_name',$event)"><input aria-label="Length mm" type="number" min="1" placeholder="L mm" [ngModel]="dimensionValue(key,'length_mm')" (ngModelChange)="setDimensionDraft(key,'length_mm',$event)"><input aria-label="Width mm" type="number" min="1" placeholder="W mm" [ngModel]="dimensionValue(key,'width_mm')" (ngModelChange)="setDimensionDraft(key,'width_mm',$event)"><input aria-label="Height mm" type="number" min="1" placeholder="H mm" [ngModel]="dimensionValue(key,'height_mm')" (ngModelChange)="setDimensionDraft(key,'height_mm',$event)"><button (click)="saveBackdropDimensions(key)" [disabled]="dimensionSaving===key">{{dimensionSaving===key?'Saving…':'Save dimensions'}}</button></div>
+              @if(dimensionFeedback[key]){<p [attr.role]="dimensionFeedback[key].ok?'status':'alert'">{{dimensionFeedback[key].text}}</p>}
+             </section>
+            }}
             @if(!p.saved_only){
             @if(isCart(p)){
              <p class="small cart-packaging-note">Quote uses the reusable Main packages below. Select one or several Add-ons in the far-right column to create an exact, manually entered Main + Add-ons replacement variant.</p>
@@ -195,7 +202,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               }</div>
              </section>}
             }@else if(!visiblePackingProfiles(p).length){
-             @if(isBackdrop(p)){<p role="status">No shared box dimensions are configured for {{activeProductSize(p)}}. Add them in Backdrop box drawings.</p>}@else{
+             @if(!isBackdrop(p)){
              <div id="packaging-variant-editor">@for (variantProduct of [p]; track variantProduct.id) {<app-packaging-variants [product]="variantProduct" [catalog]="catalogProducts()[p.id]" [initialSignature]="requestedVariant" [packagingScope]="packagingScope(variantProduct)" [backdropDimensions]="backdropDimensions()" />}</div>
              }
             }
@@ -260,14 +267,14 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             }
             }
             @if(detailTab==='minutes'){
-             <section class="shipsection"><app-product-parts [product]="p" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" /></section>
+             <section class="shipsection"><app-product-parts [product]="p" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" [selectedFolding]="isBackdrop(p)?selectedBackdropFolding:''" /></section>
              @if(!p.saved_only&&hasPainting(p)){<section class="shipsection"><app-backdrop-paint-profile mode="minutes" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" /></section>}
             }
             @if(detailTab==='wix'){
-              <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" (catalogUpdated)="updateCatalog(p.id,$event)" /></section>
+              <section class="shipsection"><app-wix-product-snapshot [productId]="p.id" [backdrop]="isBackdrop(p)" [selectedSize]="activeProductSize(p)" [selectedFolding]="isBackdrop(p)?selectedBackdropFolding:''" (catalogUpdated)="updateCatalog(p.id,$event)" /></section>
             }
             @if(detailTab==='cnc'){
-              <section class="shipsection">@if(p.saved_only){<p class="mut">Save this product in Products before adding CNC sheets.</p>}@else{<app-product-cnc [productId]="p.id" [backdrop]="isBackdrop(p)" />}</section>
+              <section class="shipsection">@if(p.saved_only){<p class="mut">Save this product in Products before adding CNC sheets.</p>}@else{<app-product-cnc [productId]="p.id" [backdrop]="isBackdrop(p)" [orderFolding]="isBackdrop(p)?selectedBackdropFolding:''" />}</section>
             }
           } @else {
             <div class="mut">No products in this filter.</div>
@@ -279,8 +286,8 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
   styleUrl: './shipping-data.component.css',
 })
 export class ShippingDataComponent implements OnInit {
-  search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'|'cnc'='cost';selectedCartSize='';selectedPackingSize='';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
-  openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.selectedPackingSize='';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
+  search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'|'cnc'='cost';selectedCartSize='';selectedPackingSize='';selectedBackdropFolding:Folding='foldable';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
+  openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.selectedPackingSize='';this.selectedBackdropFolding='foldable';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
   finishCatalog=signal<{id:string;source:any}|null>(null);
   catalogProducts=signal<Record<string,any>>({});
   updateCatalog(id:string,source:any){this.catalogProducts.update(rows=>({...rows,[id]:source}));this.finishCatalog.set({id,source});}
@@ -310,7 +317,9 @@ export class ShippingDataComponent implements OnInit {
   packingSizeTabs(p:ShippingProduct){return packagingSizeGroups(this.packingProfiles(p),p.product_name,this.productSizes(p));}
   activePackingSize(p:ShippingProduct){const tabs=this.packingSizeTabs(p);return tabs.some(tab=>tab.key===this.selectedPackingSize)?this.selectedPackingSize:tabs[0]?.key||'';}
   selectPackingSize(key:string){this.selectedPackingSize=key;}
-  visiblePackingProfiles(p:ShippingProduct){if(this.isCart(p))return this.packingProfiles(p);const tabs=this.packingSizeTabs(p);return tabs.length>1?(tabs.find(tab=>tab.key===this.activePackingSize(p))?.profiles||[]):this.packingProfiles(p);}
+  visiblePackingProfiles(p:ShippingProduct){if(this.isCart(p))return this.packingProfiles(p);const tabs=this.packingSizeTabs(p),sizeProfiles=tabs.length>1?(tabs.find(tab=>tab.key===this.activePackingSize(p))?.profiles||[]):this.packingProfiles(p);return this.isBackdrop(p)?sizeProfiles.filter(profile=>this.sharedSize(profile,p).endsWith(':'+this.selectedBackdropFolding)):sizeProfiles;}
+  missingBackdropPacking(p:ShippingProduct){if(!this.isBackdrop(p))return[];const size=backdropSizeKey(this.activeProductSize(p));if(!size)return[];const key=size+':'+this.selectedBackdropFolding;return this.visiblePackingProfiles(p).some(profile=>this.sharedSize(profile,p)===key)?[]:[key];}
+  visibleCostProfiles(p:ShippingProduct){const rows=this.costProfiles(p.id,this.activeCartSize(p));return this.isBackdrop(p)?rows.filter(row=>{const fold=foldingOption(row.options);return !fold||fold===this.selectedBackdropFolding;}):rows;}
   reusableProfileCount(p:ShippingProduct){return p.saved_profiles?.length||0;}
   newFolding='';libraryMessage='';qualifiedKey=qualifiedDrawingKey;legacyFolding:Record<string,string>={};legacyRevisions:Record<string,string>={};classifying='';
   sharedSize(profile:any,p:ShippingProduct){return backdropDrawingKey(profile,p.product_name);}
