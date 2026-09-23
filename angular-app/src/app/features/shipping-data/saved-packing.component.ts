@@ -6,7 +6,7 @@ import {packagingError,reviewComponents} from '../../../../../supabase/functions
 
 @Component({selector:'app-saved-packing',standalone:true,imports:[FormsModule,PackageDrawingsComponent],template:`
  @if(backdrop&&backdropDimensions){
- <div class="tablewrap"><table><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Drawing</th></tr></thead><tbody><tr>
+ <div class="tablewrap"><table class="backdrop-pack-table"><colgroup><col style="width:15%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:20%"><col style="width:32%"></colgroup><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Drawing</th></tr></thead><tbody><tr>
  <td>{{backdropDimensions.package_name}}</td><td>{{backdropDimensions.length_mm}}</td><td>{{backdropDimensions.width_mm}}</td><td>{{backdropDimensions.height_mm}}</td>
  <td><input aria-label="Weight kg" type="number" min="0.001" step="0.1" [disabled]="saving()" [(ngModel)]="weightDraft" (ngModelChange)="saved.set(false)"></td>
  <td><app-package-drawings [signature]="profile.signature" [index]="0" [box]="canonical(profile.packages[0])" [backdrop]="true" [sharedSize]="sharedSize" [sizeLabel]="sharedSizeLabel" /></td>
@@ -40,7 +40,7 @@ import {packagingError,reviewComponents} from '../../../../../supabase/functions
  </tbody></table></div>
  @if(replacing&&!backdrop){<button type="button" [disabled]="saving()" (click)="addBox()">Add box</button>}
  }
- `,styles:[`:host{display:block}.actions{display:flex;gap:8px;margin:8px 0}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--wc-border)}input:not([type=checkbox]){width:90px;max-width:100%;box-sizing:border-box}td:first-child input{width:180px}label{display:block}p{font-size:.875rem}[role=alert]{color:#b91c1c}`]})
+ `,styles:[`:host{display:block}.actions{display:flex;gap:8px;margin:8px 0}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse}.backdrop-pack-table{table-layout:fixed}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--wc-border)}input:not([type=checkbox]){width:90px;max-width:100%;box-sizing:border-box}td:first-child input{width:180px}label{display:block}p{font-size:.875rem}[role=alert]{color:#b91c1c}`]})
 export class SavedPackingComponent implements OnChanges{
  @Input()product:any;@Input()profile:any;@Input()rules:any[]=[];@Input()backdrop=false;@Input()sharedSize='';@Input()sharedSizeLabel='';@Input()fallbackOptions:Record<string,string>={};@Input()backdropDimensions:any=null;
  @Output()profileSaved=new EventEmitter<any>();@Output()dimensionsSaved=new EventEmitter<any>();
