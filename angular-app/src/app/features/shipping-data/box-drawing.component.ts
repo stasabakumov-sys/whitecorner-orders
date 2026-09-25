@@ -21,6 +21,7 @@ export function sameDrawingBox(a:any,b:any):boolean {
  </label>}
  </div>
  @if(current){<small>{{sizeLabel(current.size_bytes)}}</small>}
+ @if(readOnly&&!current){<small>No saved drawing</small>}
  @if(busy&&current){<small role="status">Uploading replacement…</small>}
  @if(busy&&!current){<small role="status">Uploading {{sizeLabel(pendingBytes)}}…</small>}
  @if(stale){<small>Box changed. Upload a matching drawing.</small>}

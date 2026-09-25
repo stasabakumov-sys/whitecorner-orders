@@ -33,11 +33,20 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/packing-production-release.mjs --verify
+      - name: Verify shared Packing prerequisites
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/shared-packing-release.mjs --verify
       - name: Apply and verify Packing migration
         if: inputs.mode == 'apply'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/packing-production-release.mjs --apply
+      - name: Apply and verify shared Packing migration
+        if: inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/shared-packing-release.mjs --apply
       - uses: supabase/setup-cli@v1
         if: inputs.mode == 'apply'
         with:
