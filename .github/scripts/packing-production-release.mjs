@@ -30,6 +30,7 @@ const preflight=`select
  exists(select 1 from supabase_migrations.schema_migrations where version='20260923000600') packing_registered;`;
 const verification=`select
  exists(select 1 from supabase_migrations.schema_migrations where version='20260923000800') delivery_filter_registered,
+ exists(select 1 from supabase_migrations.schema_migrations where version='20260925000100') shared_registered,
  to_regclass('public.wc_box_rd_files') is not null rd_table,
  to_regclass('public.wc_hub_members') is not null members_table,
  to_regclass('public.wc_packing_tasks') is not null tasks_table,
@@ -38,6 +39,7 @@ const verification=`select
  exists(select 1 from storage.buckets where id='box-rd-files' and not public) private_bucket,
  (select count(*)::int from public.wc_hub_members where role='manager' and active) manager_count,
  to_regprocedure('public.wc_assign_packing_task(uuid,text,uuid)') is not null assign_rpc,
+ to_regprocedure('public.wc_send_packing_task(uuid,text)') is not null send_rpc,
  to_regprocedure('public.wc_request_packing_transfer(uuid)') is not null transfer_rpc,
  coalesce((select relrowsecurity from pg_class where oid=to_regclass('public.wc_packing_tasks')),false) tasks_rls;`;
 const before=(await sql(preflight))[0];
@@ -58,5 +60,7 @@ const blocks=sources.map(({version,name,source})=>{
 }).join('\n');
 await sql(`begin;select pg_advisory_xact_lock(20260923,6);do $release$ begin ${blocks} end $release$;commit;`,false);
 const after=(await sql(verification))[0];
-if(!after||Object.entries(after).some(([key,value])=>key==='manager_count'?value!==2:value!==true))throw Error(`Packing postflight failed: ${JSON.stringify(after)}`);
+if(!after||after.manager_count!==2||Object.entries(after).some(([key,value])=>
+ !['manager_count','shared_registered','assign_rpc','send_rpc'].includes(key)&&value!==true)||
+ (after.shared_registered?!after.send_rpc||after.assign_rpc:!after.assign_rpc))throw Error(`Packing postflight failed: ${JSON.stringify(after)}`);
 console.log('Packing database verified:',JSON.stringify(after));
