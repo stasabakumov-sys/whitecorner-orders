@@ -1,6 +1,6 @@
 import { NgFor, NgIf } from '@angular/common';
-import { Component, afterNextRender, computed, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component, Optional, afterNextRender, computed, effect, signal } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { TagModule } from 'primeng/tag';
@@ -44,9 +44,17 @@ export class ProductionBoardComponent {
   });
   readonly boardReady = computed(() => this.firstPaintComplete() && !this.orders.loading());
 
-  constructor(readonly orders: OrdersService, readonly production: ProductionService, private readonly router: Router) {
+  constructor(readonly orders: OrdersService, readonly production: ProductionService, private readonly router: Router, @Optional() route?: ActivatedRoute) {
     if (!orders.orders().length) void orders.load();
     afterNextRender(() => this.firstPaintComplete.set(true));
+    const requestedUnitId = route?.snapshot.queryParamMap.get('unit');
+    if (requestedUnitId) {
+      let opened = false;
+      effect(() => {
+        const unit = this.allUnits().find(candidate => candidate.unit.id === requestedUnitId);
+        if (unit && !opened) { opened = true; this.selected.set(unit); }
+      });
+    }
   }
 
   units(status: ProductionStatus): ProductionUnitView[] { return this.groupedUnits().get(status) ?? []; }

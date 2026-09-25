@@ -6,6 +6,7 @@ import { ActivityService } from './activity.service';
 import { OrderActivityRow, OrderItemRow, OrderRow, ProductionUnitRow } from '../models/order.models';
 import { ProductKind, ProductionStatus, ProductionUnitView, UnitAddonView } from '../models/production.models';
 import { orderItemOptionLabels } from '../utils/order-item-display';
+import { orderItemImageUrl } from '../utils/order-item-image';
 
 const STATUSES: ProductionStatus[] = ['New','CNC','Assembly','Sanding','Painting','Packing','Ready'];
 import {orderProducts} from '../utils/order-products';
@@ -79,9 +80,7 @@ export class ProductionService {
   }
 
   imageUrl(item: OrderItemRow): string {
-    const image = (item.image ?? {}) as Record<string, any>;
-    const raw = (item.raw_item ?? {}) as Record<string, any>;
-    return image['url'] || image['imageUrl'] || image['imageInfo']?.url || raw['media']?.url || raw['image']?.url || raw['image']?.imageInfo?.url || '';
+    return orderItemImageUrl(item);
   }
 
   optionLabels(item: OrderItemRow): string[] {

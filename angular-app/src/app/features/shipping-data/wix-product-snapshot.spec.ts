@@ -13,4 +13,14 @@ describe('Wix product variant display',()=>{
   ]});
   expect(component.visibleVariants().map((variant:any)=>variant.id)).toEqual(['blue','red']);
  });
+ it('shows only the exact order variant, including its colour',()=>{
+  const component=new WixProductSnapshotComponent({} as any);
+  component.orderOptions={Size:'180cm x 100cm',Foldable:'YES',Colour:'Blue'};
+  component.product.set({variants:[
+   {id:'ordered',choices:{Size:{original:'180cm x 100cm'},Foldable:'YES',Colour:'Blue'}},
+   {id:'other-colour',choices:{Size:'180cm x 100cm',Foldable:'YES',Colour:'Red'}},
+   {id:'other-folding',choices:{Size:'180cm x 100cm',Foldable:'NO',Colour:'Blue'}},
+  ]});
+  expect(component.visibleVariants().map((variant:any)=>variant.id)).toEqual(['ordered']);
+ });
 });
