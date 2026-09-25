@@ -34,6 +34,7 @@ type BookingDraft = {
           <div class="route-buttons">
             <p-button label="Pickup" [badge]="String(pickup().length)" [outlined]="tab() !== 'Pickup'" [severity]="tab() === 'Pickup' ? 'primary' : 'secondary'" (onClick)="tab.set('Pickup')" />
             <p-button label="Delivery" [badge]="String(delivery().length)" [outlined]="tab() !== 'Delivery'" [severity]="tab() === 'Delivery' ? 'primary' : 'secondary'" (onClick)="tab.set('Delivery')" />
+            <p-button label="History" [badge]="String(history().length)" [outlined]="tab() !== 'History'" [severity]="tab() === 'History' ? 'primary' : 'secondary'" (onClick)="tab.set('History')" />
           </div>
         </div>
       </div>
@@ -108,7 +109,9 @@ type BookingDraft = {
             } @else {
               <section class="section">
                 <div class="section-title">Packages</div>
-                @if (f.shipmentFor(row); as shipment) {
+                @if (row.status === 'Fulfilled') {
+                  <div class="done">Fulfilled ✓</div><div class="wix-sync-ok">Wix: FULFILLED ✓</div>
+                } @else if (f.shipmentFor(row); as shipment) {
                   <div class="package-head"><div><b>{{ f.packagesFor(shipment.id).length }} package(s)</b><div class="muted">Only an exact saved product profile can attach packages automatically.</div></div><p-tag [value]="shipment.status" [severity]="shipmentSeverity(shipment.status)" /></div>
                   @if (!f.hasSavedProfile(o)) {
                     <div class="callout profile-missing">
@@ -167,13 +170,11 @@ type BookingDraft = {
                     <div class="callout warning">{{ f.syncFor(row)?.error || 'Wix fulfillment synchronization is pending.' }}</div>
                     <p-button label="Retry Wix synchronization" [disabled]="!f.canSyncShipping(row) || f.syncingOrderIds().includes(row.order_id)" [loading]="f.syncingOrderIds().includes(row.order_id)" (onClick)="f.syncShippingFulfillment(row)" />
                     @if (!f.canSyncShipping(row)) { <div class="muted hint">Waiting for saved tracking, carrier and service before Wix synchronization.</div> }
-                  } @else if (row.status === 'Fulfilled') {
-                    <div class="done">Fulfilled ✓</div><div class="wix-sync-ok">Wix: FULFILLED ✓</div>
                   }
                 } @else { <div class="callout warning">Shipment record is being prepared.</div> }
               </section>
 
-              @if (f.shipmentFor(row); as shipment) {
+              @if (row.status !== 'Fulfilled' && f.shipmentFor(row); as shipment) {
                 <section class="section quote-section">
                   <div class="section-title">Fast Courier quote</div>
                   <div class="callout safety"><b>Quote only.</b> This does not book a courier or charge the account.</div>
@@ -336,7 +337,7 @@ type BookingDraft = {
 })
 export class FulfilmentComponent implements OnInit {
   readonly String = String;
-  tab = signal<'Pickup' | 'Delivery'>('Delivery');
+  tab = signal<'Pickup' | 'Delivery' | 'History'>('Delivery');
   selected = signal<FulfilmentRow | null>(null);
   currentSelected = computed(() => this.f.rows().find(row => row.id === this.selected()?.id) ?? this.selected());
   pickupAddress = signal({suburb:'BURLEIGH HEADS',state:'QLD',postcode:'4220'});
@@ -355,11 +356,12 @@ export class FulfilmentComponent implements OnInit {
   bookingDraft = signal<BookingDraft>(this.emptyBookingDraft());
   collectingRowId = signal<string|null>(null);
   private addressTypeRequest = 0;
-  pickup = computed(() => this.sortFulfilment(this.f.rows().filter((r) => r.route === 'Pickup')));
-  delivery = computed(() => this.sortFulfilment(this.f.rows().filter((r) => r.route === 'Shipping')));
-  visible = computed(() => this.tab() === 'Pickup' ? this.pickup() : this.delivery());
+  pickup = computed(() => this.sortFulfilment(this.f.rows().filter((r) => r.route === 'Pickup' && r.status !== 'Fulfilled')));
+  delivery = computed(() => this.sortFulfilment(this.f.rows().filter((r) => r.route === 'Shipping' && r.status !== 'Fulfilled')));
+  history = computed(() => this.sortFulfilment(this.f.rows().filter((r) => r.status === 'Fulfilled')));
+  visible = computed(() => this.tab() === 'Pickup' ? this.pickup() : this.tab() === 'Delivery' ? this.delivery() : this.history());
   constructor(readonly f: FulfilmentService) {}
-  private sortFulfilment(rows:FulfilmentRow[]){return [...rows].sort((a,b)=>Number(a.status==='Fulfilled')-Number(b.status==='Fulfilled')||new Date(b.ready_at).getTime()-new Date(a.ready_at).getTime());}
+  private sortFulfilment(rows:FulfilmentRow[]){return [...rows].sort((a,b)=>new Date(b.ready_at).getTime()-new Date(a.ready_at).getTime());}
   ngOnInit() { void this.f.load(); }
   displayStatus(row: FulfilmentRow) { if (row.route === 'Pickup') return row.status === 'Fulfilled' ? 'Fulfilled' : 'Awaiting Pickup'; const shipment = this.f.shipmentFor(row); return row.status === 'Fulfilled' ? 'Fulfilled' : (shipment?.status || row.status); }
   statusSeverity(row: FulfilmentRow): 'success'|'info'|'warn'|'secondary' { const s=this.displayStatus(row); if(s==='Fulfilled'||s==='Delivered')return'success'; if(s==='Ready to Quote'||s==='Quoted'||s==='Quote Selected')return'info'; if(s==='Packaging Review'||s==='Awaiting Pickup')return'warn'; return'secondary'; }

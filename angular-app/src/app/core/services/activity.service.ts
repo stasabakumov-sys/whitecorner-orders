@@ -56,10 +56,11 @@ export class ActivityService {
     this.loaded = true;
   }
 
-  async addNote(orderId: string, message: string, orderItemId?: string): Promise<void> {
+  async addNote(orderId: string, message: string, orderItemId?: string, productionUnitId?: string): Promise<void> {
     const payload = {
       order_id: orderId,
       ...(orderItemId ? { order_item_id: orderItemId } : {}),
+      ...(productionUnitId ? { production_unit_id: productionUnitId } : {}),
       activity_type: 'note',
       message,
       created_by: this.auth.userEmail() || 'User',

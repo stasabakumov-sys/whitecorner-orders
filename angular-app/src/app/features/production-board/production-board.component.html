@@ -21,7 +21,7 @@
     }
   </div>
 } @else {
-  <div class="board" #boardEl (scroll)="bottomScroll.scrollLeft = boardEl.scrollLeft">
+  <div class="board">
     <section class="column" *ngFor="let status of production.statuses; let i = index; trackBy: trackStatus" [attr.data-stage]="i"
       [class.drop-target]="dropTarget()===status" (dragover)="dragOver($event,status)" (drop)="drop($event,status)">
       <header>
@@ -57,9 +57,6 @@
     </section>
   </div>
 
-  <div class="boardscroll" #bottomScroll (scroll)="boardEl.scrollLeft = bottomScroll.scrollLeft" aria-label="Production board horizontal scroll">
-    <div class="boardscroll-inner" [style.width.px]="boardEl.scrollWidth"></div>
-  </div>
 }
 
 <app-production-unit-drawer *ngIf="selected() as unit" [view]="unit" (closed)="selected.set(null)" />

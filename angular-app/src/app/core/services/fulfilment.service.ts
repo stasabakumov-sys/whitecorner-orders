@@ -103,6 +103,7 @@ export class FulfilmentService {
 
   private isReady(order:OrderRow){
     if(order.order_source==='hub_test')return false;
+    if(order.is_history||order.archived||['FULFILLED','COMPLETED'].includes(String(order.fulfillment_status||'').toUpperCase())||['CANCELED','CANCELLED'].includes(String(order.wix_status||'').toUpperCase()))return false;
     // Use the exact same logical production units that are shown on Production Board.
     // Add-on rows can contain legacy/raw wc_production_units and must not block fulfilment.
     const units=this.production.unitsForOrder(order);
@@ -258,7 +259,7 @@ export class FulfilmentService {
   }
 
   async ensureShipments(){
-    const shippingRows=this.rows().filter(r=>r.route==='Shipping');
+    const shippingRows=this.rows().filter(r=>r.route==='Shipping'&&r.status!=='Fulfilled');
     const existing=new Set(this.shipments().map(s=>s.fulfilment_id));
     const missing=shippingRows.filter(r=>!existing.has(r.id));
     if(missing.length){

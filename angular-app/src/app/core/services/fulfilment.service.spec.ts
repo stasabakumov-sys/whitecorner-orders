@@ -44,6 +44,20 @@ function setup() {
 }
 
 describe('FulfilmentService shipping completion', () => {
+  it('does not create fulfilment or shipping records for completed orders', async () => {
+    const s=setup();
+    s.service.rows.set([]);
+    s.service.shipments.set([]);
+    s.orders.orders.set([{...s.saved.order,fulfillment_status:'FULFILLED'}]);
+    (s.service as any).production={unitsForOrder:()=>[{status:'Ready'}]};
+    await s.service.ensureReadyOrders();
+    expect(s.service.rows()).toHaveLength(0);
+    s.service.rows.set([{...s.row,status:'Fulfilled'}]);
+    await s.service.ensureShipments();
+    expect(s.service.rows()).toHaveLength(1);
+    expect(s.service.shipments()).toHaveLength(0);
+    expect(s.supabase.client.from).not.toHaveBeenCalledWith('wc_shipments');
+  });
   it('blocks booking without a delivery-cost decision before courier calls, even when production is Ready', async () => {
     const s=setup(),original=s.supabase.client.from.getMockImplementation()!;
     (s.orders.orders()[0] as any).wc_order_items=[{id:'item',product_name:'Cart',quantity:1,unit_price:110,wc_production_units:[{production_status:'Ready'}]}];
