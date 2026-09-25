@@ -1,4 +1,5 @@
 import {TestBed} from '@angular/core/testing';
+import {provideRouter,Router} from '@angular/router';
 import {ProductLinkComponent,productLink} from './product-link.component';
 import {productNavigationMatches} from '../../core/utils/product-navigation';
 
@@ -17,6 +18,7 @@ describe('Product navigation',()=>{
   expect(productNavigationMatches([{id:'legacy',product_name:'Arch'}],new URLSearchParams({wixProductId:'one',product:'Arch'}))).toHaveLength(1);
  });
  it('keeps keyboard navigation and prevents card click or drag handlers from firing',()=>{
+  TestBed.configureTestingModule({providers:[provideRouter([])]});
   const fixture=TestBed.createComponent(ProductLinkComponent);fixture.componentInstance.item={product_name:'Backdrop'};fixture.detectChanges();
   const host=fixture.nativeElement as HTMLElement,link=host.querySelector('a')!;
   let bubbled=0;for(const event of ['click','keydown','dragstart'])host.addEventListener(event,()=>bubbled++);
@@ -27,5 +29,16 @@ describe('Product navigation',()=>{
   const drag=new Event('dragstart',{bubbles:true,cancelable:true});link.dispatchEvent(drag);
   expect(bubbled).toBe(0);expect(key.defaultPrevented).toBe(false);expect(drag.defaultPrevented).toBe(true);
   expect(link.getAttribute('href')).toContain('#/shipping-data?');
+ });
+ it('routes a normal click to the selected product',async()=>{
+  TestBed.configureTestingModule({providers:[provideRouter([])]});
+  const navigate=vi.spyOn(TestBed.inject(Router),'navigateByUrl').mockResolvedValue(true);
+  const fixture=TestBed.createComponent(ProductLinkComponent);
+  fixture.componentInstance.item={product_name:'Ripple Arch Backdrop',catalog_reference:{catalogItemId:'wix-arch'}};
+  fixture.detectChanges();
+  const click=new MouseEvent('click',{bubbles:true,cancelable:true,button:0});
+  fixture.nativeElement.querySelector('a').dispatchEvent(click);
+  expect(click.defaultPrevented).toBe(true);
+  expect(navigate).toHaveBeenCalledWith('/shipping-data?wixProductId=wix-arch&product=Ripple+Arch+Backdrop');
  });
 });

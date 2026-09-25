@@ -41,7 +41,7 @@ export function productionCostRows(templates:ShopTemplate[],profiles:any[],paint
   const candidates=profiles.filter(p=>p.kind==='main'&&!p.standard_top_excluded&&foldingOption(p.options)===folding);
   let materialCost:number|null=null;const issues:string[]=[];
   if(candidates.length!==1)issues.push(candidates.length?'Multiple material compositions: review profiles':'Materials not configured');
-  else{materialCost=materialTotal(candidates[0].profile,materials);if(materialCost===null)issues.push(candidates[0].profile?.materials_confirmed?'Material price or quantity missing':'Materials not confirmed');}
+  else{const source=candidates[0].profile||candidates[0].legacy_profile;materialCost=materialTotal(source,materials);if(materialCost===null)issues.push(source?.materials_confirmed?'Material price or quantity missing':'Materials not confirmed');else if(!candidates[0].profile)issues.push('Confirm the shared materials profile');}
   if(matching.length!==1)issues.push(matching.length?'Multiple time templates: review Estimated min':'Estimated time not configured');
   return finishModes.map(painted=>{const rowIssues=[...issues];let work:number|null=null,materialsCost=materialCost;
    if(painted){const paintMaterials=materialTotal(paintProfile,materials);if(paintMaterials===null)rowIssues.push(paintProfile?.materials_confirmed?'Paint price or quantity missing':'Painting materials not confirmed');else if(materialsCost!==null)materialsCost=Math.round((materialsCost+paintMaterials)*100)/100;}

@@ -13,7 +13,13 @@ describe('Product card cost profiles',()=>{
   it('creates exactly one material editor per folding option, independent of size',()=>{
     const foldable={variant_key:'fold',kind:'main',options:{Size:'200cm x 100cm',Foldable:'YES'},profile:{lines:[{material_id:'mdf',quantity:1}],materials_confirmed:true}};
     const rows=backdropCostProfiles('product','Plane Arch',['200cm x 100cm'],[foldable]);
-    expect(rows).toHaveLength(2);expect(rows.map(row=>[row.size_key,row.folding])).toEqual([[null,'foldable'],[null,'nonfoldable']]);expect(rows[0].legacy_lines).toEqual(foldable.profile.lines);expect(rows[1]).toEqual(expect.objectContaining({backdrop_material_scope:true,shipping_product_id:'product'}));
+    expect(rows).toHaveLength(2);expect(rows.map(row=>[row.size_key,row.folding])).toEqual([[null,'foldable'],[null,'nonfoldable']]);expect(rows[0].legacy_lines).toEqual(foldable.profile.lines);expect(rows[0].legacy_profile).toBe(foldable.profile);expect(rows[1]).toEqual(expect.objectContaining({backdrop_material_scope:true,shipping_product_id:'product'}));
+  });
+  it('does not calculate from conflicting size-specific materials',()=>{
+    const variant=(size:string,quantity:number)=>({variant_key:size,kind:'main',options:{Size:size,Foldable:'NO'},profile:{lines:[{material_id:'mdf',quantity}],materials_confirmed:true}});
+    const rows=backdropCostProfiles('product','Plane Arch',[],[variant('190cm x 95cm',1),variant('200cm x 100cm',2)]);
+    expect(rows[1].legacy_profile).toBeNull();
+    expect(rows[1].legacy_lines).toEqual([]);
   });
   it('does not create duplicate material editors for additional sizes',()=>{
     expect(backdropCostProfiles('product','Plane Arch',['190x100','180cm x 90cm'],[],true).map(row=>row.folding)).toEqual(['foldable','nonfoldable']);

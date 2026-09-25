@@ -12,6 +12,10 @@ describe('Product card Backdrop production cost',()=>{
   const component=new ProductWorkCostComponent({} as any);component.product={id:'product',product_name:'Plane Backdrop'};component.selectedFolding='nonfoldable';
   expect(component.visibleComparison().map(row=>row.folding)).toEqual(['nonfoldable']);
  });
+ it('keeps the Raw cost row visible when finish choices are absent from the order',()=>{
+  const component=new ProductWorkCostComponent({} as any);component.product={id:'product',product_name:'Ripple Arch Backdrop'};component.selectedFolding='nonfoldable';component.availableFinishes=[];component.orderVariant=true;
+  expect(component.visibleComparison().map(row=>[row.folding,row.painted])).toEqual([['nonfoldable',false]]);
+ });
  it('shows Painted only when the Backdrop is explicitly labelled Painted',()=>{
   const component=new ProductWorkCostComponent({} as any);component.product={id:'product',product_name:'Event Arch painted',product_type:'Backdrop'};
   expect(component.comparison()).toHaveLength(2);expect(component.comparison().every(row=>row.painted)).toBe(true);

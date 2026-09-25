@@ -101,7 +101,8 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
   if(shared)return{...shared,shipping_product_id:productId,size_key:null,folding};
   const legacy=main.filter(row=>foldingOption(row.options)===folding).map(row=>row.profile).filter(Boolean);
   const signatures=[...new Set(legacy.map(profile=>JSON.stringify((profile.lines||[]).map((line:any)=>[line.material_id,Number(line.quantity)]).sort())))];
-  return{variant_key:JSON.stringify(['backdrop-structure-v2',productId,folding]),shipping_product_id:productId,product_name:productName,kind:'main',multiplier:1,standard_top_excluded:false,options:{Foldable:folding==='foldable'?'YES':'NO'},backdrop_material_scope:true,size_key:null,folding,profile:null,legacy_lines:signatures.length===1?legacy[0]?.lines||[]:[]};
+  const consistentLegacy=legacy.length>0&&signatures.length===1;
+  return{variant_key:JSON.stringify(['backdrop-structure-v2',productId,folding]),shipping_product_id:productId,product_name:productName,kind:'main',multiplier:1,standard_top_excluded:false,options:{Foldable:folding==='foldable'?'YES':'NO'},backdrop_material_scope:true,size_key:null,folding,profile:null,legacy_profile:consistentLegacy&&legacy.every(profile=>profile.materials_confirmed)?legacy[0]:null,legacy_lines:consistentLegacy?legacy[0]?.lines||[]:[]};
  });
  return [...variants,...other];
 }

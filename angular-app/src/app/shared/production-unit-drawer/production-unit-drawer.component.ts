@@ -9,12 +9,13 @@ import { TagModule } from 'primeng/tag';
 import { ProductionStatus, ProductionUnitView } from '../../core/models/production.models';
 import { ProductionService } from '../../core/services/production.service';
 import { OrderActivityComponent } from '../order-activity/order-activity.component';
+import { ProductLinkComponent } from '../product-link/product-link.component';
 import { OrderProductSectionsComponent } from './order-product-sections.component';
 
 @Component({
   selector: 'app-production-unit-drawer',
   standalone: true,
-  imports: [CurrencyPipe, DatePipe, NgFor, NgIf, FormsModule, ButtonModule, DrawerModule, SelectModule, TagModule, OrderActivityComponent, OrderProductSectionsComponent],
+  imports: [CurrencyPipe, DatePipe, NgFor, NgIf, FormsModule, ButtonModule, DrawerModule, SelectModule, TagModule, OrderActivityComponent, OrderProductSectionsComponent, ProductLinkComponent],
   templateUrl: './production-unit-drawer.component.html',
   styleUrl: './production-unit-drawer.component.css',
 })
