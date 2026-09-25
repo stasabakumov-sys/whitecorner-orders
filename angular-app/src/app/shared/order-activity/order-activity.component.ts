@@ -28,13 +28,13 @@ import { ActivityService } from '../../core/services/activity.service';
                   <div class="line"></div>
                   <div class="time">{{ event.created_at | date:'h:mm a' }}</div>
                   @if (event.activity_type === 'status_change') {
-                    <div class="who">{{ event.created_by || 'User' }}</div>
+                    <div class="who">{{ actorLabel(event.created_by) }}</div>
                     <div class="message">
                       @if (event.production_unit_id) { <b>{{ unitLabel(event.production_unit_id) }}</b> · }
                       Status changed from <b>{{ event.old_status || '—' }}</b> to <b>{{ event.new_status || '—' }}</b>
                     </div>
                   } @else if (event.activity_type === 'note') {
-                    <div class="who">{{ event.created_by || 'User' }} added a note:</div>
+                    <div class="who">{{ actorLabel(event.created_by) }} added a note:</div>
                     <div class="message">{{ event.message }}</div>
                   } @else {
                     <div class="message">{{ event.message }}</div>
@@ -49,7 +49,7 @@ import { ActivityService } from '../../core/services/activity.service';
   `,
   styles: [`@layer hub-layout {
 
-    .section-title{font-size:11px;text-transform:uppercase;color:#758198;font-weight:700;margin-bottom:8px}.box{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);border:1px solid #e4e7ec;border-radius:12px;background:#fff;overflow:hidden}.add{padding:20px;border-right:1px solid #e4e7ec}.add label{display:block;font-weight:600;margin-bottom:8px}.add label span{display:block;font-size:12px;color:#758198;font-weight:400;margin-top:3px}.add textarea{box-sizing:border-box;width:100%;height:100px;min-height:80px;max-height:180px;resize:vertical;border:1px solid #d4d9e2;border-radius:8px;padding:8px 10px;font:inherit}.add button{margin-top:8px;background:#116dff;color:#fff;border:0;border-radius:8px;padding:8px 12px;cursor:pointer}.add button:disabled{opacity:.6;cursor:wait}.timeline{min-width:0;padding:10px 20px 20px}.date{font-size:12px;color:#758198;font-weight:700;margin:14px 0 8px}.event{position:relative;margin-left:10px;padding:4px 72px 16px 28px;min-height:36px}.dot{position:absolute;left:-4px;top:11px;width:7px;height:7px;border-radius:50%;background:#68758a;z-index:2}.line{position:absolute;left:-1px;top:18px;bottom:-1px;width:1px;background:#9aa5b5}.event:last-child .line{display:none}.time{position:absolute;right:0;top:4px;color:#758198;font-size:11px;white-space:nowrap}.who{font-size:12px;color:#4d5a70;margin-bottom:4px}.message{line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}.empty{padding:16px 0;color:#758198;font-size:12px}@media(max-width:700px){.box{grid-template-columns:1fr}.add{border-right:0;border-bottom:1px solid #e4e7ec}.add textarea{height:70px}.timeline{padding:8px 18px 16px}}
+    .section-title{font-size:11px;text-transform:uppercase;color:#758198;font-weight:700;margin-bottom:8px}.box{border:1px solid #e4e7ec;border-radius:12px;background:#fff;overflow:hidden}.add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:end;padding:14px 18px;border-bottom:1px solid #e4e7ec}.add label{grid-column:1/-1;display:flex;gap:5px;flex-wrap:wrap;font-weight:600}.add label span{font-size:12px;color:#758198;font-weight:400}.add textarea{box-sizing:border-box;width:100%;height:42px;min-height:42px;max-height:160px;resize:vertical;border:1px solid #d4d9e2;border-radius:8px;padding:9px 10px;font:inherit}.add button{background:#116dff;color:#fff;border:0;border-radius:8px;padding:10px 14px;cursor:pointer;white-space:nowrap}.add button:disabled{opacity:.6;cursor:wait}.timeline{min-width:0;padding:8px 18px 14px}.date{font-size:12px;color:#758198;font-weight:700;margin:12px 0 7px}.event{position:relative;margin-left:10px;padding:3px 76px 13px 22px;min-height:26px}.dot{position:absolute;left:-4px;top:10px;width:7px;height:7px;border-radius:50%;background:#68758a;z-index:2}.line{position:absolute;left:-1px;top:17px;bottom:-1px;width:1px;background:#9aa5b5}.event:last-child .line{display:none}.time{position:absolute;right:0;top:4px;color:#758198;font-size:11px;white-space:nowrap}.who{font-size:12px;color:#4d5a70;margin-bottom:2px}.message{line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}.empty{padding:12px 0;color:#758198;font-size:12px}@media(max-width:560px){.add{grid-template-columns:1fr}.add button{width:100%}.event{padding-right:0;padding-top:18px}.time{left:22px;right:auto;top:0}}
 
 }`],
 })
@@ -89,6 +89,11 @@ export class OrderActivityComponent implements OnInit {
     const index = units.findIndex((entry) => entry.unit.id === unitId);
     if (index < 0) return `#${this.order.order_number}`;
     return units.length > 1 ? `#${this.order.order_number}-${index + 1}` : `#${this.order.order_number}`;
+  }
+
+  actorLabel(value: string | null | undefined): string {
+    if (!value) return 'User';
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? 'Team member' : value;
   }
 
   trackEvent(event: OrderActivityRow): string {
