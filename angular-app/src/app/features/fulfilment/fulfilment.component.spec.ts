@@ -65,11 +65,16 @@ describe('FulfilmentComponent', () => {
     expect(service.load).toHaveBeenCalledOnce();
   });
 
-  it('moves fulfilled deliveries below active orders and uses the persisted status', () => {
+  it('keeps fulfilled orders in History and out of the active counters', () => {
     fixture = TestBed.createComponent(FulfilmentComponent);
     const completed = { ...delivery, id: 'completed', status: 'Fulfilled' as const };
-    rows.set([completed, delivery]);
-    expect(fixture.componentInstance.delivery().map(row => row.id)).toEqual([delivery.id, 'completed']);
+    const completedPickup = { ...completed, id: 'completed-pickup', route: 'Pickup' as const };
+    rows.set([completed, completedPickup, delivery]);
+    expect(fixture.componentInstance.delivery().map(row => row.id)).toEqual([delivery.id]);
+    expect(fixture.componentInstance.pickup()).toEqual([]);
+    expect(fixture.componentInstance.history().map(row => row.id)).toEqual(['completed', 'completed-pickup']);
+    fixture.componentInstance.tab.set('History');
+    expect(fixture.componentInstance.visible().length).toBe(2);
     expect(fixture.componentInstance.displayStatus(completed)).toBe('Fulfilled');
   });
 

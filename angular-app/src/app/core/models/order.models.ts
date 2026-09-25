@@ -27,6 +27,8 @@ export interface OrderRow {
   wix_order_id?: string | null;
   order_source?: 'wix' | 'hub_test';
   is_history?: boolean;
+  archived?: boolean | null;
+  wix_status?: string | null;
   order_number: string;
   wix_created_at?: string | null;
   wix_synced_at?: string | null;
