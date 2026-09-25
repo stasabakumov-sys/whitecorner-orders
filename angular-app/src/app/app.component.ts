@@ -33,7 +33,7 @@ const inviteEntry = new URLSearchParams(window.location.hash.replace(/^#/, '')).
         <a routerLink="/orders" routerLinkActive="active"><span>▤</span>Orders</a>
         <a routerLink="/production" routerLinkActive="active"><span>▦</span>Production Board</a>
         <a routerLink="/shop-floor" routerLinkActive="active"><span>◷</span>Shop Floor</a>
-        <details class="nav-menu" [open]="router.url.startsWith('/packing')"><summary><span>▣</span>Packing</summary><div class="nav-submenu packing-submenu">@if(members.manager()){<a routerLink="/packing/manage" routerLinkActive="active">Manage Packing</a>}<a routerLink="/packing/work" routerLinkActive="active">Packing work</a></div></details>
+        <details class="nav-menu" [open]="router.url.startsWith('/packing')"><summary><span>▣</span>Packing</summary><div class="nav-submenu">@if(members.manager()){<a routerLink="/packing/manage" routerLinkActive="active">Manage Packing</a>}<a routerLink="/packing/work" routerLinkActive="active">Packing work</a></div></details>
         <details class="nav-menu" [open]="isReferenceRoute()"><summary><span>▤</span>Reference</summary><div class="nav-submenu">
           <a routerLink="/materials" routerLinkActive="active">Materials</a>
           <a routerLink="/work-rates" routerLinkActive="active">Work Rates</a>
@@ -89,7 +89,7 @@ const inviteEntry = new URLSearchParams(window.location.hash.replace(/^#/, '')).
     @media(max-width:600px){aside{position:relative;width:100%;height:auto;display:flex;overflow-x:auto;align-items:center;padding:6px;gap:4px}.brand{display:none}aside a{white-space:nowrap;min-height:44px}.nav-menu{flex:none}.nav-menu summary{min-height:44px;box-sizing:border-box;white-space:nowrap}.nav-submenu{position:fixed;z-index:20;left:6px;top:55px;background:#17191f;border:1px solid #454b57;border-radius:8px;padding:5px;box-shadow:0 10px 25px #0004}.nav-submenu a{min-height:36px}aside button{position:static;min-height:44px;white-space:nowrap}main{margin-left:0;height:calc(100dvh - 60px)}.content{height:100%;padding:12px}}
 
 }
-:host .packing-submenu a{font-size:10px}`],
+:host .nav-submenu a{font-size:10px}`],
 })
 export class AppComponent {
   readonly workspaceReady = signal(false);
