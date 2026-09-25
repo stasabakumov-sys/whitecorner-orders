@@ -1,7 +1,6 @@
 import { Routes } from '@angular/router';
 import { HomeComponent } from './features/home/home.component';
 import { OrdersComponent } from './features/orders/orders.component';
-import { ProductionBoardComponent } from './features/production-board/production-board.component';
 import { FulfilmentComponent } from './features/fulfilment/fulfilment.component';
 import { AddressReviewComponent } from './features/address-review/address-review.component';
 import { ShippingDataComponent } from './features/shipping-data/shipping-data.component';
@@ -20,7 +19,7 @@ export const routes:Routes=[
   {path:'materials',loadComponent:()=>import('./features/costing/materials.component').then(m=>m.MaterialsComponent)},
   {path:'work-rates',loadComponent:()=>import('./features/costing/work-rates.component').then(m=>m.WorkRatesComponent)},
   {path:'product-costing',loadComponent:()=>import('./features/costing/product-costing.component').then(m=>m.ProductCostingComponent)},
-  {path:'production',component:ProductionBoardComponent},
+  {path:'production',loadComponent:()=>import('./features/production-board/production-board.component').then(m=>m.ProductionBoardComponent)},
   {path:'shop-floor',loadComponent:()=>import('./features/shop-floor/shop-floor.component').then(m=>m.ShopFloorComponent)},
   {path:'packing',pathMatch:'full',redirectTo:'packing/manage'},
   {path:'packing/manage',loadComponent:()=>import('./features/packing/packing-manage.component').then(m=>m.PackingManageComponent)},
