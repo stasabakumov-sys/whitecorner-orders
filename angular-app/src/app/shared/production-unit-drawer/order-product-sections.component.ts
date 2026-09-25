@@ -13,7 +13,8 @@ import {SavedPackingComponent} from '../../features/shipping-data/saved-packing.
 import {BoxRdFilesComponent} from '../../features/shipping-data/box-rd-files.component';
 import {backdropSizeKey, optionSizes} from '../../features/shipping-data/product-sizes';
 import {cartSizeFromOptions, isCartProduct} from '../../features/shipping-data/cart-size';
-import {foldingOption, Folding} from '../../features/costing/production-cost';
+import {backdropFinishModes, foldingOption, optionFinish, Folding} from '../../features/costing/production-cost';
+import {backdropCostProfiles, currentProductCostProfiles} from '../../features/shipping-data/shipping-data.component';
 import {orderItemOptionLabels} from '../../core/utils/order-item-display';
 import {productId, variantSignature, canonicalPackagingSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
@@ -76,7 +77,7 @@ function orderChoices(view:ProductionUnitView):Record<string,string> {
 export class OrderProductSectionsComponent implements OnChanges {
  @Input({required:true})view!:ProductionUnitView;
  readonly section=signal<Section>('cost');readonly product=signal<Product|null>(null);readonly profiles=signal<PackingProfile[]>([]);
- readonly costParts=signal<any[]>([]);readonly templates=signal<any[]>([]);readonly rules=signal<any[]>([]);readonly dimensions=signal<any>(null);readonly componentIds=signal<string[]>([]);readonly unresolvedAddons=signal(false);readonly loading=signal(false);readonly error=signal('');readonly costError=signal('');
+ readonly costParts=signal<any[]>([]);readonly sharedCostProfiles=signal<any[]>([]);readonly templates=signal<any[]>([]);readonly rules=signal<any[]>([]);readonly dimensions=signal<any>(null);readonly componentIds=signal<string[]>([]);readonly unresolvedAddons=signal(false);readonly loading=signal(false);readonly error=signal('');readonly costError=signal('');
  private generation=0;
  constructor(private db:SupabaseService,readonly members:HubMembersService,readonly costing:CostingService){}
  ngOnChanges(){this.section.set('cost');void this.load();}
@@ -86,15 +87,20 @@ export class OrderProductSectionsComponent implements OnChanges {
  cartSize(){return cartSizeFromOptions(this.choices());}
  timeSize(){return isCartProduct(this.product())?this.cartSize():this.backdrop()?backdropSizeKey(this.size()):this.size();}
  folding():Folding|''{return foldingOption(this.choices());}
- orderFinishes():boolean[]{const entry=Object.entries(this.choices()).find(([name])=>/^(colou?r|finish)$/i.test(name.trim()));if(!entry)return[];return /^(raw|unpainted|natural)$/i.test(entry[1])?[false]:[true];}
+ orderFinishes():boolean[]{const finish=optionFinish(this.choices());if(finish==='raw')return[false];if(finish==='painted')return[true];return backdropFinishModes(this.product());}
  backdrop(){const p=this.product();return !!p&&(String(p.product_type||'').toLowerCase()==='backdrop'||/backdrop/i.test(p.product_name));}
  backdropKey(){const size=backdropSizeKey(this.size()),fold=this.folding();return size&&fold?`${size}:${fold}`:'';}
  packingProfiles(){let signature='';try{signature=variantSignature(this.view.mainItem);}catch{return[];}
   return this.profiles().filter(profile=>canonicalPackagingSignature(profile.signature)===signature);}
- costProfiles(){return this.costParts();}
+ costProfiles(){
+  const product=this.product(),parts=this.costParts();if(!product||!this.backdrop())return parts;
+  const saved=this.sharedCostProfiles().map(profile=>({...profile.template_item,shipping_product_id:profile.shipping_product_id,item_id:profile.template_item?.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile,backdrop_material_scope:['backdrop-structure','backdrop-structure-v2'].includes(profile.template_item?.profile_scope)}));
+  const rows=currentProductCostProfiles([...new Map([...parts,...saved].map(part=>[part.variant_key,part])).values()]);
+  return backdropCostProfiles(product.id,product.product_name,[],rows).filter(part=>part.kind!=='main'||!this.folding()||foldingOption(part.options)===this.folding());
+ }
  visibleParts(template:any){const allowed=new Set(this.componentIds());return (template.parts||[]).filter((part:any)=>allowed.has(part.component_product_id||this.product()?.id));}
  timeTemplates(){const size=this.cartSize(),fold=this.folding();return this.templates().filter(t=>this.backdrop()?t.folding===fold&&(!t.size_key||t.size_key===this.backdropKey().split(':')[0]):isCartProduct(this.product())?!!size&&t.size_key===size:!t.size_key||!!this.size()&&t.size_key===this.size());}
- async load(){const generation=++this.generation,id=productId(this.view.mainItem);this.loading.set(true);this.error.set('');this.costError.set('');this.product.set(null);this.profiles.set([]);this.costParts.set([]);this.templates.set([]);this.rules.set([]);this.dimensions.set(null);this.componentIds.set([]);this.unresolvedAddons.set(false);
+ async load(){const generation=++this.generation,id=productId(this.view.mainItem);this.loading.set(true);this.error.set('');this.costError.set('');this.product.set(null);this.profiles.set([]);this.costParts.set([]);this.sharedCostProfiles.set([]);this.templates.set([]);this.rules.set([]);this.dimensions.set(null);this.componentIds.set([]);this.unresolvedAddons.set(false);
   try{await this.members.load();if(!id)return;
    const productResult=await this.db.client.from('wc_shipping_products').select('id,product_name,product_type,short_name,wix_product_id,backdrop_paint_profile').eq('wix_product_id',id).eq('active',true).maybeSingle();
    if(productResult.error)throw productResult.error;if(generation!==this.generation)return;
@@ -118,6 +124,7 @@ export class OrderProductSectionsComponent implements OnChanges {
    try{
     const parts:any[]=[];for(let start=0;;start+=250){const page=await this.db.client.rpc('wc_catalog_cost_parts').range(start,start+249);if(page.error)throw page.error;parts.push(...(page.data||[]));if((page.data||[]).length<250)break;}
     if(generation===this.generation)this.costParts.set(parts.filter(part=>part.shipping_product_id===product.id&&part.order_id===this.view.order.id&&part.main_item_id===this.view.mainItem.id));
+    if(this.backdrop()){const shared:any[]=[];for(let start=0;;start+=250){const page=await this.db.client.from('wc_material_profiles').select('*').eq('shipping_product_id',product.id).eq('costing_version',2).order('variant_key').range(start,start+249);if(page.error)throw page.error;shared.push(...(page.data||[]));if((page.data||[]).length<250)break;}if(generation===this.generation)this.sharedCostProfiles.set(shared);}
     if(!this.costing.materials().length){const materials:any[]=[];for(let start=0;;start+=250){const page=await this.db.client.from('wc_materials').select('*').order('name').order('id').range(start,start+249);if(page.error)throw page.error;materials.push(...(page.data||[]));if((page.data||[]).length<250)break;}if(generation===this.generation)this.costing.materials.set(materials);}
    }catch(e){if(generation===this.generation)this.costError.set(`Could not load material costs. ${(e as Error)?.message||'Check the connection and retry.'}`);}
   }catch(e){if(generation===this.generation)this.error.set(`Could not load this product configuration. ${(e as Error)?.message||'Check the connection and retry.'}`);}
