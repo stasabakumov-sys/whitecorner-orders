@@ -1,4 +1,5 @@
-import {describe,expect,it} from 'vitest';
+import {signal} from '@angular/core';
+import {describe,expect,it,vi} from 'vitest';
 import {OrderProductSectionsComponent} from './order-product-sections.component';
 
 function section(options:Record<string,string>){
@@ -28,4 +29,29 @@ describe('Order product cost source',()=>{
   expect(profiles[0].profile).toBeNull();
   expect(profiles[0].folding).toBe('nonfoldable');
  });
+});
+
+it('opens product sections while order material details are still loading',async()=>{
+ let finishParts!:(value:{data:any[];error:null})=>void;
+ const pendingParts=new Promise<{data:any[];error:null}>(resolve=>finishParts=resolve);
+ const result={data:[],error:null};
+ const query=(table:string):any=>({
+  select(){return this;},eq(){return this;},order(){return this;},range(){return this;},
+  maybeSingle(){return Promise.resolve({data:table==='wc_shipping_products'?{id:'product',product_name:'Ripple Arch Backdrop',product_type:'Backdrop'}:null,error:null});},
+  then(resolve:any,reject:any){return Promise.resolve(result).then(resolve,reject);},
+ });
+ const db={client:{from:query,rpc:()=>({...query('parts'),then:(resolve:any,reject:any)=>pendingParts.then(resolve,reject)})}};
+ const members={members:signal([{user_id:'user'}]),loading:signal(false),manager:signal(true)};
+ const costing={materials:signal([{id:'wood'}])};
+ const component=new OrderProductSectionsComponent(db as any,members as any,costing as any);
+ component.view={mainItem:{id:'item',catalog_reference:{catalogItemId:'wix-id'},wix_options:{Size:'190cm x 95cm',Foldable:'NO'}},addons:[],order:{id:'order'}} as any;
+ const request=component.load();
+ await vi.waitFor(()=>expect(component.costLoading()).toBe(false));
+ expect(component.loading()).toBe(false);
+ expect(component.detailsLoading()).toBe(false);
+ expect(component.product()?.id).toBe('product');
+ expect(component.partsLoading()).toBe(true);
+ finishParts(result);
+ await request;
+ expect(component.partsLoading()).toBe(false);
 });

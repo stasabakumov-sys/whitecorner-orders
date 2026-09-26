@@ -47,26 +47,35 @@ function orderChoices(view:ProductionUnitView):Record<string,string> {
     <button type="button" [class.active]="section()==='cnc'" (click)="section.set('cnc')">CNC</button>
    </nav>
    @if(section()==='cost'){
+   @if(detailsLoading()||costLoading()){<p role="status">Loading product cost…</p>}@else{
    <app-product-work-cost [product]="p" [selectedSize]="timeSize()" [selectedFolding]="folding()" [orderVariant]="true" [orderComponentIds]="componentIds()" [availableFinishes]="orderFinishes()" [materialProfiles]="costProfiles()" [materials]="costing.materials()" />
+   }
     @if(costError()){<p class="error" role="alert">{{costError()}} <button type="button" (click)="load()">Retry</button></p>}
     @if(costing.error()){<p class="error" role="alert">{{costing.error()}}</p>}
-    @if(members.manager()){@for(part of costProfiles();track part.variant_key){<details><summary>Edit materials · {{part.kind||'Product'}}</summary><app-catalog-cost-editor [part]="part" [showWork]="false" /></details>}
+    @if(!detailsLoading()&&!costLoading()&&members.manager()){
+     @if(partsLoading()){<p role="status">Loading material details…</p>}
+     @else{@for(part of costProfiles();track part.variant_key){<details><summary>Edit materials · {{part.kind||'Product'}}</summary><app-catalog-cost-editor [part]="part" [showWork]="false" /></details>}
     @empty{<p>No saved cost profile matches this configuration.</p>}}
+    }
    }
    @if(section()==='packing'){
+    @if(detailsLoading()){<p role="status">Loading packing profiles…</p>}@else{
     @for(profile of packingProfiles();track profile.signature){<section class="profile"><h3>Boxes for this configuration</h3>
      @if(members.manager()){<app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" [fallbackOptions]="choices()" [backdrop]="backdrop()" [sharedSize]="backdropKey()" [backdropDimensions]="dimensions()" (profileSaved)="load()" />}
      @else{@for(box of profile.packages;track $index){<p>{{box.package_name||'Box '+($index+1)}} · {{box.length_mm}} × {{box.width_mm}} × {{box.height_mm}} mm · {{box.weight_kg??'—'}} kg</p>}}
      @if(!members.manager()){@for(box of profile.packages;track $index){<div class="box-files"><strong>{{box.package_name||'Box '+($index+1)}}</strong><app-box-rd-files [signature]="profile.signature" [index]="$index" /></div>}}
     </section>}
     @empty{<p>No saved Packing profile matches this order configuration.</p>}
+    }
    }
    @if(section()==='minutes'){
+    @if(detailsLoading()){<p role="status">Loading estimated minutes…</p>}@else{
     @if(unresolvedAddons()){<p class="error" role="alert">An ordered add-on could not be matched to a product ID. Its minutes need review in Products.</p>}
     @if(backdrop()&&!folding()){<p class="error" role="alert">This order has no clear Foldable option. Review its product choices before editing estimated minutes.</p>}
     @else if(members.manager()&&!unresolvedAddons()){<app-product-parts [product]="p" [selectedSize]="timeSize()" [selectedFolding]="folding()" [orderVariant]="true" [orderComponentIds]="componentIds()" />}
     @else{@for(template of timeTemplates();track template.id){<section class="profile"><h3>{{template.name}}</h3><p>CNC: {{template.estimates?.CNC??'—'}} min</p>@for(part of visibleParts(template);track part.id){<p>{{part.name}} · Assembly: {{template.estimates?.['Assembly:'+part.id]??'—'}} min · Sanding: {{template.estimates?.['Sanding:'+part.id]??'—'}} min</p>}</section>}
     @empty{<p>No estimated minutes match this configuration.</p>}}
+    }
    }
    @if(section()==='wix'){<app-wix-product-snapshot [productId]="p.id" [orderOptions]="choices()" [readonly]="!members.manager()" [backdrop]="backdrop()" [selectedSize]="size()" [selectedFolding]="folding()" />}
    @if(section()==='cnc'){<app-product-cnc [productId]="p.id" [backdrop]="backdrop()" [orderFolding]="folding()" [requireOrderFolding]="backdrop()" [readonly]="!members.manager()" />}
@@ -77,7 +86,7 @@ function orderChoices(view:ProductionUnitView):Record<string,string> {
 export class OrderProductSectionsComponent implements OnChanges {
  @Input({required:true})view!:ProductionUnitView;
  readonly section=signal<Section>('cost');readonly product=signal<Product|null>(null);readonly profiles=signal<PackingProfile[]>([]);
- readonly costParts=signal<any[]>([]);readonly sharedCostProfiles=signal<any[]>([]);readonly templates=signal<any[]>([]);readonly rules=signal<any[]>([]);readonly dimensions=signal<any>(null);readonly componentIds=signal<string[]>([]);readonly unresolvedAddons=signal(false);readonly loading=signal(false);readonly error=signal('');readonly costError=signal('');
+ readonly costParts=signal<any[]>([]);readonly sharedCostProfiles=signal<any[]>([]);readonly templates=signal<any[]>([]);readonly rules=signal<any[]>([]);readonly dimensions=signal<any>(null);readonly componentIds=signal<string[]>([]);readonly unresolvedAddons=signal(false);readonly loading=signal(false);readonly detailsLoading=signal(false);readonly costLoading=signal(false);readonly partsLoading=signal(false);readonly error=signal('');readonly costError=signal('');
  private generation=0;
  constructor(private db:SupabaseService,readonly members:HubMembersService,readonly costing:CostingService){}
  ngOnChanges(){this.section.set('cost');void this.load();}
@@ -100,12 +109,12 @@ export class OrderProductSectionsComponent implements OnChanges {
  }
  visibleParts(template:any){const allowed=new Set(this.componentIds());return (template.parts||[]).filter((part:any)=>allowed.has(part.component_product_id||this.product()?.id));}
  timeTemplates(){const size=this.cartSize(),fold=this.folding();return this.templates().filter(t=>this.backdrop()?t.folding===fold&&(!t.size_key||t.size_key===this.backdropKey().split(':')[0]):isCartProduct(this.product())?!!size&&t.size_key===size:!t.size_key||!!this.size()&&t.size_key===this.size());}
- async load(){const generation=++this.generation,id=productId(this.view.mainItem);this.loading.set(true);this.error.set('');this.costError.set('');this.product.set(null);this.profiles.set([]);this.costParts.set([]);this.sharedCostProfiles.set([]);this.templates.set([]);this.rules.set([]);this.dimensions.set(null);this.componentIds.set([]);this.unresolvedAddons.set(false);
-  try{await this.members.load();if(!id)return;
+ async load(){const generation=++this.generation,id=productId(this.view.mainItem);this.loading.set(true);this.detailsLoading.set(true);this.costLoading.set(true);this.partsLoading.set(true);this.error.set('');this.costError.set('');this.product.set(null);this.profiles.set([]);this.costParts.set([]);this.sharedCostProfiles.set([]);this.templates.set([]);this.rules.set([]);this.dimensions.set(null);this.componentIds.set([]);this.unresolvedAddons.set(false);
+  try{if(!this.members.members().length&&!this.members.loading())void this.members.load();if(!id)return;
    const productResult=await this.db.client.from('wc_shipping_products').select('id,product_name,product_type,short_name,wix_product_id,backdrop_paint_profile').eq('wix_product_id',id).eq('active',true).maybeSingle();
    if(productResult.error)throw productResult.error;if(generation!==this.generation)return;
    const product=productResult.data as Product|null;if(!product)return;
-   this.product.set(product);
+   this.product.set(product);this.loading.set(false);
    const addonIds=[...new Set(this.view.addons.map(addon=>productId(addon.item)).filter(Boolean))];
    if(addonIds.length){const addonResult=await this.db.client.from('wc_shipping_products').select('id,wix_product_id').in('wix_product_id',addonIds).eq('active',true);if(addonResult.error)throw addonResult.error;if(generation!==this.generation)return;this.componentIds.set([product.id,...(addonResult.data||[]).map(row=>row.id)]);this.unresolvedAddons.set(addonIds.length!==this.view.addons.length||(addonResult.data||[]).length!==addonIds.length);}
    else this.componentIds.set([product.id]);
@@ -121,13 +130,17 @@ export class OrderProductSectionsComponent implements OnChanges {
    this.templates.set(templates.data||[]);
    this.rules.set(rules.data||[]);
    this.dimensions.set(dimensions.data);
+   this.detailsLoading.set(false);
+   const loadParts=async()=>{const parts:any[]=[];for(let start=0;;start+=250){const page=await this.db.client.rpc('wc_catalog_cost_parts').range(start,start+249);if(page.error)throw page.error;parts.push(...(page.data||[]));if((page.data||[]).length<250)break;}if(generation===this.generation)this.costParts.set(parts.filter(part=>part.shipping_product_id===product.id&&part.order_id===this.view.order.id&&part.main_item_id===this.view.mainItem.id));};
+   const partsTask=loadParts().catch(e=>{if(generation===this.generation)this.costError.set(`Could not load material details. ${(e as Error)?.message||'Check the connection and retry.'}`);}).finally(()=>{if(generation===this.generation)this.partsLoading.set(false);});
    try{
-    const parts:any[]=[];for(let start=0;;start+=250){const page=await this.db.client.rpc('wc_catalog_cost_parts').range(start,start+249);if(page.error)throw page.error;parts.push(...(page.data||[]));if((page.data||[]).length<250)break;}
-    if(generation===this.generation)this.costParts.set(parts.filter(part=>part.shipping_product_id===product.id&&part.order_id===this.view.order.id&&part.main_item_id===this.view.mainItem.id));
-    if(this.backdrop()){const shared:any[]=[];for(let start=0;;start+=250){const page=await this.db.client.from('wc_material_profiles').select('*').eq('shipping_product_id',product.id).eq('costing_version',2).order('variant_key').range(start,start+249);if(page.error)throw page.error;shared.push(...(page.data||[]));if((page.data||[]).length<250)break;}if(generation===this.generation)this.sharedCostProfiles.set(shared);}
-    if(!this.costing.materials().length){const materials:any[]=[];for(let start=0;;start+=250){const page=await this.db.client.from('wc_materials').select('*').order('name').order('id').range(start,start+249);if(page.error)throw page.error;materials.push(...(page.data||[]));if((page.data||[]).length<250)break;}if(generation===this.generation)this.costing.materials.set(materials);}
+    const loadShared=async()=>{if(!this.backdrop())return;const shared:any[]=[];for(let start=0;;start+=250){const page=await this.db.client.from('wc_material_profiles').select('*').eq('shipping_product_id',product.id).eq('costing_version',2).order('variant_key').range(start,start+249);if(page.error)throw page.error;shared.push(...(page.data||[]));if((page.data||[]).length<250)break;}if(generation===this.generation)this.sharedCostProfiles.set(shared);};
+    const loadMaterials=async()=>{if(this.costing.materials().length)return;const materials:any[]=[];for(let start=0;;start+=250){const page=await this.db.client.from('wc_materials').select('*').order('name').order('id').range(start,start+249);if(page.error)throw page.error;materials.push(...(page.data||[]));if((page.data||[]).length<250)break;}if(generation===this.generation)this.costing.materials.set(materials);};
+    await Promise.all([loadShared(),loadMaterials()]);
    }catch(e){if(generation===this.generation)this.costError.set(`Could not load material costs. ${(e as Error)?.message||'Check the connection and retry.'}`);}
+   finally{if(generation===this.generation)this.costLoading.set(false);}
+   await partsTask;
   }catch(e){if(generation===this.generation)this.error.set(`Could not load this product configuration. ${(e as Error)?.message||'Check the connection and retry.'}`);}
-  finally{if(generation===this.generation)this.loading.set(false);}
+  finally{if(generation===this.generation){this.loading.set(false);this.detailsLoading.set(false);this.costLoading.set(false);this.partsLoading.set(false);}}
  }
 }
