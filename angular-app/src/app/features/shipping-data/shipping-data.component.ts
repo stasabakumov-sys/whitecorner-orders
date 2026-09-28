@@ -1,6 +1,7 @@
 import {productNavigationMatches} from '../../core/utils/product-navigation';
 import {WixCatalogReviewComponent} from './wix-catalog-review.component';
 import {WixProductSnapshotComponent} from './wix-product-snapshot.component';
+import {ProductDraftsComponent} from './product-drafts.component';
 import {SavedPackingComponent} from './saved-packing.component';
 import { Component, OnInit, computed, signal, Optional, ChangeDetectorRef } from '@angular/core';
 import {DialogModule} from 'primeng/dialog';
@@ -110,7 +111,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[AddMainPackageComponent,SavedPackingComponent,PackageDrawingsComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[AddMainPackageComponent,SavedPackingComponent,PackageDrawingsComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,ProductDraftsComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -125,7 +126,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
         <span class="mut push">Shared product catalogue · packaging, materials, work and Pans</span>
       </div>
 
-      <div class="product-tools"><input aria-label="Search products" placeholder="Search products" [(ngModel)]="search"><app-wix-catalog-review (saved)="load()" /><button (click)="openLibrary()">Backdrop box drawings</button></div>
+      <div class="product-tools"><input aria-label="Search products" placeholder="Search products" [(ngModel)]="search"><app-product-drafts /><app-wix-catalog-review (saved)="load()" /><button (click)="openLibrary()">Backdrop box drawings</button></div>
       </div>
       @if(imageError()){<p class="error" role="alert">{{imageError()}} <button type="button" (click)="loadHubImages()">Retry photos</button></p>}
       <div class="tablewrap product-tablewrap"><table class="shiptable product-list"><thead><tr><th class="number">#</th><th>Product</th><th>Short name</th><th>Product size</th><th>Packaging profiles</th></tr></thead><tbody>

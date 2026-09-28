@@ -1,0 +1,88 @@
+import {Component,OnInit,signal} from '@angular/core';
+import {DatePipe} from '@angular/common';
+import {FormsModule} from '@angular/forms';
+import {DialogModule} from 'primeng/dialog';
+import {SupabaseService} from '../../core/services/supabase.service';
+import {DraftOption,DraftVariant,draftOptions,draftVariants,validateProductDraft} from './product-draft';
+
+type DraftMedia={path:string;name:string;kind:'image'|'video';mimeType:string;size:number};
+type DraftRow={id:string;name:string;description:string;ribbon:string;base_price_aud:number;sku:string;category_ids:string[];options:DraftOption[];variants:DraftVariant[];media:DraftMedia[];status:string;wix_product_id:string|null;updated_at:string};
+type Category={id:string;name:string;path:string};
+const bucket='hub-product-drafts';
+const maxFileBytes=50*1024*1024;
+const allowedTypes=new Set(['image/jpeg','image/png','image/webp','video/mp4','video/webm']);
+
+@Component({selector:'app-product-drafts',standalone:true,imports:[FormsModule,DialogModule,DatePipe],template:`
+ @if(manager()){
+ <button class="icon-action" type="button" aria-label="Add product draft" title="Add product draft" (click)="newDraft()"><span class="pi pi-plus" aria-hidden="true"></span></button>
+ <button type="button" (click)="openList()">Drafts @if(drafts().length){({{drafts().length}})}</button>
+ }
+ @if(loadError()){<span class="draft-error" role="alert">{{loadError()}}</span>}
+ <p-dialog [header]="draftId?'Product draft':'New product'" [(visible)]="formOpen" [modal]="true" [style]="{width:'min(1040px,96vw)'}" [contentStyle]="{'max-height':'78vh','overflow':'auto'}" [draggable]="false">
+  <div class="draft-layout">
+   <div class="draft-main">
+    <section class="draft-card"><h3>Images and videos</h3><label class="upload-area" for="draft-media">Add images or videos</label><input id="draft-media" class="file-input" type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" (change)="selectFiles($event)">
+     <p>JPG, PNG, WebP, MP4 or WebM · up to 50 MB per file. Files stay private in Hub while this product is a draft.</p>
+     @for(item of media;track item.path){<div class="media-row">@if(item.kind==='image'&&mediaUrls[item.path]){<img class="draft-thumb" [src]="mediaUrls[item.path]" [alt]="item.name">}<span>{{item.kind==='image'?'Image':'Video'}} · {{item.name}}</span><button type="button" (click)="removeMedia(item)" [disabled]="saving()" aria-label="Remove {{item.name}}" title="Remove media"><span class="pi pi-times" aria-hidden="true"></span></button></div>}
+     @for(file of pendingFiles;track $index){<div class="media-row"><span>Ready to upload · {{file.name}} ({{fileSize(file.size)}})</span><button type="button" (click)="removePending(file)" [disabled]="saving()" aria-label="Remove {{file.name}}" title="Remove file"><span class="pi pi-times" aria-hidden="true"></span></button></div>}
+    </section>
+    <section class="draft-card"><h3>Product info</h3><div class="draft-fields"><label>Full product name *<input [(ngModel)]="name" maxlength="80" placeholder="Product name"></label><label>Ribbon<input [(ngModel)]="ribbon" maxlength="30" placeholder="e.g. New Arrival"></label></div>
+     <label>Description<textarea [(ngModel)]="description" maxlength="8000" rows="7" placeholder="Describe the product, materials and uses"></textarea></label>
+    </section>
+    <section class="draft-card"><h3>Pricing</h3><div class="draft-fields"><label>Base price · AUD *<input type="number" min="0" step="0.01" [ngModel]="basePrice" (ngModelChange)="setBasePrice($event)"></label><label>Product SKU<input [(ngModel)]="sku" maxlength="40" placeholder="Optional"></label></div><p>Individual variants can have their own prices and SKUs below.</p></section>
+    <section class="draft-card"><div class="draft-section-head"><h3>Product options</h3><button class="icon-action" type="button" aria-label="Add product option" title="Add product option" (click)="addOption()" [disabled]="optionInputs.length>=6"><span class="pi pi-plus" aria-hidden="true"></span></button></div>
+     @for(option of optionInputs;track $index){<div class="draft-option"><label>Option name<input [(ngModel)]="option.name" (ngModelChange)="syncVariants()" placeholder="e.g. Colour"></label><label>Choices, separated by commas<input [(ngModel)]="option.choicesText" (ngModelChange)="syncVariants()" placeholder="e.g. Raw, White, Pink"></label><button class="icon-action" type="button" (click)="removeOption($index)" aria-label="Remove option" title="Remove option"><span class="pi pi-times" aria-hidden="true"></span></button></div>}
+     @if(optionError){<p class="draft-error" role="alert">{{optionError}}</p>}
+     <h4>Variants · {{variants.length}}</h4><div class="variant-scroll"><table><thead><tr><th>Choices</th><th>Price · AUD</th><th>SKU</th></tr></thead><tbody>@for(variant of variants;track $index){<tr><td>{{variantLabel(variant)}}</td><td><input type="number" min="0" step="0.01" [(ngModel)]="variant.price_aud" [attr.aria-label]="'Price for '+variantLabel(variant)"></td><td><input [(ngModel)]="variant.sku" maxlength="40" [attr.aria-label]="'SKU for '+variantLabel(variant)"></td></tr>}</tbody></table></div>
+    </section>
+   </div>
+   <aside><section class="draft-card"><h3>Publication</h3><strong class="draft-status">Draft in Hub</strong><p>Save draft stores the product in Hub only. It does not create a Wix product or add it to the new storefront. Publication will be a separate action after Wix confirms the product is visible.</p></section>
+    <section class="draft-card"><h3>Categories</h3>@if(categories.length){@for(category of categories;track category.id){<label class="category-choice"><input type="checkbox" [checked]="categoryIds.includes(category.id)" (change)="toggleCategory(category.id,$event)">{{category.name}}</label>}}@else{<p>{{categoryError||'Loading categories…'}}</p>}</section>
+   </aside>
+  </div>
+  @if(progress()){<p role="status" class="draft-progress">{{progress()}}</p>}
+  @if(formError()){<p role="alert" class="draft-error">{{formError()}}</p>}
+  @if(savedMessage()){<p role="status" class="draft-success">{{savedMessage()}}</p>}
+  <div class="draft-actions"><button type="button" (click)="formOpen=false" [disabled]="saving()">Close</button><button type="button" class="primary" (click)="saveDraft()" [disabled]="saving()">{{saving()?'Saving…':'Save draft in Hub'}}</button></div>
+ </p-dialog>
+ <p-dialog header="Product drafts" [(visible)]="listOpen" [modal]="true" [style]="{width:'min(800px,95vw)'}" [draggable]="false">
+  <p>Drafts are private in Hub. They have not been sent to Wix or the storefront.</p>
+  @if(loadError()){<p class="draft-error" role="alert">{{loadError()}} <button type="button" (click)="loadDrafts()">Retry</button></p>}
+  <div class="variant-scroll"><table><thead><tr><th>Product</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>@for(row of drafts();track row.id){<tr><td>{{row.name}}</td><td>{{row.status}}</td><td>{{row.updated_at|date:'mediumDate'}}</td><td><button type="button" (click)="editDraft(row)" [disabled]="row.status!=='draft'">Edit</button></td></tr>}@empty{<tr><td colspan="4">No product drafts yet.</td></tr>}</tbody></table></div>
+ </p-dialog>
+ `,styles:[`:host{display:contents}.icon-action{width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;padding:0}.draft-layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(230px,.85fr);gap:18px;align-items:start}.draft-main,.draft-layout aside{display:grid;gap:14px}.draft-card{border:1px solid var(--wc-border);border-radius:10px;background:#fff;padding:18px}.draft-card h3{margin:0 0 15px}.draft-card h4{margin:18px 0 8px}.draft-card p{font-size:.85rem;color:var(--wc-muted);margin:8px 0 0}.draft-card label{display:block;font-size:.85rem}.draft-card input:not([type=checkbox]),.draft-card textarea{width:100%;margin-top:5px;box-sizing:border-box}.draft-card textarea{min-height:120px}.draft-fields{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px;margin-bottom:12px}.draft-section-head{display:flex;justify-content:space-between;align-items:center}.draft-option{display:grid;grid-template-columns:1fr 1.4fr 38px;gap:8px;align-items:end;margin-bottom:9px}.variant-scroll{overflow:auto;max-height:340px}.variant-scroll table{width:100%;border-collapse:collapse}.variant-scroll th,.variant-scroll td{text-align:left;padding:8px;border-bottom:1px solid var(--wc-border);vertical-align:middle}.variant-scroll input{min-width:90px}.upload-area{display:block;border:1px dashed var(--wc-border);border-radius:8px;padding:20px;text-align:center;cursor:pointer}.media-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--wc-border);font-size:.85rem}.media-row button{width:32px;height:32px;display:grid;place-items:center}.draft-thumb{width:44px;height:44px;object-fit:cover;border-radius:5px}.category-choice{display:flex!important;align-items:center;gap:8px;margin:9px 0}.category-choice input{width:auto}.draft-status{display:inline-block;border-radius:5px;background:#eef3eb;color:#385540;padding:5px 9px;font-size:.8rem}.draft-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.draft-actions button{min-width:110px}.draft-actions .primary{background:var(--p-primary-color);color:#fff}.draft-error{color:#991b1b!important;font-size:.85rem}.draft-success{color:#17643d}.draft-progress{color:var(--wc-muted);font-size:.85rem}.draft-card input.file-input{position:absolute;width:1px;height:1px;padding:0;margin:0;clip-path:inset(50%);overflow:hidden}@media(max-width:720px){.draft-layout{grid-template-columns:1fr}.draft-fields,.draft-option{grid-template-columns:1fr}.draft-option .icon-action{justify-self:end}}`]})
+export class ProductDraftsComponent implements OnInit{
+  readonly manager=signal(false);readonly drafts=signal<DraftRow[]>([]);readonly saving=signal(false);readonly progress=signal('');readonly formError=signal('');readonly loadError=signal('');readonly savedMessage=signal('');
+  formOpen=false;listOpen=false;draftId='';name='';description='';ribbon='';basePrice=0;sku='';categoryIds:string[]=[];categories:Category[]=[];categoryError='';optionInputs:{name:string;choicesText:string}[]=[];variants:DraftVariant[]=[{choices:{},price_aud:0,sku:''}];optionError='';media:DraftMedia[]=[];mediaUrls:Record<string,string>={};pendingFiles:File[]=[];
+  constructor(private readonly db:SupabaseService){}
+  async ngOnInit(){const {data,error}=await this.db.client.rpc('wc_is_hub_manager');if(error){this.loadError.set('Could not check product editing access. Reload Products and try again.');return;}this.manager.set(data===true);if(this.manager()){await Promise.all([this.loadDrafts(),this.loadCategories()]);}}
+  async loadDrafts(){this.loadError.set('');const {data,error}=await this.db.client.from('wc_hub_product_drafts').select('*').order('updated_at',{ascending:false});if(error){this.loadError.set('Product drafts could not be loaded. Retry.');return;}this.drafts.set((data||[]) as DraftRow[]);}
+  async loadCategories(){const {data,error}=await this.db.client.from('wc_storefront_catalog').select('payload').eq('id','live').maybeSingle();if(error){this.categoryError='Categories could not be loaded. You can save the draft without categories and add them later.';return;}this.categories=(data?.payload?.categories||[]).filter((row:Category)=>row.path!=='/category/all-products'&&row.id&&row.name);}
+  reset(){this.draftId='';this.name='';this.description='';this.ribbon='';this.basePrice=0;this.sku='';this.categoryIds=[];this.optionInputs=[];this.variants=[{choices:{},price_aud:0,sku:''}];this.media=[];this.mediaUrls={};this.pendingFiles=[];this.formError.set('');this.savedMessage.set('');this.progress.set('');this.optionError='';}
+  newDraft(){this.reset();this.formOpen=true;}
+  openList(){void this.loadDrafts();this.listOpen=true;}
+  editDraft(row:DraftRow){if(row.status!=='draft')return;this.reset();this.draftId=row.id;this.name=row.name;this.description=row.description;this.ribbon=row.ribbon;this.basePrice=Number(row.base_price_aud);this.sku=row.sku;this.categoryIds=[...(row.category_ids||[])];this.optionInputs=(row.options||[]).map(option=>({name:option.name,choicesText:option.choices.join(', ')}));this.variants=(row.variants||[]).map(variant=>({...variant,price_aud:Number(variant.price_aud)}));this.media=[...(row.media||[])];this.listOpen=false;this.formOpen=true;void this.loadMediaUrls();}
+  async loadMediaUrls(){for(const item of this.media.filter(row=>row.kind==='image')){const {data,error}=await this.db.client.storage.from(bucket).createSignedUrl(item.path,600);if(!error&&data?.signedUrl)this.mediaUrls[item.path]=data.signedUrl;}}
+  addOption(){if(this.optionInputs.length<6)this.optionInputs.push({name:'',choicesText:''});}
+  removeOption(index:number){this.optionInputs.splice(index,1);this.syncVariants();}
+  syncVariants(){this.optionError='';try{this.variants=draftVariants(draftOptions(this.optionInputs),this.variants,this.basePrice);}catch(e:any){this.optionError=e.message;}}
+  setBasePrice(value:number){const old=this.basePrice;this.basePrice=Number(value);for(const variant of this.variants)if(variant.price_aud===old)variant.price_aud=this.basePrice;}
+  toggleCategory(id:string,event:Event){const checked=(event.target as HTMLInputElement).checked;this.categoryIds=checked?[...new Set([...this.categoryIds,id])]:this.categoryIds.filter(item=>item!==id);}
+  variantLabel(row:DraftVariant){return Object.entries(row.choices).map(([name,value])=>`${name}: ${value}`).join(' · ')||'Default';}
+  fileSize(bytes:number){return `${(bytes/1024/1024).toFixed(1)} MB`;}
+  selectFiles(event:Event){const input=event.target as HTMLInputElement;const files=[...(input.files||[])];this.formError.set('');for(const file of files){if(!allowedTypes.has(file.type)){this.formError.set(`${file.name}: unsupported file type. Use JPG, PNG, WebP, MP4 or WebM.`);continue;}if(file.size>maxFileBytes){this.formError.set(`${file.name}: ${this.fileSize(file.size)} exceeds the 50 MB limit. Choose a smaller file.`);continue;}this.pendingFiles.push(file);}input.value='';}
+  removePending(file:File){this.pendingFiles=this.pendingFiles.filter(item=>item!==file);}
+  async removeMedia(item:DraftMedia){if(!this.draftId){this.media=this.media.filter(row=>row.path!==item.path);return;}this.progress.set(`Removing ${item.name}…`);this.formError.set('');try{const next=this.media.filter(row=>row.path!==item.path);const {error}=await this.db.client.from('wc_hub_product_drafts').update({media:next}).eq('id',this.draftId);if(error)throw error;this.media=next;delete this.mediaUrls[item.path];const removed=await this.db.client.storage.from(bucket).remove([item.path]);this.progress.set(`${item.name} removed from the draft.`);if(removed.error)this.formError.set(`${item.name} was removed from the draft, but its private file could not be cleaned up. Contact an administrator.`);await this.loadDrafts();}catch{this.formError.set(`${item.name} could not be removed. Reload the draft and retry.`);this.progress.set('');}}
+  async saveDraft(){if(this.saving()||!this.manager())return;const options=draftOptions(this.optionInputs);const validation=validateProductDraft({name:this.name,description:this.description,ribbon:this.ribbon,basePrice:this.basePrice,sku:this.sku,options,variants:this.variants});if(validation||this.optionError){this.formError.set(validation||this.optionError);return;}this.saving.set(true);this.formError.set('');this.savedMessage.set('');this.progress.set('Saving draft in Hub…');
+    try{const payload={name:this.name.trim(),description:this.description,ribbon:this.ribbon.trim(),base_price_aud:this.basePrice,sku:this.sku.trim(),category_ids:this.categoryIds,options,variants:this.variants,media:this.media};
+      if(this.draftId){const {data,error}=await this.db.client.from('wc_hub_product_drafts').update(payload).eq('id',this.draftId).eq('status','draft').select('id').single();if(error||!data)throw error||Error('Draft not found');}
+      else{const {data,error}=await this.db.client.from('wc_hub_product_drafts').insert(payload).select('id').single();if(error||!data)throw error||Error('Draft was not created');this.draftId=data.id;}
+      await this.loadDrafts();
+      for(const file of [...this.pendingFiles]){this.progress.set(`Uploading ${file.name} (${this.fileSize(file.size)})…`);const path=`${this.draftId}/${crypto.randomUUID()}-${file.name.slice(-80).replace(/[^a-zA-Z0-9._-]/g,'_')}`;const upload=await this.db.client.storage.from(bucket).upload(path,file,{contentType:file.type,upsert:false});if(upload.error)throw Error(`${file.name} could not be uploaded. Check your connection and retry. The draft was saved in Hub.`);
+        const next:DraftMedia[]=[...this.media,{path,name:file.name,kind:file.type.startsWith('image/')?'image':'video',mimeType:file.type,size:file.size}];const update=await this.db.client.from('wc_hub_product_drafts').update({media:next}).eq('id',this.draftId).eq('status','draft');if(update.error){await this.db.client.storage.from(bucket).remove([path]);throw Error(`${file.name} uploaded but could not be attached to the draft. Retry the upload.`);}this.media=next;this.pendingFiles=this.pendingFiles.filter(item=>item!==file);if(file.type.startsWith('image/'))void this.loadMediaUrls();
+      }
+      await this.loadDrafts();this.progress.set('');this.savedMessage.set('Draft saved in Hub. Nothing was sent to Wix or the storefront.');
+    }catch(e:any){this.progress.set('');this.formError.set(e?.message||'Draft could not be saved. Check your connection and retry.');}
+    finally{this.saving.set(false);}
+  }
+}
