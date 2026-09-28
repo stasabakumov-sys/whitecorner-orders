@@ -55,6 +55,8 @@ if(process.argv.includes('--sync')){
  for(const row of rows)for(const item of mediaItems(row.source_product)){
   const old=needed.get(item.url);needed.set(item.url,{...item,public:old?.public||row.source_product.visible===true});
  }
+ const editorial=JSON.parse(await readFile('.github/scripts/hub-storefront-editorial-assets.json','utf8'));
+ for(const url of editorial)needed.set(assetUrl(url),{url:assetUrl(url),kind:'image',public:true});
  let completed=0,bytes=0;const failures=[];
  const queue=[...needed.values()];
  async function worker(){while(queue.length){const item=queue.shift();try{
@@ -82,6 +84,7 @@ if(process.argv.includes('--sync')){
  console.log(JSON.stringify({mediaTotal:needed.size,mediaComplete:completed,newBytes:bytes,failures:failures.length}));
  if(failures.length){console.log(JSON.stringify(failures));throw Error('Media incomplete. Previous storefront catalogue kept; rerun to resume.');}
  const catalog=buildCatalog(rows,collections,assets,base);
+ catalog.editorialAssets=Object.fromEntries(editorial.map(url=>{const asset=assets.get(url);return [url,`${base}/storage/v1/object/public/${asset.bucket}/${asset.path}`];}));
  // Anonymous contract contains only the separate, explicitly selected public projection.
  await rest('wc_storefront_catalog?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify({id:'live',payload:catalog,published_at:catalog.syncedAt})});
  const anon=keys.find(k=>k.name==='anon')?.api_key;

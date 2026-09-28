@@ -23,7 +23,7 @@ Deno.serve(async(request:Request)=>{
     const page=await response.json();
     if(!Array.isArray(page.collections)||!Number.isSafeInteger(page.totalResults)||page.totalResults<0)throw Error('Invalid collections page');
     if(total!==undefined&&total!==page.totalResults)throw Error('Collections changed during import');
-    total=page.totalResults;
+    total=Number(page.totalResults);
     for(const item of page.collections){
      if(typeof item.id!=='string'||!item.id||typeof item.name!=='string'||!item.name||seen.has(item.id))throw Error('Invalid or duplicate collection');
      seen.add(item.id);rows.push({id:item.id,source_collection:item,synced_at:new Date().toISOString()});
