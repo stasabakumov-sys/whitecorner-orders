@@ -4,6 +4,16 @@ on:
     branches: [codex/hub-storefront-catalog]
     paths: ['.github/scripts/hub-storefront-*', '.github/workflows/hub-storefront-catalog.yml']
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Catalogue operation
+        type: choice
+        options: [audit, sync]
+        default: audit
+      restart:
+        description: Start a fresh full Wix import (otherwise resume)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -17,7 +27,41 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.6
+      - name: Check importer and catalogue contract
+        run: |
+          deno check --no-lock supabase/functions/hub-catalog-sync/index.ts
+          node --test .github/scripts/hub-storefront-model.test.mjs
+          npm install --prefix "$RUNNER_TEMP/catalog-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/hub-storefront-schema.test.mjs "$RUNNER_TEMP/catalog-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Read-only catalogue audit
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/hub-storefront-audit.mjs
+      - name: Apply dedicated catalogue schema
+        if: inputs.mode == 'sync'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/hub-storefront-release.mjs --apply
+      - uses: supabase/setup-cli@v1
+        if: inputs.mode == 'sync'
+        with:
+          version: latest
+      - name: Deploy protected catalogue importer
+        if: inputs.mode == 'sync'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy hub-catalog-sync --project-ref zgvnrpspwluapaxnycrg
+      - name: Import, copy media, verify and publish Hub catalogue
+        if: inputs.mode == 'sync'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          RESTART: ${{ inputs.restart }}
+        run: |
+          if [ "$RESTART" = "true" ]; then
+            node .github/scripts/hub-storefront-release.mjs --sync --restart
+          else
+            node .github/scripts/hub-storefront-release.mjs --sync
+          fi
