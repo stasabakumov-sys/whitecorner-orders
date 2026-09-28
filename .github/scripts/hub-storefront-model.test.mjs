@@ -1,10 +1,19 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {assetUrl,buildCatalog,plainText} from './hub-storefront-model.mjs';
+import {cardPresentation} from './hub-storefront-presentation.mjs';
 const url='https://static.wixstatic.com/media/test.jpg';
 const assets=new Map([[url,{bucket:'catalog-media',path:'wix/test.jpg'}]]);
 const collections=[{id:'c',source_collection:{id:'c',name:'Event Backdrops',slug:'event-backdrops'}}];
 const product=()=>({shipping_product_id:'hub-id',source_product:{id:'wix-id',name:'Test backdrop',slug:'test-backdrop',visible:true,description:'<p>Made here</p><script>bad()</script>',collectionIds:['c'],priceData:{price:100,discountedPrice:90,currency:'AUD'},media:{items:[{mediaType:'image',image:{url}}]},manageVariants:true,productOptions:[{name:'Colour',choices:[{description:'Raw'},{description:'White'}]}],variants:[{id:'raw',choices:{Colour:'Raw'},variant:{priceData:{price:100,discountedPrice:90,currency:'AUD'}},stock:{inStock:true,trackQuantity:false}},{id:'white',choices:{Colour:'White'},variant:{priceData:{price:150,discountedPrice:140,currency:'AUD'}},stock:{inStock:false,trackQuantity:true,quantity:0}}],costRange:{minValue:42},internal_comment:'PRIVATE'}});
+
+test('card attributes preserve the full title and use only explicit material and options',()=>{
+ const input={name:'Hollow Wavy Line Arch Backdrop - Foldable/Non-Foldable MDF Arch',options:[{name:'Foldable',values:['YES','NO']},{name:'Colour',values:['Raw','White']}],material:''};
+ const result={...input,...cardPresentation(input)};
+ assert.equal(result.name,input.name);
+ assert.deepEqual(result.cardAttributes,['MDF','Foldable / Non-foldable','Raw / White']);
+ assert.deepEqual(cardPresentation({name:'Display',options:[],material:''}).cardAttributes,[]);
+});
 test('keeps stable Hub IDs, price differences and unknown stock without leaking private fields',()=>{
  const p=buildCatalog([product()],collections,assets,'https://hub.example').products[0];
  assert.equal(p.id,'hub-id');assert.equal(p.price,90);assert.deepEqual(p.variants.map(v=>v.price),[90,140]);

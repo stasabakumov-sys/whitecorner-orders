@@ -1,6 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import {createHash,randomBytes} from 'node:crypto';
 import {assetUrl,mediaItems,buildCatalog} from './hub-storefront-model.mjs';
+import {cardPresentation} from './hub-storefront-presentation.mjs';
 const ref='zgvnrpspwluapaxnycrg',base=`https://${ref}.supabase.co`;
 const token=process.env.SUPABASE_ACCESS_TOKEN;if(!token)throw Error('SUPABASE_ACCESS_TOKEN is required');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -17,6 +18,14 @@ async function request(url,options={}){
 async function management(path,options={}){return request(`https://api.supabase.com/v1/projects/${ref}/${path}`,{...options,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...options.headers}});}
 async function sql(query,read_only=true){return (await management('database/query',{method:'POST',body:JSON.stringify({query,read_only})})).json();}
 const literal=s=>"'"+s.replaceAll("'","''")+"'";
+if(process.argv.includes('--presentation')){
+ const [row]=await sql("select payload,published_at from wc_storefront_catalog where id='live'");
+ if(!row?.payload?.products?.length)throw Error('Published Hub catalogue is missing');
+ const catalog={...row.payload,products:row.payload.products.map(p=>({...p,...cardPresentation(p)}))};
+ const saved=await sql(`update wc_storefront_catalog set payload=${literal(JSON.stringify(catalog))}::jsonb where id='live' and published_at=${literal(row.published_at)}::timestamptz and payload=${literal(JSON.stringify(row.payload))}::jsonb returning id`,false);
+ if(saved.length!==1)throw Error('Catalogue changed concurrently; retry from the latest snapshot');
+ console.log(JSON.stringify({presentationUpdated:catalog.products.length,examples:catalog.products.slice(0,3).map(p=>({title:p.name,attributes:p.cardAttributes}))}));
+}
 if(process.argv.includes('--apply')){
  for(const name of ['20260928000100_storefront_catalog','20260928000200_catalog_import_access','20260928000300_catalog_media_issues']){const version=name.slice(0,14);const source=(await readFile(`supabase/migrations/${name}.sql`,'utf8')).replaceAll('\r','');
  await sql(`begin; select pg_advisory_xact_lock(20260928000100); do $release$ begin

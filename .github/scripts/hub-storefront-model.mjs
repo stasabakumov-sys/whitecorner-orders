@@ -1,4 +1,5 @@
 // The only public catalogue projection. Never spread Wix or operational objects.
+import {cardPresentation} from './hub-storefront-presentation.mjs';
 export const plainText=value=>String(value??'').replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi,'').replace(/<\/(p|div|li|h\d)>|<br\s*\/?>/gi,'\n').replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/\n\s*\n\s*\n/g,'\n\n').trim();
 const amount=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0?v:null;
 const priceOf=p=>{const n=amount(p?.discountedPrice)??amount(p?.price);if(n===null||p?.currency!=='AUD')throw Error('Missing or unsupported AUD price');return n;};
@@ -58,7 +59,7 @@ export function buildCatalog(rows,collections,assets,baseUrl){
  }
  if(!products.length||new Set(products.map(p=>p.id)).size!==products.length||new Set(products.map(p=>p.path)).size!==products.length)throw Error('Empty or duplicate storefront products');
  if(new Set(categories.map(c=>c.path)).size!==categories.length)throw Error('Duplicate collection paths');
- const doc={schemaVersion:1,source:'hub',syncedAt:new Date().toISOString(),products,categories};
+ const doc={schemaVersion:1,source:'hub',syncedAt:new Date().toISOString(),products:products.map(p=>({...p,...cardPresentation(p)})),categories};
  if(/(?:static|video)\.wixstatic\.com|costRange|internal_comment|source_product/.test(JSON.stringify(doc)))throw Error('Unexpected source URL or private field in public catalogue');
  return doc;
 }

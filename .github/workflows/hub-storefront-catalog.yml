@@ -8,7 +8,7 @@ on:
       mode:
         description: Catalogue operation
         type: choice
-        options: [audit, sync]
+        options: [audit, sync, presentation]
         default: audit
       restart:
         description: Start a fresh full Wix import (otherwise resume)
@@ -45,6 +45,11 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/hub-storefront-release.mjs --apply
+      - name: Publish compact card presentation from saved Hub data
+        if: inputs.mode == 'presentation'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/hub-storefront-release.mjs --presentation
       - uses: supabase/setup-cli@v1
         if: inputs.mode == 'sync'
         with:
