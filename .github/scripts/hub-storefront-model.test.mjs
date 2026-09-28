@@ -20,3 +20,10 @@ test('incomplete media, missing categories and currency fail instead of publishi
 });
 test('media URL validation prevents SSRF and embedded credentials',()=>{for(const u of ['http://static.wixstatic.com/a','https://evil.test/a','https://static.wixstatic.com.evil.test/a','https://secret@static.wixstatic.com/a'])assert.throws(()=>assetUrl(u));});
 test('HTML is converted to text; duplicate paths are rejected',()=>{assert.equal(plainText('<p>A &amp; B</p><p>C</p>'),'A & B\nC');assert.throws(()=>buildCatalog([product(),product()],collections,assets,'https://hub.example'),/duplicate/);});
+test('unavailable source videos are counted without exposing Wix URLs; images remain mandatory',()=>{
+ const p=product();p.source_product.media.items.push({mediaType:'video',video:{files:[{url:'https://video.wixstatic.com/video/unavailable/file.mp4'}]}});
+ const result=buildCatalog([p],collections,assets,'https://hub.example').products[0];
+ assert.equal(result.pendingMedia,1);assert.equal(result.media.length,1);assert.equal(result.images.length,1);
+ assert(!JSON.stringify(result).includes('video.wixstatic.com'));
+ assert.throws(()=>buildCatalog([p],collections,new Map(),'https://hub.example'),/copied/);
+});
