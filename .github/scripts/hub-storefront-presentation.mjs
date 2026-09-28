@@ -1,5 +1,5 @@
 // Presentation fields are generated and persisted in Hub, never guessed by the site.
-export function cardPresentation(product){
+export function cardPresentation(product,categories=[]){
  const name=product.name.trim();
  const materials=[...new Set(name.match(/\b(?:MDF|plywood|timber|stainless steel|acrylic)\b/gi)?.map(v=>v.toLowerCase())??[])];
  const material=product.material||materials.map(v=>v==='mdf'?'MDF':v[0].toUpperCase()+v.slice(1)).join(' / ');
@@ -17,5 +17,10 @@ export function cardPresentation(product){
  if(colour?.values.length)attributes.push(colour.values.length<=2?colour.values.join(' / '):`${colour.values.length} colours`);
  const size=product.options.find(o=>/^(?:size|dimensions?)$/i.test(o.name));
  if(size?.values.length>1)attributes.push(`${size.values.length} sizes`);
- return {cardAttributes:attributes.slice(0,3),material};
+ const roofCategories=categories.filter(c=>product.categoryIds?.includes(c.id));
+ const withRoof=roofCategories.some(c=>c.path==='/category/mobile-carts-with-roof');
+ const withoutRoof=roofCategories.some(c=>c.path==='/category/mobile-carts-without-roof');
+ if(withRoof&&withoutRoof)throw Error('Conflicting roof categories');
+ const roof=withRoof?'With Roof':withoutRoof?'Without Roof':product.roof;
+ return {cardAttributes:attributes.slice(0,3),material,...(roof?{roof}:{})};
 }

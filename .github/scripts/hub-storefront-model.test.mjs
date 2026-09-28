@@ -46,3 +46,12 @@ test('original Wix creation time controls order, independent of input and update
  assert.deepEqual(products.map(p=>p.id),['old','new']);
  assert.throws(()=>newestFirst(products,rows.slice(1)),/Missing Wix creation date/);
 });
+
+test('roof filters use saved Wix categories even without roof words in the title',()=>{
+ const categories=[{id:'yes',path:'/category/mobile-carts-with-roof'},{id:'no',path:'/category/mobile-carts-without-roof'}];
+ const product={name:'Foldable Timber Event Bar',material:'Timber',options:[],categoryIds:['no']};
+ assert.equal(cardPresentation(product,categories).roof,'Without Roof');
+ assert.equal(cardPresentation({...product,categoryIds:['yes']},categories).roof,'With Roof');
+ assert.equal(cardPresentation({...product,categoryIds:[]},categories).roof,undefined);
+ assert.throws(()=>cardPresentation({...product,categoryIds:['yes','no']},categories),/Conflicting/);
+});

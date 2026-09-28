@@ -60,7 +60,7 @@ export function buildCatalog(rows,collections,assets,baseUrl){
  }
  if(!products.length||new Set(products.map(p=>p.id)).size!==products.length||new Set(products.map(p=>p.path)).size!==products.length)throw Error('Empty or duplicate storefront products');
  if(new Set(categories.map(c=>c.path)).size!==categories.length)throw Error('Duplicate collection paths');
- const doc={schemaVersion:1,source:'hub',syncedAt:new Date().toISOString(),products:newestFirst(products,rows).map(p=>({...p,...cardPresentation(p)})),categories};
+ const doc={schemaVersion:1,source:'hub',syncedAt:new Date().toISOString(),products:newestFirst(products,rows).map(p=>({...p,...cardPresentation(p,categories)})),categories};
  if(/(?:static|video)\.wixstatic\.com|costRange|internal_comment|source_product/.test(JSON.stringify(doc)))throw Error('Unexpected source URL or private field in public catalogue');
  return doc;
 }
