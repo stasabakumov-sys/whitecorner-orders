@@ -4,7 +4,7 @@
 
 Products > Add product draft creates a Hub-owned record in `wc_hub_product_drafts`. It stores the name, description, ribbon, base price, SKU, categories, options, variant prices/SKUs, and private media. Only Hub managers can read or edit drafts. Saving a draft does not call Wix, alter the imported catalog, or expose it on the storefront. A failed upload leaves the saved draft and selected file available for retry.
 
-The migration creates the draft table and a private `hub-product-drafts` Storage bucket. Deploy the migration before enabling the Angular UI in production. The form reads category suggestions from `wc_storefront_catalog`; that projection remains a separate, public, allowlisted catalog source and must not contain Hub operational fields.
+The migration creates the draft table and a private `hub-product-drafts` Storage bucket. Run the guarded `Hub product drafts release` workflow in `apply` mode before using the Angular UI in production. It applies only this migration and verifies RLS and private Storage; it does not run all pending migrations. The form reads category suggestions from `wc_storefront_catalog`; that projection remains a separate, public, allowlisted catalog source and must not contain Hub operational fields.
 
 ## Later publication workflow
 
