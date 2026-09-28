@@ -25,7 +25,10 @@ const preflight=(await sql(`select
   to_regclass('public.wc_hub_product_drafts') is not null draft_table,
   exists(select 1 from storage.buckets where id='hub-product-drafts') bucket_exists,
   exists(select 1 from storage.buckets where id='hub-product-drafts' and public) public_bucket,
-  exists(select 1 from supabase_migrations.schema_migrations where version='${version}') registered;`))[0];
+  exists(select 1 from supabase_migrations.schema_migrations where version='${version}') registered,
+  (select name from supabase_migrations.schema_migrations where version='${version}') registered_name,
+  (select coalesce(array_length(statements,1),0) from supabase_migrations.schema_migrations where version='${version}') statement_count,
+  (select replace(statements[1],E'\\r','')=${quote(source)} from supabase_migrations.schema_migrations where version='${version}') source_matches;`))[0];
 if(!preflight?.manager_rpc||!preflight?.catalog_projection)throw Error('Hub manager RPC or catalog projection is missing');
 if(preflight.public_bucket)throw Error('Draft media bucket already exists as public');
 if(!preflight.registered&&(preflight.draft_table||preflight.bucket_exists))throw Error('Draft table or bucket exists without a registered migration');
@@ -61,7 +64,7 @@ if(process.argv.includes('--apply')){
   throw Error('Use --verify or --apply');
 }
 
-if(preflight.registered||process.argv.includes('--apply')){
+if(preflight.draft_table||process.argv.includes('--apply')){
   const state=(await sql(verification))[0];
   if(!state||Object.values(state).some(value=>value!==true))throw Error(`Product draft postflight failed: ${JSON.stringify(state)}`);
   console.log('Product draft database verified:',JSON.stringify(state));
