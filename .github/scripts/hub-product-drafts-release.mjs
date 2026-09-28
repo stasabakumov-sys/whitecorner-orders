@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises';
 
 const project='zgvnrpspwluapaxnycrg';
-const version='20260928000200';
+const version='20260928000400';
 const name='hub_product_drafts';
 const source=(await readFile(`supabase/migrations/${version}_${name}.sql`,'utf8')).replaceAll('\r','');
 const token=process.env.SUPABASE_ACCESS_TOKEN;
