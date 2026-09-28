@@ -54,8 +54,35 @@ Production import completed on 28 September 2026 (Actions run 36397596149):
 copied; 12 videos remain deferred (11 Wix HTTP 403 responses, one over 50 MB).
 Two visible products are affected by deferred video. Their photo galleries are complete.
 
+The selected Site is deployed as **version 4**, source
+`272bab1a6b3ecb98697df4f74ddb8d9e9e2729fc`, at
+https://white-corner-design.abakumovasvetlana.chatgpt.site/category/event-backdrops.
+Production HTTP checks returned 200 for category, product and management pages;
+all three contained Hub catalogue/media and no catalogue-error state.
+Local browser checks covered desktop/mobile layouts, Hub photos, category count,
+search, option selection and the exact variant price in the demo cart.
+TypeScript, the production build and four selection tests passed. Hub CI run
+36398989977 passed Deno checking, six projection tests and migration/RLS tests.
+No Angular files changed, so Angular tests/build were not run for this release.
+
 The 12 local-only registry entries have no linked commercial Wix snapshot. They
 must be reviewed before publication: titles alone are not a safe identity match,
 and prices/media must not be invented. Hidden Wix products remain hidden.
+The read-only audit identified these local-only names:
+
+- Custom 3D Arch Backdrop with Rectangular Top
+- Additional Tabletop for the Collapsible Plywood Charcuterie Cart
+- Custom Cutouts for the Additional Tabletop
+- Custom configuration of the Collapsible Mobile Plywood Serving Table
+- Back panel with a pair of closable doors
+- Сustom painting (two separate records, one with trailing whitespace)
+- Decals
+- Customisation of the tabletop and shelf height
+- Tasmanian Oak Timber Benchtop Upgrade
+- TEST Backdrop
+- TEST Cart
+
+These are primarily custom work and test entries, not a missing Wix catalogue
+page. Preserve their operational IDs; decide commercial publication individually.
 Location-specific inventory and checkout calculations are not implied by the
 V1 product availability snapshot. Missing merchant SKU/SEO values remain missing.
