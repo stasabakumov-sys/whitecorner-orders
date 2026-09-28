@@ -28,7 +28,8 @@ const preflight=(await sql(`select
   exists(select 1 from supabase_migrations.schema_migrations where version='${version}') registered,
   (select name from supabase_migrations.schema_migrations where version='${version}') registered_name,
   (select coalesce(array_length(statements,1),0) from supabase_migrations.schema_migrations where version='${version}') statement_count,
-  (select replace(statements[1],E'\\r','')=${quote(source)} from supabase_migrations.schema_migrations where version='${version}') source_matches;`))[0];
+  (select replace(statements[1],E'\\r','')=${quote(source)} from supabase_migrations.schema_migrations where version='${version}') source_matches,
+  (select max(version) from supabase_migrations.schema_migrations) latest_version;`))[0];
 if(!preflight?.manager_rpc||!preflight?.catalog_projection)throw Error('Hub manager RPC or catalog projection is missing');
 if(preflight.public_bucket)throw Error('Draft media bucket already exists as public');
 if(!preflight.registered&&(preflight.draft_table||preflight.bucket_exists))throw Error('Draft table or bucket exists without a registered migration');
