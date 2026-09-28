@@ -127,8 +127,9 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 
       <div class="product-tools"><input aria-label="Search products" placeholder="Search products" [(ngModel)]="search"><app-wix-catalog-review (saved)="load()" /><button (click)="openLibrary()">Backdrop box drawings</button></div>
       </div>
+      @if(imageError()){<p class="error" role="alert">{{imageError()}} <button type="button" (click)="loadHubImages()">Retry photos</button></p>}
       <div class="tablewrap product-tablewrap"><table class="shiptable product-list"><thead><tr><th class="number">#</th><th>Product</th><th>Short name</th><th>Product size</th><th>Packaging profiles</th></tr></thead><tbody>
-      @for(p of visibleProducts();track p.id){<tr><td class="number">{{$index+1}}</td><td><button class="product-link" (click)="openProduct(p.id)">{{p.product_name}}</button></td><td>{{p.short_name||'—'}}</td><td>{{productSizes(p).join(' · ')||'—'}}</td><td>{{reusableProfileCount(p)}}</td></tr>}
+      @for(p of visibleProducts();track p.id){<tr><td class="number">{{$index+1}}</td><td><button class="product-link product-with-image" (click)="openProduct(p.id)"><span class="product-thumbnail list-thumbnail" aria-hidden="true">@if(productImage(p);as src){<img [src]="src" alt="" loading="lazy" decoding="async" (error)="failedImages.add(src)">}@else{<span class="pi pi-image" title="No product image available"></span>}</span><span>{{p.product_name}}</span></button></td><td>{{p.short_name||'—'}}</td><td>{{productSizes(p).join(' · ')||'—'}}</td><td>{{reusableProfileCount(p)}}</td></tr>}
       @empty{<tr><td colspan="5">No products found.</td></tr>}
       </tbody></table></div>
       <p-dialog header="Backdrop box drawings" [(visible)]="libraryOpen" [modal]="true" [style]="{width:'min(760px,95vw)'}" [draggable]="false">
@@ -398,7 +399,21 @@ export class ShippingDataComponent implements OnInit {
   constructor(private supabase: SupabaseService,@Optional() private route?:ActivatedRoute,@Optional() public costing:CostingService=new CostingService(supabase),@Optional() private cdr?:ChangeDetectorRef) {}
   costProfiles(id:string,sizeKey=''){const product=this.products().find(p=>p.id===id) as ShippingProduct;const saved=this.costing.profiles().filter(p=>p.shipping_product_id===id&&p.costing_version===2).map(profile=>({...profile.template_item,shipping_product_id:profile.shipping_product_id,item_id:profile.template_item.source_item_id,variant_key:profile.variant_key,product_name:profile.product_name,profile,backdrop_material_scope:['backdrop-structure','backdrop-structure-v2'].includes(profile.template_item?.profile_scope),cart_material_scope:profile.template_item?.profile_scope==='cart-size-materials'}));const rows=currentProductCostProfiles([...new Map([...saved,...this.costing.parts().filter(p=>p.shipping_product_id===id)].map(p=>[p.variant_key,p])).values()]);if(this.isCart(product))return cartCostProfiles(id,rows,sizeKey,product.product_name);return this.isBackdrop(product)?backdropCostProfiles(id,product.product_name,this.productSizes(product),rows,!this.wixSizes(product).length):rows;}
   failedImages=new Set<string>();
+  hubImages=signal<Record<string,string[]>>({});
+  imageError=signal('');
+  async loadHubImages(){
+    this.imageError.set('');this.failedImages.clear();
+    try{
+      const {data,error}=await this.supabase.client.from('wc_storefront_catalog').select('payload').eq('id','live').maybeSingle();
+      if(error)throw error;
+      this.hubImages.set(Object.fromEntries((data?.payload?.products||[]).map((p:any)=>[p.id,p.images||[]])));
+    }catch{this.imageError.set('Hub photos could not be loaded. Showing available catalogue images. Retry to load Hub photos.');}
+  }
   productImage(p:ShippingProduct){
+    const catalog=this.catalogProducts()[p.id];
+    const photos=[...(this.hubImages()[p.id]||[]),catalog?.media?.mainMedia?.image?.url,...(catalog?.media?.items||[]).filter((item:any)=>item.mediaType==='image').map((item:any)=>item.image?.url)];
+    const photo=photos.find(src=>typeof src==='string'&&src.startsWith('https://')&&!this.failedImages.has(src));
+    if(photo)return photo;
     const items=this.costing.orders().flatMap(o=>o.wc_order_items||[]);
     const matches=items.filter(item=>p.wix_product_id?productId(item)===p.wix_product_id:componentNormal(item.product_name||'')===componentNormal(p.product_name));
     for(const item of matches){
@@ -417,7 +432,7 @@ export class ShippingDataComponent implements OnInit {
   }
 
   async ngOnInit() {
-    await Promise.all([this.load(),this.costing.load()]);
+    await Promise.all([this.load(),this.costing.load(),this.loadHubImages()]);
   }
 
   async load() {
