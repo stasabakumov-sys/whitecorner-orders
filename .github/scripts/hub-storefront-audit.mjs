@@ -15,9 +15,7 @@ const query=`select jsonb_build_object(
  'jobs', (select jsonb_agg(jsonb_build_object('offset',next_offset,'total',expected_total,'complete',complete,'updated',updated_at)) from wc_wix_catalog_jobs),
  'oldest_snapshot', (select min(synced_at) from wc_wix_catalog_products),
  'newest_snapshot', (select max(synced_at) from wc_wix_catalog_products),
- 'media_example', (select source_product->'media' from wc_wix_catalog_products where source_product->>'visible'='true' limit 1),
- 'variant_example', (select source_product->'variants'->0 from wc_wix_catalog_products where source_product->>'visible'='true' and jsonb_array_length(source_product->'variants')>0 limit 1),
- 'options_example', (select source_product->'productOptions' from wc_wix_catalog_products where source_product->>'visible'='true' and jsonb_array_length(source_product->'productOptions')>0 limit 1)
+ 'local_review', (select jsonb_agg(jsonb_build_object('id',p.id,'name',coalesce(to_jsonb(p)->>'name',to_jsonb(p)->>'product_name'))) from wc_shipping_products p where wix_product_id is null)
 ) audit;`;
 const response=await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/database/query',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({query,read_only:true})});
 if(!response.ok)throw Error(`Read-only Hub audit failed (${response.status})`);

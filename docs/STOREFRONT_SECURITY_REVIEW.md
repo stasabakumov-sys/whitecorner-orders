@@ -10,7 +10,7 @@ gateway's user-JWT check. Every request must supply a cryptographically random
 anon and authenticated users cannot read or write that table. CI creates a token
 through its existing authorised database connection. The token expires within two
 hours, is masked in Actions, is never bundled into the storefront, and is revoked
-after successful completion. This exception applies only to this new maintenance
+in a finally block after the job. This exception applies only to this new maintenance
 function. All existing protected functions retain JWT verification.
 
 The handler authenticates before parsing the action. Its allowlist is: read Wix
@@ -21,12 +21,20 @@ allow only HTTPS Wix media hosts, reject redirects, enforce MIME and a 50 MB siz
 limit, and use content-hashed storage names. Private media uses a private bucket.
 The private service key stays inside the Edge Function runtime.
 
+Large media transfers use short-lived signed upload URLs scoped to one hashed
+filename in an allowed bucket. CI downloads only validated Wix media URLs and
+uploads that file; the handler confirms its saved size and MIME before recording
+completion. Signed URLs and the job token are never persisted or printed.
+The owner separately approved this transfer method and publication with inaccessible
+videos deferred. Missing photos still block publication; the private media-issue
+table records video failures for subsequent recovery.
+
 The anonymous storefront reads only `wc_storefront_catalog`, containing a field
 allowlist of visible products. No source payloads, costs, internal notes, drawings,
 customer fields or secrets are included. Source tables retain their existing RLS.
 The Site retains its owner-private audience. Public catalogue media is limited to
 visible products and existing storefront editorial images. Hidden media remains
-private. The release validates the complete import and every copied asset before
+private. The release validates the complete import and every copied photo before
 atomically replacing the last successful projection.
 
 Validation: migration rehearsals assert anonymous source-data denial, anonymous

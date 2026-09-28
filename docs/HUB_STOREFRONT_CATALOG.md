@@ -23,7 +23,9 @@ ages. Images/videos were still Wix URLs, categories were only collection IDs.
 4. Build the separate allowlisted `wc_storefront_catalog` document. Include visible
    products, category membership, descriptions, options, exact variant prices,
    stock semantics, SKU, weight, custom fields, SEO text and Hub media URLs.
-   Fail on incomplete files, unknown categories, duplicate IDs/slugs or bad prices.
+   Fail on incomplete photos, unknown categories, duplicate IDs/slugs or bad prices.
+   The owner approved deferring inaccessible videos; their reasons are recorded in
+   the private `wc_catalog_media_issues` table and never replaced with Wix URLs.
 5. Atomically replace the `live` document only after the entire run succeeds.
    Existing published data stays readable during import and on failure.
 6. The Next.js/Vinext storefront fetches this document server-side from Hub.
@@ -33,7 +35,7 @@ ages. Images/videos were still Wix URLs, categories were only collection IDs.
 ## Operations
 
 Use GitHub Actions **Hub storefront catalogue**, on the reviewed source branch.
-`mode=audit` is read-only. `mode=sync` applies only the two named migrations,
+`mode=audit` is read-only. `mode=sync` applies only the three named migrations,
 deploys the dedicated importer, resumes the saved run and publishes the catalogue.
 Set `restart=true` only to deliberately start a fresh complete Wix product scan.
 Re-running with `restart=false` resumes file copying without downloading confirmed
@@ -45,6 +47,12 @@ No courier booking, emails, Wix writes, orders, payments or production UI deploy
 are part of this release.
 
 ## Explicit gaps
+
+Production import completed on 28 September 2026 (Actions run 36397596149):
+179 source products and 18 collections, 103 visible products, 76 hidden products,
+939 public variants. Storage contains 1,114 confirmed media files. All photos were
+copied; 12 videos remain deferred (11 Wix HTTP 403 responses, one over 50 MB).
+Two visible products are affected by deferred video. Their photo galleries are complete.
 
 The 12 local-only registry entries have no linked commercial Wix snapshot. They
 must be reviewed before publication: titles alone are not a safe identity match,
