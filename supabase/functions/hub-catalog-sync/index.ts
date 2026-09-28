@@ -21,6 +21,26 @@ Deno.serve(async(request:Request)=>{
   const wixKey=Deno.env.get('WIX_API_KEY'),site=Deno.env.get('WIX_SITE_ID');
   if(!wixKey||!site||!url)return json({error:'Catalogue integration configuration missing'},503);
   const headers={'Authorization':wixKey,'wix-site-id':site,'Content-Type':'application/json'};
+  if(body.action==='prepareMedia'||body.action==='confirmMedia'){
+   const target=new URL(body.url);
+   if(target.protocol!=='https:'||target.port||target.username||target.password||!['static.wixstatic.com','video.wixstatic.com'].includes(target.hostname)||!['catalog-media','catalog-source-media'].includes(body.bucket))throw Error('Invalid catalogue media request');
+   const extensions:Record<string,string>={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif','video/mp4':'mp4'};
+   if(!extensions[body.contentType])throw Error('Unsupported media type');
+   const path=`wix/${hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(target.href)))}.${extensions[body.contentType]}`;
+   if(body.action==='prepareMedia'){
+    const {data,error}=await db.storage.from(body.bucket).createSignedUploadUrl(path,{upsert:true});
+    if(error||!data)throw Error('Could not prepare catalogue media upload');
+    return json({ok:true,signedUrl:data.signedUrl,path});
+   }
+   const filename=path.slice(4);
+   const {data:files,error:filesError}=await db.storage.from(body.bucket).list('wix',{search:filename,limit:2});
+   const saved=files?.find(f=>f.name===filename);
+   if(filesError||!saved||saved.metadata?.size!==body.bytes||saved.metadata?.mimetype!==body.contentType||!/^[a-f0-9]{64}$/.test(body.sha256))throw Error('Catalogue media upload could not be verified');
+   const asset={source_url:target.href,bucket:body.bucket,path,bytes:body.bytes,content_type:body.contentType,sha256:body.sha256};
+   const {error:saveError}=await db.from('wc_catalog_media').upsert(asset,{onConflict:'source_url'});
+   if(saveError)throw Error('Could not confirm media record');
+   return json({ok:true,asset});
+  }
   if(body.action==='copyMedia'){
    const target=new URL(body.url);
    if(target.protocol!=='https:'||target.port||target.username||target.password||!['static.wixstatic.com','video.wixstatic.com'].includes(target.hostname)||!['catalog-media','catalog-source-media'].includes(body.bucket))throw Error('Invalid catalogue media request');

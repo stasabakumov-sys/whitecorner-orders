@@ -41,16 +41,20 @@ export function buildCatalog(rows,collections,assets,baseUrl){
   if((p.collectionIds??[]).some(id=>!collections.some(c=>c.id===id)))throw Error('Product refers to an unknown collection');
   const primary=categories.find(c=>c.id!=='all'&&categoryIds.includes(c.id));
   const priceData=p.priceData??p.price;
-  const options=(p.productOptions??[]).map(o=>({name:plainText(o.name),values:(o.choices??[]).filter(c=>c.visible!==false).map(c=>plainText(c.description??c.value))}));
+  const options=(p.productOptions??[]).map(o=>({name:plainText(o.name),values:(o.choices??[]).filter(c=>c.visible!==false).map(c=>plainText(c.description??c.value)),choiceImages:Object.fromEntries((o.choices??[]).filter(c=>c.visible!==false).map(c=>[plainText(c.description??c.value),(c.media?.items??[]).filter(i=>i.mediaType==='image').map(i=>publicAsset(i.image.url))]))}));
   const variants=(p.variants??[]).filter(v=>v.variant?.visible!==false).map(v=>({id:v.id,choices:Object.fromEntries(Object.entries(v.choices??{}).map(([k,val])=>[plainText(k),plainText(val)])),sku:String(v.variant?.sku??''),price:priceOf(v.variant?.priceData??priceData),weight:amount(v.variant?.weight),inStock:typeof v.stock?.inStock==='boolean'?v.stock.inStock:null,trackQuantity:v.stock?.trackQuantity===true,quantity:v.stock?.trackQuantity===true?amount(v.stock.quantity):null}));
   if(p.manageVariants&&variants.length===0)throw Error('Managed product has no visible variants');
-  const media=mediaItems(p).map(i=>({kind:i.kind,url:publicAsset(i.url),alt:i.alt}));
+  const pendingMedia=mediaItems(p).filter(i=>i.kind==='video'&&!assets.has(i.url)).length;
+  const media=mediaItems(p).filter(i=>i.kind!=='video'||assets.has(i.url)).map(i=>({kind:i.kind,url:publicAsset(i.url),alt:i.alt}));
   const details=plainText(p.description);
+  // Derive only explicitly stated attributes; never infer material from packaging/cost data.
+  const material=details.match(/(?:^|\n)Material\s*:\s*([^\n]+)/i)?.[1]?.trim()??'';
+  const roof=/\bwithout roof\b/i.test(p.name)?'Without Roof':/\bwith (?:a )?roof\b/i.test(p.name)?'With Roof':undefined;
   const info=(p.additionalInfoSections??[]).map(s=>({title:plainText(s.title),description:plainText(s.description)}));
   const seoTags=p.seoData?.tags??[];
   const seoTitle=plainText(seoTags.find(t=>t.type==='title')?.children);
   const seoDescription=plainText(seoTags.find(t=>t.type==='meta'&&t.props?.name==='description')?.props?.content);
-  products.push({id:row.shipping_product_id,name:plainText(p.name),path:`/product-page/${p.slug}`,price:p.manageVariants?Math.min(...variants.map(v=>v.price)):priceOf(priceData),currency:'AUD',images:media.filter(m=>m.kind==='image').map(m=>m.url),media,categoryIds,type:primary?.type??'Other',material:'',description:details.split('\n\n')[0],details,options,variants,manageVariants:p.manageVariants===true,sku:String(p.sku??''),weight:amount(p.weight),inStock:typeof p.stock?.inStock==='boolean'?p.stock.inStock:null,trackQuantity:p.stock?.trackQuantity===true,quantity:p.stock?.trackQuantity===true?amount(p.stock.quantity):null,customTextFields:(p.customTextFields??[]).map(f=>({title:plainText(f.title),maxLength:f.maxLength,mandatory:f.mandatory===true})),info,brand:plainText(p.brand),ribbon:plainText(p.ribbon),sourceTitle:seoTitle,sourceMetaDescription:seoDescription});
+  products.push({id:row.shipping_product_id,name:plainText(p.name),path:`/product-page/${p.slug}`,price:p.manageVariants?Math.min(...variants.map(v=>v.price)):priceOf(priceData),currency:'AUD',pendingMedia,images:media.filter(m=>m.kind==='image').map(m=>m.url),media,categoryIds,type:primary?.type??'Other',material,roof,description:details.split('\n\n')[0],details,options,variants,manageVariants:p.manageVariants===true,sku:String(p.sku??''),weight:amount(p.weight),inStock:typeof p.stock?.inStock==='boolean'?p.stock.inStock:null,trackQuantity:p.stock?.trackQuantity===true,quantity:p.stock?.trackQuantity===true?amount(p.stock.quantity):null,customTextFields:(p.customTextFields??[]).map(f=>({title:plainText(f.title),maxLength:f.maxLength,mandatory:f.mandatory===true})),info,brand:plainText(p.brand),ribbon:plainText(p.ribbon),sourceTitle:seoTitle,sourceMetaDescription:seoDescription});
  }
  if(!products.length||new Set(products.map(p=>p.id)).size!==products.length||new Set(products.map(p=>p.path)).size!==products.length)throw Error('Empty or duplicate storefront products');
  if(new Set(categories.map(c=>c.path)).size!==categories.length)throw Error('Duplicate collection paths');

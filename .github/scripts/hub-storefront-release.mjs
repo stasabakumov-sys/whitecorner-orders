@@ -18,7 +18,7 @@ async function management(path,options={}){return request(`https://api.supabase.
 async function sql(query,read_only=true){return (await management('database/query',{method:'POST',body:JSON.stringify({query,read_only})})).json();}
 const literal=s=>"'"+s.replaceAll("'","''")+"'";
 if(process.argv.includes('--apply')){
- for(const name of ['20260928000100_storefront_catalog','20260928000200_catalog_import_access']){const version=name.slice(0,14);const source=(await readFile(`supabase/migrations/${name}.sql`,'utf8')).replaceAll('\r','');
+ for(const name of ['20260928000100_storefront_catalog','20260928000200_catalog_import_access','20260928000300_catalog_media_issues']){const version=name.slice(0,14);const source=(await readFile(`supabase/migrations/${name}.sql`,'utf8')).replaceAll('\r','');
  await sql(`begin; select pg_advisory_xact_lock(20260928000100); do $release$ begin
  if exists(select 1 from supabase_migrations.schema_migrations where version='${version}') then
   if (select replace(statements[1],E'\\r','') from supabase_migrations.schema_migrations where version='${version}') is distinct from ${literal(source)} then raise exception 'Storefront migration differs from registered source';end if;
@@ -29,6 +29,7 @@ if(process.argv.includes('--sync')){
  const jobToken=randomBytes(32).toString('hex');const jobHash=createHash('sha256').update(jobToken).digest('hex');
  console.log('::add-mask::'+jobToken);
  await sql("insert into wc_catalog_import_access(token_hash,expires_at) values("+literal(jobHash)+",now()+interval '110 minutes')",false);
+ try{
  async function action(body){
   const response=await fetch(base+'/functions/v1/hub-catalog-sync',{method:'POST',headers:{'Content-Type':'application/json','x-catalog-token':jobToken},body:JSON.stringify(body),signal:AbortSignal.timeout(120000)});
   const data=await response.json();if(!response.ok||!data.ok)throw Error('Catalogue importer: '+String(data.error??response.status).slice(0,250));return data;
@@ -59,8 +60,28 @@ if(process.argv.includes('--sync')){
   const bucket=item.public?'catalog-media':'catalog-source-media';
   const saved=assets.get(item.url);
   if(saved&&(saved.bucket===bucket||saved.bucket==='catalog-media')){completed++;continue;}
-  const result=await action({action:'copyMedia',url:assetUrl(item.url),bucket});
-  const asset=result.asset;const size=asset.bytes;
+  const response=await fetch(assetUrl(item.url),{redirect:'error',signal:AbortSignal.timeout(90000)});
+  if(item.kind==='video'&&[403,404].includes(response.status)){
+   await sql(`insert into wc_catalog_media_issues(source_url,reason) values(${literal(item.url)},${literal('Wix video unavailable: HTTP '+response.status)}) on conflict(source_url) do update set reason=excluded.reason,checked_at=now()`,false);
+   completed++;continue;
+  }
+  if(!response.ok)throw Error(`Wix media download failed (${response.status})`);
+  const mime=(response.headers.get('content-type')??'').split(';')[0];
+  const limit=50*1024*1024;
+  if(Number(response.headers.get('content-length'))>limit&&item.kind==='video'){
+   await sql(`insert into wc_catalog_media_issues(source_url,reason) values(${literal(item.url)},'Video exceeds 50 MB storage limit') on conflict(source_url) do update set reason=excluded.reason,checked_at=now()`,false);
+   await response.body.cancel();completed++;continue;
+  }
+  const chunks=[];let size=0;
+  for await(const chunk of response.body){size+=chunk.length;if(size>limit)throw Error('Media exceeds 50 MB storage limit');chunks.push(chunk);}
+  if(!size)throw Error('Empty media file');
+  const buffer=Buffer.concat(chunks);const sha256=createHash('sha256').update(buffer).digest('hex');
+  const prepared=await action({action:'prepareMedia',url:assetUrl(item.url),bucket,contentType:mime});
+  if(new URL(prepared.signedUrl).origin!==base)throw Error('Unexpected upload destination');
+  await request(prepared.signedUrl,{method:'PUT',headers:{'Content-Type':mime,'x-upsert':'true'},body:buffer});
+  const result=await action({action:'confirmMedia',url:assetUrl(item.url),bucket,contentType:mime,bytes:size,sha256});
+  const asset=result.asset;
+  await sql(`delete from wc_catalog_media_issues where source_url=${literal(item.url)}`,false);
   assets.set(item.url,asset);completed++;bytes+=size;
   if(completed%25===0)console.log(`Media saved in Hub: ${completed}/${needed.size}`);
  }catch(error){failures.push({source:item.url,error:error.message});}}}
@@ -80,6 +101,7 @@ if(process.argv.includes('--sync')){
   const r=await fetch(`${base}/rest/v1/${table}?select=*&limit=1`,{headers:{apikey:anon}});
   if(r.ok&&(await r.json()).length)throw Error('Private catalogue data exposed to anonymous access');
  }
- await sql(`delete from wc_catalog_import_access where token_hash=${literal(jobHash)}`,false);
  console.log(JSON.stringify({publishedProducts:catalog.products.length,hiddenProducts:rows.length-catalog.products.length,categories:catalog.categories.map(c=>({name:c.name,path:c.path,products:catalog.products.filter(p=>c.id==='all'||p.categoryIds.includes(c.id)).length})),variants:catalog.products.reduce((n,p)=>n+p.variants.length,0),publishedAt:catalog.syncedAt}));
+ console.log('Media requiring review:',JSON.stringify(await sql('select reason,count(*)::int count from wc_catalog_media_issues group by reason')));
+ }finally{await sql(`delete from wc_catalog_import_access where token_hash=${literal(jobHash)} or expires_at<now()`,false);}
 }
