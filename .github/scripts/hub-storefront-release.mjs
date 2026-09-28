@@ -1,3 +1,4 @@
+import {newestFirst} from './hub-storefront-order.mjs';
 import {readFile} from 'node:fs/promises';
 import {createHash,randomBytes} from 'node:crypto';
 import {assetUrl,mediaItems,buildCatalog} from './hub-storefront-model.mjs';
@@ -21,7 +22,8 @@ const literal=s=>"'"+s.replaceAll("'","''")+"'";
 if(process.argv.includes('--presentation')){
  const [row]=await sql("select payload,published_at from wc_storefront_catalog where id='live'");
  if(!row?.payload?.products?.length)throw Error('Published Hub catalogue is missing');
- const catalog={...row.payload,products:row.payload.products.map(p=>({...p,...cardPresentation(p)}))};
+ const sourceRows=await sql('select shipping_product_id,source_product from wc_wix_catalog_products');
+ const catalog={...row.payload,products:newestFirst(row.payload.products,sourceRows).map(p=>({...p,...cardPresentation(p)}))};
  const saved=await sql(`update wc_storefront_catalog set payload=${literal(JSON.stringify(catalog))}::jsonb where id='live' and published_at=${literal(row.published_at)}::timestamptz and payload=${literal(JSON.stringify(row.payload))}::jsonb returning id`,false);
  if(saved.length!==1)throw Error('Catalogue changed concurrently; retry from the latest snapshot');
  console.log(JSON.stringify({presentationUpdated:catalog.products.length,examples:catalog.products.slice(0,3).map(p=>({title:p.name,attributes:p.cardAttributes}))}));

@@ -5,7 +5,7 @@ import {cardPresentation} from './hub-storefront-presentation.mjs';
 const url='https://static.wixstatic.com/media/test.jpg';
 const assets=new Map([[url,{bucket:'catalog-media',path:'wix/test.jpg'}]]);
 const collections=[{id:'c',source_collection:{id:'c',name:'Event Backdrops',slug:'event-backdrops'}}];
-const product=()=>({shipping_product_id:'hub-id',source_product:{id:'wix-id',name:'Test backdrop',slug:'test-backdrop',visible:true,description:'<p>Made here</p><script>bad()</script>',collectionIds:['c'],priceData:{price:100,discountedPrice:90,currency:'AUD'},media:{items:[{mediaType:'image',image:{url}}]},manageVariants:true,productOptions:[{name:'Colour',choices:[{description:'Raw'},{description:'White'}]}],variants:[{id:'raw',choices:{Colour:'Raw'},variant:{priceData:{price:100,discountedPrice:90,currency:'AUD'}},stock:{inStock:true,trackQuantity:false}},{id:'white',choices:{Colour:'White'},variant:{priceData:{price:150,discountedPrice:140,currency:'AUD'}},stock:{inStock:false,trackQuantity:true,quantity:0}}],costRange:{minValue:42},internal_comment:'PRIVATE'}});
+const product=()=>({shipping_product_id:'hub-id',source_product:{createdDate:'2024-01-01T00:00:00Z',id:'wix-id',name:'Test backdrop',slug:'test-backdrop',visible:true,description:'<p>Made here</p><script>bad()</script>',collectionIds:['c'],priceData:{price:100,discountedPrice:90,currency:'AUD'},media:{items:[{mediaType:'image',image:{url}}]},manageVariants:true,productOptions:[{name:'Colour',choices:[{description:'Raw'},{description:'White'}]}],variants:[{id:'raw',choices:{Colour:'Raw'},variant:{priceData:{price:100,discountedPrice:90,currency:'AUD'}},stock:{inStock:true,trackQuantity:false}},{id:'white',choices:{Colour:'White'},variant:{priceData:{price:150,discountedPrice:140,currency:'AUD'}},stock:{inStock:false,trackQuantity:true,quantity:0}}],costRange:{minValue:42},internal_comment:'PRIVATE'}});
 
 test('card attributes preserve the full title and use only explicit material and options',()=>{
  const input={name:'Hollow Wavy Line Arch Backdrop - Foldable/Non-Foldable MDF Arch',options:[{name:'Foldable',values:['YES','NO']},{name:'Colour',values:['Raw','White']}],material:''};
@@ -35,4 +35,14 @@ test('unavailable source videos are counted without exposing Wix URLs; images re
  assert.equal(result.pendingMedia,1);assert.equal(result.media.length,1);assert.equal(result.images.length,1);
  assert(!JSON.stringify(result).includes('video.wixstatic.com'));
  assert.throws(()=>buildCatalog([p],collections,new Map(),'https://hub.example'),/copied/);
+});
+
+
+import {newestFirst} from './hub-storefront-order.mjs';
+test('original Wix creation time controls order, independent of input and update dates',()=>{
+ const products=[{id:'old'},{id:'new'}];
+ const rows=[{shipping_product_id:'old',source_product:{createdDate:'2020-01-01T00:00:00Z',lastUpdated:'2026-09-28T00:00:00Z'}},{shipping_product_id:'new',source_product:{createdDate:'2025-01-01T00:00:00Z'}}];
+ assert.deepEqual(newestFirst(products,rows).map(p=>p.id),['new','old']);
+ assert.deepEqual(products.map(p=>p.id),['old','new']);
+ assert.throws(()=>newestFirst(products,rows.slice(1)),/Missing Wix creation date/);
 });
