@@ -24,7 +24,7 @@ function packetFor(payload){
 export async function sendRdFile(data,{address,filename,port=50200,localPort=40200,timeoutMs=3000,chunkSize=1470,allowLoopbackForTest=false}={}){
  if(!privateControllerAddress(address)&&!(allowLoopbackForTest&&address==='127.0.0.1'))throw Error('Controller address must be a private IPv4 address on the local network.');
  if(!Buffer.isBuffer(data)||data.length<1||data.length>20971520)throw Error('RD file is empty or exceeds 20 MB.');
- if(!/^[A-Za-z0-9_-]{1,8}$/.test(filename||''))throw Error('Controller filename must be 1–8 ASCII letters, digits, underscores or hyphens.');
+ if(typeof filename!=='string'||!/^[\x20-\x7e]{1,255}$/.test(filename)||!filename.toLowerCase().endsWith('.rd')||/[\\/]/.test(filename))throw Error('Controller filename must be the unchanged ASCII .rd filename without path separators.');
  if(!Number.isInteger(port)||port<1||port>65535||!Number.isInteger(localPort)||localPort<0||localPort>65535||!Number.isInteger(chunkSize)||chunkSize<1||chunkSize>1470)throw Error('Invalid Ruida network settings.');
 
  const socket=dgram.createSocket('udp4');
