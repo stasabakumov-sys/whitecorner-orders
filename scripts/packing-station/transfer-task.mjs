@@ -13,8 +13,10 @@ export async function transferTask(files,{address,fetchFile,sendFile=sendRdFile,
    throw Error(`${file.filename}: downloaded file size does not match the saved task.`);
   }
   const hash=createHash('sha256').update(data).digest('hex');
-  const filename=String(file.filename||'').replace(/\.rd$/i,'');
-  if(!/^[A-Za-z0-9_-]{1,8}$/.test(filename))throw Error(`${file.filename}: use an RD filename with 1-8 ASCII letters, digits, underscores or hyphens before .rd.`);
+  const filename=String(file.filename||'');
+  if(!/^[\x20-\x7e]{1,255}$/.test(filename)||!filename.toLowerCase().endsWith('.rd')||/[\\/]/.test(filename)){
+   throw Error(`${file.filename}: the saved RD filename cannot be sent unchanged. Use an ASCII .rd filename without path separators, then retry.`);
+  }
   if(prepared.some(entry=>entry.filename.toUpperCase()===filename.toUpperCase()&&entry.hash!==hash))throw Error(`${file.filename}: different files have the same controller name. Rename them before retrying.`);
   prepared.push({file,data,filename,hash});
  }
