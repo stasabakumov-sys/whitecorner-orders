@@ -7,31 +7,50 @@ export function privateControllerAddress(address){
  return isIP(address)===4&&PRIVATE_IPV4.some(pattern=>pattern.test(address));
 }
 
-export async function sendRdFile(data,{address,port=50200,timeoutMs=3000,chunkSize=1470,allowLoopbackForTest=false}={}){
+function scramble(byte){
+ const high=byte&0x80,low=byte&1;
+ return ((((byte-high-low)|(low<<7)|(high>>7))^0x88)+1)&0xff;
+}
+
+function packetFor(payload){
+ const packet=Buffer.allocUnsafe(payload.length+2);
+ let checksum=0;
+ for(const byte of payload)checksum=(checksum+byte)&0xffff;
+ packet.writeUInt16BE(checksum,0);
+ payload.copy(packet,2);
+ return packet;
+}
+
+export async function sendRdFile(data,{address,filename,port=50200,localPort=40200,timeoutMs=3000,chunkSize=1470,allowLoopbackForTest=false}={}){
  if(!privateControllerAddress(address)&&!(allowLoopbackForTest&&address==='127.0.0.1'))throw Error('Controller address must be a private IPv4 address on the local network.');
  if(!Buffer.isBuffer(data)||data.length<1||data.length>20971520)throw Error('RD file is empty or exceeds 20 MB.');
- if(!Number.isInteger(port)||port<1||port>65535||!Number.isInteger(chunkSize)||chunkSize<1||chunkSize>1470)throw Error('Invalid Ruida network settings.');
+ if(!/^[A-Za-z0-9_-]{1,8}$/.test(filename||''))throw Error('Controller filename must be 1–8 ASCII letters, digits, underscores or hyphens.');
+ if(!Number.isInteger(port)||port<1||port>65535||!Number.isInteger(localPort)||localPort<0||localPort>65535||!Number.isInteger(chunkSize)||chunkSize<1||chunkSize>1470)throw Error('Invalid Ruida network settings.');
+
  const socket=dgram.createSocket('udp4');
  try{
-  await new Promise((resolve,reject)=>{socket.once('error',reject);socket.bind(0,()=>{socket.off('error',reject);resolve();});});
-  await new Promise((resolve,reject)=>socket.connect(port,address,error=>error?reject(error):resolve()));
+  await new Promise((resolve,reject)=>{socket.once('error',reject);socket.bind(localPort,()=>{socket.off('error',reject);resolve();});});
+  const sendPacket=(payload,stage)=>new Promise((resolve,reject)=>{
+   const packet=packetFor(payload);
+   const timer=setTimeout(()=>{cleanup();reject(Error(`Controller acknowledgement timed out during ${stage}. Check its file list, network access and whether RDWorks is open before retrying.`));},timeoutMs);
+   const cleanup=()=>{clearTimeout(timer);socket.off('message',onMessage);socket.off('error',onError);};
+   const onError=error=>{cleanup();reject(error);};
+   const onMessage=(answer,peer)=>{
+    if(peer.address!==address||(peer.port!==port&&peer.port!==40200))return;
+    cleanup();
+    if(answer.length!==1||answer[0]!==0xc6)reject(Error(`Controller rejected ${stage} (${answer[0]?.toString(16)||'empty'}). Check its file list before retrying.`));
+    else resolve();
+   };
+   socket.on('message',onMessage);
+   socket.on('error',onError);
+   socket.send(packet,port,address,error=>{if(error){cleanup();reject(error);}});
+  });
+
+  const nameCommand=Buffer.concat([Buffer.from([0xe8,0x02,0xe7,0x01]),Buffer.from(filename,'ascii'),Buffer.from([0])]);
+  await sendPacket(Buffer.from(nameCommand.map(scramble)),'filename command');
   for(let offset=0;offset<data.length;offset+=chunkSize){
-   const payload=data.subarray(offset,Math.min(offset+chunkSize,data.length));
-   const packet=Buffer.allocUnsafe(payload.length+2);
-   let sum=0;for(const byte of payload)sum=(sum+byte)&0xffff;
-   packet.writeUInt16BE(sum,0);payload.copy(packet,2);
-   let attempt=0;
-   while(true){
-    const answer=await new Promise((resolve,reject)=>{
-     const timer=setTimeout(()=>{socket.off('message',onMessage);reject(Error('Controller acknowledgement timed out. Check its file list before retrying.'));},timeoutMs);
-     const onMessage=message=>{clearTimeout(timer);resolve(message);};
-     socket.once('message',onMessage);
-     socket.send(packet,error=>{if(error){clearTimeout(timer);socket.off('message',onMessage);reject(error);}});
-    });
-    if(answer[0]===0xc6)break;
-    if(offset===0&&answer[0]===0x46&&attempt++<2){await new Promise(resolve=>setTimeout(resolve,200*attempt));continue;}
-    throw Error(`Controller rejected a packet (${answer[0]?.toString(16)||'empty'}). Check its file list before retrying.`);
-   }
+   await sendPacket(data.subarray(offset,Math.min(offset+chunkSize,data.length)),`file packet ${Math.floor(offset/chunkSize)+1}/${Math.ceil(data.length/chunkSize)}`);
   }
+  return {bytes:data.length,filename};
  }finally{socket.close();}
 }

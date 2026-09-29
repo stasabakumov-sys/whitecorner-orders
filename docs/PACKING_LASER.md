@@ -16,12 +16,18 @@ Configure `HUB_INVITE_REDIRECT_URL` as the deployed Hub's HTTPS root with `?setu
 
 ## Connected laptop
 
-The station is a local Node.js 22 program under `scripts/packing-station/`. Set `HUB_SUPABASE_URL` and `HUB_SUPABASE_ANON_KEY` as local environment variables; both are publishable frontend configuration. At the machine, run `start.ps1 -ControllerIp <private LAN address>`. It prompts for a manager account and keeps the password only in the process environment during this run. Stop it with Ctrl+C before disconnecting the laptop. A future server can run the same station contract under its own authenticated manager or dedicated station identity.
+Read [the saved connection runbook](LASER_CONNECTION_RUNBOOK.md) first. The confirmed controller is `192.168.1.100`, destination UDP port 50200 and local port 40200. Close RDWorks before starting the station.
 
-The transport sends `.rd` bytes to a private Ruida IPv4 address over UDP and requires an acknowledgement for every chunk. The implementation is based on the [published Ruida protocol research](https://github.com/jnweiger/ruida-laser/blob/master/doc/protocol.md). Its packet exchange is tested with a local mock, but the exact controller model, network address and file-list behavior have not been verified against the physical machine. First validate with a harmless test job and check the controller file list before production use. A timeout or stopped laptop may leave a partially received file; check the controller before resetting and retrying. No command to start cutting is issued by the station program.
+The station is a local Node.js 22 program under `scripts/packing-station/`. Run `start.ps1 -ControllerIp 192.168.1.100`. It reads the public Hub URL and publishable key from the repository frontend configuration unless `HUB_SUPABASE_URL` and `HUB_SUPABASE_ANON_KEY` are already set. It prompts for a manager account and keeps the password only in the process environment during this run. Keep the window open; stop with Ctrl+C before disconnecting the laptop. Starting the station allows it to process queued Hub transfers.
+
+The transport first sends the filename command, then `.rd` bytes unchanged, requiring an acknowledgement for every chunk. The named-file sender was tested on the physical controller with `RELTEST2`; the operator confirmed both storage and a successful manual cut. Earlier timeouts were caused by restricted UDP access in the command environment, even though ping worked. Use permitted LAN access without changing the exported RD bytes or disabling security settings.
+
+The station downloads and validates all task files before sending any of them. Controller names are the first eight hexadecimal characters of the file content's SHA-256 hash. The station window shows each original filename, its controller name and its required cutting quantity. Identical file content is stored once; all cutting quantity instructions remain visible. A partial failure never reports the whole task as transferred. Check the controller file list before retrying; acknowledgements alone are not proof of a usable stored file. No command to start cutting is issued.
+
+After transfer, Packing work shows **Ready to cut**. The operator checks and cuts every listed quantity at the machine, confirms the checkbox, then presses **Boxes made**. Only the server's confirmed `completed` response removes the work card. Manage Packing refreshes task statuses every ten seconds and shows **Boxes made** with `completed_at`; the product's production stage is unchanged. Failed completion retains the task and checkbox so the operator can retry.
 
 ## Checks
 
 - `npm test -- --watch=false` and `npm run build` from `angular-app/`.
-- `node --test scripts/packing-station/ruida-udp.test.mjs`.
+- `node --test scripts/packing-station/ruida-udp.test.mjs scripts/packing-station/transfer-task.test.mjs` (local mocks only).
 - `.github/scripts/packing.test.mjs` runs the Packing migrations on isolated PGlite with synthetic users, boxes and orders, checking manager/worker access, missing-file rejection, transfer and completion. It does not touch production data.

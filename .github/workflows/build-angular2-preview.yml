@@ -130,6 +130,8 @@ jobs:
           npm run build -- --base-href /whitecorner-orders/angular2/
       - name: Test delivery estimate worker with mocks
         run: node --test .github/scripts/delivery-review-worker.test.cjs
+      - name: Test packing station with a local mock controller
+        run: node --test scripts/packing-station/ruida-udp.test.mjs scripts/packing-station/transfer-task.test.mjs
       - name: Test Wix history import with mocks
         run: node --test supabase/functions/wix-orders-sync/order-history.test.cjs
       - name: Test Wix catalogue review with mocks
