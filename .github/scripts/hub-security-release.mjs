@@ -53,7 +53,7 @@ if(process.argv.includes('--apply')||process.argv.includes('--smoke')){
   execute 'set local role authenticated';
   if exists(select 1 from wc_orders) or exists(select 1 from wc_email_messages) or exists(select 1 from transactions) then raise exception 'Nonmember RLS verification failed';end if;
  end $check$;
- rollback;`);
+ rollback;`,false); // Management API read-only role cannot SET ROLE; SQL itself stays read-only.
  console.log('Production postflight:',JSON.stringify({...checks,nonmember_rls:true}));
 }
 if(process.argv.includes('--smoke')){
