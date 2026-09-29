@@ -124,7 +124,3 @@ const invalidated=(await db.query('select status,packages_approved_at,courier_or
 assert.deepEqual(invalidated,{status:'Packaging Review',packages_approved_at:null,courier_order_id:null});
 console.log(JSON.stringify({tables:tables.length,functions:funcs.length,authenticatedRPCs:funcs.filter(f=>f.permitted).length,result:'PASS: roster, RLS, Storage, RPC grants/roles, OAuth revoke/replay/logout'}));
 await db.close();
-
-
-
-

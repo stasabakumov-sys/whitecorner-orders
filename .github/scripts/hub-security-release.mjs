@@ -47,12 +47,14 @@ if(process.argv.includes('--apply')||process.argv.includes('--smoke')){
   has_table_privilege('anon','wc_storefront_catalog','SELECT') storefront_read_preserved,
   (select md5(coalesce(string_agg(user_id::text||':'||role||':'||active::text,',' order by user_id),'')) from wc_hub_members) roster_digest;`))[0];
  if(checks.roster_digest!==inventory.prerequisites[0].roster_digest||Object.entries(checks).some(([k,v])=>k!=='roster_digest'&&v!==true))throw Error('Production postflight failed');
- const denied=await sql(`begin read only;set local role authenticated;select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
- select (select count(*) from wc_orders)=0 orders_denied,(select count(*) from wc_email_messages)=0 emails_denied,(select count(*) from transactions)=0 finance_denied;
+ await sql(`begin read only;
+ do $check$ begin
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
+  execute 'set local role authenticated';
+  if exists(select 1 from wc_orders) or exists(select 1 from wc_email_messages) or exists(select 1 from transactions) then raise exception 'Nonmember RLS verification failed';end if;
+ end $check$;
  rollback;`);
- const flags=denied.find(r=>'orders_denied' in r);
- if(!flags||Object.values(flags).some(v=>v!==true))throw Error('Production nonmember RLS verification failed');
- console.log('Production postflight:',JSON.stringify({...checks,nonmember_rls:flags}));
+ console.log('Production postflight:',JSON.stringify({...checks,nonmember_rls:true}));
 }
 if(process.argv.includes('--smoke')){
  const functions=['address-review-sync','delivery-cost-review','email-ai','fast-courier-api','gmail-api','gmail-oauth','hub-users','wix-orders-sync'];
