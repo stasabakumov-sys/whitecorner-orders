@@ -1,4 +1,5 @@
-import {sendRdFile,privateControllerAddress} from './ruida-udp.mjs';
+import {privateControllerAddress} from './ruida-udp.mjs';
+import {transferTask} from './transfer-task.mjs';
 
 const settings={
  url:process.env.HUB_SUPABASE_URL?.replace(/\/$/,''),
@@ -63,12 +64,9 @@ while(!stopped){
   if(transfer?.transfer_id){
    const heartbeat=setInterval(()=>{void rpc('wc_packing_station_heartbeat',{p_station:settings.name}).catch(()=>{});},10000);
    try{
-    if(!Array.isArray(transfer.files)||!transfer.files.length)throw Error('Task has no RD files.');
-    for(const file of transfer.files){
-     const data=await fetchFile(file);
-     await sendRdFile(data,{address:settings.controller});
-     console.log(`Sent ${file.filename}; requested cutting copies: ${file.copies}.`);
-    }
+    await transferTask(transfer.files,{address:settings.controller,fetchFile,isStopped:()=>stopped,
+     onFile:({file,filename,completed,total})=>console.log(`[${completed}/${total}] ${file.filename} -> controller ${filename}; cut ${file.copies} copies manually.`),
+    });
     await rpc('wc_finish_packing_transfer',{p_transfer:transfer.transfer_id,p_ok:true,p_error:null});
     console.log('All RD files acknowledged. Verify them on the controller before cutting.');
    }catch(error){
