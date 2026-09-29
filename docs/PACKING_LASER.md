@@ -26,6 +26,14 @@ The station downloads and validates all task files before sending any of them. C
 
 After transfer, Packing work shows **Ready to cut**. The operator checks and cuts every listed quantity at the machine, confirms the checkbox, then presses **Boxes made**. Only the server's confirmed `completed` response removes the work card. Manage Packing refreshes task statuses every ten seconds and shows **Boxes made** with `completed_at`; the product's production stage is unchanged. Failed completion retains the task and checkbox so the operator can retry.
 
+## Windows automatic startup
+
+Run `scripts/packing-station/install-autostart.ps1` with Windows PowerShell once on the connected computer. The installer prompts for the Hub manager account, validates active manager access, and saves the credential with Windows DPAPI (`Export-Clixml`). Only the same Windows user on the same computer can decrypt it. Do not copy or commit `credential.xml`. The installation folder is restricted to that user and SYSTEM.
+
+The installed copy lives in `%LOCALAPPDATA%\WhiteCorner\PackingStation`, independently of Git worktrees. A `White Corner Packing Station.lnk` shortcut in the current user's Startup folder launches Windows PowerShell hidden at sign-in, without administrator privileges. `RemoteSigned` is set only for that launcher process; no machine or user execution policy is changed. Node.js is invoked by its resolved absolute path. A named mutex prevents two background station instances; an exited Node process restarts after 15 seconds.
+
+The station starts immediately after setup and processes Hub transfer requests, including already queued requests. Cutting remains manual. Close RDWorks before uploading. `transfer.log` contains original-to-controller filename mappings, `errors.log` contains station errors, and `setup-status.json` records installation progress without credentials. To disable future automatic starts, remove the named shortcut from `shell:startup`; this does not stop an already-running transfer. Re-run setup after changing the Hub password, moving to a different Windows account, or upgrading the installed station code. Real end-to-end file transfer still requires operator verification on the controller.
+
 ## Checks
 
 - `npm test -- --watch=false` and `npm run build` from `angular-app/`.
