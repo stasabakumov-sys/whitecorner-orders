@@ -24,6 +24,9 @@ const inventory={
   p.proconfig from pg_proc p join pg_namespace n on n.oid=p.pronamespace join pg_language l on l.oid=p.prolang
   where n.nspname='public' order by signature`),
  buckets:await sql("select id,public from storage.buckets order by id"),
+ drift_columns:await sql("select table_name,column_name,data_type from information_schema.columns where table_schema='public' and table_name in ('wc_storefront_catalog','wc_catalog_import_access','wc_catalog_media','wc_catalog_media_issues') order by table_name,ordinal_position"),
+ drift_policies:await sql("select tablename,policyname,roles,cmd,qual,with_check from pg_policies where (schemaname='public' and tablename in ('wc_storefront_catalog','wc_catalog_import_access','wc_catalog_media','wc_catalog_media_issues','transactions','business_categories','classification_rules','imports','personal_rules','personal_rule_transactions')) or (schemaname='storage' and tablename='objects') order by tablename,policyname"),
+ extra_function:await sql("select p.prorettype::regtype::text return_type,p.prosrc from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='rls_auto_enable'"),
 };
 console.log(JSON.stringify(inventory,null,2));
 if(inventory.prerequisites[0].active_managers<1||inventory.prerequisites[0].session_columns!==3)throw Error('Production membership/session prerequisites failed');
