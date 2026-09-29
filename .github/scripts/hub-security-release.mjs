@@ -56,7 +56,7 @@ if(process.argv.includes('--apply')||process.argv.includes('--smoke')){
  do $check$ declare relation text;visible boolean;begin
   perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
   execute 'set local role authenticated';
-  foreach relation in array array['wc_orders','wc_email_messages','transactions'] loop
+  foreach relation in array array['wc_orders','wc_shipments','wc_mailboxes','transactions'] loop
    begin
     execute format('select exists(select 1 from public.%I)',relation) into visible;
     if visible then raise exception 'Nonmember RLS verification failed';end if;
