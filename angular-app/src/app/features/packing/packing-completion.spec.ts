@@ -2,31 +2,47 @@ import {describe,it,expect,vi,afterEach} from 'vitest';
 import {PackingWorkComponent} from './packing-work.component';
 import {PackingManageComponent} from './packing-manage.component';
 
-const task=()=>({id:'task',unit_id:'unit',order_number:'TEST-1',product_name:'Test arch',profile_signature:'profile',state:'transferred',files:Array.from({length:4},(_,i)=>({file_id:`f${i}`,box_index:0,box_name:'Box',filename:`D${i+1}.rd`,copies:1,object_path:`test/${i}`})),packages:[],assigned_at:'2026-09-29T00:00:00Z'});
-function work(){const rpc=vi.fn().mockResolvedValue({data:{id:'task',state:'completed'},error:null});const c=new PackingWorkComponent({client:{rpc}} as any,{manager:()=>true} as any);c.tasks.set([task()]);return {c,rpc};}
+const task=()=>({id:'task',unit_id:'unit',order_number:'TEST-1',product_name:'Test arch',profile_signature:'profile',state:'transferred',files:Array.from({length:4},(_,i)=>({file_id:`f${i}`,box_index:0,box_name:'Box',filename:`D${i+1}.rd`,copies:1,object_path:`test/${i}`})),cut_file_ids:[],packages:[],assigned_at:'2026-09-29T00:00:00Z'});
+function work(){const rpc=vi.fn();const c=new PackingWorkComponent({client:{rpc}} as any,{manager:()=>true} as any);c.tasks.set([task()]);return {c,rpc};}
 afterEach(()=>vi.useRealTimers());
-describe('Manual cutting completion',()=>{
- it('does not mark transferred files made until the operator confirms cutting',async()=>{
-  const {c,rpc}=work();await c.complete(task());expect(rpc).not.toHaveBeenCalled();
-  c.confirmCut('task',true);await c.complete(task());expect(rpc).toHaveBeenCalledWith('wc_complete_packing_task',{p_id:'task'});expect(c.tasks()).toEqual([]);expect(c.success()).toContain('Boxes made');
+describe('Manual cutting progress',()=>{
+ it('saves each file and keeps three checked files on the task',async()=>{
+  const {c,rpc}=work();
+  for(let index=0;index<3;index++){
+   const current=c.tasks()[0];const next=[...current.cut_file_ids,current.files[index].file_id];
+   rpc.mockResolvedValueOnce({data:{...current,cut_file_ids:next},error:null});
+   await c.saveFileCut(current,current.files[index],true);
+  }
+  expect(c.cutCount(c.tasks()[0])).toBe(3);expect(c.tasks()[0].state).toBe('transferred');
+  expect(rpc).toHaveBeenCalledWith('wc_set_packing_file_done',{p_task:'task',p_file:'f2',p_done:true});
+  const saved=c.tasks()[0];c.tasks.set([saved]);expect(c.fileDone(c.tasks()[0],saved.files[2])).toBe(true);
  });
- it('cannot complete a task before transfer even if a confirmation is present',async()=>{
-  const {c,rpc}=work();c.confirmCut('task',true);await c.complete({...task(),state:'assigned'});expect(rpc).not.toHaveBeenCalled();
+ it('closes only after the last file is saved',async()=>{
+  const {c,rpc}=work();const current={...task(),cut_file_ids:['f0','f1','f2']};c.tasks.set([current]);
+  rpc.mockResolvedValueOnce({data:{...current,cut_file_ids:['f0','f1','f2','f3'],state:'completed'},error:null});
+  await c.saveFileCut(current,current.files[3],true);
+  expect(c.tasks()).toEqual([]);expect(c.success()).toContain('Boxes made');
  });
- it('retains the task and confirmation after an error or unconfirmed server response',async()=>{
-  const {c,rpc}=work();c.confirmCut('task',true);rpc.mockResolvedValueOnce({data:null,error:{message:'Connection lost'}});
-  await c.complete(task());expect(c.tasks()).toHaveLength(1);expect(c.cutConfirmed()).toEqual(['task']);expect(c.taskError()?.message).toContain('Connection lost');expect(c.success()).toBe('');
-  rpc.mockResolvedValueOnce({data:{id:'task',state:'transferred'},error:null});await c.complete(task());expect(c.tasks()).toHaveLength(1);expect(c.taskError()?.message).toContain('Server did not confirm');
+ it('retains saved progress and restores the checkbox after a save failure',async()=>{
+  const {c,rpc}=work();const current={...task(),cut_file_ids:['f0','f1','f2']};c.tasks.set([current]);
+  const input={checked:true} as HTMLInputElement;
+  rpc.mockResolvedValueOnce({data:null,error:{message:'Connection lost'}});
+  await c.saveFileCut(current,current.files[3],true,input);
+  expect(input.checked).toBe(false);expect(c.cutCount(c.tasks()[0])).toBe(3);
+  expect(c.taskError()?.message).toContain('Connection lost');expect(c.success()).toBe('');
+ });
+ it('rejects marking a file done before transfer',async()=>{
+  const {c,rpc}=work();await c.saveFileCut({...task(),state:'assigned'},task().files[0],true);expect(rpc).not.toHaveBeenCalled();
  });
  it('does not queue a transfer while the station is offline',async()=>{
   const {c,rpc}=work();await c.requestTransfer({...task(),state:'assigned'});expect(rpc).not.toHaveBeenCalled();
  });
- it('allows reloading a transferred task and clears cutting confirmation only after the server accepts',async()=>{
-  const {c,rpc}=work();c.stations.set([{station_name:'Test',last_seen:new Date().toISOString()}]);c.confirmCut('task',true);
+ it('allows reloading a transferred task without losing saved cutting progress',async()=>{
+  const {c,rpc}=work();c.stations.set([{station_name:'Test',last_seen:new Date().toISOString()}]);c.tasks.set([{...task(),cut_file_ids:['f0']}]);
   rpc.mockResolvedValueOnce({data:null,error:{message:'Offline'}});await c.requestTransfer(task());
-  expect(c.tasks()[0].state).toBe('transferred');expect(c.cutConfirmed()).toEqual(['task']);
+  expect(c.tasks()[0].state).toBe('transferred');expect(c.tasks()[0].cut_file_ids).toEqual(['f0']);
   rpc.mockResolvedValueOnce({data:{id:'reload'},error:null});await c.requestTransfer(task());
-  expect(c.tasks()[0].state).toBe('transfer_requested');expect(c.cutConfirmed()).toEqual([]);
+  expect(c.tasks()[0].state).toBe('transfer_requested');expect(c.tasks()[0].cut_file_ids).toEqual(['f0']);
   rpc.mockClear();await c.requestTransfer({...task(),state:'completed'});expect(rpc).not.toHaveBeenCalled();
  });
 });
