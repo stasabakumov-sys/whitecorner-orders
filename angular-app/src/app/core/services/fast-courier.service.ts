@@ -140,9 +140,9 @@ export class FastCourierService {
     return data.contents;
   }
 
-  async getQuotes(request: FastCourierQuoteRequest): Promise<FastCourierQuoteResponse> {
+  async getQuotes(request: FastCourierQuoteRequest, shipmentId: string): Promise<FastCourierQuoteResponse> {
     const { data, error } = await this.supabase.client.functions.invoke(environment.fastCourierFunction, {
-      body: { action: 'quotes', payload: request },
+      body: { action: 'quotes', payload: request, shipmentId },
     });
     if (error) throw new Error(await this.functionError(error));
     if (!data?.status) throw new Error(data?.message || 'Fast Courier could not retrieve quotes.');
@@ -176,13 +176,13 @@ export class FastCourierService {
     return data.data.map((value: unknown) => String(value));
   }
 
-  async saveOrderDetails(orderId: string, payload: FastCourierBookingDetails): Promise<void> {
-    const data = await this.invoke({ action: 'save-order-details', orderId, payload });
+  async saveOrderDetails(orderId: string, payload: FastCourierBookingDetails, confirmedTotalCents: number): Promise<void> {
+    const data = await this.invoke({ action: 'save-order-details', orderId, payload, confirmedTotalCents });
     if (!data?.status) throw new Error(this.responseError(data, 'Fast Courier could not save the order details.'));
   }
 
-  async bookOrder(orderId: string): Promise<void> {
-    const data = await this.invoke({ action: 'booking', orderId });
+  async bookOrder(orderId: string, confirmedTotalCents: number): Promise<void> {
+    const data = await this.invoke({ action: 'booking', orderId, confirmedTotalCents });
     if (!data?.status) throw new Error(data?.message || 'Fast Courier could not start the booking.');
   }
 

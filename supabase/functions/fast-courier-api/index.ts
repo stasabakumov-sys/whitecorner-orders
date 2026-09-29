@@ -1,3 +1,5 @@
+import { HubAccessError, requireHubSession } from '../_shared/hub-auth.ts';
+import { shipmentPacking, assertQuotedPackages, validateBookingDetails } from '../_shared/courier-booking-validation.ts';
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { assertDeliveryBookingAllowed } from '../_shared/delivery-booking-gate.ts';
@@ -105,7 +107,7 @@ async function detectAddressType(payload: any) {
   let result: any;
   try { result = raw ? JSON.parse(raw) : {}; } catch { result = {}; }
   if (!response.ok) {
-    console.warn('GOOGLE_ADDRESS_VALIDATION_FAILED', response.status, raw);
+    console.warn('GOOGLE_ADDRESS_VALIDATION_FAILED', response.status);
     return json({ status: false, message: 'Google could not validate this address.', upstreamStatus: response.status }, 502);
   }
 
@@ -129,7 +131,9 @@ serve(async (req) => {
   if (req.method !== 'POST') return json({ status: false, message: 'Method not allowed.' }, 405);
 
   try {
+    const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const body = await req.json();
+    const user = await requireHubSession(req, db, ['save-order-details','booking'].includes(body?.action));
     if (body?.action === 'address-type') return await detectAddressType(body.payload);
     if (!['quotes', 'contents-preview', 'insurance-list', 'save-order-details', 'booking', 'order-status', 'document-url'].includes(body?.action)) return json({ status: false, message: 'Unsupported Fast Courier action.' }, 400);
     if (body.action === 'document-url') return json({ status: true, url: await signedDocumentUrl(text(body.path)) });
@@ -158,12 +162,27 @@ serve(async (req) => {
     if (['save-order-details', 'booking', 'order-status'].includes(body.action)) {
       const orderId = text(body.orderId);
       if (!/^[A-Za-z0-9_-]+$/.test(orderId)) return json({ status: false, message: 'A valid Fast Courier orderId is required.' }, 422);
-      if (body.action !== 'order-status' && Deno.env.get('DELIVERY_REVIEW_ENABLED') === 'true') {
-        const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-        const { data: { user }, error: authError } = await db.auth.getUser((req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, ''));
-        if (authError || !user) return json({status:false,message:'Authentication required before booking.'},401);
-        try { await assertDeliveryBookingAllowed(db, orderId); }
-        catch (error) { return json({status:false,message:error instanceof Error?error.message:'Delivery cost review is required.'},409); }
+      const {data:known,error:knownError}=await db.from('wc_shipments').select('id').eq('courier_order_id',orderId).single();
+      if(knownError||!known)return json({status:false,message:'Hub shipment not found.'},404);
+      let bookingContext:any;
+      if (body.action !== 'order-status') {
+        try {
+          await assertDeliveryBookingAllowed(db, orderId);
+          bookingContext=await shipmentPacking(db,'courier_order_id',orderId);
+          const {data:trusted,error:quoteError}=await db.from('wc_courier_quotes').select('*').eq('courier_order_id',orderId).single();
+          if(quoteError||trusted?.shipment_id!==bookingContext.shipment.id)throw Error('Request a fresh server-verified quote before booking.');
+          assertQuotedPackages(trusted.request,bookingContext.packages);
+          const quote=trusted.quotes.find((q:any)=>String(q.id)===bookingContext.shipment.selected_quote_id);
+          if(!quote)throw Error('Selected quote was not issued for this shipment.');
+          const insurance=await courierJson(baseUrl+'/api/insurance-list',apiKey,{method:'GET'});
+          if(!insurance.response.ok||!insurance.result?.status||!Array.isArray(insurance.result.data))throw Error('Insurance could not be verified.');
+          if(body.action==='booking'){
+            const {data:prepared,error}=await db.from('wc_courier_booking_attempts').select('*').eq('courier_order_id',orderId).single();
+            if(error||!prepared||prepared.actor!==user.id||prepared.attempted_at)throw Error('Booking is not prepared or was already attempted. Check its status before retrying.');
+            bookingContext.details=prepared.details;
+          }else bookingContext.details=body.payload;
+          bookingContext.total=validateBookingDetails(bookingContext.details,quote,bookingContext.order,insurance.result.data,body.confirmedTotalCents);
+        } catch(error){return json({status:false,message:error instanceof Error?error.message:'Booking prerequisites could not be verified.'},409);}
       }
       const route = body.action === 'save-order-details'
         ? `/api/save-order-details/${encodeURIComponent(orderId)}`
@@ -174,21 +193,38 @@ serve(async (req) => {
         const contents=await generalContents();
         if(body.payload?.parcelContent!==contents) return json({status:false,message:'Parcel contents must match the current Fast Courier category. Reopen the booking form to review it. No booking created.'},422);
       }
+      if(body.action==='save-order-details'){
+        bookingContext.token=crypto.randomUUID();
+        const {data:prepared,error}=await db.rpc('wc_prepare_courier_booking',{p_order:orderId,p_actor:user.id,p_version:bookingContext.shipment.updated_at,p_total:bookingContext.total,p_details:body.payload,p_token:bookingContext.token});
+        if(error||prepared!==true)return json({status:false,message:'Booking preparation changed or an earlier request is uncertain. Reconcile it before retrying.'},409);
+      }
+      if(body.action==='booking'){
+        const {data:claimed,error}=await db.rpc('wc_claim_courier_booking',{p_order:orderId,p_actor:user.id,p_version:bookingContext.shipment.updated_at,p_total:bookingContext.total});
+        if(error||claimed!==true)return json({status:false,message:'Booking changed, expired or was already attempted. Reload and reconcile before retrying.'},409);
+      }
       const init: RequestInit = body.action === 'order-status'
         ? { method: 'GET' }
         : { method: 'POST', ...(body.action === 'save-order-details' ? { body: JSON.stringify(body.payload || {}) } : {}) };
       const { response, result } = await courierJson(`${baseUrl}${route}`, apiKey, init);
       if (!response.ok) return json({ ...result, status: false, upstreamStatus: response.status }, response.status);
+      if(body.action==='save-order-details'&&result?.status===true){
+        const {error}=await db.from('wc_courier_booking_attempts').update({details_saved:true}).eq('courier_order_id',orderId).eq('preparation_token',bookingContext.token).select('courier_order_id').single();
+        if(error)return json({status:false,message:'Booking details could not be confirmed locally. No booking was sent.'},503);
+      }
       if (body.action === 'order-status' && result?.documents) {
         try { result.storedDocuments = await storeCourierDocuments(orderId, result.documents); }
         catch (storageError) { result.documentStorageError = storageError instanceof Error ? storageError.message : 'Documents could not be stored.'; }
       }
+      if(result?.documents)delete result.documents;
       return json(result);
     }
 
     const validationError = validateQuote(body.payload);
     if (validationError) return json({ status: false, message: validationError }, 422);
 
+    let packing:any;
+    try{packing=await shipmentPacking(db,'id',text(body.shipmentId));assertQuotedPackages(body.payload,packing.packages);}
+    catch(error){return json({status:false,message:error instanceof Error?error.message:'Packing approval required.'},409);}
     let quoteRequest: any;
     try {
       const {response: referenceResponse, result: referenceData} = await courierJson(`${baseUrl}/api/package-contents-list`, apiKey, {method:'GET', signal:AbortSignal.timeout(30000)});
@@ -219,8 +255,13 @@ serve(async (req) => {
     let result: any;
     try { result = raw ? JSON.parse(raw) : {}; } catch { result = { status: false, message: raw || 'Invalid response from Fast Courier.' }; }
     if (!response.ok) return json({ ...result, status: false, upstreamStatus: response.status }, response.status);
+    if(result?.status===true && result.orderId && Array.isArray(result.data)){
+      const {error}=await db.from('wc_courier_quotes').insert({courier_order_id:String(result.orderId),shipment_id:packing.shipment.id,request:quoteRequest,quotes:result.data});
+      if(error)return json({status:false,message:'Courier quotes could not be saved. Reload before retrying.'},503);
+    }
     return json({...result, quoteRequest});
   } catch (error) {
+    if(error instanceof HubAccessError)return json({status:false,message:error.message},error.status);
     const message = error instanceof DOMException && error.name === 'AbortError'
       ? 'Fast Courier did not respond within 90 seconds.'
       : error instanceof Error ? error.message : 'Fast Courier request failed.';

@@ -67,7 +67,7 @@ describe('FulfilmentService shipping completion', () => {
       }
       return original(table);
     });
-    expect(await s.service.bookShipment(s.row,{} as any)).toBe(false);
+    expect(await s.service.bookShipment(s.row, {} as any, 11000)).toBe(false);
     expect(s.service.error()).toContain('Booking blocked');expect(s.courier.saveOrderDetails).not.toHaveBeenCalled();expect(s.courier.bookOrder).not.toHaveBeenCalled();
   });
   it('permits a previously captured Ready exemption through the usual booking checks', async () => {
@@ -76,7 +76,7 @@ describe('FulfilmentService shipping completion', () => {
       if(table==='wc_delivery_booking_exemptions'){const q:any={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:{order_id:'order'},error:null})};return q;}
       return original(table);
     });
-    expect(await s.service.bookShipment(s.row,{} as any)).toBe(true);expect(s.courier.bookOrder).toHaveBeenCalledOnce();
+    expect(await s.service.bookShipment(s.row, {} as any, 11000)).toBe(true);expect(s.courier.bookOrder).toHaveBeenCalledOnce();
   });
   it('blocks Retry without tracking and blocks concurrent clicks without courier calls', async () => {
     const s=setup(),row={...s.row,status:'Shipping Booked' as const};
@@ -101,7 +101,7 @@ describe('FulfilmentService shipping completion', () => {
     expect(s.courier.bookOrder).not.toHaveBeenCalled();
   });
   it('automatically calls Wix after the booking is saved and updates Hub', async () => {
-    const s = setup(); await expect(s.service.bookShipment(s.row, {} as any)).resolves.toBe(true);
+    const s = setup(); await expect(s.service.bookShipment(s.row, {} as any, 11000)).resolves.toBe(true);
     expect(s.supabase.client.rpc).toHaveBeenCalledWith('wc_save_shipping_booking', expect.anything());
     expect(s.supabase.client.functions.invoke).toHaveBeenCalledWith(expect.anything(), { body: { action: 'fulfillShipping', orderId: 'order' } });
     expect(s.supabase.client.rpc.mock.invocationCallOrder[0]).toBeLessThan(s.supabase.client.functions.invoke.mock.invocationCallOrder[0]);
@@ -111,7 +111,7 @@ describe('FulfilmentService shipping completion', () => {
     expect(s.activity.load).toHaveBeenCalledWith(true);
   });
   it('retains fulfilled status when data is reloaded from storage', async () => {
-    const s = setup(); await s.service.bookShipment(s.row, {} as any);
+    const s = setup(); await s.service.bookShipment(s.row, {} as any, 11000);
     s.service.rows.set([]); s.orders.orders.set([]);
     await s.orders.load(); await s.service.load();
     expect(s.service.rows()[0].status).toBe('Fulfilled');
@@ -120,7 +120,7 @@ describe('FulfilmentService shipping completion', () => {
   it('keeps booking when Wix fails and retries only Wix', async () => {
     const s = setup();
     s.supabase.client.functions.invoke.mockRejectedValueOnce(new Error('temporary failure'));
-    expect(await s.service.bookShipment(s.row, {} as any)).toBe(true);
+    expect(await s.service.bookShipment(s.row, {} as any, 11000)).toBe(true);
     expect(s.service.error()).toContain('temporary failure');
     expect(s.service.rows()[0].status).toBe('Shipping Booked');
     expect(s.orders.orders()[0].fulfillment_status).toBe('NOT_FULFILLED');
@@ -130,20 +130,20 @@ describe('FulfilmentService shipping completion', () => {
   });
   it('does not fulfill when courier booking fails', async () => {
     const s = setup(); s.courier.bookOrder.mockRejectedValueOnce(new Error('booking rejected'));
-    expect(await s.service.bookShipment(s.row, {} as any)).toBe(false);
+    expect(await s.service.bookShipment(s.row, {} as any, 11000)).toBe(false);
     expect(s.supabase.client.functions.invoke).not.toHaveBeenCalled();
     expect(s.service.rows()[0].status).toBe('Shipping Preparation');
   });
   it('blocks another booking after persistence failure', async () => {
     const s = setup(); s.supabase.client.rpc.mockResolvedValueOnce({ error: { message: 'database unavailable' } } as any);
-    expect(await s.service.bookShipment(s.row, {} as any)).toBe(false);
-    expect(await s.service.bookShipment(s.row, {} as any)).toBe(false);
+    expect(await s.service.bookShipment(s.row, {} as any, 11000)).toBe(false);
+    expect(await s.service.bookShipment(s.row, {} as any, 11000)).toBe(false);
     expect(s.courier.bookOrder).toHaveBeenCalledOnce();
     expect(s.supabase.client.functions.invoke).not.toHaveBeenCalled();
   });
   it('keeps the pickup collection trigger separate from shipping', async () => {
     const s = setup(); const pickup = { ...s.row, route: 'Pickup' as const, status: 'Awaiting Pickup' as const };
-    expect(await s.service.bookShipment(pickup, {} as any)).toBe(false);
+    expect(await s.service.bookShipment(pickup, {} as any, 11000)).toBe(false);
     expect(await s.service.syncShippingFulfillment(pickup)).toBe(false);
     expect(await s.service.markCollected(s.row)).toBe(false);
     savedPickup(s, pickup);

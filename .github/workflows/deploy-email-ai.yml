@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'supabase/functions/email-ai/**'
+      - 'supabase/functions/_shared/hub-auth.ts'
       - 'supabase/config.toml'
       - '.github/workflows/deploy-email-ai.yml'
   workflow_dispatch:

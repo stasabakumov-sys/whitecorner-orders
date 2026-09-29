@@ -121,8 +121,8 @@ describe('FulfilmentComponent', () => {
     expect(details).not.toHaveProperty('insuranceFee');
     // Verify the actual Edge Function transport contract using a mock only.
     const invoke=vi.fn(async()=>({data:{status:true},error:null})),courier=new FastCourierService({client:{functions:{invoke}}} as any);
-    await courier.saveOrderDetails('courier-order',details);await courier.bookOrder('courier-order');
-    expect(invoke.mock.calls.map((call:any)=>call[1].body)).toEqual([{action:'save-order-details',orderId:'courier-order',payload:details},{action:'booking',orderId:'courier-order'}]);
+    await courier.saveOrderDetails('courier-order',details,11000);await courier.bookOrder('courier-order',11000);
+    expect(invoke.mock.calls.map((call:any)=>call[1].body)).toEqual([{action:'save-order-details',orderId:'courier-order',payload:details,confirmedTotalCents:11000},{action:'booking',orderId:'courier-order',confirmedTotalCents:11000}]);
     done(true);await pending;expect(c.bookingBusy()).toBe(false);expect(c.bookingDialogOpen()).toBe(false);native.mockRestore();
   });
   it('sends the exact paid insurance tier only when extended cover is required',async()=>{

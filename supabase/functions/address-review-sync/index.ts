@@ -1,3 +1,4 @@
+import { HubAccessError, requireHubJobOrSession } from '../_shared/hub-auth.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const jsonHeaders = { "Content-Type": "application/json" };
@@ -79,7 +80,8 @@ async function validateAddress(apiKey: string, raw: any) {
   return { issues: [...new Set(issues)], suggested };
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  if(req.method!=='POST')return new Response('Method not allowed',{status:405,headers:jsonHeaders});
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -89,6 +91,7 @@ Deno.serve(async () => {
     }
 
     const db = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
+    await requireHubJobOrSession(req, db, serviceRole, true);
     const { data: orders, error } = await db
       .from("wc_orders")
       .select("id,order_number,customer_name,delivery_type,delivery_address,wix_updated_at")
@@ -141,6 +144,7 @@ Deno.serve(async () => {
 
     return new Response(JSON.stringify({ ok: true, checked, issuesFound, cleared, checkedAt: new Date().toISOString() }, null, 2), { status: 200, headers: jsonHeaders });
   } catch (e) {
+    if (e instanceof HubAccessError) return new Response(JSON.stringify({error:e.message}),{status:e.status,headers:jsonHeaders});
     console.error(e);
     return new Response(JSON.stringify({ error: String((e as any)?.message || e) }, null, 2), { status: 500, headers: jsonHeaders });
   }

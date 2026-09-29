@@ -1,3 +1,4 @@
+import { HubAccessError, requireHubMember } from '../_shared/hub-auth.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -40,12 +41,14 @@ async function buildState(data: Record<string, unknown>, secret: string) {
   return `${payload}.${await signState(payload, secret)}`;
 }
 async function verifyState(state: string, secret: string) {
-  const [payload, signature] = state.split(".");
-  if (!payload || !signature) throw new Error("Invalid OAuth state");
-  const expected = await signState(payload, secret);
-  if (signature !== expected) throw new Error("Invalid OAuth state signature");
+  const [payload, signature, extra] = state.split(".");
+  if (!payload || !signature || extra !== undefined) throw new Error("Invalid OAuth state");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+  const normalized = signature.replaceAll("-", "+").replaceAll("_", "/");
+  const bytes = Uint8Array.from(atob(normalized + "=".repeat((4-normalized.length%4)%4)), c=>c.charCodeAt(0));
+  if (!await crypto.subtle.verify("HMAC", key, bytes, new TextEncoder().encode(payload))) throw new Error("Invalid OAuth state signature");
   const data = JSON.parse(decodeText(payload));
-  if (!data?.t || Date.now() - Number(data.t) > 15 * 60 * 1000) throw new Error("OAuth state expired");
+  if (!Number.isFinite(data?.t) || data.t > Date.now() || Date.now() - data.t > 15 * 60 * 1000) throw new Error("OAuth state expired");
   return data;
 }
 
@@ -70,6 +73,9 @@ Deno.serve(async (req) => {
     if (req.method === "GET" && (code || oauthError)) {
       if (!state) throw new Error("Missing OAuth state");
       const decoded = await verifyState(state, serviceRole);
+      const {data:actor,error:consumeError}=await admin.rpc('wc_consume_gmail_oauth',{p_nonce:decoded.n});
+      if(consumeError||!actor||actor!==decoded.u) throw new HubAccessError('Mailbox authorization expired or access was revoked. Start again.');
+      await requireHubMember(admin, actor, true);
       const mailboxKey = String(decoded.m || "");
       const expectedEmail = ALLOWED_MAILBOXES[mailboxKey];
       if (!expectedEmail) throw new Error("Unknown mailbox");
@@ -113,12 +119,20 @@ Deno.serve(async (req) => {
     const { data: userData } = await userClient.auth.getUser();
     const user = userData.user;
     if (!user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders });
+    await requireHubMember(admin, user.id, true);
     const body = await req.json().catch(() => ({}));
     const mailboxKey = String(body.mailbox || "");
     const expectedEmail = ALLOWED_MAILBOXES[mailboxKey];
     if (!expectedEmail) return new Response(JSON.stringify({ error: "Unknown mailbox" }), { status: 400, headers: jsonHeaders });
 
-    const stateValue = await buildState({ m: mailboxKey, u: user.id, t: Date.now() }, serviceRole);
+    // Decode only AFTER getUser verified the signature and current user session.
+    const claims=JSON.parse(decodeText(authHeader.replace(/^Bearer\s+/i,'').split('.')[1]));
+    if(!claims.session_id||!Number.isFinite(claims.exp))throw new HubAccessError('A current user session is required.',401);
+    const nonce=crypto.randomUUID();
+    const expires=new Date(Math.min(claims.exp*1000,Date.now()+15*60*1000)).toISOString();
+    const {error:stateError}=await admin.from('wc_gmail_oauth_requests').insert({nonce,user_id:user.id,session_id:claims.session_id,mailbox:mailboxKey,expires_at:expires});
+    if(stateError)throw new HubAccessError('Mailbox authorization could not be started. Retry.',503);
+    const stateValue = await buildState({ m: mailboxKey, u: user.id, n:nonce, t: Date.now() }, serviceRole);
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: REDIRECT_URI,
@@ -132,9 +146,8 @@ Deno.serve(async (req) => {
     });
     return new Response(JSON.stringify({ authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`, mailbox: mailboxKey, email: expectedEmail }), { headers: jsonHeaders });
   } catch (e) {
-    console.error(e);
-    const message = String((e as Error)?.message || e);
+    const message = e instanceof HubAccessError ? e.message : 'Mailbox connection failed. Start again from Hub.';
     if (req.method === "GET") return Response.redirect(`${HUB_RETURN_URL}&error=${encodeURIComponent(message)}`, 302);
-    return new Response(JSON.stringify({ error: message }), { status: 500, headers: jsonHeaders });
+    return new Response(JSON.stringify({ error: message }), { status: e instanceof HubAccessError ? e.status : 500, headers: jsonHeaders });
   }
 });
