@@ -35,6 +35,7 @@ try{
  await db.exec(await readFile('supabase/migrations/20260923000600_packing_tasks.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20260923000800_packing_exclude_delivery.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20260925000100_shared_packing_work.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20260929000100_packing_reupload.sql','utf8'));
  await db.query('insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3)',[worker,'worker@example.test',{full_name:'Worker'}]);
  assert.equal((await db.query("select count(*)::int n from wc_hub_members where role='manager'")).rows[0].n,2);
  assert.equal((await db.query('select role from wc_hub_members where user_id=$1',[worker])).rows[0].role,'worker');
@@ -81,7 +82,17 @@ try{
  assert.equal(claim.files.length,4);
  await db.query('select wc_finish_packing_transfer($1,true,null)',[transfer.id]);
  await db.query("select set_config('test.actor',$1,false)",[worker]);
+ const reload=(await db.query('select to_jsonb(wc_request_packing_transfer($1)) result',[task.id])).rows[0].result;
+ assert.notEqual(reload.id,transfer.id);
+ const duplicate=(await db.query('select to_jsonb(wc_request_packing_transfer($1)) result',[task.id])).rows[0].result;
+ assert.equal(duplicate.id,reload.id);
+ await assert.rejects(db.query('select wc_complete_packing_task($1)',[task.id]),/Transfer must be confirmed/);
+ await db.query("select set_config('test.actor',$1,false)",[managerA]);
+ await db.query('select wc_claim_packing_transfer($1)',['Test laptop']);
+ await db.query('select wc_finish_packing_transfer($1,true,null)',[reload.id]);
+ await db.query("select set_config('test.actor',$1,false)",[worker]);
  const done=(await db.query('select to_jsonb(wc_complete_packing_task($1)) result',[task.id])).rows[0].result;
  assert.equal(done.state,'completed');
+ await assert.rejects(db.query('select wc_request_packing_transfer($1)',[task.id]),/Only unfinished/);
  console.log('Packing migration checks passed.');
 }finally{await db.close();}

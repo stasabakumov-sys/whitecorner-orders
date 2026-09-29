@@ -21,6 +21,14 @@ describe('Manual cutting completion',()=>{
  it('does not queue a transfer while the station is offline',async()=>{
   const {c,rpc}=work();await c.requestTransfer({...task(),state:'assigned'});expect(rpc).not.toHaveBeenCalled();
  });
+ it('allows reloading a transferred task and clears cutting confirmation only after the server accepts',async()=>{
+  const {c,rpc}=work();c.stations.set([{station_name:'Test',last_seen:new Date().toISOString()}]);c.confirmCut('task',true);
+  rpc.mockResolvedValueOnce({data:null,error:{message:'Offline'}});await c.requestTransfer(task());
+  expect(c.tasks()[0].state).toBe('transferred');expect(c.cutConfirmed()).toEqual(['task']);
+  rpc.mockResolvedValueOnce({data:{id:'reload'},error:null});await c.requestTransfer(task());
+  expect(c.tasks()[0].state).toBe('transfer_requested');expect(c.cutConfirmed()).toEqual([]);
+  rpc.mockClear();await c.requestTransfer({...task(),state:'completed'});expect(rpc).not.toHaveBeenCalled();
+ });
 });
 describe('Manage Packing status updates',()=>{
  function manage(){const query=vi.fn().mockResolvedValue({data:[{...task(),state:'completed',completed_at:'2026-09-29T01:00:00Z'}],error:null});const c=new PackingManageComponent({client:{from:()=>({select:()=>({neq:query})})}} as any,{manager:()=>true} as any);return {c,query};}

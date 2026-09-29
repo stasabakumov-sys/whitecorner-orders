@@ -23,7 +23,7 @@ interface Transfer {id:string;task_id:string;state:string;error:string|null;clai
    @for(file of filesFor(task,$index);track file.file_id){<div class="file"><span>{{file.filename}}</span><strong>Cut {{file.copies}} {{file.copies===1?'copy':'copies'}}</strong></div>}
   </div>}</div>
   @if(lastTransfer(task)?.state==='failed'){<p class="error" role="alert">{{lastTransfer(task)?.error||'Transfer failed.'}} Check the controller file list before retrying.</p>}
-  @if(task.state==='assigned'){<button type="button" class="primary" (click)="requestTransfer(task)" [disabled]="!!busy()||!stationOnline()">{{busy()===task.id?'Requesting transfer…':'Load '+task.files.length+' files to laser'}}</button>
+  @if(task.state==='assigned'||task.state==='transferred'){<button type="button" class="primary" (click)="requestTransfer(task)" [disabled]="!!busy()||!stationOnline()">{{busy()===task.id?'Requesting transfer…':(task.state==='transferred'?'Reload ':'Load ')+task.files.length+' files to laser'}}</button>
    @if(!stationOnline()){<p class="hint">Start the cutting station on the connected laptop, then refresh.</p>}}
   @if(task.state==='transfer_requested'){<p class="hint" role="status">Waiting for the laptop to confirm transfer. Check the machine file list before cutting.</p>
    @if(members.manager()&&staleClaim(task)){<button type="button" (click)="resetStale(task)" [disabled]="!!busy()">Reset stalled transfer</button>}}
@@ -71,9 +71,9 @@ export class PackingWorkComponent implements OnInit,OnDestroy {
  staleClaim(task:WorkTask){const transfer=this.lastTransfer(task);return !this.stationOnline()&&transfer?.state==='claimed'&&!!transfer.claimed_at&&Date.now()-Date.parse(transfer.claimed_at)>120000;}
  stateLabel=packingStateLabel;
  confirmCut(id:string,checked:boolean){this.cutConfirmed.update(ids=>checked?[...new Set([...ids,id])]:ids.filter(value=>value!==id));}
- async requestTransfer(task:WorkTask){if(this.busy()||task.state!=='assigned'||!this.stationOnline())return;++this.loadVersion;this.busy.set(task.id);this.error.set('');this.taskError.set(null);this.success.set('');
+ async requestTransfer(task:WorkTask){if(this.busy()||!['assigned','transferred'].includes(task.state)||!this.stationOnline())return;++this.loadVersion;this.busy.set(task.id);this.error.set('');this.taskError.set(null);this.success.set('');
   try{const {data,error}=await this.db.client.rpc('wc_request_packing_transfer',{p_task:task.id});if(error||!data?.id)throw error||Error('The laptop did not receive the request.');
-   this.tasks.update(tasks=>tasks.map(row=>row.id===task.id?{...row,state:'transfer_requested'}:row));this.success.set('Transfer requested. Wait for confirmation from the connected laptop.');
+   this.confirmCut(task.id,false);this.tasks.update(tasks=>tasks.map(row=>row.id===task.id?{...row,state:'transfer_requested'}:row));this.success.set('Transfer requested. Wait for confirmation from the connected laptop.');
   }catch(e){this.taskError.set({id:task.id,message:`Could not transfer #${task.order_number}. ${(e as Error)?.message||'Check the laptop and retry.'}`});}
   finally{this.busy.set('');}
  }
