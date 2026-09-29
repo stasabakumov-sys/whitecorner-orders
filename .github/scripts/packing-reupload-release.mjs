@@ -6,7 +6,7 @@ const token=process.env.SUPABASE_ACCESS_TOKEN;
 if(!token)throw Error('Supabase access token required');
 async function query(sql,read_only){
  const response=await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/database/query',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({query:sql,read_only})});
- if(!response.ok)throw Error(`Migration request failed: HTTP ${response.status}`);
+ if(!response.ok)throw Error(`Migration request failed: HTTP ${response.status}: ${(await response.text()).slice(0,1500)}`);
  return response.json();
 }
 await query(`begin;select pg_advisory_xact_lock(20260923,6);do $release$ begin
