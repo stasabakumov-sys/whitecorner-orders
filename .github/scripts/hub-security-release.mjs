@@ -6,7 +6,12 @@ if(!token)throw Error('Supabase access token required');
 const api='https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg';
 async function sql(query,read_only=true){
  const response=await fetch(api+'/database/query',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({query,read_only})});
- if(!response.ok)throw Error(`Production SQL HTTP ${response.status}; response omitted to protect credentials/data`);
+ if(!response.ok){
+  const raw=await response.text();
+  const state=/ERROR:\s*([A-Z0-9]{5}):/.exec(raw)?.[1]||'unknown';
+  const category=['permission denied','cannot set','read-only','syntax error','Nonmember RLS verification failed'].find(label=>raw.includes(label))||'SQL error';
+  throw Error(`Production SQL HTTP ${response.status}; SQLSTATE ${state}; ${category}. Raw response omitted.`);
+ }
  return response.json();
 }
 const inventory={
@@ -48,10 +53,15 @@ if(process.argv.includes('--apply')||process.argv.includes('--smoke')){
   (select md5(coalesce(string_agg(user_id::text||':'||role||':'||active::text,',' order by user_id),'')) from wc_hub_members) roster_digest;`))[0];
  if(checks.roster_digest!==inventory.prerequisites[0].roster_digest||Object.entries(checks).some(([k,v])=>k!=='roster_digest'&&v!==true))throw Error('Production postflight failed');
  await sql(`begin read only;
- do $check$ begin
+ do $check$ declare relation text;visible boolean;begin
   perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',true);
   execute 'set local role authenticated';
-  if exists(select 1 from wc_orders) or exists(select 1 from wc_email_messages) or exists(select 1 from transactions) then raise exception 'Nonmember RLS verification failed';end if;
+  foreach relation in array array['wc_orders','wc_email_messages','transactions'] loop
+   begin
+    execute format('select exists(select 1 from public.%I)',relation) into visible;
+    if visible then raise exception 'Nonmember RLS verification failed';end if;
+   exception when insufficient_privilege then null;end;
+  end loop;
  end $check$;
  rollback;`,false); // Management API read-only role cannot SET ROLE; SQL itself stays read-only.
  console.log('Production postflight:',JSON.stringify({...checks,nonmember_rls:true}));
