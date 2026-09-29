@@ -1,3 +1,4 @@
+import { HubAccessError, requireHubMember } from '../_shared/hub-auth.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { productionDecision, setReviewedProductionStatus, unquotedApprovalStates } from '../_shared/delivery-production-gate.ts';
 import { courierReviewCall, processDeliveryReview, reviewContext } from '../_shared/delivery-review-worker.ts';
@@ -16,6 +17,7 @@ Deno.serve(async(req)=>{
   const {data:{user},error}=await db.auth.getUser(auth.replace(/^Bearer\s+/i,''));
   if(error||!user)return json({error:'Authentication required'},401);
   const body=await req.json();
+  await requireHubMember(db,user.id,['approve','approve-without-quote'].includes(body.action));
   if(body.action==='save-packaging-variant'){
    const {data:product,error:productError}=await db.from('wc_shipping_products').select('id,product_name,wix_product_id,product_type').eq('id',body.productId).eq('active',true).single();
    if(productError||!product)return json({error:'Shipping product unavailable'},422);
@@ -158,5 +160,5 @@ Deno.serve(async(req)=>{
    return error?json({error:'Review changed; reload before approving.'},409):json({ok:true});
   }
   return json({error:'Unsupported action'},400);
- }catch{return json({error:'Delivery review failed. Reload to check its saved state; no automatic quote retry.'},500);}
+ }catch(e){if(e instanceof HubAccessError)return json({error:e.message},e.status);return json({error:'Delivery review failed. Reload to check its saved state; no automatic quote retry.'},500);}
 });

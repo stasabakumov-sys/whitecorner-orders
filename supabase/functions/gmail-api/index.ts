@@ -1,3 +1,4 @@
+import { HubAccessError, requireHubMember } from '../_shared/hub-auth.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -180,6 +181,7 @@ Deno.serve(async (req) => {
     if (!userData.user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders });
 
     const admin = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
+    await requireHubMember(admin, userData.user.id);
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "status");
     const mailboxKey = String(body.mailbox || "");
@@ -457,7 +459,6 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: jsonHeaders });
   } catch (e) {
-    console.error(e);
-    return new Response(JSON.stringify({ error: String((e as Error)?.message || e) }), { status: 500, headers: jsonHeaders });
+    return new Response(JSON.stringify({error:e instanceof HubAccessError?e.message:'Gmail request failed. Retry or reconnect the mailbox.'}),{status:e instanceof HubAccessError?e.status:500,headers:jsonHeaders});
   }
 });

@@ -491,7 +491,7 @@ export class FulfilmentService {
 
     this.quotingShipmentId.set(shipment.id);
     try{
-      const result=await this.fastCourier.getQuotes(request);
+      const result=await this.fastCourier.getQuotes(request,shipment.id);
       const now=new Date().toISOString();
       const payload={
         status:'Quoted' as const,
@@ -527,7 +527,7 @@ export class FulfilmentService {
     return value&&typeof value==='object'?value as FastCourierOrderStatus:null;
   }
 
-  async bookShipment(row:FulfilmentRow, details:FastCourierBookingDetails){
+  async bookShipment(row:FulfilmentRow, details:FastCourierBookingDetails,confirmedTotalCents:number){
     const shipment=this.shipmentFor(row);
     if(row.route!=='Shipping'||!shipment||shipment.status!=='Quote Selected'||!shipment.courier_order_id||!shipment.selected_quote){
       this.error.set('Select a courier quote before booking.');return false;
@@ -536,8 +536,7 @@ export class FulfilmentService {
     this.error.set('');this.bookingShipmentId.set(shipment.id);
     try{
       const {data:exemption,error:exemptionError}=await this.supabase.client.from('wc_delivery_booking_exemptions').select('order_id').eq('order_id',row.order_id).maybeSingle();
-      // Missing table is permitted only during an additive rollout. The server
-      // independently enforces the gate once DELIVERY_REVIEW_ENABLED is true.
+      // The server independently enforces delivery review on every booking.
       if(exemptionError&&!['42P01','PGRST205'].includes(exemptionError.code))throw Error('Delivery cost approval could not be verified.');
       if(!exemptionError&&!exemption){
         const {data:review,error}=await this.supabase.client.from('wc_delivery_reviews').select('*').eq('order_id',row.order_id).maybeSingle();
@@ -546,8 +545,8 @@ export class FulfilmentService {
       }
       const {error:syncSetupError}=await this.supabase.client.from('wc_shipping_fulfillment_sync').select('order_id').eq('order_id',row.order_id);
       if(syncSetupError)throw new Error('Shipping synchronization is not available. Install the shipping sync migration before booking.');
-      await this.fastCourier.saveOrderDetails(shipment.courier_order_id,details);
-      await this.fastCourier.bookOrder(shipment.courier_order_id);
+      await this.fastCourier.saveOrderDetails(shipment.courier_order_id,details,confirmedTotalCents);
+      await this.fastCourier.bookOrder(shipment.courier_order_id,confirmedTotalCents);
       const now=new Date().toISOString();
       const selectedQuote={...(shipment.selected_quote as any),booking:{details,initiatedAt:now,status:null}};
       const shipmentPayload={status:'Shipping Booked' as const,selected_quote:selectedQuote,updated_at:now};

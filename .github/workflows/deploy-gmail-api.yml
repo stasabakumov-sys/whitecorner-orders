@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'supabase/functions/gmail-api/**'
+      - 'supabase/functions/_shared/hub-auth.ts'
       - 'supabase/config.toml'
       - '.github/workflows/deploy-gmail-api.yml'
   workflow_dispatch:

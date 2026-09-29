@@ -1,25 +1,21 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const ts=require('../../angular-app/node_modules/typescript');
+function withMember(db){return {...db,from:table=>table==='wc_hub_members'?{select(){return this},eq(){return this},maybeSingle:async()=>({data:{role:'manager',active:true}})}:db.from(table)};}
 function moduleAt(file){const exports={};const result=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS},reportDiagnostics:true});assert.equal(result.diagnostics.length,0);vm.runInNewContext(result.outputText,{exports,require:p=>moduleAt(path.resolve(path.dirname(file),p)),crypto:globalThis.crypto,fetch,AbortSignal,Date,console});return exports;}
 const domain=moduleAt(path.resolve('supabase/functions/_shared/delivery-review-domain.ts'));
 const production=moduleAt(path.resolve('supabase/functions/_shared/delivery-production-gate.ts'));
 const {processDeliveryReview,courierReviewCall}=moduleAt(path.resolve('supabase/functions/_shared/delivery-review-worker.ts'));
 test('booking details require the exact previewed general category and fail closed on stale contents or reference failure',async()=>{
- let handler;const sent=[];let reference={status:true,data:['other','fragile']};
- const file=path.resolve('supabase/functions/fast-courier-api/index.ts');
- const output=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
- vm.runInNewContext(output,{exports:{},require:p=>p.includes('http/server')?{serve:f=>handler=f}:p.includes('esm.sh')?{}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{env:{get:()=> 'fixture'}},Response,Request,AbortController,AbortSignal,DOMException,setTimeout,clearTimeout,console,
- fetch:async(url,init)=>{sent.push({url,init});return new Response(JSON.stringify(url.endsWith('/package-contents-list')?reference:{status:true}),{status:200});}});
- const call=body=>handler(new Request('http://fixture.invalid',{method:'POST',body:JSON.stringify(body)}));
- assert.equal((await (await call({action:'contents-preview'})).json()).contents,'other');
- sent.length=0;
- for(const parcelContent of ['Front/Sides, Shelves','General',''])assert.equal((await call({action:'save-order-details',orderId:'fixture',payload:{parcelContent}})).status,422);
- assert.equal(sent.filter(s=>s.url.includes('/save-order-details')).length,0);
- assert.equal((await call({action:'save-order-details',orderId:'fixture',payload:{parcelContent:'other',quoteId:'q'}})).status,200);
- assert.deepEqual(JSON.parse(sent.at(-1).init.body),{parcelContent:'other',quoteId:'q'});
- reference={status:false,data:[]};sent.length=0;
- assert.equal((await call({action:'save-order-details',orderId:'fixture',payload:{parcelContent:'other'}})).status,500);
- assert.equal(sent.length,1);assert.ok(sent[0].url.endsWith('/package-contents-list'));
+ const h=require('./courier-fixture.cjs')();
+ assert.equal((await (await h.call({action:'contents-preview'})).json()).contents,'other');
+ h.sent.length=0;
+ for(const parcelContent of ['Front/Sides, Shelves','General',''])assert.equal((await h.call({action:'save-order-details',payload:{...h.details,parcelContent}})).status,parcelContent?422:409);
+ assert.equal(h.sent.filter(s=>s.url.includes('/save-order-details')).length,0);
+ assert.equal((await h.call({action:'save-order-details',payload:h.details})).status,200);
+ assert.deepEqual(JSON.parse(h.sent.at(-1).init.body),h.details);
+ h.state.reference={status:false,data:[]};h.sent.length=0;
+ assert.equal((await h.call({action:'save-order-details',payload:h.details})).status,500);
+ assert.equal(h.sent.filter(s=>s.url.includes('/save-order-details')).length,0);
 });
 function setup(){
  const order={id:'order',currency:'AUD',shipping:300,subtotal:110,fulfillment_status:'NOT_FULFILLED',delivery_type:'Shipping',delivery_address:{city:'Test',state:'VIC',postalCode:'3000'},wc_order_items:[{id:'item',product_name:'Cart',unit_price:110,quantity:1}]};
@@ -55,11 +51,9 @@ test('backdrop resolves stale contents from live reference data and persists the
  assert.equal(s.review.request.items[0].contents,'general');
  assert.equal(s.review.request.items[0].height,9);assert.equal(s.review.packages[0].package_name,'Backdrop');
  assert.deepEqual(s.calls.map(c=>c.route),['package-contents-list','insurance-list','quotes']);
- let handler;const sent=[];const file=path.resolve('supabase/functions/fast-courier-api/index.ts');
- const output=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
- vm.runInNewContext(output,{exports:{},require:p=>p.includes('http/server')?{serve:f=>handler=f}:p.includes('esm.sh')?{}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{env:{get:()=> 'fixture'}},Response,Request,AbortController,AbortSignal,DOMException,setTimeout,clearTimeout,console,
-  fetch:async(url,init)=>{sent.push({url,init});return new Response(JSON.stringify(url.endsWith('/package-contents-list')?reference.body:{status:true,orderId:'fixture',data:[]}),{status:200});}});
- const response=await handler(new Request('http://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'},body:JSON.stringify({action:'quotes',payload:{...s.review.request,items:[{...s.review.request.items[0],contents:'Backdrop'}]}})}));
+ const h=require('./courier-fixture.cjs')({order:s.order,packages:s.catalog.boxes,reference:reference.body});
+ const response=await h.call({action:'quotes',payload:{...s.review.request,items:[{...s.review.request.items[0],contents:'Backdrop'}]}});
+ const sent=h.sent;
  assert.equal(response.status,200);assert.equal(sent[0].init.method,'GET');
  assert.equal(sent[0].init.headers['Secret-Key'],'fixture');assert.equal(sent.length,2);
  assert.equal(JSON.parse(sent[1].init.body).items[0].contents,'general');
@@ -95,7 +89,7 @@ test('report calculation ignores client boxes and rejects the retired packaging 
  let handler;const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');
  const output=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
  const client={...s.db,auth:{getUser:async()=>({data:{user:{id:'actor'}}})}};
- vm.runInNewContext(output,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>client}:p.includes('delivery-review-worker')?{...moduleAt(path.resolve(path.dirname(file),p)),courierReviewCall:s.call}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:n=>n==='DELIVERY_REVIEW_ENABLED'?'true':'fixture'}},Response,Request,console});
+ vm.runInNewContext(output,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>withMember(client)}:p.includes('delivery-review-worker')?{...moduleAt(path.resolve(path.dirname(file),p)),courierReviewCall:s.call}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:n=>n==='DELIVERY_REVIEW_ENABLED'?'true':'fixture'}},Response,Request,console});
  const call=action=>handler(new Request('http://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'},body:JSON.stringify({action,orderId:s.order.id,packages:[{weight_kg:999}],saveProfile:true})}));
  assert.equal((await call('packages')).status,409);assert.equal(s.calls.length,0);
  assert.equal((await call('calculate-from-products')).status,200);
@@ -125,15 +119,15 @@ test('booking gate requires a priced decision; only fixed pre-cutover Ready exem
  await assertDeliveryBookingAllowed(gateDb(false,true),'draft');
  await assertDeliveryBookingAllowed(gateDb(true,false),'draft');
 });
-test('actual Fast Courier handler blocks POST booking before any upstream call and allows grandfathered Ready',async()=>{
+test('actual Fast Courier handler preserves cost exemptions without bypassing other booking prerequisites',async()=>{
  for(const exempt of [false,true]){
   let handler,calls=0;
   const file=path.resolve('supabase/functions/fast-courier-api/index.ts');
   const output=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
-  vm.runInNewContext(output,{exports:{},require:p=>p.includes('http/server')?{serve:f=>handler=f}:p.includes('esm.sh')?{createClient:()=>gateDb(exempt,false)}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{env:{get:n=>n==='DELIVERY_REVIEW_ENABLED'?'true':'fixture'}},Response,Request,AbortController,DOMException,setTimeout,clearTimeout,console,
+  vm.runInNewContext(output,{exports:{},require:p=>p.includes('http/server')?{serve:f=>handler=f}:p.includes('esm.sh')?{createClient:()=>withMember(gateDb(exempt,false))}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{env:{get:n=>n==='DELIVERY_REVIEW_ENABLED'?'true':'fixture'}},Response,Request,AbortController,DOMException,setTimeout,clearTimeout,console,
    fetch:async()=>{calls++;return new Response(JSON.stringify({status:true}),{status:200});}});
   const response=await handler(new Request('http://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'},body:JSON.stringify({action:'booking',orderId:'draft'})}));
-  assert.equal(response.status,exempt?200:409);assert.equal(calls,exempt?1:0);
+  assert.equal(response.status,409);assert.equal(calls,0);
  }
 });
 
@@ -169,7 +163,7 @@ test('delivery handler authenticates approval, validates reason and never calls 
  s.order.id='00000000-0000-4000-8000-000000000001';s.order.updated_at='2026-09-07T00:00:00Z';s.review.state='packaging_required';s.review.updated_at=s.order.updated_at;
  s.db.auth={getUser:async()=>({data:{user:authorized?{id:'verified-user'}:null},error:null})};s.db.rpc=async(name,args)=>{rpc.push({name,args});return {data:null}};
  const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');
- vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>s.db}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{upstream++;throw Error('No external calls allowed')}});
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>withMember(s.db)}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{upstream++;throw Error('No external calls allowed')}});
  const call=body=>handler(new Request('http://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'},body:JSON.stringify({orderId:s.order.id,action:'approve-without-quote',...body})}));
  authorized=false;assert.equal((await call({reason:'First build'})).status,401);authorized=true;
  assert.equal((await call({reason:' '})).status,422);assert.equal(rpc.length,0);
@@ -180,7 +174,7 @@ test('delivery handler authenticates approval, validates reason and never calls 
 test('variant save is authenticated, canonical, and never quotes or changes orders',async()=>{
  let handler,authorized=true,saved=null;const product={id:'cart',product_name:'Cart',product_type:'Cart',wix_product_id:'catalog'},shelfRule={id:'shelf-rule',shipping_product_id:'cart',size_key:'size ii',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Add package',active:true};
  const db={auth:{getUser:async()=>({data:{user:authorized?{id:'actor'}:null}})},from(table){assert.ok(['wc_shipping_products','wc_shipping_rules','wc_delivery_packaging_profiles'].includes(table));let selected=false;const q={select(){return q},eq(){return q},in(){selected=true;return q},single:async()=>({data:product}),then:resolve=>resolve({data:table==='wc_shipping_rules'&&selected?[shelfRule]:[]}),upsert:async value=>{saved=value;return {error:null}}};return q;}};
- const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>db}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{throw Error('No upstream calls')}});
+ const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>withMember(db)}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{throw Error('No upstream calls')}});
  const item={id:'cart',product_name:'Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Size:'Size II'}};
  const body={action:'save-packaging-variant',productId:'cart',options:[{name:'Size',value:'Size II'}],packages:[{package_name:'Box',length_mm:1300,width_mm:600,height_mm:100,weight_kg:15,contents:domain.reviewComponents({wc_order_items:[item]})}]};
  const call=b=>handler(new Request('http://fixture.invalid',{method:'POST',body:JSON.stringify(b)}));authorized=false;assert.equal((await call(body)).status,401);authorized=true;
@@ -206,7 +200,7 @@ test('editing a legacy profile updates its original key, preserves options, and 
    writes++;profile={...profile,...patch};return {data:profile};
   }};return q;
  }};
- const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>db}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{throw Error('No external calls allowed')}});
+ const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>withMember(db)}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{throw Error('No external calls allowed')}});
  const draft=JSON.parse(JSON.stringify(profile.packages));draft[0].width_mm=620;draft[0].contents[0].profile_item_key='lost options';
  const body={action:'save-packaging-variant',productId:product.id,existingSignature:signature,options:[],packages:draft};
  const call=()=>handler(new Request('http://fixture.invalid',{method:'POST',body:JSON.stringify(body)}));
@@ -229,7 +223,7 @@ test('order item size exception validates Wix identity and saved catalogue choic
   },then:resolve=>resolve({data:[],error:null})};return q;
  }};
  const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');
- vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>db}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{attempted=true;throw Error('No upstream calls')}});
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>withMember(db)}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{attempted=true;throw Error('No upstream calls')}});
  const call=body=>handler(new Request('http://fixture.invalid',{method:'POST',headers:{Authorization:'Bearer fixture'},body:JSON.stringify({orderId:id,itemId:item.id,...body})}));
  authorized=false;assert.equal((await call({action:'set-order-item-size',size:'180cm x 100cm'})).status,401);authorized=true;
  assert.deepEqual(JSON.parse(await (await call({action:'order-item-size-choices'})).text()).choices,['180cm x 100cm','200cm x 100cm']);

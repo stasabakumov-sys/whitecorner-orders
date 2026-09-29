@@ -15,13 +15,14 @@ function compile(file, requireMock, globals = {}) {
     structuredClone, Response, Request, AbortSignal, ...globals });
   return module.exports;
 }
+const hubAuth = compile('../_shared/hub-auth.ts', () => { throw Error('Unexpected import'); });
 const domain = compile('domain.ts', () => { throw new Error('Unexpected import'); });
 function setup({ authenticated = true, key = true, dbError = false, providerStatus = 200, providerBody, rows = [] } = {}) {
   const calls = [], reads = [];
   let handler;
   const createClient = () => ({
     auth: { getUser: async () => ({ data: { user: authenticated ? { id: 'test-user' } : null } }) },
-    from: table => ({
+    from: table => table==='wc_hub_members'?{select:()=>({eq:()=>({maybeSingle:async()=>({data:{role:"manager",active:true}})})})}:({
       select: fields => ({
         in: (column, numbers) => ({
           eq: async (filter, value) => { reads.push({ table, fields, column, numbers, filter, value }); return { data: rows, error: dbError ? { message: 'private db details' } : null }; },
@@ -29,7 +30,7 @@ function setup({ authenticated = true, key = true, dbError = false, providerStat
       }),
     }),
   });
-  compile('index.ts', name => name === './domain.ts' ? domain : { createClient }, {
+  compile('index.ts', name => name === './domain.ts' ? domain : name.includes('hub-auth') ? hubAuth : { createClient }, {
     Deno: { serve: fn => { handler = fn; }, env: { get: keyName => ({
       SUPABASE_URL: 'https://database.example.test', SUPABASE_ANON_KEY: 'test-anon',
       OPENAI_API_KEY: key ? 'test-provider' : undefined,

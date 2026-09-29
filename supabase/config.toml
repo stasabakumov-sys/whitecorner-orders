@@ -1,5 +1,14 @@
 project_id = "zgvnrpspwluapaxnycrg"
 
+[functions.fast-courier-api]
+verify_jwt = true
+
+[functions.wix-orders-sync]
+verify_jwt = true
+
+[functions.address-review-sync]
+verify_jwt = true
+
 [functions.delivery-cost-review]
 verify_jwt = true
 

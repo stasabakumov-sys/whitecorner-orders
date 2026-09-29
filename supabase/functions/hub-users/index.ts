@@ -37,6 +37,11 @@ Deno.serve(async request=>{
   });
   if(error)return reply({error:error.message||'Could not send invitation. Check the email and retry.'},409);
   if(!data.user)return reply({error:'Invitation was not confirmed. Check the user list before retrying.'},503);
+  // Only this already manager-authorized invitation grants membership. Signup does not.
+  const {error:memberError}=await db.from('wc_hub_members').upsert({
+   user_id:data.user.id,email,display_name:name,role:'worker',active:true,
+  },{onConflict:'user_id',ignoreDuplicates:true});
+  if(memberError)return reply({error:'Invitation sent, but Hub access could not be saved. Ask a manager to retry access setup.'},503);
   return reply({ok:true,email});
  }catch{
   return reply({error:'Could not invite the employee. Check the connection and retry.'},503);

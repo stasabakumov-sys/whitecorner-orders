@@ -1,3 +1,4 @@
+import { HubAccessError, requireHubMember } from '../_shared/hub-auth.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   ANALYSIS_SCHEMA, AnalysisError, candidateOrderNumbers, HISTORICAL_GUIDANCE,
@@ -29,6 +30,7 @@ Deno.serve(async (req) => {
     });
     const { data: userData } = await userClient.auth.getUser();
     if (!userData.user) return json({ error: "Unauthorized" }, 401);
+    await requireHubMember(userClient, userData.user.id);
     const raw = await req.text();
     if (raw.length > 350_000) throw new AnalysisError("Analysis request is too large.", 413);
     let body;
@@ -93,6 +95,7 @@ Deno.serve(async (req) => {
       context: { message_count: conversation.messages.length, complete: conversation.complete, order_count: orders.length },
     });
   } catch (e) {
+    if (e instanceof HubAccessError) return json({error:e.message},e.status);
     if (e instanceof AnalysisError) return json({ error: e.message }, e.status);
     return json({ error: "Email analysis could not be completed. Please retry or review manually." }, 500);
   }

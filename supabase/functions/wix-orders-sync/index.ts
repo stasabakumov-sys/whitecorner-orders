@@ -1,3 +1,4 @@
+import { HubAccessError, requireHubJobOrSession } from '../_shared/hub-auth.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { courierReviewCall, processDeliveryQueue } from '../_shared/delivery-review-worker.ts';
 import { syncShippingFulfillment } from "./shipping-fulfillment.ts";
@@ -75,6 +76,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: corsHeaders });
   }
+  if (req.method !== "POST") return new Response("Method not allowed", {status:405,headers:jsonHeaders});
   try {
     const requestBody = await req.json().catch(() => ({}));
     const wixApiKey = Deno.env.get("WIX_API_KEY");
@@ -87,6 +89,12 @@ Deno.serve(async (req) => {
     }
 
     const db = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
+    const action = requestBody?.action;
+    const allowedActions = ['importOrderHistory','importCatalog','refreshCatalogProduct','queryCatalog','queryContacts','syncContacts','fulfillShipping','markFulfilled'];
+    if (action !== undefined && !allowedActions.includes(action)) return new Response(JSON.stringify({error:'Unsupported action'}),{status:400,headers:jsonHeaders});
+    await requireHubJobOrSession(req, db, serviceRole,
+      action === undefined || ['syncContacts','importOrderHistory'].includes(action),
+      ['markFulfilled','fulfillShipping'].includes(action));
     const wixHeaders = {
       "Content-Type": "application/json",
       "Authorization": wixApiKey,
@@ -423,6 +431,7 @@ Deno.serve(async (req) => {
     console.log("SYNC_RESULT", JSON.stringify(result));
     return new Response(JSON.stringify(result, null, 2), { status: 200, headers: jsonHeaders });
   } catch (err) {
+    if (err instanceof HubAccessError) return new Response(JSON.stringify({error:err.message}),{status:err.status,headers:jsonHeaders});
     console.error(err);
     return new Response(JSON.stringify({ error: String((err as any)?.message || err) }, null, 2), { status: 500, headers: jsonHeaders });
   }
