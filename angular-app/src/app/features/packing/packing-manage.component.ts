@@ -13,7 +13,7 @@ import {canonicalPackagingSignature,variantSignature} from '../../../../../supab
 interface Candidate {unit_id:string;order_number:string;product_name:string;production_status:string;product_id:string|null;item_id:string;item:OrderItemRow}
 interface Profile {signature:string;shipping_product_id:string;packages:{package_name:string}[];template_item:any}
 interface RdFile {id:string;profile_signature:string;box_index:number;filename:string;copies:number}
-interface Task {id:string;unit_id:string;profile_signature:string;state:string;files:any[];completed_at?:string|null}
+interface Task {id:string;unit_id:string;profile_signature:string;state:string;files:any[];cut_file_ids:string[];completed_at?:string|null}
 
 @Component({selector:'app-packing-manage',standalone:true,imports:[FormsModule,RouterLink,DrawerModule,DatePipe],template:`
  <section class="packing-page"><h1>Manage Packing</h1><p class="sub">Send box cutting work to everyone in Packing work. Products nearest Packing appear first.</p>
@@ -25,7 +25,7 @@ interface Task {id:string;unit_id:string;profile_signature:string;state:string;f
  @if(members.manager()){
   <div class="controls"><input aria-label="Search Packing products" placeholder="Search order or product" [ngModel]="search()" (ngModelChange)="search.set($event)"><button type="button" (click)="load()" [disabled]="loading()||!!busy()">Refresh</button></div>
   <div class="table-wrap"><table><colgroup><col class="order-col"><col><col class="stage-col"><col class="task-col"><col class="action-col"></colgroup><thead><tr><th>Order</th><th>Product</th><th>Stage</th><th>Packing task</th><th></th></tr></thead><tbody>
-   @for(row of visible();track row.unit_id){<tr><td>#{{row.order_number}}</td><td class="product-cell"><a class="product-link" routerLink="/production" [queryParams]="{unit:row.unit_id}" title="Open this unit on Production Board">@if(imageUrl(row);as src){<img class="product-image" [src]="src" alt="" loading="lazy" (error)="failedImages.add(row.unit_id)">}@else{<span class="product-image image-empty" aria-hidden="true"></span>}<span class="product-name">{{row.product_name}}</span></a></td><td><span class="stage">{{row.production_status}}</span></td><td><span class="packing-state" [class.made]="taskFor(row)?.state==='completed'">{{stateLabel(taskFor(row)?.state)}}</span>@if(taskFor(row)?.completed_at;as finished){<small class="finished-at">{{finished|date:'short'}}</small>}</td><td class="row-actions"><button type="button" (click)="select(row)" [disabled]="!!busy()">Details</button><button type="button" (click)="send(row)" [disabled]="!!busy()||!!taskFor(row)" title="Send box cutting task to Packing work">{{busy()===row.unit_id?'Sending…':'Send'}}</button>@if(rowError()?.unit===row.unit_id){<small class="row-error" role="alert">{{rowError()?.message}}</small>}</td></tr>}
+   @for(row of visible();track row.unit_id){<tr><td>#{{row.order_number}}</td><td class="product-cell"><a class="product-link" routerLink="/production" [queryParams]="{unit:row.unit_id}" title="Open this unit on Production Board">@if(imageUrl(row);as src){<img class="product-image" [src]="src" alt="" loading="lazy" (error)="failedImages.add(row.unit_id)">}@else{<span class="product-image image-empty" aria-hidden="true"></span>}<span class="product-name">{{row.product_name}}</span></a></td><td><span class="stage">{{row.production_status}}</span></td><td><span class="packing-state" [class.made]="taskFor(row)?.state==='completed'">{{stateLabel(taskFor(row)?.state)}}</span>@if(taskFor(row);as task){@if(task.state==='transferred'){<small class="finished-at">{{task.cut_file_ids?.length||0}}/{{task.files.length}} files done</small>}}@if(taskFor(row)?.completed_at;as finished){<small class="finished-at">{{finished|date:'short'}}</small>}</td><td class="row-actions"><button type="button" (click)="select(row)" [disabled]="!!busy()">Details</button><button type="button" (click)="send(row)" [disabled]="!!busy()||!!taskFor(row)" title="Send box cutting task to Packing work">{{busy()===row.unit_id?'Sending…':'Send'}}</button>@if(rowError()?.unit===row.unit_id){<small class="row-error" role="alert">{{rowError()?.message}}</small>}</td></tr>}
    @empty{<tr><td colspan="5">No products match the search.</td></tr>}
   </tbody></table></div>
   @if(selected();as row){<p-drawer [visible]="true" position="right" appendTo="body" header="Packing details" ariaCloseLabel="Close" [modal]="true" [blockScroll]="true" [style]="{width:'min(680px,100vw)'}" (onHide)="selected.set(null)">
@@ -64,7 +64,7 @@ export class PackingManageComponent implements OnInit,OnDestroy {
  async refreshTasks(){
   if(this.loading()||this.busy()||this.refreshingTasks||!this.members.manager())return;
   const version=++this.taskVersion;this.refreshingTasks=true;
-  try{const {data,error}=await this.db.client.from('wc_packing_tasks').select('id,unit_id,profile_signature,state,files,completed_at').neq('state','cancelled');
+  try{const {data,error}=await this.db.client.from('wc_packing_tasks').select('id,unit_id,profile_signature,state,files,cut_file_ids,completed_at').neq('state','cancelled');
    if(version!==this.taskVersion)return;
    if(error)throw error;this.tasks.set((data||[]) as Task[]);this.taskSyncError.set('');
   }catch(e){if(version===this.taskVersion)this.taskSyncError.set(`Could not refresh box status. ${(e as Error)?.message||'Check the connection.'} Press Refresh to retry.`);}
@@ -74,7 +74,7 @@ export class PackingManageComponent implements OnInit,OnDestroy {
   try{await this.members.load();if(!this.members.manager())return;
    const [candidateResult,taskResult,profiles,files]=await Promise.all([
     this.db.client.rpc('wc_packing_candidates'),
-    this.db.client.from('wc_packing_tasks').select('id,unit_id,profile_signature,state,files,completed_at').neq('state','cancelled'),
+    this.db.client.from('wc_packing_tasks').select('id,unit_id,profile_signature,state,files,cut_file_ids,completed_at').neq('state','cancelled'),
     this.allProfiles(),
     this.allRdFiles(),
    ]);

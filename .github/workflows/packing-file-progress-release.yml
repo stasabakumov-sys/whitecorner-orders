@@ -1,0 +1,24 @@
+name: Packing file progress release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: packing-production-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rehearse Packing progress in isolated PostgreSQL
+        run: |
+          npm install --prefix "$RUNNER_TEMP/packing-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/packing.test.mjs "$RUNNER_TEMP/packing-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Apply and verify file progress migration
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/packing-file-progress-release.mjs
