@@ -35,7 +35,7 @@ try{
  await db.exec(await readFile('supabase/migrations/20260923000600_packing_tasks.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20260923000800_packing_exclude_delivery.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20260925000100_shared_packing_work.sql','utf8'));
- await db.exec(await readFile('supabase/migrations/20260929000100_packing_reupload.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20260929131500_packing_reupload.sql','utf8'));
  await db.query('insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3)',[worker,'worker@example.test',{full_name:'Worker'}]);
  assert.equal((await db.query("select count(*)::int n from wc_hub_members where role='manager'")).rows[0].n,2);
  assert.equal((await db.query('select role from wc_hub_members where user_id=$1',[worker])).rows[0].role,'worker');

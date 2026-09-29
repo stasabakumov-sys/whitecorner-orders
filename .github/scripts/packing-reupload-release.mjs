@@ -1,5 +1,5 @@
 import {readFile} from 'node:fs/promises';
-const version='20260929000100',name='packing_reupload';
+const version='20260929131500',name='packing_reupload';
 const source=(await readFile(`supabase/migrations/${version}_${name}.sql`,'utf8')).replaceAll('\r','');
 const quote=value=>"'"+value.replaceAll("'","''")+"'";
 const token=process.env.SUPABASE_ACCESS_TOKEN;
