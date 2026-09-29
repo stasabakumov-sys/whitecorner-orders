@@ -39,3 +39,5 @@ The station starts immediately after setup and processes Hub transfer requests, 
 - `npm test -- --watch=false` and `npm run build` from `angular-app/`.
 - `node --test scripts/packing-station/ruida-udp.test.mjs scripts/packing-station/transfer-task.test.mjs` (local mocks only).
 - `.github/scripts/packing.test.mjs` runs the Packing migrations on isolated PGlite with synthetic users, boxes and orders, checking manager/worker access, missing-file rejection, transfer and completion. It does not touch production data.
+
+After a successful transfer, Reload files to laser remains available until Boxes made. It queues a new transfer through the same authenticated contract; queued or claimed requests are reused to prevent duplicate jobs. Reload clears the local cutting confirmation only after the server accepts the request. Completed and cancelled tasks cannot be reloaded.
