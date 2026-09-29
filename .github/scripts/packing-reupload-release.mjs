@@ -1,12 +1,12 @@
 import {readFile} from 'node:fs/promises';
-const version='20260929000100',name='packing_reupload';
+const version='20260929131500',name='packing_reupload';
 const source=(await readFile(`supabase/migrations/${version}_${name}.sql`,'utf8')).replaceAll('\r','');
 const quote=value=>"'"+value.replaceAll("'","''")+"'";
 const token=process.env.SUPABASE_ACCESS_TOKEN;
 if(!token)throw Error('Supabase access token required');
 async function query(sql,read_only){
  const response=await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/database/query',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({query:sql,read_only})});
- if(!response.ok)throw Error(`Migration request failed: HTTP ${response.status}`);
+ if(!response.ok)throw Error(`Migration request failed: HTTP ${response.status}: ${(await response.text()).slice(0,1500)}`);
  return response.json();
 }
 await query(`begin;select pg_advisory_xact_lock(20260923,6);do $release$ begin
