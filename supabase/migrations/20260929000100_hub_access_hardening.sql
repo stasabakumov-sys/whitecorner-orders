@@ -32,6 +32,9 @@ do $$ declare r record; begin
  for r in select c.relname,c.relkind from pg_class c join pg_namespace n on n.oid=c.relnamespace
   where n.nspname='public' and (c.relname like 'wc\_%' escape '\' or c.relname in ('transactions','business_categories','classification_rules','personal_rules','personal_rule_transactions','imports')) and c.relkind in ('r','p','v')
  loop
+  -- Production has a separately published, read-only `live` storefront projection.
+  -- Its catalog publication contract is outside private Hub operations.
+  if r.relname='wc_storefront_catalog' then continue; end if;
   execute format('revoke all on public.%I from public,anon',r.relname);
   if r.relkind='v' then
    execute format('alter view public.%I set (security_invoker=true)',r.relname);

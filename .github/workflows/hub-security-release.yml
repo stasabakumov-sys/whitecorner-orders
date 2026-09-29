@@ -6,6 +6,12 @@ on:
       - '.github/workflows/hub-security-release.yml'
       - '.github/scripts/hub-security-release.mjs'
   workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [verify, apply]
+        default: verify
+        description: Verify only, or apply SQL then deploy all protected Edge Functions
 permissions:
   contents: read
 concurrency:
@@ -23,3 +29,38 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/hub-security-release.mjs --verify
+  release:
+    needs: verify
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install test dependencies
+        run: |
+          npm ci --prefix angular-app --ignore-scripts --no-audit --no-fund
+          npm install --prefix "$RUNNER_TEMP/security-db" --no-save --ignore-scripts @electric-sql/pglite@0.3.14
+      - name: Rehearse atomic SQL and access controls
+        run: node .github/scripts/hub-security.test.mjs "$RUNNER_TEMP/security-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Test Edge authorization using mocks
+        run: node --test supabase/functions/_shared/hub-security.test.cjs supabase/functions/email-ai/handler.test.cjs supabase/functions/wix-orders-sync/*.test.cjs .github/scripts/delivery-review-worker.test.cjs
+      - name: Apply only the two reviewed security migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/hub-security-release.mjs --apply
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Deploy all eight protected functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          for function in address-review-sync delivery-cost-review email-ai fast-courier-api gmail-api gmail-oauth hub-users wix-orders-sync; do
+            supabase functions deploy "$function" --project-ref zgvnrpspwluapaxnycrg
+          done
+      - name: Verify production access without business actions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/hub-security-release.mjs --smoke

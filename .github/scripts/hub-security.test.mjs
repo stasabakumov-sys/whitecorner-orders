@@ -3,6 +3,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 const {PGlite}=await import(pathToFileURL(path.resolve(process.argv[2])).href);
 import fs from 'node:fs';
+import {releaseSql} from './hub-security-release-sql.mjs';
 const db=new PGlite();
 await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create schema storage;
 create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');
@@ -26,15 +27,28 @@ create table business_categories(name text primary key,tax_attribute text,tax_ca
 insert into auth.users(id,email) values('11111111-1111-1111-1111-111111111111','manager@example.test'),('22222222-2222-2222-2222-222222222222','manager2@example.test');`);
 let roster;
 for(const f of ['supabase/orders-schema.sql',...fs.readdirSync('supabase/migrations').sort().map(f=>'supabase/migrations/'+f)]){
+ if(f.includes('20260929000200'))continue; // Applied atomically together with 001 below.
  if(/20260918000300|20260923000700/.test(f)){console.log('SKIP historical data-only '+f);continue;}
  try{if(f.includes('20260929000100')){
  await db.exec(`insert into auth.users(id,email) values('33333333-3333-3333-3333-333333333333','worker@example.test'),('44444444-4444-4444-4444-444444444444','inactive@example.test');
  update wc_hub_members set active=false where user_id='44444444-4444-4444-4444-444444444444';
  create policy fixture_finance_access on transactions for all to authenticated using(true) with check(true);
+ create table wc_storefront_catalog(id text primary key,payload jsonb,published_at timestamptz);
+ alter table wc_storefront_catalog enable row level security;
+ revoke all on wc_storefront_catalog from public,anon,authenticated;
+ grant select on wc_storefront_catalog to anon,authenticated;
+ create policy storefront_read on wc_storefront_catalog for select to anon,authenticated using(id='live');
+ insert into wc_storefront_catalog values('live','{}',now()),('unpublished','{}',null);
  insert into transactions(business_category) values('Fixture');
  insert into storage.buckets(id,name,public) values('shipping-documents','shipping-documents',true) on conflict(id) do update set public=true;
  `);
  roster=(await db.query('select * from wc_hub_members order by user_id')).rows;
+ await db.exec('create schema supabase_migrations; create table supabase_migrations.schema_migrations(version text primary key,name text,statements text[])');
+ const sources=fs.readdirSync('supabase/migrations').filter(n=>/^20260929000[12]00_/.test(n)).sort().map(n=>({version:n.slice(0,14),name:n.slice(15,-4),source:fs.readFileSync('supabase/migrations/'+n,'utf8').replaceAll('\r','')}));
+ const broken=sources.map((s,i)=>i?{...s,source:s.source.replace(/commit;\s*$/,()=>"do $$ begin raise exception 'intentional release failure';end $$;commit;")}:s);
+ await assert.rejects(db.exec(releaseSql(broken)),/intentional release failure/);await db.exec('rollback');
+ assert.equal((await db.query("select to_regprocedure('wc_is_active_hub_member()') missing")).rows[0].missing,null,'failed release must roll back its first migration');
+ await db.exec(releaseSql(sources));await db.exec(releaseSql(sources));continue;
  }let sql=fs.readFileSync(f,'utf8').replace(/create extension if not exists pgcrypto;/gi,'');await db.exec(sql);}
  catch(e){throw new Error(f+': '+e.message);}
 }
@@ -47,7 +61,7 @@ await db.query("update auth.users set raw_user_meta_data='{\"role\":\"manager\"}
 assert.equal((await db.query('select active from wc_hub_members where user_id=$1',[inactive])).rows[0].active,false);
 const tables=(await db.query(`select c.relname,c.relkind from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and (c.relname like 'wc_%' or c.relname in ('transactions','classification_rules','business_categories','personal_rules','personal_rule_transactions','imports')) and c.relkind in ('r','v')`)).rows;
 const funcs=(await db.query(`select p.oid::regprocedure::text signature,p.proname,p.pronargs,p.prosrc,p.prosecdef,has_function_privilege('authenticated',p.oid,'execute') permitted from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'wc_%'`)).rows;
-for(const t of tables){assert.equal((await db.query("select has_table_privilege('anon',$1,'SELECT,INSERT,UPDATE,DELETE') allowed",[t.relname])).rows[0].allowed,false,t.relname+' anon grant');}
+for(const t of tables.filter(t=>t.relname!=='wc_storefront_catalog')){assert.equal((await db.query("select has_table_privilege('anon',$1,'SELECT,INSERT,UPDATE,DELETE') allowed",[t.relname])).rows[0].allowed,false,t.relname+' anon grant');}
 for(const f of funcs){assert.equal((await db.query("select has_function_privilege('anon',$1,'execute') allowed",[f.signature])).rows[0].allowed,false,f.signature+' anon EXECUTE');}
 const actor=async(id,role='authenticated')=>{await db.exec('reset role');await db.query("select set_config('test.actor',$1,false)",[id||'']);await db.exec('set role '+role);};
 for(const id of ['',outsider,inactive]){
@@ -79,6 +93,8 @@ await db.exec("create policy fixture_unsafe_storage on storage.objects for all t
 for(const bucket of ['shipping-documents','box-drawings','cnc-files','box-rd-files','hub-product-drafts'])await db.query('insert into storage.objects(bucket_id,name) values($1,$2)',[bucket,'fixture']);
 for(const id of [outsider,inactive]){await actor(id);assert.equal((await db.query('select count(*)::int n from storage.objects')).rows[0].n,0);await assert.rejects(db.query("insert into storage.objects(bucket_id,name) values('cnc-files','bad')"),/row-level security/);}
 await actor('', 'anon');assert.equal((await db.query('select count(*)::int n from storage.objects')).rows[0].n,0);
+assert.deepEqual((await db.query('select id from wc_storefront_catalog')).rows,[{id:'live'}]);
+await assert.rejects(db.query("insert into wc_storefront_catalog values('attacker','{}',now())"),/permission denied/);
 // Manager callback requires the same unrevoked session and is single use.
 await db.exec('reset role');
 const session='66666666-6666-6666-6666-666666666666';await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[session,manager]);
@@ -108,6 +124,7 @@ const invalidated=(await db.query('select status,packages_approved_at,courier_or
 assert.deepEqual(invalidated,{status:'Packaging Review',packages_approved_at:null,courier_order_id:null});
 console.log(JSON.stringify({tables:tables.length,functions:funcs.length,authenticatedRPCs:funcs.filter(f=>f.permitted).length,result:'PASS: roster, RLS, Storage, RPC grants/roles, OAuth revoke/replay/logout'}));
 await db.close();
+
 
 
 
