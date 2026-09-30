@@ -30,6 +30,9 @@ select jsonb_build_object(
  'import_complete',coalesce((select bool_and(complete and next_offset=expected_total
   and expected_total=(select count(*) from current_source s where s.site_id=j.site_id)) from wc_wix_catalog_jobs j),false),
  'last_full_scan_at',(select max(updated_at) from wc_wix_catalog_jobs where complete),
+ 'oldest_snapshot_at',(select min(synced_at) from wc_wix_catalog_products),
+ 'newest_snapshot_at',(select max(synced_at) from wc_wix_catalog_products),
+ 'snapshots_read_last_6h',(select count(*) from wc_wix_catalog_products where synced_at>now()-interval '6 hours'),
  'published_at',(select published_at from live),
  'snapshots_read_after_publication',(select count(*) from current_source where synced_at>(select published_at from live)),
  'visible_not_published',(select count(*) from visible s where not exists(select 1 from published where p->>'id'=s.shipping_product_id::text)),
