@@ -1,10 +1,10 @@
 # Catalogue importer security review — 28 September 2026
 
-Historical review of the deployed importer. The 30 September integration restores
-its source but does not change gateway settings or redeploy it. Its replacement
-workflow runs synthetic checks and an explicitly requested aggregate-only SQL audit;
-it contains no production write/deployment job. No previous deployment authorization
-is treated as authorization for a new release.
+The 30 September integration restored the already deployed importer. The production
+release keeps its existing gateway setting, verified by a read-only management API
+check before deployment. A manual run applies the fenced publication migration and
+deploys the function; scheduled runs reuse that deployment. No source product or
+collection rows are transferred to the CI runner.
 
 The owner authorised production on 28 September in the catalogue migration task.
 The CI management token permits database queries and function deployment, but cannot
@@ -27,13 +27,12 @@ allow only HTTPS Wix media hosts, reject redirects, enforce MIME and a 50 MB siz
 limit, and use content-hashed storage names. Private media uses a private bucket.
 The private service key stays inside the Edge Function runtime.
 
-Large media transfers use short-lived signed upload URLs scoped to one hashed
-filename in an allowed bucket. CI downloads only validated Wix media URLs and
-uploads that file; the handler confirms its saved size and MIME before recording
-completion. Signed URLs and the job token are never persisted or printed.
-The owner separately approved this transfer method and publication with inaccessible
-videos deferred. Missing photos still block publication; the private media-issue
-table records video failures for subsequent recovery.
+The server downloads only validated Wix media URLs and copies them directly into
+dedicated storage. CI receives only completion counts and timestamps. The job token
+is never persisted or printed and is revoked after the run. The earlier signed
+upload route remains available for manual recovery. Inaccessible videos can be
+deferred; missing photos still block publication and the private media-issue table
+records video failures for subsequent recovery.
 
 The anonymous storefront reads only `wc_storefront_catalog`, containing a field
 allowlist of visible products. No source payloads, costs, internal notes, drawings,
@@ -41,7 +40,9 @@ customer fields or secrets are included. Source tables retain their existing RLS
 The Site retains its owner-private audience. Public catalogue media is limited to
 visible products and existing storefront editorial images. Hidden media remains
 private. The release validates the complete import and every copied photo before
-atomically replacing the last successful projection.
+atomically replacing the last successful projection. If a previously public asset
+is no longer used by a visible product or editorial page, publication stops for
+manual media review; this release does not delete or move public objects.
 
 Validation: migration rehearsals assert anonymous source-data denial, anonymous
 write denial, staff write denial and separate public/private buckets. Projection

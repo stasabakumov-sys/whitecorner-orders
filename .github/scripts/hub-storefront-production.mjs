@@ -17,7 +17,15 @@ const functions=await api('functions');
 const importer=functions.find(f=>f.slug==='hub-catalog-sync');
 if(!importer||importer.verify_jwt!==false)throw Error('Catalog importer must already have gateway JWT disabled; stop before deployment or token creation');
 console.log('Existing catalog importer gateway setting verified.');
-if(process.argv.includes('--check'))process.exit(0);
+if(process.argv.includes('--check')){
+ const editorial=JSON.parse(await readFile('.github/scripts/hub-storefront-editorial-assets.json','utf8'));
+ const [media]=await sql(`select count(*)::int as public_assets_needing_review from wc_catalog_media a
+ where a.bucket='catalog-media' and a.source_url not in (${editorial.map(literal).join(',')})
+ and not exists(select 1 from wc_wix_catalog_products p join wc_wix_catalog_jobs j using(site_id,run_id)
+ where p.source_product->>'visible'='true' and jsonb_path_exists(p.source_product,'$.**.url ? (@ == $needle)',jsonb_build_object('needle',a.source_url)))`);
+ console.log(JSON.stringify({publicAssetsNeedingReview:media.public_assets_needing_review}));
+ process.exit(0);
+}
 
 if(process.argv.includes('--apply')){
  const name='20260930000400_catalog_release_fence';
@@ -63,7 +71,7 @@ try{
  if(!mediaComplete)throw Error('Media processing limit reached; saved progress retained');
  const result=await action({action:'publish'});
  const [audit]=await sql("select published_at, jsonb_array_length(payload->'products') as products from wc_storefront_catalog where id='live'");
- if(audit?.published_at!==result.publishedAt||audit.products!==result.products)throw Error('Published catalogue verification failed');
+ if(Date.parse(audit?.published_at)!==Date.parse(result.publishedAt)||audit.products!==result.products)throw Error('Published catalogue verification failed');
  console.log(JSON.stringify({publishedAt:result.publishedAt,products:result.products,categories:result.categories,pendingVideos:result.pendingVideos,copied,deferred}));
 }finally{
  await sql(`delete from wc_catalog_import_access where token_hash=${literal(hash)} or expires_at<now()`,false);
