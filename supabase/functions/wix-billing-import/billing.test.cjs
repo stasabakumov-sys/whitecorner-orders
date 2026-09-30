@@ -64,7 +64,7 @@ test('source snapshots retain original precision, history and explicit order ass
   assert.notEqual(a.source_hash, (await snapshot('invoice', {...fixture, revision: '2'})).source_hash);
 });
 test('PDF copying rejects private networks, redirects, oversize and HTML responses', async () => {
-  for (const url of ['http://files.wix.com/doc', 'https://127.0.0.1/file', 'https://files.wix.com.evil.test/a', 'https://user:pass@files.wix.com/a']) {
+  for (const url of ['http://files.wix.com/doc', 'https://127.0.0.1/file', 'https://files.wix.com.evil.test/a', 'https://manage.wix.com.evil.test/a', 'https://user:pass@files.wix.com/a']) {
     await assert.rejects(() => downloadPdf(url, async () => { throw Error('Must not fetch'); }), /host/);
   }
   await assert.rejects(() => downloadPdf('https://files.wix.com/a', async () => new Response('html')), /non-PDF/);
@@ -74,6 +74,10 @@ test('PDF copying rejects private networks, redirects, oversize and HTML respons
     return new Response('%PDF-1.7\nfixture');
   });
   assert.equal(new TextDecoder().decode(bytes), '%PDF-1.7\nfixture');
+  await downloadPdf('https://manage.wix.com/fixture', async (_, options) => {
+    assert.equal(options.redirect, 'error'); assert.equal(options.headers, undefined);
+    return new Response('%PDF-fixture');
+  });
 });
 test('import saves a page only after validated reads and resumes the server cursor', async () => {
   const calls = [], {billingAction} = load('handler.ts');

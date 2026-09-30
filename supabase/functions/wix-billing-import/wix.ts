@@ -84,7 +84,7 @@ export async function queryPage(kind: Kind, headers: Record<string, string>, cur
 export async function downloadPdf(url: string, call: typeof fetch = fetch): Promise<Uint8Array> {
   let target: URL;
   try { target = new URL(url); } catch { throw new BillingError('Wix returned an invalid PDF link. Retry the document.'); }
-  if (target.protocol !== 'https:' || target.username || target.password || target.port || !['static.wixstatic.com', 'files.wix.com', 'www.wixapis.com'].includes(target.hostname)) {
+  if (target.protocol !== 'https:' || target.username || target.password || target.port || !['static.wixstatic.com', 'files.wix.com', 'www.wixapis.com', 'manage.wix.com'].includes(target.hostname)) {
     const host = /^[a-z0-9.-]{1,253}$/.test(target.hostname) ? target.hostname : 'unrecognized';
     throw new BillingError(`The Wix PDF download host (${host}) needs review before it can be copied. The saved document is kept.`);
   }

@@ -1,8 +1,9 @@
 # Wix invoices and receipts → Hub
 
-Implementation prepared on 30 September 2026. **Not deployed; no live documents
-have been imported or counted.** The migration is additive and its rollout
-requires approval. This is customer billing, not Wix subscription/vendor bills.
+Deployed on 30 September 2026 following the owner's explicit production approval.
+This is customer billing, not Wix subscription/vendor bills. The live section is
+[Invoices & receipts](https://stasabakumov-sys.github.io/whitecorner-orders/angular2/#/billing-documents).
+Deployment does not itself establish that all Wix documents have been migrated.
 
 ## Source and scope
 
@@ -65,14 +66,15 @@ secrets: the existing `WIX_API_KEY`, `WIX_SITE_ID`, `SUPABASE_URL`,
 `SUPABASE_SERVICE_ROLE_KEY`; never put these in frontend code or fixtures.
 
 PDF requests send no Wix API credentials to download hosts. Only HTTPS on
-`static.wixstatic.com`, `files.wix.com`, or `www.wixapis.com` is accepted, with
-no redirects. The actual PDF host has **not** been verified against production.
+`static.wixstatic.com`, `files.wix.com`, `www.wixapis.com`, or `manage.wix.com`
+is accepted, with no redirects. Production Wix Get Receipt returned the official
+`manage.wix.com` host on 30 September 2026; only that exact host was added.
 If different, review an actual Wix-provided link and approve an exact trusted
 host; do not broaden this to arbitrary URLs or disable redirect/SSRF checks.
 PDFs must have a PDF signature and be at most 20 MiB. Oversize, unavailable,
 changed or untrusted documents retain a visible, persisted error.
 
-## Reviewable rollout (not executed)
+## Rollout and operation
 
 1. Approve applying the single migration and deploying the new protected Edge
    Function. Use the established deployment credentials. Do not change existing
@@ -97,7 +99,14 @@ changed or untrusted documents retain a visible, persisted error.
    pending counts are zero or every unavailable original is explicitly accounted
    for. Do not call the overall migration complete merely because a scan ended.
 
-The new CI workflow only validates code; it cannot deploy, migrate or import.
+`wix-billing-import-check.yml` only validates code. The explicitly dispatched
+`wix-billing-release.yml` deploy mode applies only the named billing migration
+(or verifies its exact registered source), deploys the protected function and
+checks aggregate counts/security. Verify mode is read-only. Initial release
+[36718141186](https://github.com/stasabakumov-sys/whitecorner-orders/actions/runs/36718141186)
+passed; Angular2 publication and Pages deployment also completed. Hosted checks
+confirmed RLS, private storage, server-only writes and RPCs, JWT verification,
+and HTTP 401 for unauthenticated requests.
 Existing deployment workflows watch `supabase/config.toml`, so review their
 automatic effects before any future push to `main`.
 
@@ -106,7 +115,8 @@ automatic effects before any future push to `main`.
 - `node --test supabase/functions/wix-billing-import/billing.test.cjs`
 - `node supabase/functions/wix-billing-import/check.cjs` — TypeScript semantic
   check of adapter/handler; the Edge entrypoint/auth paths run in mocked tests.
-  Deno itself is not installed locally; no Deno runtime check is claimed.
+  Deno itself is not installed locally; `deno check` with Deno 2.9.6 passed in
+  the production release workflow.
 - `migration.test.cjs` uses disposable PGlite 0.5.8 with synthetic auth/storage
   fixtures. Set `BILLING_PGLITE_PATH` to that package's absolute installation path.
   It verifies SQL execution, rollback, resume, duplicate rejection, stale-run
