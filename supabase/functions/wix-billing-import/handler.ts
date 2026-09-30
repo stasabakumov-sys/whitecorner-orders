@@ -80,7 +80,7 @@ export async function billingAction(db: any, headers: Record<string, string>, si
       if (latest.source_hash !== doc.source_hash) throw new BillingError('This document changed in Wix. Start a fresh scan before copying its current PDF. Earlier snapshots are kept.');
       const info = kind === 'invoice' ? fresh.documentInfo : fresh.document;
       if (info?.status !== 'AVAILABLE' || typeof info.downloadUrl !== 'string') throw new BillingError('Wix has no downloadable PDF for this document yet. Existing document data is saved; export the original in Wix or retry later.');
-      const bytes = await downloadPdf(info.downloadUrl, call);
+      const bytes = await downloadPdf(info.downloadUrl, call, headers);
       const hash = await sha256(bytes);
       const path = `${doc.id}/${doc.source_hash}/${hash}.pdf`;
       // Content-addressed upload makes a lost response safe to retry.

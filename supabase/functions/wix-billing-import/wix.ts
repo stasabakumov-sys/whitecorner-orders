@@ -81,7 +81,7 @@ export async function queryPage(kind: Kind, headers: Record<string, string>, cur
 }
 
 // Download only from reviewed Wix asset hosts; redirects cannot escape the list.
-export async function downloadPdf(url: string, call: typeof fetch = fetch): Promise<Uint8Array> {
+export async function downloadPdf(url: string, call: typeof fetch = fetch, wixHeaders?: Record<string, string>): Promise<Uint8Array> {
   let target: URL;
   try { target = new URL(url); } catch { throw new BillingError('Wix returned an invalid PDF link. Retry the document.'); }
   if (target.protocol !== 'https:' || target.username || target.password || target.port || !['static.wixstatic.com', 'files.wix.com', 'www.wixapis.com', 'manage.wix.com'].includes(target.hostname)) {
@@ -91,7 +91,16 @@ export async function downloadPdf(url: string, call: typeof fetch = fetch): Prom
   let response: Response;
   try { response = await call(target, {redirect: 'error', signal: AbortSignal.timeout(30000)}); }
   catch { throw new BillingError('PDF download failed or redirected to an unreviewed host. Retry or review the Wix download host.'); }
-  if (!response.ok) throw new BillingError(`PDF download failed (HTTP ${response.status}). Retry to obtain a fresh Wix link.`);
+  // Wix's own dashboard download service can require the same Wix identity.
+  // Never forward credentials to asset hosts, redirects or arbitrary URLs.
+  if (response.status === 401 && target.hostname === 'manage.wix.com' && wixHeaders?.Authorization && wixHeaders?.['wix-site-id']) {
+    try {
+      response = await call(target, {redirect: 'error', signal: AbortSignal.timeout(30000), headers: {
+        Authorization: wixHeaders.Authorization, 'wix-site-id': wixHeaders['wix-site-id'],
+      }});
+    } catch { throw new BillingError('Authenticated Wix PDF download failed. Saved documents are kept; retry.'); }
+  }
+  if (!response.ok) throw new BillingError(`PDF download failed (HTTP ${response.status}). Wix download authorization or dashboard export is required; saved data is kept.`);
   const limit = 20 * 1024 * 1024;
   const size = Number(response.headers.get('content-length'));
   if (size > limit) throw new BillingError(`PDF is ${size} bytes; the limit is ${limit} bytes. Export and review this document manually.`);

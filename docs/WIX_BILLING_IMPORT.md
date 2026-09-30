@@ -65,10 +65,13 @@ members can view saved records. There is no machine-token exception. Runtime
 secrets: the existing `WIX_API_KEY`, `WIX_SITE_ID`, `SUPABASE_URL`,
 `SUPABASE_SERVICE_ROLE_KEY`; never put these in frontend code or fixtures.
 
-PDF requests send no Wix API credentials to download hosts. Only HTTPS on
+PDF requests initially send no credentials. Only HTTPS on
 `static.wixstatic.com`, `files.wix.com`, `www.wixapis.com`, or `manage.wix.com`
 is accepted, with no redirects. Production Wix Get Receipt returned the official
 `manage.wix.com` host on 30 September 2026; only that exact host was added.
+On HTTP 401 from that exact Wix dashboard host, retry once with only the existing
+Wix Authorization and site ID. Never forward Supabase credentials, other headers,
+or Wix authorization to asset hosts; redirects remain forbidden on both attempts.
 If different, review an actual Wix-provided link and approve an exact trusted
 host; do not broaden this to arbitrary URLs or disable redirect/SSRF checks.
 PDFs must have a PDF signature and be at most 20 MiB. Oversize, unavailable,

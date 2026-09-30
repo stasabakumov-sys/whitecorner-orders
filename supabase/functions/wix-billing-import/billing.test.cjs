@@ -79,6 +79,24 @@ test('PDF copying rejects private networks, redirects, oversize and HTML respons
     return new Response('%PDF-fixture');
   });
 });
+test('Wix download authorization is retried only on the exact dashboard host without redirects', async () => {
+  const headers = {Authorization: 'wix-fixture', 'wix-site-id': 'site-fixture', apikey: 'never-forward'};
+  for (const host of ['files.wix.com', 'static.wixstatic.com', 'www.wixapis.com']) {
+    let calls = 0;
+    await assert.rejects(() => downloadPdf(`https://${host}/fixture`, async (_, options) => {
+      calls++; assert.equal(options.headers, undefined); return new Response('', {status: 401});
+    }, headers), /401/);
+    assert.equal(calls, 1);
+  }
+  let calls = 0;
+  await downloadPdf('https://manage.wix.com/fixture', async (url, options) => {
+    calls++; assert.equal(url.hostname, 'manage.wix.com'); assert.equal(options.redirect, 'error');
+    if (calls === 1) { assert.equal(options.headers, undefined); return new Response('', {status: 401}); }
+    assert.deepEqual(JSON.parse(JSON.stringify(options.headers)), {Authorization: 'wix-fixture', 'wix-site-id': 'site-fixture'});
+    return new Response('%PDF-fixture');
+  }, headers);
+  assert.equal(calls, 2);
+});
 test('import saves a page only after validated reads and resumes the server cursor', async () => {
   const calls = [], {billingAction} = load('handler.ts');
   const run = {id: 'run', cursor: 'saved-cursor', started_at: fixture.createdDate, saved_count: 50, scan_complete: false};
