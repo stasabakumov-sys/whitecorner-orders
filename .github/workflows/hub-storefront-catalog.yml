@@ -21,7 +21,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: hub-storefront-catalog-checks
+  group: hub-storefront-catalog-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   checks:
