@@ -38,7 +38,7 @@ export class ShopFloorComponent implements OnDestroy {
  tab='timer';unitId='';stageFilter='';partId='';operation='';other='Cleaning';mode='product';
  templateId='';finish='';assigning=false;
  date=brisbaneDate();period='day';editId='';editType='interval';editStart='';editEnd='';notice='';localError='';moving=false;
- paintFinishOpen=false;paintFinishIntervalId='';paintVolumeMl='';paintVolumeError='';
+ paintFinishOpen=false;paintFinishIntervalId='';paintVolumeMl:string|number='';paintVolumeError='';
  get paint(){return this.snapshot()?.paint_operations||PAINT_OPERATIONS;}paintLabel=paintLabel;needsPaintVolume=needsPaintVolume;others=OTHER_OPERATIONS;format=duration;seconds=intervalSeconds;paintAvailable=availablePaint;
  private reconnect=()=>{void this.refresh();};
  constructor(readonly s:ShopFloorService,readonly auth:AuthService,readonly orders:OrdersService,readonly production:ProductionService,route:ActivatedRoute,readonly phone:ShopPhoneService){
