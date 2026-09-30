@@ -104,6 +104,19 @@ describe('Shop Floor mobile work selection',()=>{
   c.paintVolumeMl='125.5';service.command.mockResolvedValueOnce(true);await c.confirmPaintFinish();
   expect(service.command).toHaveBeenCalledWith('finish-operation',{paintVolumeMl:125.5});expect(c.paintFinishOpen).toBe(false);
  });
+ it('saves a paint amount entered through the phone number input',async()=>{
+  const {fixture,c,service,views}=await setup();views[0].status='Painting';await c.chooseProduct(views[0]);
+  const started=new Date().toISOString();service.data.update(d=>({...d,intervals:[{id:'paint',shift_id:'shift',worker_id:'worker',unit_id:'u1',stage:'Painting',operation:'Second primer',part_id:null,started_at:started,ended_at:null}]}));
+  await c.finishWork();fixture.detectChanges();
+  const input=fixture.nativeElement.querySelector('[aria-label="Paint used in millilitres"]') as HTMLInputElement;
+  input.value='750';input.dispatchEvent(new Event('input'));fixture.detectChanges();
+  expect(c.paintVolumeMl).toBe(750);
+  service.command.mockResolvedValueOnce(true);
+  (fixture.nativeElement.querySelector('.modal .primary') as HTMLButtonElement).click();
+  await fixture.whenStable();
+  expect(service.command).toHaveBeenCalledWith('finish-operation',{paintVolumeMl:750});
+  expect(c.paintFinishOpen).toBe(false);
+ });
  it('finishes painting sanding without a paint amount',async()=>{
   const {c,service,views}=await setup();views[0].status='Painting';await c.chooseProduct(views[0]);
   const started=new Date().toISOString();service.data.update(d=>({...d,intervals:[{id:'sand',shift_id:'shift',worker_id:'worker',unit_id:'u1',stage:'Painting',operation:'First sanding',part_id:null,started_at:started,ended_at:null}]}));

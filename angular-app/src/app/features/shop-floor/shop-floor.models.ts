@@ -3,8 +3,8 @@ export const BACKDROP_PAINT_OPERATIONS = ['First primer', 'First sanding', 'Fini
 export function paintOperations(productName:string){return /backdrop/i.test(productName||'')?BACKDROP_PAINT_OPERATIONS:PAINT_OPERATIONS;}
 export function paintLabel(operation:string,operations:string[]){return operations.length===3?({'First primer':'Primer','First sanding':'Sanding'} as Record<string,string>)[operation]||operation:operation;}
 export function needsPaintVolume(operation:string){return ['First primer','Second primer','Finish coat','Repaint'].includes(operation);}
-export function parsePaintVolume(value:string):number|null {
- const input=value.trim();if(!/^(?:\d+)(?:\.\d{1,2})?$/.test(input))return null;
+export function parsePaintVolume(value:string|number):number|null {
+ const input=String(value).trim();if(!/^(?:\d+)(?:\.\d{1,2})?$/.test(input))return null;
  const amount=Number(input);return Number.isFinite(amount)&&amount>0&&amount<=100000?amount:null;
 }
 export const OTHER_OPERATIONS = ['Cleaning', 'Design', 'Administration', 'Development', 'Rest'];
