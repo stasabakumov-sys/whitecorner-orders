@@ -13,9 +13,10 @@ export async function transferTask(files,{address,fetchFile,sendFile=sendRdFile,
    throw Error(`${file.filename}: downloaded file size does not match the saved task.`);
   }
   const hash=createHash('sha256').update(data).digest('hex');
-  const filename=String(file.filename||'');
-  if(!/^[\x20-\x7e]{1,255}$/.test(filename)||!filename.toLowerCase().endsWith('.rd')||/[\\/]/.test(filename)){
-   throw Error(`${file.filename}: the saved RD filename cannot be sent unchanged. Use an ASCII .rd filename without path separators, then retry.`);
+  const sourceFilename=String(file.filename||'');
+  const filename=sourceFilename.replace(/\.rd$/i,'');
+  if(!/^[\x20-\x7e]{1,255}$/.test(sourceFilename)||!sourceFilename.toLowerCase().endsWith('.rd')||!filename.trim()||/[\\/]/.test(filename)){
+   throw Error(`${file.filename}: invalid laser filename. Use a non-empty ASCII name with an .rd extension and no path separators, then retry.`);
   }
   if(prepared.some(entry=>entry.filename.toUpperCase()===filename.toUpperCase()&&entry.hash!==hash))throw Error(`${file.filename}: different files have the same controller name. Rename them before retrying.`);
   prepared.push({file,data,filename,hash});

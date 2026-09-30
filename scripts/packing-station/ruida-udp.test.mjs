@@ -28,9 +28,9 @@ test('stores a named RD file only after the controller acknowledges its name',as
  });
  try{
   const file=Buffer.alloc(3500,0x55);
-  const result=await sendRdFile(file,{address:'127.0.0.1',filename:'Arch Panel Painted.rd',port:mock.address().port,localPort:0,allowLoopbackForTest:true});
-  assert.deepEqual(result,{bytes:3500,filename:'Arch Panel Painted.rd'});
-  assert.deepEqual(Buffer.from(received[0].map(unscramble)),Buffer.from([0xe8,0x02,0xe7,0x01,...Buffer.from('Arch Panel Painted.rd'),0]));
+  const result=await sendRdFile(file,{address:'127.0.0.1',filename:'Arch Panel Painted',port:mock.address().port,localPort:0,allowLoopbackForTest:true});
+  assert.deepEqual(result,{bytes:3500,filename:'Arch Panel Painted'});
+  assert.deepEqual(Buffer.from(received[0].map(unscramble)),Buffer.from([0xe8,0x02,0xe7,0x01,...Buffer.from('Arch Panel Painted'),0]));
   assert.deepEqual(Buffer.concat(received.slice(1)),file);
  }finally{mock.close();}
 });
@@ -41,7 +41,7 @@ test('does not send file bytes when the filename command is rejected',async()=>{
  let packets=0;
  mock.on('message',(_packet,remote)=>{packets++;mock.send(Buffer.from([0x46]),remote.port,remote.address);});
  try{
-  await assert.rejects(sendRdFile(Buffer.from([1,2,3]),{address:'127.0.0.1',filename:'TEST.rd',port:mock.address().port,localPort:0,allowLoopbackForTest:true}),/Controller rejected/);
+  await assert.rejects(sendRdFile(Buffer.from([1,2,3]),{address:'127.0.0.1',filename:'TEST',port:mock.address().port,localPort:0,allowLoopbackForTest:true}),/Controller rejected/);
   assert.equal(packets,1);
  }finally{mock.close();}
 });
