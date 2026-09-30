@@ -5,8 +5,16 @@ The laser cuts packaging boxes. Its `.rd` jobs are separate from Product CNC `.c
 ## Hub workflow
 
 1. A manager opens **Products → product card → Packing**. Each saved physical box can have multiple `.rd` files. A positive **Copies** count belongs to each file and tells the operator how many cutouts to make. The laptop sends each distinct file once; it does not start the laser or automatically repeat cutting.
-2. **Packing → Manage Packing** lists physical product units by production stage, from Packing to New. The manager presses **Send** for the matching saved packaging variant. No employee is selected. The server rejects the send unless every box in that profile has at least one `.rd` file. Each task saves a snapshot of packaging, filenames, storage paths and copy counts, so later profile edits cannot rewrite sent work.
+2. **Packing → Manage Packing** lists physical product units by production stage, from Packing to New. The manager presses **Send** for the matching saved packaging variant. No employee is selected. The server rejects the send unless every box in that profile has at least one `.rd` file. Each task saves a snapshot of packaging, filenames, storage paths and copy counts. Replacing an existing RD file in Product Packing explicitly updates that file in all unfinished tasks using its ID. Completed and cancelled snapshots stay unchanged. Other profile edits do not rewrite sent work.
 3. **Packing → Packing work** shows each sent task to every active Hub member, with the Product packaging, box drawing, RD files and the operator's cutting quantity for each file. **Load to laser** queues a transfer only while a station heartbeat is fresh. The laptop transfers each distinct RD file once; the quantity is a visual instruction only and is never configured in the machine by Hub. The operator checks the controller file list, sets the required number of cuts and starts cutting at the machine panel. Completion in this section records packaging work and does not change the product's Production Board stage.
+
+## Replacing an RD file in current work
+
+Migration `20260930000200_replace_active_packing_rd.sql` allows the existing Replace control to save a new file and update unfinished task snapshots atomically. It preserves the file ID, box information, other files and their Done marks. The replaced file's Done mark is cleared, affected tasks return to Sent to cutting, and a fresh **Load to laser** is required. Replacement never queues a transfer, starts cutting or changes the production stage. Completed tasks retain their original files; storage cleanup continues to protect those objects.
+
+If any affected task has a queued or claimed transfer, replacement fails without changing the saved file or tasks. Wait for that transfer to finish, then retry. Stale revisions are rejected. Deletion and copies-only edits remain blocked while the file is used by active work. Saving a replacement can include the desired copy count.
+
+New task creation locks the packaging profile, as file saving already does, to prevent a concurrent Send from capturing the old file during replacement. Task locks serialize replacements with transfer requests and cut completion.
 
 ## Accounts
 
