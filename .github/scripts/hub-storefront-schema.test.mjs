@@ -25,13 +25,14 @@ try{
  assert.deepEqual((await db.query('select id,public from storage.buckets order by id')).rows,[{id:'catalog-media',public:true},{id:'catalog-source-media',public:false}]);
  // Rehearse the actual read-only audit SQL on synthetic data, never customer records.
  await db.exec(`create table wc_shipping_products(id text primary key,wix_product_id text);
- create table wc_wix_catalog_jobs(site_id text,run_id text,next_offset int,expected_total int,complete boolean,updated_at timestamptz);
- create table wc_wix_catalog_products(site_id text,run_id text,shipping_product_id text,source_product jsonb,synced_at timestamptz);
- insert into wc_wix_catalog_jobs values('site','run',1,1,true,now());
+ create table wc_wix_catalog_jobs(site_id text,run_id uuid,next_offset int,expected_total int,complete boolean,updated_at timestamptz);
+ create table wc_wix_catalog_products(site_id text,run_id uuid,shipping_product_id text,source_product jsonb,synced_at timestamptz);
+ insert into wc_wix_catalog_jobs values('site','11111111-1111-4111-8111-111111111111',1,1,true,now());
  insert into wc_shipping_products values('hub','wix');`);
+ await db.exec(await readFile('supabase/migrations/20260930000400_catalog_release_fence.sql','utf8'));
  const source={visible:true,manageVariants:true,variants:[{id:'v',variant:{priceData:{price:100,discountedPrice:90,currency:'AUD'}},stock:{inStock:true,trackQuantity:false}}]};
  const payload={schemaVersion:1,categories:[],products:[{id:'hub',price:90,variants:[{id:'v',price:90,inStock:true,trackQuantity:false,quantity:null}]}]};
- const saveSource=async(value)=>{await db.exec('delete from wc_wix_catalog_products');await db.query("insert into wc_wix_catalog_products values('site','run','hub',$1,now())",[JSON.stringify(value)]);};
+ const saveSource=async(value)=>{await db.exec('delete from wc_wix_catalog_products');await db.query("insert into wc_wix_catalog_products values('site','11111111-1111-4111-8111-111111111111','hub',$1,now())",[JSON.stringify(value)]);};
  await saveSource(source);
  await db.query("update wc_storefront_catalog set payload=$1,published_at=now()-interval '1 hour'",[JSON.stringify(payload)]);
  const audit=async()=>(await db.query(freshnessQuery)).rows[0].audit;
@@ -46,5 +47,10 @@ try{
  const variantChanged=structuredClone(source);variantChanged.variants[0].id='new';await saveSource(variantChanged);report=await audit();assert.equal(report.variants_not_published,1);assert.equal(report.published_variants_missing_or_hidden,1);
  await saveSource({...source,manageVariants:false,priceData:{price:120,currency:'AUD'}});assert.equal((await audit()).simple_product_price_changes,1);
  await db.exec('update wc_wix_catalog_jobs set complete=false');assert.equal((await audit()).import_complete,false);
+ const publish=()=>db.query("select wc_storefront_publish_run('site','11111111-1111-4111-8111-111111111111',$1::jsonb)",[JSON.stringify(payload)]);
+ await assert.rejects(publish);
+ await db.exec("update wc_wix_catalog_jobs set complete=true;update wc_wix_catalog_collections set run_id='11111111-1111-4111-8111-111111111111'");
+ assert.equal((await publish()).rows.length,1);
+ await db.exec('set role anon');await assert.rejects(publish);await db.exec('reset role');
  console.log('Catalogue migration, RLS and bucket isolation verified.');
 }finally{await db.close();}

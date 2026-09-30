@@ -18,10 +18,12 @@ on:
       - 'supabase/functions/wix-orders-sync/catalog-import*'
       - 'supabase/migrations/**'
   workflow_dispatch:
+  schedule:
+    - cron: '0 17 * * *' # 03:00 Australia/Brisbane
 permissions:
   contents: read
 concurrency:
-  group: hub-storefront-catalog-${{ github.event_name }}-${{ github.ref }}
+  group: hub-storefront-catalog-production
   cancel-in-progress: false
 jobs:
   checks:
@@ -57,3 +59,35 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/hub-storefront-audit.mjs
+      - name: Verify existing importer gateway setting without changing production
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/hub-storefront-production.mjs --check
+  production:
+    needs: checks
+    if: github.ref == 'refs/heads/main' && github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: supabase/setup-cli@v1
+        if: github.event_name != 'schedule'
+        with:
+          version: latest
+      - name: Apply fenced catalogue publication migration
+        if: github.event_name != 'schedule'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/hub-storefront-production.mjs --apply
+      - name: Deploy catalogue maintenance function preserving verified gateway setting
+        if: github.event_name != 'schedule'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy hub-catalog-sync --project-ref zgvnrpspwluapaxnycrg --no-verify-jwt
+      - name: Refresh Wix snapshots and publish verified public catalogue
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/hub-storefront-production.mjs --sync
