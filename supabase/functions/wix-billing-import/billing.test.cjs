@@ -21,12 +21,20 @@ test('queries all statuses using cursor pagination and a fixed creation cutoff',
     calls++;
     assert.equal(url, 'https://www.wixapis.com/invoices/v4/invoices/query');
     const {query} = JSON.parse(options.body);
-    assert.deepEqual(query.filter, {createdDate: {$lte: fixture.createdDate}});
+    assert.equal(query.filter, undefined);
+    assert.equal(query.sort, undefined);
     assert.deepEqual(query.cursorPaging, {limit: 50, cursor: 'cursor-1'});
     return Response.json({invoices: [fixture], pagingMetadata: {count: 1, hasNext: true, cursors: {next: 'cursor-2'}}});
   });
   assert.equal(calls, 1); assert.equal(page.next, 'cursor-2'); assert.equal(page.complete, false);
   assert.equal(page.rows[0].total, '123.4567'); assert.equal(page.rows[0].paid, '100.00');
+  await queryPage('receipt', {}, null, fixture.createdDate, async (_, options) => {
+    const {query} = JSON.parse(options.body);
+    assert.deepEqual(query.filter, {createdDate: {$lte: fixture.createdDate}});
+    assert.deepEqual(query.sort, [{fieldName: 'id', order: 'ASC'}]);
+    assert.deepEqual(query.cursorPaging, {limit: 50});
+    return Response.json({receipts: [], pagingMetadata: {count: 0, hasNext: false}});
+  });
 });
 test('missing counts, stuck cursors and duplicate IDs never claim completion', async () => {
   for (const value of [
