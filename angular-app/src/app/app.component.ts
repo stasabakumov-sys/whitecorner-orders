@@ -45,6 +45,7 @@ const inviteEntry = new URLSearchParams(window.location.hash.replace(/^#/, '')).
         <a routerLink="/fulfilment" routerLinkActive="active"><span>✓</span>Fulfilment</a>
         <a routerLink="/email" routerLinkActive="active"><span>✉</span>Email</a>
         <a routerLink="/finance" routerLinkActive="active"><span>$</span>Finance</a>
+        <a routerLink="/billing-documents" routerLinkActive="active"><span>▤</span>Invoices & receipts</a>
         <a routerLink="/product-costing" routerLinkActive="active"><span>▤</span>Order Costing</a>
         <a routerLink="/shipping-data" routerLinkActive="active"><span>⇄</span>Products</a>
         @if(members.manager()){<a routerLink="/users" routerLinkActive="active"><span>♙</span>Users</a>}

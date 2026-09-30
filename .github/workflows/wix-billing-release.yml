@@ -1,0 +1,60 @@
+name: Release Wix billing archive
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Deploy the approved billing archive or verify it without changes
+        type: choice
+        options: [verify, deploy]
+        default: verify
+permissions:
+  contents: read
+concurrency:
+  group: wix-billing-production-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: denoland/setup-deno@v2
+        if: inputs.mode == 'deploy'
+        with:
+          deno-version: v2.9.6
+      - name: Check new Edge Function
+        if: inputs.mode == 'deploy'
+        run: deno check --no-lock supabase/functions/wix-billing-import/index.ts
+      - name: Install isolated test dependencies
+        if: inputs.mode == 'deploy'
+        run: |
+          npm ci --prefix angular-app --ignore-scripts --no-audit --no-fund
+          npm install --prefix "$RUNNER_TEMP/billing-db-test" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+      - name: Verify adapter, auth and SQL before release
+        if: inputs.mode == 'deploy'
+        run: |
+          node --test supabase/functions/wix-billing-import/billing.test.cjs
+          node supabase/functions/wix-billing-import/check.cjs
+          BILLING_PGLITE_PATH="$RUNNER_TEMP/billing-db-test/node_modules/@electric-sql/pglite" node --test supabase/functions/wix-billing-import/migration.test.cjs
+      - name: Apply only the billing archive migration
+        if: inputs.mode == 'deploy'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/wix-billing-release.mjs --apply
+      - uses: supabase/setup-cli@v1
+        if: inputs.mode == 'deploy'
+        with:
+          version: latest
+      - name: Deploy protected billing function with default JWT verification
+        if: inputs.mode == 'deploy'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy wix-billing-import --project-ref zgvnrpspwluapaxnycrg
+      - name: Verify production security and aggregate archive counts
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/wix-billing-release.mjs --verify

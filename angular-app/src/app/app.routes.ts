@@ -10,6 +10,7 @@ import { DeliveryReviewComponent } from './features/delivery-review/delivery-rev
 import { PartnerPansComponent } from './features/partner-pans/partner-pans.component';
 
 export const routes:Routes=[
+  {path:'billing-documents',loadComponent:()=>import('./features/billing/billing.component').then(m=>m.BillingComponent)},
   {path:'',pathMatch:'full',redirectTo:'home'},
   {path:'home',component:HomeComponent},
   {path:'orders',component:OrdersComponent},
