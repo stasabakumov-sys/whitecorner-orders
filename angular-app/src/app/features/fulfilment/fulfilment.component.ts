@@ -68,6 +68,7 @@ type BookingDraft = {
       @if (currentSelected(); as row) {
         @if (f.orderFor(row); as o) {
           <div class="drawer-body">
+            @if (f.error()) { <div class="error" role="alert">{{ f.error() }}</div> }
             <section class="section">
               <div class="section-title">Overview</div>
               <div class="overview">
@@ -110,8 +111,10 @@ type BookingDraft = {
                 <div class="section-title">Packages</div>
                 @if (row.status === 'Fulfilled') {
                   <div class="done">Fulfilled ✓</div><div class="wix-sync-ok">Wix: FULFILLED ✓</div>
-                } @else if (f.shipmentFor(row); as shipment) {
+                }
+                @if (f.shipmentFor(row); as shipment) {
                   <div class="package-head"><div><b>{{ f.packagesFor(shipment.id).length }} package(s)</b><div class="muted">Only an exact saved product profile can attach packages automatically.</div></div><p-tag [value]="shipment.status" [severity]="shipmentSeverity(shipment.status)" /></div>
+                  @if (canEditPackages(row, shipment)) {
                   @if (!f.hasSavedProfile(o)) {
                     <div class="callout profile-missing">
                       <b>No saved packaging profile for:</b> {{ f.profileTargetName(o) }}
@@ -123,15 +126,16 @@ type BookingDraft = {
                   } @else {
                     <div class="callout profile-saved"><b>Saved product profile:</b> {{ f.profileTargetName(o) }}</div>
                   }
+                  }
                   @for (pkg of f.packagesFor(shipment.id); track pkg.id) {
                     <div class="package-card">
                       <div class="package-no">{{ pkg.package_no }}</div>
                       <div class="package-fields">
-                        <label>Name<input pInputText #pn [value]="pkg.package_name || ''" /></label>
-                        <label>L mm<input pInputText #pl type="number" [value]="pkg.length_mm ?? ''" /></label>
-                        <label>W mm<input pInputText #pw type="number" [value]="pkg.width_mm ?? ''" /></label>
-                        <label>H mm<input pInputText #ph type="number" [value]="pkg.height_mm ?? ''" /></label>
-                        <label>kg<input pInputText #pk type="number" step="0.1" [value]="pkg.weight_kg ?? ''" /></label>
+                        <label>Name<input pInputText #pn [value]="pkg.package_name || ''" [readOnly]="!canEditPackages(row, shipment)" /></label>
+                        <label>L mm<input pInputText #pl type="number" [value]="pkg.length_mm ?? ''" [readOnly]="!canEditPackages(row, shipment)" /></label>
+                        <label>W mm<input pInputText #pw type="number" [value]="pkg.width_mm ?? ''" [readOnly]="!canEditPackages(row, shipment)" /></label>
+                        <label>H mm<input pInputText #ph type="number" [value]="pkg.height_mm ?? ''" [readOnly]="!canEditPackages(row, shipment)" /></label>
+                        <label>kg<input pInputText #pk type="number" step="0.1" [value]="pkg.weight_kg ?? ''" [readOnly]="!canEditPackages(row, shipment)" /></label>
                         <div class="contents-summary">
                           <b>Assigned products:</b>
                           @if (assignedProductNames(pkg).length) {
@@ -141,7 +145,9 @@ type BookingDraft = {
                           } @else { <span>not specified</span> }
                         </div>
                       </div>
-                      <div class="package-actions"><p-button label="Contents" size="small" severity="secondary" outlined [badge]="String(f.packageContents(pkg).length)" (onClick)="openPackageContents(pkg)" /><p-button label="Save" size="small" outlined (onClick)="savePkg(pkg,pn.value,pl.value,pw.value,ph.value,pk.value)" /><p-button label="Remove" size="small" severity="danger" text (onClick)="f.removePackage(pkg)" /></div>
+                      @if (canEditPackages(row, shipment)) {
+                        <div class="package-actions"><p-button label="Contents" size="small" severity="secondary" outlined [badge]="String(f.packageContents(pkg).length)" (onClick)="openPackageContents(pkg)" /><p-button icon="pi pi-check" ariaLabel="Save package" title="Save package" size="small" outlined (onClick)="savePkg(pkg,pn.value,pl.value,pw.value,ph.value,pk.value)" /><p-button label="Remove" size="small" severity="danger" text (onClick)="f.removePackage(pkg)" /></div>
+                      }
                     </div>
                   } @empty { <div class="callout warning">No exact packaging profile exists. Add the actual package(s) below — nothing has been guessed or copied from another product.</div> }
                   @if (f.unassignedOrderItems(shipment.id).length) {
@@ -156,9 +162,9 @@ type BookingDraft = {
                       </ul>
                     </div>
                   }
-                  @if (row.status === 'Shipping Preparation') {
+                  @if (canEditPackages(row, shipment)) {
                     <div class="actions">
-                      <p-button label="Add custom box" severity="secondary" outlined (onClick)="f.addPackage(shipment)" />
+                      <p-button icon="pi pi-plus" ariaLabel="Add custom box" title="Add custom box" severity="secondary" outlined (onClick)="f.addPackage(shipment)" />
                       @if (shipment.status === 'Packaging Review') { <p-button label="Approve packages" [disabled]="!f.shipmentComplete(shipment.id)" (onClick)="f.approvePackages(shipment)" /> }
                     </div>
                     <div class="muted hint">For the final shipment you can move Contents between boxes, remove unused boxes, or add a custom box. Approve the final list before requesting fresh quotes.</div>
@@ -170,10 +176,11 @@ type BookingDraft = {
                     <p-button label="Retry Wix synchronization" [disabled]="!f.canSyncShipping(row) || f.syncingOrderIds().includes(row.order_id)" [loading]="f.syncingOrderIds().includes(row.order_id)" (onClick)="f.syncShippingFulfillment(row)" />
                     @if (!f.canSyncShipping(row)) { <div class="muted hint">Waiting for saved tracking, carrier and service before Wix synchronization.</div> }
                   }
-                } @else { <div class="callout warning">Shipment record is being prepared.</div> }
+                } @else { <div class="callout warning">{{ row.status === 'Fulfilled' ? 'No saved shipment record is available for this order.' : 'Shipment record is being prepared.' }}</div> }
               </section>
 
-              @if (row.status !== 'Fulfilled' && f.shipmentFor(row); as shipment) {
+              @if (f.shipmentFor(row); as shipment) {
+                @if (canEditPackages(row, shipment)) {
                 <section class="section quote-section">
                   <div class="section-title">Fast Courier quote</div>
                   <div class="callout safety"><b>Quote only.</b> This does not book a courier or charge the account.</div>
@@ -241,7 +248,11 @@ type BookingDraft = {
                     }
                   }
 
-                  @if (f.bookingStatus(shipment); as status) {
+                </section>
+                }
+
+                @if (f.bookingStatus(shipment); as status) {
+                  <section class="section" aria-label="Shipping documents">
                     <div class="booking-result">
                       <div class="booking-result-head"><div><b>Fast Courier booking</b><span>{{ bookingStatusLabel(status.orderStatus) }}</span></div><p-button label="Refresh documents" size="small" severity="secondary" outlined icon="pi pi-refresh" [loading]="f.checkingBookingShipmentId() === shipment.id" (onClick)="f.refreshBookingStatus(shipment.id)" /></div>
                       <div class="booking-identifiers">
@@ -256,10 +267,14 @@ type BookingDraft = {
                         @if (!status.storedDocuments?.label?.path) { <span class="muted">The courier is still preparing the label. It will be saved here automatically.</span> }
                       </div>
                       @if (status.documentStorageError) { <div class="callout warning">Fast Courier returned documents, but they could not be copied to private storage: {{ status.documentStorageError }}</div> }
-                      <div class="muted wix-later">Saved labels are ready for the future Wix integration; nothing is sent to Wix yet.</div>
                     </div>
-                  }
-                </section>
+                  </section>
+                } @else if (!canEditPackages(row, shipment) && shipment.courier_order_id) {
+                  <section class="section" aria-label="Shipping documents">
+                    <div class="callout">Booking details and documents are not available yet. Refresh to retrieve them.</div>
+                    <p-button label="Refresh documents" icon="pi pi-refresh" [loading]="f.checkingBookingShipmentId() === shipment.id" (onClick)="f.refreshBookingStatus(shipment.id)" />
+                  </section>
+                }
               }
             }
           </div>
@@ -365,6 +380,7 @@ export class FulfilmentComponent implements OnInit {
   statusSeverity(row: FulfilmentRow): 'success'|'info'|'warn'|'secondary' { const s=this.displayStatus(row); if(s==='Fulfilled'||s==='Delivered')return'success'; if(s==='Ready to Quote'||s==='Quoted'||s==='Quote Selected')return'info'; if(s==='Packaging Review'||s==='Awaiting Pickup')return'warn'; return'secondary'; }
   shipmentSeverity(status:string): 'success'|'info'|'warn'|'secondary' { if(status==='Delivered')return'success'; if(status==='Ready to Quote'||status==='Quoted'||status==='Quote Selected')return'info'; if(status==='Packaging Review')return'warn'; return'secondary'; }
   canQuote(status:string){return status==='Ready to Quote'||status==='Quoted'||status==='Quote Selected';}
+  canEditPackages(row:FulfilmentRow,shipment:ShipmentRow){return row.status==='Shipping Preparation'&&!['Shipping Booked','In Transit','Delivered'].includes(shipment.status);}
   orderItems(items: OrderItemRow[]) { return items.filter((i) => !/^(delivery|shipping)(\s+(fee|charge))?$/i.test(String(i.product_name || '').trim())); }
   composition(order:OrderRow){return orderProducts(order.wc_order_items||[]);}
   compositionGroups(order:OrderRow){const c=this.composition(order);return [...c.products,...c.unresolved.map(item=>({item,components:[item]}))];}

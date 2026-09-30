@@ -4,7 +4,7 @@ import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderRow } from '../../core/models/order.models';
-import { FulfilmentRow, FulfilmentService } from '../../core/services/fulfilment.service';
+import { FulfilmentRow, FulfilmentService, ShipmentRow } from '../../core/services/fulfilment.service';
 import { FastCourierService } from '../../core/services/fast-courier.service';
 import { FulfilmentComponent } from './fulfilment.component';
 
@@ -33,7 +33,18 @@ describe('FulfilmentComponent', () => {
     bookingShipmentId: signal<string | null>(null),
     load: vi.fn(async () => undefined),
     orderFor: vi.fn((row: FulfilmentRow) => row.order_id === order.id ? order : undefined),
-    shipmentFor: vi.fn(() => undefined),
+    shipmentFor: vi.fn<() => ShipmentRow | undefined>(() => undefined),
+    packagesFor: vi.fn(() => [{id:'package-1',package_no:1,package_name:'Saved box',length_mm:500,width_mm:400,height_mm:300,weight_kg:12,contents:[]}]),
+    packageContents: vi.fn(() => []),
+    unassignedOrderItems: vi.fn(() => []),
+    noPackageItems: vi.fn(() => []),
+    bookingStatus: vi.fn((shipment:ShipmentRow) => (shipment.selected_quote as any)?.booking?.status ?? null),
+    checkingBookingShipmentId: signal<string|null>(null),
+    syncingOrderIds: signal<string[]>([]),
+    syncFor: vi.fn(() => undefined),
+    canSyncShipping: vi.fn(() => false),
+    openStoredDocument: vi.fn(async (_path:string) => undefined),
+    refreshBookingStatus: vi.fn(async (_id:string) => undefined),
   };
 
   beforeEach(async () => {
@@ -42,6 +53,9 @@ describe('FulfilmentComponent', () => {
     service.bookShipment.mockReset().mockResolvedValue(true);
     service.error.set('');
     service.bookingShipmentId.set(null);
+    service.shipmentFor.mockReset().mockReturnValue(undefined);
+    service.openStoredDocument.mockClear();
+    service.refreshBookingStatus.mockClear();
     await TestBed.configureTestingModule({
       imports: [FulfilmentComponent],
       providers: [
@@ -83,6 +97,55 @@ describe('FulfilmentComponent', () => {
     fixture.componentInstance.selected.set(delivery);
     rows.set([{ ...delivery, status: 'Fulfilled' }]);
     expect(fixture.componentInstance.currentSelected()?.status).toBe('Fulfilled');
+  });
+
+  function bookedShipment():ShipmentRow {
+    return {id:'shipment-1',fulfilment_id:delivery.id,order_id:order.id,status:'Shipping Booked',courier_order_id:'courier-1',selected_quote:{booking:{status:{orderStatus:'booked',consignmentNumber:'TEST-123',storedDocuments:{label:{path:'test/label.pdf'},invoice:{path:'test/invoice.pdf'},manifest:{path:'test/manifest.pdf'}}}}} as any};
+  }
+
+  it('keeps saved packages and working document buttons visible as shipping becomes fulfilled and on reopening', async () => {
+    const booked = {...delivery,status:'Shipping Booked' as const};
+    rows.set([booked]);
+    service.shipmentFor.mockReturnValue(bookedShipment());
+    fixture = TestBed.createComponent(FulfilmentComponent);
+    fixture.componentInstance.selected.set(booked);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const docsBefore = fixture.nativeElement.querySelector('[aria-label="Shipping documents"]');
+    expect(docsBefore.textContent).toContain('Open label');
+    rows.set([{...booked,status:'Fulfilled'}]);
+    fixture.detectChanges();
+    const docsAfter = fixture.nativeElement.querySelector('[aria-label="Shipping documents"]');
+    expect(docsAfter).toBe(docsBefore);
+    expect(docsAfter.textContent).toContain('TEST-123');
+    expect(docsAfter.textContent).toContain('Open invoice');
+    expect(docsAfter.textContent).toContain('Open manifest');
+    expect(fixture.nativeElement.querySelector('.package-fields input').value).toBe('Saved box');
+    expect([...fixture.nativeElement.querySelectorAll('.package-fields input')].every((input:any)=>input.readOnly)).toBe(true);
+    expect(fixture.nativeElement.querySelector('.package-actions')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.quote-section')).toBeNull();
+    const button = (text:string) => [...fixture.nativeElement.querySelectorAll('button')].find((b:any)=>b.textContent.includes(text)) as HTMLButtonElement;
+    button('Open label').click();
+    button('Refresh documents').click();
+    expect(service.openStoredDocument).toHaveBeenCalledWith('test/label.pdf');
+    expect(service.refreshBookingStatus).toHaveBeenCalledWith('shipment-1');
+    fixture.componentInstance.selected.set(null);fixture.detectChanges();
+    fixture.componentInstance.selected.set(rows()[0]);fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Shipping documents"]').textContent).toContain('Open label');
+    expect(service.bookShipment).not.toHaveBeenCalled();
+  });
+
+  it('allows document recovery without status and shows errors beside the documents without removing saved packages', () => {
+    const completed = {...delivery,status:'Fulfilled' as const};
+    rows.set([completed]);
+    service.shipmentFor.mockReturnValue({...bookedShipment(),selected_quote:null});
+    fixture = TestBed.createComponent(FulfilmentComponent);
+    fixture.componentInstance.selected.set(completed);fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Shipping documents"]').textContent).toContain('Refresh documents');
+    service.error.set('Could not refresh Fast Courier documents. Please retry.');fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.drawer-body [role="alert"]').textContent).toContain('Please retry');
+    expect(fixture.nativeElement.querySelector('.package-fields input').value).toBe('Saved box');
+    expect(service.bookShipment).not.toHaveBeenCalled();
   });
 
   function bookingSetup(){
