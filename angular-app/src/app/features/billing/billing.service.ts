@@ -95,12 +95,15 @@ export class BillingService {
       let page = 0;
       do {
         const list = id ? {documents: [{id, pdf_saved: false}], total: 1} : await this.request({action: 'list', kind: this.kind(), page, search: ''});
-        for (const document of list.documents) {
+        const pending = list.documents.filter((document: BillingDocument) => !document.pdf_saved);
+        for (let offset = 0; offset < pending.length; offset += 4) {
           if (this.pauseRequested) break;
-          if (document.pdf_saved) continue;
           this.progress.set(`Copying PDFs: ${copied} saved, ${failed} need review…`);
-          try { await this.request({action: 'copyPdf', id: document.id}); copied++; }
-          catch (e) { failed++; this.error.set(this.message(e)); }
+          await Promise.all(pending.slice(offset, offset + 4).map(async (document: BillingDocument) => {
+            try { await this.request({action: 'copyPdf', id: document.id}); copied++; }
+            catch (e) { failed++; this.error.set(this.message(e)); }
+            if (!this.pauseRequested) this.progress.set(`Copying PDFs: ${copied} saved, ${failed} need review…`);
+          }));
         }
         page++;
         if (id || page * 50 >= list.total) break;

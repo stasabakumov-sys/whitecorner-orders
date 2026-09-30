@@ -39,4 +39,24 @@ describe('billing migration feedback', () => {
     await billing.copyPdfs();
     expect(copied).toEqual(['bad', 'good']); expect(billing.error()).toContain('too large'); expect(billing.progress()).toContain('1 PDFs copied; 1 need review');
   });
+  it('limits PDF concurrency and waits for in-flight saves before pausing', async () => {
+    const started: string[] = [], release: (() => void)[] = [];
+    const billing = service(async body => {
+      if (body.action === 'copyPdf') {
+        started.push(body.id);
+        await new Promise<void>(resolve => release.push(resolve));
+        return {ok: true};
+      }
+      return {ok: true, documents: Array.from({length: 8}, (_, i) => ({id: String(i)})), total: 8, sources: []};
+    });
+    const operation = billing.copyPdfs();
+    await vi.waitFor(() => expect(started).toHaveLength(4));
+    billing.pause();
+    expect(billing.busy()).toBe(true);
+    release.forEach(resolve => resolve());
+    await operation;
+    expect(started).toHaveLength(4);
+    expect(billing.busy()).toBe(false);
+    expect(billing.progress()).toContain('Paused. 4 PDFs copied; 0 need review');
+  });
 });
