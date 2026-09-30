@@ -87,6 +87,22 @@ one, review collection removal, revocation of formerly public media when product
 become hidden, failure recovery and protection from concurrent publication. The
 importer retains absent records; absence or an access failure is not deletion.
 
+## Production verification on 30 September
+
+Aggregate-only read-only audit [36699925518](https://github.com/stasabakumov-sys/whitecorner-orders/actions/runs/36699925518)
+passed at 10:03 UTC (20:03 Brisbane). All three restored migration sources exactly
+match their registered production versions. There are 179 source/current-run
+snapshots, 103 visible and published products, 12 local-only entries, 1,114 confirmed
+media records and 12 deferred media records. The audited visibility, variant
+identity, price and stock difference counters are all zero.
+
+The last full scan completed on 28 September at 08:15 UTC; the publication is from
+08:30 UTC that day. Only one snapshot was read after publication; the latest read
+was 29 September at 12:03 UTC. No snapshots were read in the six hours preceding
+this audit. `cron.job` is absent in production. External schedulers were not
+inspected. These facts do not establish current Wix freshness; automatic updating
+must be configured and verified separately before relying on it.
+
 ## Current storefront copy
 
 On 30 September the owner published a copy in the current account:
