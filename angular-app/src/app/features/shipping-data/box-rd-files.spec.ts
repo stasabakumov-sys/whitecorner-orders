@@ -29,4 +29,21 @@ describe('box RD files',()=>{
   await component.upload(event(new File(['rd'],'new.rd')),existing);
   expect(component.files[0]).toBe(existing);expect(component.error).toContain('Reload this box');expect(remove).not.toHaveBeenCalled();
  });
+ it('confirms replacement and the required laser reload only after saving',async()=>{
+  const {component,rpc,remove,event}=setup();const existing:BoxRdFile={id:'saved',profile_signature:'profile',box_index:0,object_path:'old/path',filename:'old.rd',size_bytes:2,copies:2,revision:'old'};
+  component.files=[existing];let finish:any;rpc.mockReturnValueOnce(new Promise(resolve=>finish=resolve));
+  const pending=component.upload(event(new File(['rd'],'new.rd')),existing);
+  await vi.waitFor(()=>expect(rpc).toHaveBeenCalledOnce());
+  expect(component.success).toBe('');expect(component.files[0]).toBe(existing);expect(component.busy).toBe('upload');
+  finish({data:{...existing,filename:'new.rd',object_path:'new/path',revision:'new'},error:null});await pending;
+  expect(rpc).toHaveBeenCalledWith('wc_save_box_rd_file',expect.objectContaining({p_id:'saved',p_expected:'old'}));
+  expect(component.files[0].filename).toBe('new.rd');expect(component.success).toContain('all unfinished Packing tasks');expect(component.success).toContain('laser again');
+  expect(remove).toHaveBeenCalledWith(['old/path']);
+ });
+ it('keeps the old file when an affected task is transferring',async()=>{
+  const {component,rpc,remove,event}=setup();const existing:BoxRdFile={id:'saved',profile_signature:'profile',box_index:0,object_path:'old/path',filename:'old.rd',size_bytes:2,copies:2,revision:'old'};
+  component.files=[existing];rpc.mockResolvedValueOnce({data:null,error:{message:'An affected Packing task is loading files to the laser. Wait for the transfer to finish, then replace the file again.'}});
+  await component.upload(event(new File(['rd'],'new.rd')),existing);
+  expect(component.files[0]).toBe(existing);expect(component.error).toContain('Wait for the transfer');expect(component.success).toBe('');expect(component.busy).toBe('');expect(remove).not.toHaveBeenCalled();
+ });
 });

@@ -25,6 +25,7 @@ export interface BoxRdFile {
    }@else{<span>{{file.copies}} ×</span>}
   </div>}@empty{<small>No RD files for this box.</small>}
   @if(members.manager()){
+  <small>Replacing a file also updates all unfinished Packing tasks using it. Its Done mark is cleared; load the files to the laser again before cutting.</small>
   <div class="new-file"><label class="upload icon" title="Add RD file" aria-label="Add RD file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input type="file" accept=".rd" aria-label="Add RD file" [disabled]="!!busy||loading||loadError" (change)="upload($event)"></label><label>Copies <input type="number" min="1" max="1000" step="1" [(ngModel)]="newCopies" [disabled]="!!busy" aria-label="Copies for new RD file"></label></div>
   }
  </div>`,styles:[`
@@ -57,7 +58,7 @@ export class BoxRdFilesComponent implements OnChanges {
    const {error:uploadError}=await bucket.upload(path,file,{contentType:'application/octet-stream',upsert:false});if(uploadError)throw uploadError;uploaded=true;
    attaching=true;const {data:saved,error:saveError}=await this.db.client.rpc('wc_save_box_rd_file',{p_id:replacing?.id||null,p_signature:this.signature,p_index:this.index,p_path:path,p_filename:file.name,p_bytes:file.size,p_copies:copies,p_expected:replacing?.revision||null});if(saveError)throw saveError;
    if(!saved?.id)throw Error('Server did not confirm the saved file.');
-   if(generation===this.generation){this.files=replacing?this.files.map(row=>row.id===saved.id?saved:row):[...this.files,saved];this.success=`${file.name} uploaded and saved with ${copies} ${copies===1?'copy':'copies'}.`;this.newCopies=1;}
+   if(generation===this.generation){this.files=replacing?this.files.map(row=>row.id===saved.id?saved:row):[...this.files,saved];this.success=`${file.name} uploaded and saved with ${copies} ${copies===1?'copy':'copies'}.`+(replacing?' Updated in all unfinished Packing tasks using this file. Load the files to the laser again before cutting.':'');this.newCopies=1;}
    if(previous)await bucket.remove([previous]);
   }catch(e){if(generation===this.generation)this.error=`${file.name}: ${this.message(e)} ${attaching?'Reload this box to check whether it was saved, then retry.':'Check the file and connection, then retry.'}`;
    if(uploaded&&!attaching)await this.db.client.storage.from('box-rd-files').remove([path]);
