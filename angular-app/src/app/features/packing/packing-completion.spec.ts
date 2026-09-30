@@ -17,11 +17,25 @@ describe('Manual cutting progress',()=>{
   expect(rpc).toHaveBeenCalledWith('wc_set_packing_file_done',{p_task:'task',p_file:'f2',p_done:true});
   const saved=c.tasks()[0];c.tasks.set([saved]);expect(c.fileDone(c.tasks()[0],saved.files[2])).toBe(true);
  });
- it('closes only after the last file is saved',async()=>{
+ it('keeps all checked files open until completion is explicitly confirmed',async()=>{
   const {c,rpc}=work();const current={...task(),cut_file_ids:['f0','f1','f2']};c.tasks.set([current]);
-  rpc.mockResolvedValueOnce({data:{...current,cut_file_ids:['f0','f1','f2','f3'],state:'completed'},error:null});
+  rpc.mockResolvedValueOnce({data:{...current,cut_file_ids:['f0','f1','f2','f3']},error:null});
   await c.saveFileCut(current,current.files[3],true);
-  expect(c.tasks()).toEqual([]);expect(c.success()).toContain('Boxes made');
+  expect(c.tasks()).toHaveLength(1);expect(c.completionTask()?.id).toBe('task');expect(rpc).toHaveBeenCalledTimes(1);
+  c.closeCompletion();expect(c.completionTask()).toBeNull();expect(c.cutCount(c.tasks()[0])).toBe(4);
+  c.openCompletion(c.tasks()[0]);rpc.mockResolvedValueOnce({data:{...c.tasks()[0],state:'completed'},error:null});
+  await c.confirmCompletion();expect(rpc).toHaveBeenLastCalledWith('wc_complete_packing_task',{p_id:'task'});
+  expect(c.tasks()).toEqual([]);expect(c.completionTask()).toBeNull();expect(c.success()).toContain('Boxes made confirmed');
+ });
+ it('keeps confirmation open and progress saved when closing fails',async()=>{
+  const {c,rpc}=work();const current={...task(),cut_file_ids:['f0','f1','f2','f3']};c.tasks.set([current]);c.openCompletion(current);
+  let finish:any;rpc.mockReturnValueOnce(new Promise(resolve=>finish=resolve));const saving=c.confirmCompletion();
+  c.closeCompletion();await c.confirmCompletion();expect(c.completionTask()).toBe(current);expect(rpc).toHaveBeenCalledOnce();
+  finish({data:null,error:{message:'Connection lost'}});await saving;
+  expect(c.completionError()).toContain('Connection lost');expect(c.cutCount(c.tasks()[0])).toBe(4);expect(c.completionTask()).toBe(current);
+ });
+ it('does not offer confirmation before all files are saved',()=>{
+  const {c}=work();c.openCompletion(task());expect(c.completionTask()).toBeNull();
  });
  it('retains saved progress and restores the checkbox after a save failure',async()=>{
   const {c,rpc}=work();const current={...task(),cut_file_ids:['f0','f1','f2']};c.tasks.set([current]);

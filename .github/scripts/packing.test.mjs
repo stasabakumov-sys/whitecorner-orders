@@ -38,6 +38,7 @@ try{
  await db.exec(await readFile('supabase/migrations/20260929131500_packing_reupload.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20260930000100_packing_file_progress.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20260930000200_replace_active_packing_rd.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20260930000300_packing_completion_confirmation.sql','utf8'));
  await db.query('insert into auth.users(id,email,raw_user_meta_data) values($1,$2,$3)',[worker,'worker@example.test',{full_name:'Worker'}]);
  assert.equal((await db.query("select count(*)::int n from wc_hub_members where role='manager'")).rows[0].n,2);
  assert.equal((await db.query('select role from wc_hub_members where user_id=$1',[worker])).rows[0].role,'worker');
@@ -105,7 +106,13 @@ try{
  assert.equal((await db.query('select cardinality(cut_file_ids)::int done from wc_packing_tasks where id=$1',[task.id])).rows[0].done,2);
  await db.query('select wc_set_packing_file_done($1,$2,true)',[task.id,task.files[0].file_id]);
  const final=(await db.query('select to_jsonb(wc_set_packing_file_done($1,$2,true)) result',[task.id,task.files[3].file_id])).rows[0].result;
- assert.equal(final.state,'completed');assert.equal(final.cut_file_ids.length,4);assert.ok(final.completed_at);
+ assert.equal(final.state,'transferred');assert.equal(final.cut_file_ids.length,4);assert.equal(final.completed_at,null);
+ assert.equal((await db.query('select state from wc_packing_tasks where id=$1',[task.id])).rows[0].state,'transferred');
+ await db.query('select wc_set_packing_file_done($1,$2,false)',[task.id,task.files[3].file_id]);
+ await assert.rejects(db.query('select wc_complete_packing_task($1)',[task.id]),/Mark every RD file done/);
+ await db.query('select wc_set_packing_file_done($1,$2,true)',[task.id,task.files[3].file_id]);
+ const confirmed=(await db.query('select to_jsonb(wc_complete_packing_task($1)) result',[task.id])).rows[0].result;
+ assert.equal(confirmed.state,'completed');assert.ok(confirmed.completed_at);
  await assert.rejects(db.query('select wc_set_packing_file_done($1,$2,false)',[task.id,task.files[3].file_id]),/Transfer must be confirmed/);
  await assert.rejects(db.query('select wc_complete_packing_task($1)',[task.id]),/Transfer must be confirmed/);
  await assert.rejects(db.query('select wc_request_packing_transfer($1)',[task.id]),/Only unfinished/);
