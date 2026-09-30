@@ -3,7 +3,7 @@ const ts=require('../../../angular-app/node_modules/typescript');
 function harness({access=true,dbError=false,page={collections:[{id:'c',name:'Fixture'}],totalResults:1}}={}) {
  let handler;const writes=[],calls=[];
  const db={from:table=>{calls.push(table);const q={select:()=>q,eq:()=>q,gt:()=>q,
-  maybeSingle:async()=>({data:access?{expires_at:'future'}:null,error:dbError?{}:null}),
+  maybeSingle:async()=>({data:table==='wc_wix_catalog_jobs'?{run_id:'fixture-run',complete:true}:access?{expires_at:'future'}:null,error:dbError?{}:null}),
   upsert:async rows=>{writes.push({table,rows});return {error:null};}};return q;}};
  const exports={};
  const code=ts.transpileModule(fs.readFileSync(__dirname+'/index.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
