@@ -14,6 +14,8 @@ Deployment does not itself establish that all Wix documents have been migrated.
 - Query invoices and receipts independently across all statuses, including drafts
   and archived records, without restricting them to the operational orders list.
   Each scan fixes a creation-time cutoff and follows every returned cursor.
+  Only the first request sends filter/sort; continuation sends the cursor alone
+  with its page limit because Wix encodes the original criteria in the cursor.
   A fresh scan includes documents created since the preceding scan.
 - The external identity is `(site_id, kind, wix_id)`. Internal UUIDs survive
   refresh. Link only explicit Wix eCommerce order IDs to existing Hub orders;
@@ -93,6 +95,7 @@ changed or untrusted documents retain a visible, persisted error.
    starts a new run; it does not delete the preceding run or saved documents.
 5. Run **Copy all invoice PDFs** and **Copy all receipt PDFs**. Existing saved PDFs
    are skipped; failed files do not prevent later files from being attempted.
+   At most four copies run concurrently; pausing waits for that batch to settle.
    A changed Wix source requires a fresh data scan before copying its current PDF.
 6. Compare the final run's distinct document counts and numbers with the Wix
    dashboard/export at the same cutoff, and review totals by type and currency.
@@ -113,6 +116,30 @@ and HTTP 401 for unauthenticated requests.
 Existing deployment workflows watch `supabase/config.toml`, so review their
 automatic effects before any future push to `main`.
 
+## Live migration status, 30 September 2026
+
+- Receipt scan at `2026-09-30T13:01:18.599295Z`: **592 distinct receipts** saved;
+  pagination finished and persisted run items match the run's saved count.
+- **All 592 original receipt PDFs are saved** (59,922,822 bytes). Final read-only
+  audit at 13:33 UTC confirmed zero pending PDFs, zero missing storage objects,
+  zero current PDF errors, and 592 persisted run items. See
+  [production audit 36722511720](https://github.com/stasabakumov-sys/whitecorner-orders/actions/runs/36722511720).
+  The deployed function is version 4, ACTIVE with JWT verification; all database
+  security checks passed. A transient connection loss during copying was resumed
+  safely; saved files were skipped and no failed downloads remain.
+- Invoice reads are denied by Wix for the current API identity. No invoices were
+  imported; verify the site's API-key `Manage Invoices` permission. Do not label
+  this an empty invoice archive or a completed overall migration.
+- The first continuation failed because Wix rejects repeating filter/sort with
+  a cursor. Corrected and resumed the original run without restarting or losing
+  its 50 already-saved records.
+- Original receipt PDFs require Wix authorization at the exact `manage.wix.com`
+  host. Anonymous downloads returned 401; the scoped authenticated retry saved
+  the original PDF successfully, then bulk copying resumed.
+- Independent Wix dashboard/export reconciliation remains pending: the available
+  browser has no signed-in Wix dashboard session. API scan completion alone does
+  not prove coverage of legacy documents outside this API.
+
 ## Local verification
 
 - `node --test supabase/functions/wix-billing-import/billing.test.cjs`
@@ -126,5 +153,10 @@ automatic effects before any future push to `main`.
   rejection, immutable versions, preservation of local fields and RLS/storage
   denial. It does not replace a hosted Supabase integration test.
 - From `angular-app`: `npm test -- --watch=false` and `npm run build`.
+  After the bounded-copy update: 72 test files / 416 tests passed; production
+  build passed with existing bundle-size and CommonJS warnings.
 - UI review uses the actual billing component/service with synthetic data and
-  mocked Edge responses; no live session or customer data is included.
+  mocked Edge responses; no customer data is included in those fixtures. The live
+  flow additionally verified import/resume, persistent access errors, copying,
+  pause/reload, and saved PDF counts. Review screenshots show only aggregate
+  status, without customer rows.
