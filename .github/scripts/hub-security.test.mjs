@@ -33,12 +33,9 @@ for(const f of ['supabase/orders-schema.sql',...fs.readdirSync('supabase/migrati
  await db.exec(`insert into auth.users(id,email) values('33333333-3333-3333-3333-333333333333','worker@example.test'),('44444444-4444-4444-4444-444444444444','inactive@example.test');
  update wc_hub_members set active=false where user_id='44444444-4444-4444-4444-444444444444';
  create policy fixture_finance_access on transactions for all to authenticated using(true) with check(true);
- create table wc_storefront_catalog(id text primary key,payload jsonb,published_at timestamptz);
- alter table wc_storefront_catalog enable row level security;
- revoke all on wc_storefront_catalog from public,anon,authenticated;
- grant select on wc_storefront_catalog to anon,authenticated;
- create policy storefront_read on wc_storefront_catalog for select to anon,authenticated using(id='live');
- insert into wc_storefront_catalog values('live','{}',now()),('unpublished','{}',null);
+ insert into wc_storefront_catalog values('live','{"schemaVersion":1,"products":[],"categories":[]}',now());
+ insert into wc_wix_catalog_collections values('private','{"id":"private","name":"Fixture"}',now());
+ insert into wc_catalog_media_issues values('https://fixture.invalid/private','Fixture',now());
  insert into transactions(business_category) values('Fixture');
  insert into storage.buckets(id,name,public) values('shipping-documents','shipping-documents',true) on conflict(id) do update set public=true;
  `);
@@ -66,13 +63,13 @@ for(const f of funcs){assert.equal((await db.query("select has_function_privileg
 const actor=async(id,role='authenticated')=>{await db.exec('reset role');await db.query("select set_config('test.actor',$1,false)",[id||'']);await db.exec('set role '+role);};
 for(const id of ['',outsider,inactive]){
  await actor(id);
- for(const table of ['wc_orders','wc_email_messages','wc_shipments','transactions','wc_shipping_product_summary','wc_hub_product_drafts'])assert.equal((await db.query('select count(*)::int n from '+table)).rows[0].n,0,table+' leaked rows');
+ for(const table of ['wc_orders','wc_email_messages','wc_shipments','transactions','wc_shipping_product_summary','wc_hub_product_drafts','wc_wix_catalog_collections','wc_catalog_media_issues'])assert.equal((await db.query('select count(*)::int n from '+table)).rows[0].n,0,table+' leaked rows');
  await assert.rejects(db.exec("insert into wc_email_threads(mailbox_key,gmail_thread_id) values('info','fixture')"));
  for(const f of funcs.filter(f=>f.permitted&&!['wc_is_hub_manager','wc_is_active_hub_member'].includes(f.proname))){
   const call='select public.'+f.proname+'('+Array(f.pronargs).fill('null').join(',')+')';
   // Overloads are resolved with explicit argument types from the catalog signature.
   const types=f.signature.slice(f.signature.indexOf('(')+1,-1).split(',').filter(Boolean);
-  await assert.rejects(db.query('select public.'+f.proname+'('+types.map(t=>'null::'+t).join(',')+')'),/Active Hub membership required/,f.signature);
+  await assert.rejects(db.query('select public.'+f.proname+'('+types.map(t=>'null::'+t).join(',')+')'),error=>['Active Hub membership required','Manager access required'].includes(error.message),f.signature);
  }
 }
 for(const id of [worker,manager]){
