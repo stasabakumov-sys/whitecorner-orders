@@ -19,6 +19,7 @@ describe('Custom Packing jobs',()=>{
   rpc.mockResolvedValueOnce({data:job,error:null});await component.save();
   expect(component.selected()?.id).toBe('job-1');expect(component.jobs()).toEqual([job]);
   component.files.set([{id:'file-1',job_id:'job-1',object_path:'owner/file',filename:'D1.rd',size_bytes:10,copies:2,revision:'rev-f'}]);
+  component.drawings.set([{id:'drawing-1',job_id:'job-1',object_path:'owner/drawing',filename:'Source.cdr',size_bytes:10,revision:'rev-d'}]);
   rpc.mockResolvedValueOnce({data:{id:'task-1',state:'assigned'},error:null});await component.send(job);
   expect(rpc).toHaveBeenLastCalledWith('wc_send_custom_packing_job',{p_job:'job-1'});
   expect(component.activeTask(job)?.id).toBe('task-1');
@@ -28,6 +29,45 @@ describe('Custom Packing jobs',()=>{
   const input={files:[{name:'Huge.rd',size:20971521}],value:'chosen'} as unknown as HTMLInputElement;
   await component.upload({target:input} as unknown as Event,job);
   expect(component.fileError()).toContain('Huge.rd');expect(component.fileError()).toContain('20 MB');expect(rpc).not.toHaveBeenCalled();
+ });
+ it('validates CDR size and keeps the manager drawing separate from the laser files',async()=>{
+  const {component,rpc}=setup();const job={id:'job-1',title:'Test',instructions:'',revision:'rev',updated_at:''};
+  const input={files:[{name:'Source.cdr',size:52428801}],value:'chosen'} as unknown as HTMLInputElement;
+  await component.uploadDrawing({target:input} as unknown as Event,job);
+  expect(component.fileError()).toContain('Source.cdr');expect(component.fileError()).toContain('50 MB');expect(rpc).not.toHaveBeenCalled();
+  expect(component.drawings()).toEqual([]);expect(component.files()).toEqual([]);
+ });
+ it('shows a failed CDR save beside the upload and preserves the source job',async()=>{
+  const rpc=vi.fn().mockResolvedValue({data:null,error:{message:'Storage unavailable'}});
+  const upload=vi.fn().mockResolvedValue({error:null});
+  const component=new PackingCustomComponent({client:{rpc,auth:{getUser:async()=>({data:{user:{id:'owner'}},error:null})},storage:{from:()=>({upload})}}} as any,{manager:()=>true} as any);
+  const job={id:'job-1',title:'Test',instructions:'',revision:'rev',updated_at:''};
+  const input={files:[{name:'Source.cdr',size:12}],value:'chosen'} as unknown as HTMLInputElement;
+  await component.uploadDrawing({target:input} as unknown as Event,job);
+  expect(upload).toHaveBeenCalledOnce();expect(rpc).toHaveBeenCalledWith('wc_save_custom_packing_drawing',expect.objectContaining({p_job:'job-1',p_filename:'Source.cdr',p_bytes:12}));
+  expect(component.fileError()).toContain('Storage unavailable');expect(component.drawings()).toEqual([]);
+ });
+ it('saves an uploaded CDR as a manager drawing, separate from RD cutting files',async()=>{
+  const drawing={id:'drawing-1',job_id:'job-1',object_path:'owner/drawing',filename:'Source.cdr',size_bytes:12,revision:'rev-d'};
+  const rpc=vi.fn().mockResolvedValue({data:drawing,error:null});
+  const upload=vi.fn().mockResolvedValue({error:null});
+  const component=new PackingCustomComponent({client:{rpc,auth:{getUser:async()=>({data:{user:{id:'owner'}},error:null})},storage:{from:()=>({upload})}}} as any,{manager:()=>true} as any);
+  const job={id:'job-1',title:'Test',instructions:'',revision:'rev',updated_at:''};
+  const input={files:[{name:'Source.cdr',size:12}],value:'chosen'} as unknown as HTMLInputElement;
+  await component.uploadDrawing({target:input} as unknown as Event,job);
+  expect(component.drawings()).toEqual([drawing]);expect(component.files()).toEqual([]);
+  expect(component.fileSuccess()).toContain('not be sent to Packing work');
+ });
+ it('keeps a CDR available for retry after the storage upload fails',async()=>{
+  const drawing={id:'drawing-1',job_id:'job-1',object_path:'owner/drawing',filename:'Source.cdr',size_bytes:12,revision:'rev-d'};
+  const upload=vi.fn().mockResolvedValueOnce({error:{message:'Network lost'}}).mockResolvedValueOnce({error:null});
+  const component=new PackingCustomComponent({client:{rpc:vi.fn().mockResolvedValue({data:drawing,error:null}),auth:{getUser:async()=>({data:{user:{id:'owner'}},error:null})},storage:{from:()=>({upload})}}} as any,{manager:()=>true} as any);
+  const job={id:'job-1',title:'Test',instructions:'',revision:'rev',updated_at:''};
+  const input={files:[{name:'Source.cdr',size:12}],value:'chosen'} as unknown as HTMLInputElement;
+  await component.uploadDrawing({target:input} as unknown as Event,job);
+  expect(component.pendingDrawing()?.file.name).toBe('Source.cdr');expect(component.fileError()).toContain('Network lost');
+  await component.retryDrawing(job);
+  expect(component.drawings()).toEqual([drawing]);expect(component.pendingDrawing()).toBeNull();expect(component.fileError()).toBe('');
  });
  it('opens the new job form from the Add icon',async()=>{
   const query:any={select:()=>query,order:()=>query,not:()=>query,then:(resolve:any)=>Promise.resolve({data:[],error:null}).then(resolve)};
