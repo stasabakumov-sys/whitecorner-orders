@@ -41,4 +41,23 @@ describe('Custom Packing jobs',()=>{
   expect(fixture.nativeElement.querySelector('input[name="title"]')).not.toBeNull();
   TestBed.resetTestingModule();
  });
+ it('sends from the table row and shows a failed send beside that row',async()=>{
+  const job={id:'job-1',title:'Ungles 73mm',instructions:'',revision:'rev-1',updated_at:'2026-10-01'};
+  const file={id:'file-1',job_id:job.id,object_path:'owner/file',filename:'Ungles.rd',size_bytes:10,copies:1,revision:'rev-f'};
+  const query=(table:string)=>{const chain:any={select:()=>chain,order:()=>chain,not:()=>chain,then:(resolve:any)=>Promise.resolve({data:table==='wc_custom_packing_jobs'?[job]:table==='wc_custom_packing_rd_files'?[file]:[],error:null}).then(resolve)};return chain;};
+  const rpc=vi.fn().mockResolvedValueOnce({data:null,error:{message:'Connection lost'}}).mockResolvedValueOnce({data:{id:'task-1',state:'assigned'},error:null});
+  TestBed.configureTestingModule({imports:[PackingCustomComponent],providers:[
+   {provide:SupabaseService,useValue:{client:{from:query,rpc}}},
+   {provide:HubMembersService,useValue:{load:async()=>{},manager:()=>true}}
+  ]});
+  const fixture=TestBed.createComponent(PackingCustomComponent);fixture.detectChanges();
+  await vi.waitFor(()=>expect(fixture.componentInstance.loading()).toBe(false));fixture.detectChanges();
+  const send=fixture.nativeElement.querySelector('[aria-label="Send Ungles 73mm to Packing work"]') as HTMLButtonElement;
+  expect(send).not.toBeNull();expect(send.disabled).toBe(false);send.click();
+  await vi.waitFor(()=>expect(fixture.componentInstance.rowError()?.message).toContain('Connection lost'));fixture.detectChanges();
+  expect((fixture.nativeElement.querySelector('.row-error') as HTMLElement).textContent).toContain('Connection lost');
+  send.click();await vi.waitFor(()=>expect(fixture.componentInstance.activeTask(job)?.id).toBe('task-1'));fixture.detectChanges();
+  expect(send.disabled).toBe(true);expect(send.textContent).toContain('Sent');expect(rpc).toHaveBeenCalledTimes(2);
+  TestBed.resetTestingModule();
+ });
 });
