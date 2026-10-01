@@ -81,6 +81,29 @@ describe('Custom Packing jobs',()=>{
   expect(fixture.nativeElement.querySelector('input[name="title"]')).not.toBeNull();
   TestBed.resetTestingModule();
  });
+ it('opens the right-hand card from the job name and keeps Edit inside it',async()=>{
+  const job={id:'job-1',title:'Ungles 73mm',instructions:'Manager note',revision:'rev-1',updated_at:'2026-10-01'};
+  const file={id:'file-1',job_id:job.id,object_path:'owner/file',filename:'Ungles.rd',size_bytes:10,copies:1,revision:'rev-f'};
+  const query=(table:string)=>{const chain:any={select:()=>chain,order:()=>chain,not:()=>chain,then:(resolve:any)=>Promise.resolve({data:table==='wc_custom_packing_jobs'?[job]:table==='wc_custom_packing_rd_files'?[file]:[],error:null}).then(resolve)};return chain;};
+  TestBed.configureTestingModule({imports:[PackingCustomComponent],providers:[
+   {provide:SupabaseService,useValue:{client:{from:query}}},
+   {provide:HubMembersService,useValue:{load:async()=>{},manager:()=>true}}
+  ]});
+  const fixture=TestBed.createComponent(PackingCustomComponent);fixture.detectChanges();
+  await vi.waitFor(()=>expect(fixture.componentInstance.loading()).toBe(false));fixture.detectChanges();
+  const row=fixture.nativeElement.querySelector('tbody tr') as HTMLTableRowElement;
+  expect(row.querySelector('.number-col')?.textContent?.trim()).toBe('1');
+  expect(row.querySelectorAll('.file-check')).toHaveLength(1);
+  expect(row.querySelectorAll('.file-empty')).toHaveLength(1);
+  expect(row.querySelector('[aria-label="Edit Ungles 73mm"]')).toBeNull();
+  (row.querySelector('[aria-label="Open Ungles 73mm"]') as HTMLButtonElement).click();fixture.detectChanges();
+  expect(fixture.componentInstance.drawerOpen()).toBe(true);
+  const edit=fixture.nativeElement.querySelector('[aria-label="Edit Ungles 73mm"]') as HTMLButtonElement;
+  expect(edit).not.toBeNull();edit.click();fixture.detectChanges();
+  expect(fixture.nativeElement.querySelector('input[name="title"]')).not.toBeNull();
+  expect(row.querySelector('[aria-label="Edit Ungles 73mm"]')).toBeNull();
+  TestBed.resetTestingModule();
+ });
  it('sends from the table row and shows a failed send beside that row',async()=>{
   const job={id:'job-1',title:'Ungles 73mm',instructions:'',revision:'rev-1',updated_at:'2026-10-01'};
   const file={id:'file-1',job_id:job.id,object_path:'owner/file',filename:'Ungles.rd',size_bytes:10,copies:1,revision:'rev-f'};

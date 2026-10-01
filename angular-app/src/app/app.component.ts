@@ -40,12 +40,12 @@ const inviteEntry = new URLSearchParams(window.location.hash.replace(/^#/, '')).
           <a routerLink="/partner-pans" routerLinkActive="active">Partner Pans</a>
           <a routerLink="/customers" routerLinkActive="active">Customers</a>
           <a routerLink="/address-review" routerLinkActive="active">Address Review</a>
+          <a routerLink="/billing-documents" routerLinkActive="active">Invoices & receipts</a>
         </div></details>
         <a routerLink="/delivery-cost-review" routerLinkActive="active"><span>↗</span>Delivery Cost Review</a>
         <a routerLink="/fulfilment" routerLinkActive="active"><span>✓</span>Fulfilment</a>
         <a routerLink="/email" routerLinkActive="active"><span>✉</span>Email</a>
         <a routerLink="/finance" routerLinkActive="active"><span>$</span>Finance</a>
-        <a routerLink="/billing-documents" routerLinkActive="active"><span>▤</span>Invoices & receipts</a>
         <a routerLink="/product-costing" routerLinkActive="active"><span>▤</span>Order Costing</a>
         <a routerLink="/shipping-data" routerLinkActive="active"><span>⇄</span>Products</a>
         @if(members.manager()){<a routerLink="/users" routerLinkActive="active"><span>♙</span>Users</a>}
@@ -96,7 +96,7 @@ const inviteEntry = new URLSearchParams(window.location.hash.replace(/^#/, '')).
 export class AppComponent {
   readonly workspaceReady = signal(false);
   readonly passwordSetup=new URLSearchParams(window.location.search).has('setup')||inviteEntry;
-  isReferenceRoute(){return ['/materials','/work-rates','/partner-pans','/customers','/address-review'].some(route=>this.router.url.startsWith(route));}
+  isReferenceRoute(){return ['/materials','/work-rates','/partner-pans','/customers','/address-review','/billing-documents'].some(route=>this.router.url.startsWith(route));}
   private preloading = false;
   private preloaded = false;
 
