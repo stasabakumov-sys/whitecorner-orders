@@ -1,0 +1,43 @@
+name: Custom Packing production release
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect production or apply only the two Custom Packing migrations
+        type: choice
+        options: [verify, apply]
+        default: verify
+  pull_request:
+    paths:
+      - 'supabase/migrations/20261001000100_custom_packing_jobs.sql'
+      - 'supabase/migrations/20261001000200_custom_packing_rd_and_dispatch.sql'
+      - '.github/scripts/packing.test.mjs'
+      - '.github/scripts/custom-packing-release.mjs'
+      - '.github/workflows/custom-packing-release.yml'
+permissions:
+  contents: read
+concurrency:
+  group: packing-production-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rehearse Packing migrations and Custom task flow in isolated PostgreSQL
+        run: |
+          npm install --prefix "$RUNNER_TEMP/packing-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/packing.test.mjs "$RUNNER_TEMP/packing-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Inspect production prerequisites
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/custom-packing-release.mjs --verify
+      - name: Apply and verify only Custom Packing migrations
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/custom-packing-release.mjs --apply
