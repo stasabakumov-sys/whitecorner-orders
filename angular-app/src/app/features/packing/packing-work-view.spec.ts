@@ -17,6 +17,19 @@ async function setup(){
 }
 afterEach(()=>{TestBed.resetTestingModule();vi.restoreAllMocks();});
 describe('Packing work viewing',()=>{
+ it('shows independent Custom work without a product drawing',async()=>{
+  const custom={id:'custom-task',unit_id:null,custom_job_id:'custom-1',custom_instructions:'Cut two panels',order_number:'',product_name:'Special arch',profile_signature:null,state:'assigned',assigned_at:'2026-10-01',cut_file_ids:[],packages:[{package_name:'Custom job'}],files:[{file_id:'f1',box_index:0,filename:'D1.rd',copies:2,object_path:'owner/file'}]};
+  const from=vi.fn((table:string)=>{const q:any={select:()=>q,neq:()=>q,order:()=>q,limit:()=>q,then:(resolve:any)=>Promise.resolve({data:table==='wc_packing_tasks'?[custom]:[],error:null}).then(resolve)};return q;});
+  TestBed.configureTestingModule({imports:[PackingWorkComponent],providers:[
+   {provide:SupabaseService,useValue:{client:{from,auth:{getUser:async()=>({data:{user:{id:'user'}},error:null})}}}},
+   {provide:HubMembersService,useValue:{load:async()=>{},manager:()=>true}}
+  ]});
+  const fixture=TestBed.createComponent(PackingWorkComponent);fixture.detectChanges();
+  await vi.waitFor(()=>expect(fixture.componentInstance.loading()).toBe(false));fixture.detectChanges();
+  const card=fixture.nativeElement.querySelector('.task') as HTMLElement;
+  expect(card.textContent).toContain('Custom job');expect(card.textContent).toContain('Special arch');expect(card.textContent).toContain('Cut two panels');
+  expect(card.querySelector('app-box-drawing')).toBeNull();expect(card.textContent).toContain('D1.rd');
+ });
  it('keeps drawing controls stable during polling and progress saves but reloads changed boxes',async()=>{
   const {fixture,c,drawingLoad,changeBox}=await setup();const drawing=fixture.nativeElement.querySelector('app-box-drawing button');
   expect(drawingLoad).toHaveBeenCalledOnce();await c.load(true);fixture.detectChanges();await fixture.whenStable();
