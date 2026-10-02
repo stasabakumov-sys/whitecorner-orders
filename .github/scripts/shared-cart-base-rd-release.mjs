@@ -17,11 +17,13 @@ async function query(sql,read_only=true){
 }
 const [before]=await query(`select
  exists(select 1 from supabase_migrations.schema_migrations where version='20261002000100') backdrop_prerequisite,
- exists(select 1 from supabase_migrations.schema_migrations where version='20260915000200') cart_size_prerequisite,
+ to_regprocedure('public.wc_cart_size_key(jsonb)') is not null cart_size_prerequisite,
+ to_regclass('public.wc_shipping_packages') is not null cart_packages_prerequisite,
  (select relrowsecurity from pg_class where oid='public.wc_box_rd_files'::regclass) rd_rls,
  (select count(*)::int from public.wc_box_rd_files) rd_count,
  (select count(*)::int from public.wc_packing_tasks) task_count;`);
-if(!before?.backdrop_prerequisite||!before.cart_size_prerequisite||!before.rd_rls)
+console.log(JSON.stringify({prerequisites:{backdrop:before?.backdrop_prerequisite,cartSize:before?.cart_size_prerequisite,cartPackages:before?.cart_packages_prerequisite,rdRls:before?.rd_rls}}));
+if(!before?.backdrop_prerequisite||!before.cart_size_prerequisite||!before.cart_packages_prerequisite||!before.rd_rls)
  throw Error('Cart or Packing prerequisites differ; shared Cart Base RD migration stopped');
 const [registered]=await query(`select replace(statements[1],E'\\r','')=${quote(source)} source_matches
  from supabase_migrations.schema_migrations where version='${version}'`);
