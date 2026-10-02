@@ -24,7 +24,12 @@ try{
   create table wc_production_units(id uuid primary key,order_item_id uuid references wc_order_items(id),
    production_status text);
   create table wc_shipping_products(id uuid primary key,product_name text,product_type text);
+  create table wc_shipping_packages(id uuid primary key,shipping_product_id uuid,source_type text,active boolean,
+   size_key text,package_name text,length_mm numeric,width_mm numeric,height_mm numeric);
   create table wc_delivery_packaging_profiles(signature text primary key,shipping_product_id uuid,template_item jsonb,packages jsonb);
+  create function wc_cart_size_key(options jsonb) returns text language sql immutable as $$
+   select lower(btrim(coalesce(options->>'Size','')))
+  $$;
   create function wc_cost_main(p uuid) returns uuid language sql as $$select p$$;
   create function wc_shop_item_product(p uuid) returns uuid language sql as $$select product_id from wc_order_items where id=p$$;
   grant usage on schema auth,storage to authenticated,anon;
@@ -264,5 +269,47 @@ try{
  const revisedTask=(await db.query('select files,state from wc_packing_tasks where id=$1',[sharedTask.id])).rows[0];
  assert.equal(revisedTask.files[0].filename,'D1-new.rd');assert.equal(revisedTask.files[0].copies,3);
  assert.equal(revisedTask.state,'assigned');
+ // Cart Base files follow one product, size and reusable box across option profiles.
+ const cart=randomUUID(),basePackage=randomUUID(),otherSizePackage=randomUUID(),cartItem=randomUUID(),cartUnit=randomUUID();
+ const cartPath=`${managerA}/${randomUUID()}`,addonPath=`${managerA}/${randomUUID()}`,cartNewPath=`${managerA}/${randomUUID()}`;
+ const cartBox={package_name:'Front/Sides/MDF wheels',length_mm:1180,width_mm:670,height_mm:60,contents:[{component_key:'main'}]};
+ const addonBox={package_name:'Shelf',length_mm:300,width_mm:200,height_mm:40,contents:[{component_key:'option:internal shelf'}]};
+ await db.exec('reset role');
+ await db.query('insert into wc_shipping_products(id,product_name,product_type) values($1,$2,$3)',[cart,'MDF Mobile Bar Cart','Cart']);
+ await db.query('insert into wc_shipping_packages(id,shipping_product_id,source_type,active,size_key,package_name,length_mm,width_mm,height_mm) values($1,$2,$3,true,$4,$5,$6,$7,$8),($9,$2,$3,true,$10,$5,$6,$7,$8)',
+  [basePackage,cart,'Base','regular',cartBox.package_name,1180,670,60,otherSizePackage,'large']);
+ await db.query('insert into wc_delivery_packaging_profiles(signature,shipping_product_id,template_item,packages) values($1,$2,$3,$4),($5,$2,$6,$7),($8,$2,$9,$10),($11,$2,$12,$13)',
+  ['cart-plain',cart,{wix_options:{Size:'Regular'}},[cartBox],
+   'cart-shelf',{wix_options:{Size:'Regular','Internal Shelf':'Yes'}},[cartBox,addonBox],
+   'cart-large',{wix_options:{Size:'Large'}},[cartBox],
+   'cart-custom',{profile_scope:'cart-main',wix_options:{Size:'Regular'}},[cartBox]]);
+ await db.query('insert into wc_order_items(id,order_id,product_name,product_id,wix_options) values($1,$2,$3,$4,$5)',
+  [cartItem,order,'MDF Mobile Bar Cart',cart,{Size:'Regular','Internal Shelf':'Yes'}]);
+ await db.query("insert into wc_production_units(id,order_item_id,production_status) values($1,$2,'New')",[cartUnit,cartItem]);
+ await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-rd-files',$1,$2),('box-rd-files',$3,$4),('box-rd-files',$5,$6)",
+  [cartPath,{size:4},addonPath,{size:4},cartNewPath,{size:5}]);
+ await db.exec('set role authenticated');
+ const legacyCart=(await db.query('select to_jsonb(wc_save_box_rd_file(null,$1,0,$2,$3,4,2,null)) result',
+  ['cart-plain',cartPath,'base.rd'])).rows[0].result;
+ await db.query('select wc_save_box_rd_file(null,$1,1,$2,$3,4,1,null)',
+  ['cart-shelf',addonPath,'shelf.rd']);
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20261003000100_shared_cart_base_rd.sql','utf8'));
+ assert.equal((await db.query('select wc_cart_base_package($1,0) id',['cart-shelf'])).rows[0].id,basePackage);
+ assert.equal((await db.query('select wc_cart_base_package($1,1) id',['cart-shelf'])).rows[0].id,null);
+ assert.equal((await db.query('select wc_cart_base_package($1,0) id',['cart-large'])).rows[0].id,otherSizePackage);
+ assert.equal((await db.query('select wc_cart_base_package($1,0) id',['cart-custom'])).rows[0].id,null);
+ assert.deepEqual((await db.query('select cart_base_package_id,profile_signature,box_index from wc_box_rd_files where id=$1',[legacyCart.id])).rows[0],
+  {cart_base_package_id:basePackage,profile_signature:null,box_index:null});
+ await assert.rejects(db.query('update wc_shipping_packages set length_mm=1190 where id=$1',[basePackage]),/shared RD files/);
+ await db.exec('set role authenticated');
+ const cartTask=(await db.query('select to_jsonb(wc_send_packing_task($1,$2)) result',[cartUnit,'cart-shelf'])).rows[0].result;
+ assert.deepEqual(cartTask.files.map(file=>file.filename),['base.rd','shelf.rd']);
+ assert.equal(cartTask.files[0].file_id,legacyCart.id);
+ const replacedCart=(await db.query('select to_jsonb(wc_save_cart_base_rd_file($1,$2,0,$3,$4,5,3,$5)) result',
+  [legacyCart.id,'cart-shelf',cartNewPath,'base-new.rd',legacyCart.revision])).rows[0].result;
+ assert.equal(replacedCart.cart_base_package_id,basePackage);
+ assert.equal((await db.query('select files from wc_packing_tasks where id=$1',[cartTask.id])).rows[0].files[0].filename,'base-new.rd');
+ await assert.rejects(db.query('select wc_promote_cart_base_rd($1,0)',['cart-large']),/no RD files/);
  console.log('Packing migration checks passed.');
 }finally{await db.close();}
