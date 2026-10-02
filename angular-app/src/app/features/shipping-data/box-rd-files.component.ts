@@ -4,7 +4,7 @@ import {SupabaseService} from '../../core/services/supabase.service';
 import {HubMembersService} from '../../core/services/hub-members.service';
 
 export interface BoxRdFile {
- id:string;profile_signature:string;box_index:number;object_path:string;filename:string;
+ id:string;profile_signature:string|null;box_index:number|null;cart_base_package_id?:string|null;object_path:string;filename:string;
  size_bytes:number;copies:number;revision:string;
 }
 
@@ -15,10 +15,10 @@ export interface BoxRdFile {
   @if(busy){<span role="status">{{busy==='upload'?'Uploading and saving RD file…':'Saving RD files…'}}</span>}
   @if(error){<p class="error" role="alert">{{error}} @if(loadError){<button type="button" (click)="load()">Retry load</button>}</p>}
   @if(success){<p role="status">{{success}}</p>}
-  @if(sharedSize&&legacyFiles.length){<div class="legacy-files"><strong>Earlier files in this product profile</strong>
-   <p>RD files for this Backdrop size now come from the shared library. These older files remain saved separately.</p>
+  @if((sharedSize||cartBaseId)&&legacyFiles.length){<div class="legacy-files"><strong>Earlier files in this product profile</strong>
+   <p>RD files for this {{sharedSize?'Backdrop size':'Cart Base box'}} now come from the shared library. These older files remain saved separately.</p>
    @for(file of legacyFiles;track file.id){<button type="button" class="filename" (click)="download(file)" [disabled]="!!busy">{{file.filename}}</button><span>{{file.copies}} ×</span>}
-   @if(!files.length&&members.manager()){<button type="button" (click)="promoteLegacy()" [disabled]="!!busy||loading">Use this set for all matching Backdrops</button>}
+   @if(!files.length&&members.manager()){<button type="button" (click)="promoteLegacy()" [disabled]="!!busy||loading">Use this set for all matching {{sharedSize?'Backdrops':'Cart Base boxes'}}</button>}
   </div>}
   @for(file of files;track file.id){<div class="file-row">
    <button type="button" class="filename" [disabled]="!!busy" (click)="download(file)" [title]="file.filename">{{file.filename}}</button>
@@ -41,16 +41,17 @@ export interface BoxRdFile {
  `]})
 export class BoxRdFilesComponent implements OnChanges {
  @Input() signature='';@Input() index=0;@Input() sharedSize='';
- files:BoxRdFile[]=[];legacyFiles:BoxRdFile[]=[];newCopies=1;loading=false;loadError=false;busy:''|'upload'|'save'='';error='';success='';private generation=0;
+ files:BoxRdFile[]=[];legacyFiles:BoxRdFile[]=[];cartBaseId='';newCopies=1;loading=false;loadError=false;busy:''|'upload'|'save'='';error='';success='';private generation=0;
  constructor(private db:SupabaseService,readonly members:HubMembersService,@Optional() private cdr?:ChangeDetectorRef){}
  ngOnChanges(){void this.load();}
  private refresh(){this.cdr?.markForCheck();}
  private message(e:unknown){return e instanceof Error?e.message:(e as {message?:string})?.message||'Connection or server error.';}
  private copies(value:number){return Number.isSafeInteger(Number(value))&&Number(value)>=1&&Number(value)<=1000;}
- async load(){const generation=++this.generation;this.loading=true;this.loadError=false;this.error='';this.success='';this.files=[];this.legacyFiles=[];
-  try{let query=this.db.client.from('wc_box_rd_files').select('*');query=this.sharedSize?query.eq('backdrop_size_key',this.sharedSize):query.eq('profile_signature',this.signature).eq('box_index',this.index);
+ async load(){const generation=++this.generation;this.loading=true;this.loadError=false;this.error='';this.success='';this.files=[];this.legacyFiles=[];this.cartBaseId='';
+  try{if(!this.sharedSize&&this.signature){const key=await this.db.client.rpc('wc_cart_base_package',{p_signature:this.signature,p_index:this.index});if(key.error)throw key.error;if(generation!==this.generation)return;this.cartBaseId=key.data||'';}
+   let query=this.db.client.from('wc_box_rd_files').select('*');query=this.sharedSize?query.eq('backdrop_size_key',this.sharedSize):this.cartBaseId?query.eq('cart_base_package_id',this.cartBaseId):query.eq('profile_signature',this.signature).eq('box_index',this.index);
    const {data,error}=await query.order('created_at');if(error)throw error;
-   if(this.sharedSize&&this.signature){const older=await this.db.client.from('wc_box_rd_files').select('*').eq('profile_signature',this.signature).eq('box_index',this.index).order('created_at');if(older.error)throw older.error;if(generation===this.generation)this.legacyFiles=(older.data||[]) as BoxRdFile[];}
+   if((this.sharedSize||this.cartBaseId)&&this.signature){const older=await this.db.client.from('wc_box_rd_files').select('*').eq('profile_signature',this.signature).eq('box_index',this.index).order('created_at');if(older.error)throw older.error;if(generation===this.generation)this.legacyFiles=(older.data||[]) as BoxRdFile[];}
    if(generation===this.generation)this.files=(data||[]) as BoxRdFile[];}
   catch(e){if(generation===this.generation){this.loadError=true;this.error=`Could not load RD files. ${this.message(e)} Retry load.`;}}
   finally{if(generation===this.generation){this.loading=false;this.refresh();}}
@@ -67,6 +68,7 @@ export class BoxRdFilesComponent implements OnChanges {
    const {error:uploadError}=await bucket.upload(path,file,{contentType:'application/octet-stream',upsert:false});if(uploadError)throw uploadError;uploaded=true;
    attaching=true;const {data:saved,error:saveError}=this.sharedSize
     ?await this.db.client.rpc('wc_save_backdrop_rd_file',{p_id:replacing?.id||null,p_size:this.sharedSize,p_path:path,p_filename:file.name,p_bytes:file.size,p_copies:copies,p_expected:replacing?.revision||null})
+    :this.cartBaseId?await this.db.client.rpc('wc_save_cart_base_rd_file',{p_id:replacing?.id||null,p_signature:this.signature,p_index:this.index,p_path:path,p_filename:file.name,p_bytes:file.size,p_copies:copies,p_expected:replacing?.revision||null})
     :await this.db.client.rpc('wc_save_box_rd_file',{p_id:replacing?.id||null,p_signature:this.signature,p_index:this.index,p_path:path,p_filename:file.name,p_bytes:file.size,p_copies:copies,p_expected:replacing?.revision||null});if(saveError)throw saveError;
    if(!saved?.id)throw Error('Server did not confirm the saved file.');
    if(generation===this.generation){this.files=replacing?this.files.map(row=>row.id===saved.id?saved:row):[...this.files,saved];this.success=`${file.name} uploaded and saved with ${copies} ${copies===1?'copy':'copies'}.`+(replacing?' Updated in all unfinished Packing tasks using this file. Load the files to the laser again before cutting.':'');this.newCopies=1;}
@@ -78,6 +80,7 @@ export class BoxRdFilesComponent implements OnChanges {
  async saveCopies(file:BoxRdFile){if(this.busy)return;this.error='';this.success='';if(!this.copies(file.copies)){this.error=`${file.filename}: enter a whole copy count from 1 to 1000.`;return;}
   this.busy='save';try{const {data,error}=this.sharedSize
    ?await this.db.client.rpc('wc_save_backdrop_rd_file',{p_id:file.id,p_size:this.sharedSize,p_path:null,p_filename:null,p_bytes:null,p_copies:Number(file.copies),p_expected:file.revision})
+   :this.cartBaseId?await this.db.client.rpc('wc_save_cart_base_rd_file',{p_id:file.id,p_signature:this.signature,p_index:this.index,p_path:null,p_filename:null,p_bytes:null,p_copies:Number(file.copies),p_expected:file.revision})
    :await this.db.client.rpc('wc_save_box_rd_file',{p_id:file.id,p_signature:this.signature,p_index:this.index,p_path:null,p_filename:null,p_bytes:null,p_copies:Number(file.copies),p_expected:file.revision});if(error||!data?.revision)throw error||Error('Server did not confirm the copy count.');file.revision=data.revision;this.success=`${file.filename}: copy count saved.`;}
   catch(e){this.error=`Could not save copies for ${file.filename}. ${this.message(e)} Retry.`;}finally{this.busy='';this.refresh();}
  }
@@ -86,9 +89,9 @@ export class BoxRdFilesComponent implements OnChanges {
  }
  async download(file:BoxRdFile){this.error='';try{const {data,error}=await this.db.client.storage.from('box-rd-files').createSignedUrl(file.object_path,60,{download:file.filename});if(error||!data)throw error||Error('File unavailable.');const link=document.createElement('a');link.href=data.signedUrl;link.download=file.filename;link.rel='noopener';link.click();}
   catch(e){this.error=`Could not download ${file.filename}. ${this.message(e)} Retry.`;}finally{this.refresh();}}
- async promoteLegacy(){if(this.busy||!this.sharedSize||!this.signature||!this.legacyFiles.length)return;this.error='';this.success='';this.busy='save';
-  try{const {data,error}=await this.db.client.rpc('wc_promote_backdrop_rd',{p_signature:this.signature});if(error||data!==this.sharedSize)throw error||Error('Server did not confirm the shared Backdrop set.');
-   await this.load();this.success='RD files are now shared with all Backdrops of this size and folding option.';
+ async promoteLegacy(){if(this.busy||(!this.sharedSize&&!this.cartBaseId)||!this.signature||!this.legacyFiles.length)return;this.error='';this.success='';this.busy='save';
+  try{const {data,error}=this.sharedSize?await this.db.client.rpc('wc_promote_backdrop_rd',{p_signature:this.signature}):await this.db.client.rpc('wc_promote_cart_base_rd',{p_signature:this.signature,p_index:this.index});if(error||data!==(this.sharedSize||this.cartBaseId))throw error||Error('Server did not confirm the shared RD set.');
+   await this.load();this.success=this.sharedSize?'RD files are now shared with all Backdrops of this size and folding option.':'RD files are now shared with this Cart Base box in all matching packaging variants.';
   }catch(e){this.error=`Could not share these RD files. ${this.message(e)} Review the files and retry.`;}
   finally{this.busy='';this.refresh();}
  }

@@ -11,10 +11,12 @@ import {orderItemImageUrl} from '../../core/utils/order-item-image';
 import {canonicalPackagingSignature,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {PackingCustomComponent} from './packing-custom.component';
 import {backdropDrawingKey,qualifiedDrawingKey} from '../shipping-data/product-sizes';
+import {cartSizeFromOptions} from '../shipping-data/cart-size';
 
 interface Candidate {unit_id:string;order_number:string;product_name:string;production_status:string;product_id:string|null;item_id:string;item:OrderItemRow}
-interface Profile {signature:string;shipping_product_id:string;packages:{package_name:string;backdrop_size_key?:string}[];template_item:any}
-interface RdFile {id:string;profile_signature:string|null;box_index:number|null;backdrop_size_key?:string|null;filename:string;copies:number}
+interface Profile {signature:string;shipping_product_id:string;packages:{package_name:string;length_mm?:number;width_mm?:number;height_mm?:number;contents?:{component_key?:string}[];backdrop_size_key?:string}[];template_item:any}
+interface RdFile {id:string;profile_signature:string|null;box_index:number|null;backdrop_size_key?:string|null;cart_base_package_id?:string|null;filename:string;copies:number}
+interface CartBasePackage {id:string;shipping_product_id:string;size_key:string|null;package_name:string;length_mm:number;width_mm:number;height_mm:number}
 interface Task {id:string;unit_id:string;profile_signature:string;state:string;files:any[];cut_file_ids:string[];completed_at?:string|null}
 
 @Component({selector:'app-packing-manage',standalone:true,imports:[FormsModule,RouterLink,DrawerModule,DatePipe,PackingCustomComponent],template:`
@@ -56,7 +58,7 @@ interface Task {id:string;unit_id:string;profile_signature:string;state:string;f
  `]})
 export class PackingManageComponent implements OnInit,OnDestroy {
  readonly activeTab=signal<'product'|'custom'>('product');
- readonly candidates=signal<Candidate[]>([]);readonly profiles=signal<Profile[]>([]);readonly tasks=signal<Task[]>([]);readonly rdFiles=signal<RdFile[]>([]);
+ readonly candidates=signal<Candidate[]>([]);readonly profiles=signal<Profile[]>([]);readonly tasks=signal<Task[]>([]);readonly rdFiles=signal<RdFile[]>([]);readonly cartBasePackages=signal<CartBasePackage[]>([]);
  readonly failedImages=new Set<string>();
  readonly selected=signal<Candidate|null>(null);readonly search=signal('');readonly loading=signal(false);readonly error=signal('');readonly success=signal('');readonly busy=signal('');readonly rowError=signal<{unit:string;message:string}|null>(null);
  profileSignature='';
@@ -78,19 +80,20 @@ export class PackingManageComponent implements OnInit,OnDestroy {
  }
  async load(){if(this.loading()||this.busy())return;++this.taskVersion;this.taskSyncError.set('');this.loading.set(true);this.error.set('');this.success.set('');
   try{await this.members.load();if(!this.members.manager())return;
-   const [candidateResult,taskResult,profiles,files]=await Promise.all([
+   const [candidateResult,taskResult,profiles,files,base]=await Promise.all([
     this.db.client.rpc('wc_packing_candidates'),
     this.db.client.from('wc_packing_tasks').select('id,unit_id,profile_signature,state,files,cut_file_ids,completed_at').neq('state','cancelled'),
     this.allProfiles(),
     this.allRdFiles(),
+    this.db.client.from('wc_shipping_packages').select('id,shipping_product_id,size_key,package_name,length_mm,width_mm,height_mm').eq('source_type','Base').eq('active',true),
    ]);
-   if(candidateResult.error)throw candidateResult.error;if(taskResult.error)throw taskResult.error;
-   this.candidates.set((candidateResult.data||[]) as Candidate[]);this.tasks.set((taskResult.data||[]) as Task[]);this.profiles.set(profiles);this.rdFiles.set(files);
+   if(candidateResult.error)throw candidateResult.error;if(taskResult.error)throw taskResult.error;if(base.error)throw base.error;
+   this.candidates.set((candidateResult.data||[]) as Candidate[]);this.tasks.set((taskResult.data||[]) as Task[]);this.profiles.set(profiles);this.rdFiles.set(files);this.cartBasePackages.set((base.data||[]) as CartBasePackage[]);
   }catch(e){this.error.set(`Could not load Packing work. ${(e as Error)?.message||'Check the connection and retry.'}`);}
   finally{this.loading.set(false);}
  }
  private async allProfiles(){const all:Profile[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.from('wc_delivery_packaging_profiles').select('signature,shipping_product_id,packages,template_item').order('signature').range(start,start+249);if(error)throw error;all.push(...(data||[]) as Profile[]);if((data||[]).length<250)return all;}}
- private async allRdFiles(){const all:RdFile[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.from('wc_box_rd_files').select('id,profile_signature,box_index,backdrop_size_key,filename,copies').order('created_at').range(start,start+249);if(error)throw error;all.push(...(data||[]) as RdFile[]);if((data||[]).length<250)return all;}}
+ private async allRdFiles(){const all:RdFile[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.from('wc_box_rd_files').select('id,profile_signature,box_index,backdrop_size_key,cart_base_package_id,filename,copies').order('created_at').range(start,start+249);if(error)throw error;all.push(...(data||[]) as RdFile[]);if((data||[]).length<250)return all;}}
  visible(){const term=this.search().toLowerCase().trim();return this.candidates().filter(row=>!term||`${row.order_number} ${row.product_name}`.toLowerCase().includes(term));}
  imageUrl(row:Candidate){return this.failedImages.has(row.unit_id)?'':orderItemImageUrl(row.item);}
  taskFor(row:Candidate){return this.tasks().find(task=>task.unit_id===row.unit_id);}
@@ -100,7 +103,15 @@ export class PackingManageComponent implements OnInit,OnDestroy {
    const key=profile.packages[0].backdrop_size_key||(/backdrop/i.test(profile.template_item?.product_name||'')?backdropDrawingKey(profile,profile.template_item.product_name):'');
    if(qualifiedDrawingKey(key)){const shared=this.rdFiles().filter(file=>file.backdrop_size_key===key);if(shared.length)return shared;}
   }
+  if(profile){const baseId=this.cartBaseId(profile,index);if(baseId){const shared=this.rdFiles().filter(file=>file.cart_base_package_id===baseId);if(shared.length)return shared;}}
   return this.rdFiles().filter(file=>file.profile_signature===signature&&file.box_index===index);
+ }
+ cartBaseId(profile:Profile,index:number){const box=profile.packages[index];if(profile.template_item?.profile_scope==='cart-main'||!box?.contents?.length||box.contents.some(content=>(content.component_key||'main')!=='main'))return'';
+  const bases=this.cartBasePackages().filter(row=>row.shipping_product_id===profile.shipping_product_id),sizes=[...new Set(bases.map(row=>row.size_key||''))];
+  const size=cartSizeFromOptions(profile.template_item?.wix_options)||(sizes.length===1?sizes[0]:null);if(size===null)return'';
+  const matches=bases.filter(row=>(row.size_key||'')===size&&row.package_name.trim().toLowerCase()===box.package_name?.trim().toLowerCase()
+   &&Number(row.length_mm)===Number(box.length_mm)&&Number(row.width_mm)===Number(box.width_mm)&&Number(row.height_mm)===Number(box.height_mm));
+  return matches.length===1?matches[0].id:'';
  }
  matchingProfiles(row:Candidate){if(!row.product_id)return[];let exact='';try{exact=variantSignature(row.item);}catch{return[];}
   return this.profiles().filter(profile=>profile.shipping_product_id===row.product_id&&canonicalPackagingSignature(profile.signature)===exact);
