@@ -63,7 +63,7 @@ function orderChoices(view:ProductionUnitView):Record<string,string> {
     @for(profile of packingProfiles();track profile.signature){<section class="profile"><h3>Boxes for this configuration</h3>
      @if(members.manager()){<app-saved-packing [product]="p" [profile]="profile" [rules]="rules()" [fallbackOptions]="choices()" [backdrop]="backdrop()" [sharedSize]="backdropKey()" [backdropDimensions]="dimensions()" (profileSaved)="load()" />}
      @else{@for(box of profile.packages;track $index){<p>{{box.package_name||'Box '+($index+1)}} · {{box.length_mm}} × {{box.width_mm}} × {{box.height_mm}} mm · {{box.weight_kg??'—'}} kg</p>}}
-     @if(!members.manager()){@for(box of profile.packages;track $index){<div class="box-files"><strong>{{box.package_name||'Box '+($index+1)}}</strong><app-box-rd-files [signature]="profile.signature" [index]="$index" /></div>}}
+     @if(!members.manager()){@for(box of profile.packages;track $index){<div class="box-files"><strong>{{box.package_name||'Box '+($index+1)}}</strong><app-box-rd-files [signature]="profile.signature" [index]="$index" [sharedSize]="backdrop()?backdropKey():''" /></div>}}
     </section>}
     @empty{<p>No saved Packing profile matches this order configuration.</p>}
     }

@@ -23,6 +23,13 @@ describe('box RD files',()=>{
   expect(upload).toHaveBeenCalledOnce();expect(rpc).toHaveBeenCalledWith('wc_save_box_rd_file',expect.objectContaining({p_signature:'profile',p_index:0,p_copies:3,p_filename:'box.rd'}));
   expect(component.files[0].copies).toBe(3);expect(component.success).toContain('uploaded and saved');
  });
+ it('saves Backdrop RD files to the shared size and folding library',async()=>{
+  const {component,rpc,event}=setup();component.sharedSize='1200x1000:foldable';
+  await component.upload(event(new File(['rd'],'arch.rd')));
+  expect(rpc).toHaveBeenCalledWith('wc_save_backdrop_rd_file',expect.objectContaining({p_size:'1200x1000:foldable',p_filename:'arch.rd',p_copies:3}));
+  const file=component.files[0];await component.saveCopies(file);
+  expect(rpc).toHaveBeenCalledWith('wc_save_backdrop_rd_file',expect.objectContaining({p_size:'1200x1000:foldable',p_id:file.id,p_path:null}));
+ });
  it('keeps the prior file and gives a recovery step when replacement is uncertain',async()=>{
   const {component,rpc,remove,event}=setup();const existing:BoxRdFile={id:'saved',profile_signature:'profile',box_index:0,object_path:'old/path',filename:'old.rd',size_bytes:2,copies:2,revision:'old'};
   component.files=[existing];rpc.mockResolvedValueOnce({data:null,error:{message:'Network lost'}});

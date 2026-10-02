@@ -3,6 +3,7 @@ import {By} from '@angular/platform-browser';
 import {describe,it,expect,vi} from 'vitest';
 import {PackageDrawingsComponent} from './package-drawings.component';
 import {BoxDrawingComponent} from './box-drawing.component';
+import {BoxRdFilesComponent} from './box-rd-files.component';
 import {SupabaseService} from '../../core/services/supabase.service';
 async function render(backdrop:boolean,key:string,records:Record<string,any>={}){
  const lookups:string[]=[];
@@ -17,6 +18,7 @@ describe('One shared packing drawing',()=>{
   expect(f.nativeElement.querySelectorAll('app-box-drawing input[type=file]')).toHaveLength(1);
   expect(f.nativeElement.textContent).toContain('already exists');expect(f.nativeElement.textContent).toContain('shared.cdr');
   expect(f.nativeElement.querySelector('app-box-drawing input[type=file]').getAttribute('aria-label')).toContain('Replace');
+  expect(f.debugElement.query(By.directive(BoxRdFilesComponent)).componentInstance.sharedSize).toBe(key);
   expect(lookups).toEqual(['wc_backdrop_box_drawings:'+key]);
  });
  it('provides one upload only when neither qualified nor unclassified drawing exists',async()=>{

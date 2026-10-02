@@ -10,10 +10,11 @@ import {OrderItemRow} from '../../core/models/order.models';
 import {orderItemImageUrl} from '../../core/utils/order-item-image';
 import {canonicalPackagingSignature,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {PackingCustomComponent} from './packing-custom.component';
+import {backdropDrawingKey,qualifiedDrawingKey} from '../shipping-data/product-sizes';
 
 interface Candidate {unit_id:string;order_number:string;product_name:string;production_status:string;product_id:string|null;item_id:string;item:OrderItemRow}
-interface Profile {signature:string;shipping_product_id:string;packages:{package_name:string}[];template_item:any}
-interface RdFile {id:string;profile_signature:string;box_index:number;filename:string;copies:number}
+interface Profile {signature:string;shipping_product_id:string;packages:{package_name:string;backdrop_size_key?:string}[];template_item:any}
+interface RdFile {id:string;profile_signature:string|null;box_index:number|null;backdrop_size_key?:string|null;filename:string;copies:number}
 interface Task {id:string;unit_id:string;profile_signature:string;state:string;files:any[];cut_file_ids:string[];completed_at?:string|null}
 
 @Component({selector:'app-packing-manage',standalone:true,imports:[FormsModule,RouterLink,DrawerModule,DatePipe,PackingCustomComponent],template:`
@@ -89,12 +90,18 @@ export class PackingManageComponent implements OnInit,OnDestroy {
   finally{this.loading.set(false);}
  }
  private async allProfiles(){const all:Profile[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.from('wc_delivery_packaging_profiles').select('signature,shipping_product_id,packages,template_item').order('signature').range(start,start+249);if(error)throw error;all.push(...(data||[]) as Profile[]);if((data||[]).length<250)return all;}}
- private async allRdFiles(){const all:RdFile[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.from('wc_box_rd_files').select('id,profile_signature,box_index,filename,copies').order('created_at').range(start,start+249);if(error)throw error;all.push(...(data||[]) as RdFile[]);if((data||[]).length<250)return all;}}
+ private async allRdFiles(){const all:RdFile[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.from('wc_box_rd_files').select('id,profile_signature,box_index,backdrop_size_key,filename,copies').order('created_at').range(start,start+249);if(error)throw error;all.push(...(data||[]) as RdFile[]);if((data||[]).length<250)return all;}}
  visible(){const term=this.search().toLowerCase().trim();return this.candidates().filter(row=>!term||`${row.order_number} ${row.product_name}`.toLowerCase().includes(term));}
  imageUrl(row:Candidate){return this.failedImages.has(row.unit_id)?'':orderItemImageUrl(row.item);}
  taskFor(row:Candidate){return this.tasks().find(task=>task.unit_id===row.unit_id);}
  selectedProfile(){return this.profiles().find(profile=>profile.signature===this.profileSignature);}
- filesFor(signature:string,index:number){return this.rdFiles().filter(file=>file.profile_signature===signature&&file.box_index===index);}
+ filesFor(signature:string,index:number){const profile=this.profiles().find(row=>row.signature===signature);
+  if(index===0&&profile?.packages.length===1){
+   const key=profile.packages[0].backdrop_size_key||(/backdrop/i.test(profile.template_item?.product_name||'')?backdropDrawingKey(profile,profile.template_item.product_name):'');
+   if(qualifiedDrawingKey(key)){const shared=this.rdFiles().filter(file=>file.backdrop_size_key===key);if(shared.length)return shared;}
+  }
+  return this.rdFiles().filter(file=>file.profile_signature===signature&&file.box_index===index);
+ }
  matchingProfiles(row:Candidate){if(!row.product_id)return[];let exact='';try{exact=variantSignature(row.item);}catch{return[];}
   return this.profiles().filter(profile=>profile.shipping_product_id===row.product_id&&canonicalPackagingSignature(profile.signature)===exact);
  }

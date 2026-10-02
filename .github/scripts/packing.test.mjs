@@ -23,7 +23,8 @@ try{
    wix_options jsonb,product_id uuid);
   create table wc_production_units(id uuid primary key,order_item_id uuid references wc_order_items(id),
    production_status text);
-  create table wc_delivery_packaging_profiles(signature text primary key,shipping_product_id uuid,packages jsonb);
+  create table wc_shipping_products(id uuid primary key,product_name text,product_type text);
+  create table wc_delivery_packaging_profiles(signature text primary key,shipping_product_id uuid,template_item jsonb,packages jsonb);
   create function wc_cost_main(p uuid) returns uuid language sql as $$select p$$;
   create function wc_shop_item_product(p uuid) returns uuid language sql as $$select product_id from wc_order_items where id=p$$;
   grant usage on schema auth,storage to authenticated,anon;
@@ -212,5 +213,56 @@ try{
  const revised=(await db.query('select to_jsonb(wc_save_custom_packing_rd_file($1,$2,null,null,null,3,$3)) result',[customFile.id,custom.id,customFile.revision])).rows[0].result;
  assert.equal(revised.copies,3);
  assert.equal((await db.query('select to_jsonb(wc_send_custom_packing_job($1)) result',[custom.id])).rows[0].result.files[0].copies,3);
+ // A Backdrop RD set follows size + folding, even when the other arch has a different profile.
+ const firstArch=randomUUID(),secondArch=randomUUID(),secondItem=randomUUID(),secondUnit=randomUUID();
+ const thirdArch=randomUUID(),fourthArch=randomUUID(),ambiguousKey='1800x900:nonfoldable';
+ const archKey='1200x1000:foldable',archPath=`${managerA}/${randomUUID()}`,replacementArchPath=`${managerA}/${randomUUID()}`;
+ const thirdPath=`${managerA}/${randomUUID()}`,fourthPath=`${managerA}/${randomUUID()}`;
+ await db.exec('reset role');
+ await db.query('insert into wc_shipping_products(id,product_name,product_type) values($1,$2,$3),($4,$5,$6)',
+  [firstArch,'First Arch Backdrop','Backdrop',secondArch,'Second Arch Backdrop','Backdrop']);
+ await db.query('insert into wc_delivery_packaging_profiles(signature,shipping_product_id,template_item,packages) values($1,$2,$3,$4),($5,$6,$7,$8)',
+  ['first-arch',firstArch,{product_name:'First Arch Backdrop'},[{package_name:'Arch box',backdrop_size_key:archKey}],
+   'second-arch',secondArch,{product_name:'Second Arch Backdrop',wix_options:{Size:'120cm x 100cm',Foldable:'YES'}},[{package_name:'Arch box'}]]);
+ await db.query('insert into wc_shipping_products(id,product_name,product_type) values($1,$2,$3),($4,$5,$6)',
+  [thirdArch,'Third Arch Backdrop','Backdrop',fourthArch,'Fourth Arch Backdrop','Backdrop']);
+ await db.query('insert into wc_delivery_packaging_profiles(signature,shipping_product_id,template_item,packages) values($1,$2,$3,$4),($5,$6,$7,$8)',
+  ['third-arch',thirdArch,{product_name:'Third Arch Backdrop'},[{package_name:'Arch box',backdrop_size_key:ambiguousKey}],
+   'fourth-arch',fourthArch,{product_name:'Fourth Arch Backdrop'},[{package_name:'Arch box',backdrop_size_key:ambiguousKey}]]);
+ await db.query('insert into wc_order_items(id,order_id,product_name,product_id,wix_options) values($1,$2,$3,$4,$5)',
+  [secondItem,order,'Second Arch Backdrop',secondArch,{Size:'120cm x 100cm',Foldable:'YES'}]);
+ await db.query("insert into wc_production_units(id,order_item_id,production_status) values($1,$2,'New')",[secondUnit,secondItem]);
+ await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-rd-files',$1,$2),('box-rd-files',$3,$4),('box-rd-files',$5,$6),('box-rd-files',$7,$8)",
+  [archPath,{size:4},replacementArchPath,{size:5},thirdPath,{size:4},fourthPath,{size:4}]);
+ await db.exec('set role authenticated');
+ const legacyArch=(await db.query('select to_jsonb(wc_save_box_rd_file(null,$1,0,$2,$3,4,2,null)) result',
+  ['first-arch',archPath,'D1.rd'])).rows[0].result;
+ const ambiguousSource=(await db.query('select to_jsonb(wc_save_box_rd_file(null,$1,0,$2,$3,4,2,null)) result',
+  ['third-arch',thirdPath,'Choice A.rd'])).rows[0].result;
+ await db.query('select wc_save_box_rd_file(null,$1,0,$2,$3,4,2,null)',
+  ['fourth-arch',fourthPath,'Choice B.rd']);
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20261002000100_shared_backdrop_rd.sql','utf8'));
+ assert.equal((await db.query('select wc_backdrop_rd_key($1) size_key',['second-arch'])).rows[0].size_key,archKey);
+ const promoted=(await db.query('select backdrop_size_key,profile_signature,box_index from wc_box_rd_files where id=$1',[legacyArch.id])).rows[0];
+ assert.deepEqual(promoted,{backdrop_size_key:archKey,profile_signature:null,box_index:null});
+ assert.equal((await db.query('select profile_signature from wc_box_rd_files where id=$1',[ambiguousSource.id])).rows[0].profile_signature,'third-arch');
+ await db.exec('set role authenticated');
+ assert.equal((await db.query('select wc_promote_backdrop_rd($1) result',['third-arch'])).rows[0].result,ambiguousKey);
+ assert.equal((await db.query('select backdrop_size_key from wc_box_rd_files where id=$1',[ambiguousSource.id])).rows[0].backdrop_size_key,ambiguousKey);
+ await assert.rejects(db.query('select wc_promote_backdrop_rd($1)',['fourth-arch']),/Shared RD files already exist/);
+ const sharedTask=(await db.query('select to_jsonb(wc_send_packing_task($1,$2)) result',[secondUnit,'second-arch'])).rows[0].result;
+ assert.equal(sharedTask.files[0].file_id,legacyArch.id);
+ assert.equal(sharedTask.files[0].box_index,0);
+ await db.query("select set_config('test.actor',$1,false)",[worker]);
+ await assert.rejects(db.query('select wc_save_backdrop_rd_file($1,$2,null,null,null,3,$3)',
+  [legacyArch.id,archKey,legacyArch.revision]),/Manager access/);
+ await db.query("select set_config('test.actor',$1,false)",[managerA]);
+ const replacedArch=(await db.query('select to_jsonb(wc_save_backdrop_rd_file($1,$2,$3,$4,5,3,$5)) result',
+  [legacyArch.id,archKey,replacementArchPath,'D1-new.rd',legacyArch.revision])).rows[0].result;
+ assert.equal(replacedArch.copies,3);
+ const revisedTask=(await db.query('select files,state from wc_packing_tasks where id=$1',[sharedTask.id])).rows[0];
+ assert.equal(revisedTask.files[0].filename,'D1-new.rd');assert.equal(revisedTask.files[0].copies,3);
+ assert.equal(revisedTask.state,'assigned');
  console.log('Packing migration checks passed.');
 }finally{await db.close();}

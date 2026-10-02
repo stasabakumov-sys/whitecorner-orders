@@ -12,6 +12,7 @@ import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
 import {environment} from '../../../environments/environment';
 import {BoxDrawingComponent} from './box-drawing.component';
+import {BoxRdFilesComponent} from './box-rd-files.component';
 import {PackageDrawingsComponent} from './package-drawings.component';
 import {ProductDetailsComponent} from './product-details.component';
 import {ProductPartsComponent} from './product-parts.component';
@@ -111,7 +112,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[AddMainPackageComponent,SavedPackingComponent,PackageDrawingsComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,ProductDraftsComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[AddMainPackageComponent,SavedPackingComponent,PackageDrawingsComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,ProductDraftsComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,BoxRdFilesComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -126,26 +127,26 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
         <span class="mut push">Shared product catalogue · packaging, materials, work and Pans</span>
       </div>
 
-      <div class="product-tools"><input aria-label="Search products" placeholder="Search products" [(ngModel)]="search"><app-product-drafts /><app-wix-catalog-review (saved)="load()" /><button (click)="openLibrary()">Backdrop box drawings</button></div>
+      <div class="product-tools"><input aria-label="Search products" placeholder="Search products" [(ngModel)]="search"><app-product-drafts /><app-wix-catalog-review (saved)="load()" /><button (click)="openLibrary()">Backdrop packaging library</button></div>
       </div>
       @if(imageError()){<p class="error" role="alert">{{imageError()}} <button type="button" (click)="loadHubImages()">Retry photos</button></p>}
       <div class="tablewrap product-tablewrap"><table class="shiptable product-list"><thead><tr><th class="number">#</th><th>Product</th><th>Short name</th><th>Product size</th><th>Packaging profiles</th></tr></thead><tbody>
       @for(p of visibleProducts();track p.id){<tr><td class="number">{{$index+1}}</td><td><button class="product-link product-with-image" (click)="openProduct(p.id)"><span class="product-thumbnail list-thumbnail" aria-hidden="true">@if(productImage(p);as src){<img [src]="src" alt="" loading="lazy" decoding="async" (error)="failedImages.add(src)">}@else{<span class="pi pi-image" title="No product image available"></span>}</span><span>{{p.product_name}}</span></button></td><td>{{p.short_name||'—'}}</td><td>{{productSizes(p).join(' · ')||'—'}}</td><td>{{reusableProfileCount(p)}}</td></tr>}
       @empty{<tr><td colspan="5">No products found.</td></tr>}
       </tbody></table></div>
-      <p-dialog header="Backdrop box drawings" [(visible)]="libraryOpen" [modal]="true" [style]="{width:'min(760px,95vw)'}" [draggable]="false">
-       <p>One set of package dimensions and one packaging drawing per Backdrop size and folding option, shared by all matching Backdrops. Weight remains separate for every model and size.</p>
+      <p-dialog header="Backdrop packaging library" [(visible)]="libraryOpen" [modal]="true" [style]="{width:'min(1040px,95vw)'}" [draggable]="false">
+       <p>Package dimensions, CDR drawing and RD cutting files are shared by Backdrop size and folding option. Weight remains separate for every model and size.</p>
        @if(libraryError){<p role="alert">{{libraryError}}</p>}
-       @if(libraryLoading){<p role="status">Loading drawing library…</p>}
+       @if(libraryLoading){<p role="status">Loading Backdrop library…</p>}
        <div class="product-tools"><input aria-label="New backdrop size" placeholder="e.g. 190cm x 95cm" [(ngModel)]="newSize"><select aria-label="Folding option" [(ngModel)]="newFolding"><option value="">Choose folding option</option><option value="foldable">Foldable</option><option value="nonfoldable">Non-foldable</option></select><button (click)="addLibrarySize()" [disabled]="!parseSize(newSize)||!newFolding">Add size</button></div>
        @if(libraryMessage){<p role="status">{{libraryMessage}}</p>}
-       <table class="shiptable"><thead><tr><th>Backdrop size</th><th>Shared package dimensions</th><th>Drawing</th></tr></thead><tbody>
+       <table class="shiptable"><thead><tr><th>Backdrop size</th><th>Shared package dimensions</th><th>CDR drawing</th><th>RD cutting files</th></tr></thead><tbody>
        @for(key of librarySizes();track key){<tr><td>{{sizeLabel(key)}}</td><td>
        @if(qualifiedKey(key)){<div class="dimension-fields"><input aria-label="Package name" placeholder="Package name" [ngModel]="dimensionValue(key,'package_name')" (ngModelChange)="setDimensionDraft(key,'package_name',$event)"><input aria-label="Length mm" type="number" min="1" placeholder="L mm" [ngModel]="dimensionValue(key,'length_mm')" (ngModelChange)="setDimensionDraft(key,'length_mm',$event)"><input aria-label="Width mm" type="number" min="1" placeholder="W mm" [ngModel]="dimensionValue(key,'width_mm')" (ngModelChange)="setDimensionDraft(key,'width_mm',$event)"><input aria-label="Height mm" type="number" min="1" placeholder="H mm" [ngModel]="dimensionValue(key,'height_mm')" (ngModelChange)="setDimensionDraft(key,'height_mm',$event)"><button (click)="saveBackdropDimensions(key)" [disabled]="dimensionSaving===key">{{dimensionSaving===key?'Saving…':'Save dimensions'}}</button></div>@if(dimensionFeedback[key]){<p [attr.role]="dimensionFeedback[key].ok?'status':'alert'">{{dimensionFeedback[key].text}}</p>}}
        </td><td><app-box-drawing [sharedSize]="key" [readOnly]="!qualifiedKey(key)" />
        @if(!qualifiedKey(key)){<p>Existing drawing: folding option needs review.</p><select aria-label="Classify existing drawing" [(ngModel)]="legacyFolding[key]" [disabled]="!!classifying"><option value="">Choose folding option</option><option value="foldable">Foldable</option><option value="nonfoldable">Non-foldable</option></select><button (click)="classifyDrawing(key)" [disabled]="!legacyFolding[key]||!!classifying">{{classifying===key?'Saving…':'Confirm folding option'}}</button>}
-       </td></tr>}
-       @empty{<tr><td colspan="3">Add a backdrop size to enter its dimensions and upload its first drawing.</td></tr>}
+       </td><td>@if(qualifiedKey(key)){<app-box-rd-files [sharedSize]="key" />}@else{<small>Choose Foldable or Non-foldable before adding RD files.</small>}</td></tr>}
+       @empty{<tr><td colspan="4">Add a backdrop size to enter its dimensions and upload its first drawing or RD file.</td></tr>}
        </tbody></table>
       </p-dialog>
       <p-drawer [visible]="!!selectedId()" (visibleChange)="!$event&&selectedId.set(null)" header="Product" position="right" [modal]="true" [dismissible]="true" [blockScroll]="true" styleClass="products-drawer">
