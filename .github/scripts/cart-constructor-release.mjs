@@ -1,12 +1,13 @@
-// Apply only the reviewed Constructor migration, using the existing management boundary.
+// Apply only the reviewed Constructor and Cart access migrations.
 import {readFile} from 'node:fs/promises';
 
 const mode=process.argv[2];
 if(!['--verify','--apply'].includes(mode))throw Error('Use --verify or --apply');
 const token=process.env.SUPABASE_ACCESS_TOKEN;
 if(!token)throw Error('Supabase access token required');
-const version='20261003000400',name='cart_constructor_files';
-const source=(await readFile(`supabase/migrations/${version}_${name}.sql`,'utf8')).replaceAll('\r','');
+const sources=[];
+for(const [version,name] of [['20261003000400','cart_constructor_files'],['20261003000500','cart_file_mapping_access']])
+ sources.push({version,name,source:(await readFile(`supabase/migrations/${version}_${name}.sql`,'utf8')).replaceAll('\r','')});
 const quote=value=>"'"+value.replaceAll("'","''")+"'";
 async function query(sql,read_only=true){
  const response=await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/database/query',{
@@ -28,15 +29,19 @@ const [before]=await query(`select
  (select count(*)::int from public.wc_shipping_packages) package_count;`);
 const counters=['rd_count','task_count','cdr_count','package_count'];
 if(!before||Object.entries(before).some(([key,value])=>!counters.includes(key)&&value!==true))throw Error('Cart Constructor prerequisites differ; release stopped');
-const [registered]=await query(`select replace(statements[1],E'\\r','')=${quote(source)} source_matches
- from supabase_migrations.schema_migrations where version='${version}'`);
-if(registered&&!registered.source_matches)throw Error(`Registered migration ${version} differs from reviewed source`);
-console.log(JSON.stringify({preflight:'passed',migrationRegistered:!!registered,...Object.fromEntries(counters.map(key=>[key,before[key]]))}));
+const registrations=[];
+for(const {version,source} of sources){
+ const [registered]=await query(`select replace(statements[1],E'\\r','')=${quote(source)} source_matches
+  from supabase_migrations.schema_migrations where version='${version}'`);
+ if(registered&&!registered.source_matches)throw Error(`Registered migration ${version} differs from reviewed source`);
+ registrations.push({version,registered:!!registered});
+}
+console.log(JSON.stringify({preflight:'passed',migrations:registrations,...Object.fromEntries(counters.map(key=>[key,before[key]]))}));
 if(mode==='--verify')process.exit(0);
 
 await query(`begin;set local lock_timeout='15s';set local statement_timeout='120s';
  select pg_advisory_xact_lock(20260923,6);
- do $release$ begin
+ ${sources.map(({version,name,source})=>`do $release$ begin
   if exists(select 1 from supabase_migrations.schema_migrations where version='${version}') then
    if (select replace(statements[1],E'\\r','') from supabase_migrations.schema_migrations where version='${version}') is distinct from ${quote(source)}
     then raise exception 'Migration ${version} differs'; end if;
@@ -44,9 +49,12 @@ await query(`begin;set local lock_timeout='15s';set local statement_timeout='120
    execute ${quote(source)};
    insert into supabase_migrations.schema_migrations(version,name,statements) values('${version}','${name}',array[${quote(source)}]);
   end if;
- end $release$;commit;`,false);
+ end $release$;`).join('\n')}commit;`,false);
 const [after]=await query(`select
- exists(select 1 from supabase_migrations.schema_migrations where version='${version}') migration_registered,
+ (select count(*)=2 from supabase_migrations.schema_migrations where version in('20261003000400','20261003000500')) migrations_registered,
+ (select count(*)=4 from pg_proc where oid in('public.wc_cart_standard_base_package(text,integer)'::regprocedure,
+  'public.wc_cart_addon_rule(text,integer)'::regprocedure,'public.wc_cart_base_package(text,integer)'::regprocedure,
+  'public.wc_cart_packing_file_boxes()'::regprocedure) and prosrc like '%Active Hub membership required%') mapping_member_gates,
  (select relrowsecurity from pg_class where oid='public.wc_cart_box_svg_drawings'::regclass) svg_rls,
  (select relrowsecurity from pg_class where oid='public.wc_cart_constructor_saves'::regclass) receipt_rls,
  not has_table_privilege('anon','public.wc_cart_box_svg_drawings','select') anon_svg_denied,

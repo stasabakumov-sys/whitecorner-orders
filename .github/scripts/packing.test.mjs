@@ -427,5 +427,14 @@ try{
  await db.query("select set_config('test.actor',$1,false)",[worker]);
  assert.equal((await db.query('select * from wc_cart_box_svg_drawings where cart_base_package_id=$1',[constructorPackage])).rows.length,1);
  await assert.rejects(db.query('delete from wc_cart_box_svg_drawings where cart_base_package_id=$1',[constructorPackage]),/permission denied/);
- console.log('Packing migration checks passed, including atomic Cart Constructor saves.');
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20261003000500_cart_file_mapping_access.sql','utf8'));
+ await db.exec('set role authenticated');
+ assert.equal((await db.query("select wc_cart_base_package('cart-shelf-new',1) id")).rows[0].id,addonPackage.id);
+ for(const actor of ['',randomUUID()]){
+  await db.query("select set_config('test.actor',$1,false)",[actor]);
+  for(const rpc of ['wc_cart_standard_base_package','wc_cart_addon_rule','wc_cart_base_package'])await assert.rejects(db.query(`select ${rpc}(null,null)`),/Active Hub membership required/);
+  await assert.rejects(db.query('select * from wc_cart_packing_file_boxes()'),/Active Hub membership required/);
+ }
+ console.log('Packing migration checks passed, including atomic Cart Constructor saves and mapping access.');
 }finally{await db.close();}
