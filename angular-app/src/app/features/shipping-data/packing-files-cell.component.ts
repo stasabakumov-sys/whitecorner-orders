@@ -23,7 +23,7 @@ import {BoxRdFilesComponent} from './box-rd-files.component';
  .presence{display:flex;align-items:center;gap:8px}.presence>span{width:14px;text-align:center;color:var(--wc-muted)}.presence>.present{color:#047857;font-weight:700}.edit{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0}.edit svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}.help{color:var(--wc-muted);margin:0 0 18px;font-size:.875rem;line-height:1.5}small{color:#b91c1c}
  `]})
 export class PackingFilesCellComponent implements OnChanges{
- @Input()box:any={};@Input()kind:'cdr'|'rd'='rd';@Input()signature='';@Input()index=0;@Input()sharedSize='';@Input()backdrop=false;@Input()dimensions:any=null;@Input()readOnly=false;@Input()locked=false;
+ @Input()box:any={};@Input()kind:'cdr'|'rd'='rd';@Input()signature='';@Input()index=0;@Input()sharedSize='';@Input()backdrop=false;@Input()dimensions:any=null;@Input()readOnly=false;@Input()locked=false;@Input()refreshVersion=0;
  viewBox:any={};resolvedId='';qualifiedKey=qualifiedDrawingKey;
  open=false;present=false;loading=false;error=false;private generation=0;
  constructor(private db:SupabaseService,private cdr:ChangeDetectorRef){}

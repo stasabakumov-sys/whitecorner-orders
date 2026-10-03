@@ -23,6 +23,7 @@ export const routes:Routes=[
   {path:'shop-floor',loadComponent:()=>import('./features/shop-floor/shop-floor.component').then(m=>m.ShopFloorComponent)},
   {path:'packing',pathMatch:'full',redirectTo:'packing/manage'},
   {path:'packing/manage',loadComponent:()=>import('./features/packing/packing-manage.component').then(m=>m.PackingManageComponent)},
+  {path:'packing/constructor',loadComponent:()=>import('./features/packing/box-constructor.component').then(m=>m.BoxConstructorComponent)},
   {path:'packing/work',loadComponent:()=>import('./features/packing/packing-work.component').then(m=>m.PackingWorkComponent)},
   {path:'users',loadComponent:()=>import('./features/users/users.component').then(m=>m.UsersComponent)},
   {path:'fulfilment',pathMatch:'full',redirectTo:'fulfilment/delivery'},
