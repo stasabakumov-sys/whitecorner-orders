@@ -43,3 +43,31 @@ describe('Shared and profile-local packaging file ownership',()=>{
  it('uses exact Backdrop Size + Foldable ownership without Cart resolution',async()=>{const {c,rpc,eq}=cell();c.sharedSize='2000x1000:foldable';await c.load();expect(c.present).toBe(true);expect(rpc).not.toHaveBeenCalled();expect(eq).toHaveBeenCalledWith('backdrop_size_key','2000x1000:foldable');});
  it('uses signature and box index when custom packaging has no shared Cart owner',async()=>{const {c,rpc,eq}=cell();c.signature='custom';c.index=2;await c.load();expect(c.present).toBe(true);expect(rpc).toHaveBeenCalledWith('wc_cart_base_package',{p_signature:'custom',p_index:2});expect(eq).toHaveBeenCalledWith('profile_signature','custom');expect(eq).toHaveBeenCalledWith('box_index',2);});
 });
+
+describe('Constructor SVG in the CDR column',()=>{
+ const snapshot={package_name:'Top/Bottom',length_mm:1230,width_mm:630,height_mm:80};
+ const svg={filename:'cart-box-L1215-W615-D80.svg',object_path:'owner/drawing.svg',cart_base_package_id:'box',box_snapshot:snapshot};
+ function svgCell(svgError:any=null){
+  const from=vi.fn((table:string)=>{const response=Promise.resolve({data:table==='wc_cart_box_svg_drawings'?[svg]:[],error:table==='wc_cart_box_svg_drawings'?svgError:null});const query:any={select:()=>query,eq:()=>query,then:response.then.bind(response)};return query;});
+  const rpc=vi.fn().mockResolvedValue({data:'box',error:null}),signed=vi.fn();
+  const c=new PackingFilesCellComponent({client:{from,rpc,storage:{from:()=>({createSignedUrl:signed})}}} as any,{markForCheck:vi.fn()} as any);
+  c.kind='cdr';c.box={id:'box',...snapshot,weight_kg:20};return {c,from,rpc,signed};
+ }
+ it('shows the generated SVG as a CDR-column drawing and rejects stale geometry',async()=>{
+  const {c,from}=svgCell();await c.load();expect(c.present).toBe(true);expect(c.svgDrawing.filename).toBe(svg.filename);expect(c.label).toBe('CDR / SVG: file uploaded');
+  expect(from).toHaveBeenCalledWith('wc_cart_box_svg_drawings');c.box.weight_kg=21;await c.load();expect(c.present).toBe(true);
+  c.box.length_mm=1231;await c.load();expect(c.present).toBe(false);expect(c.svgDrawing).toBeNull();
+ });
+ it('resolves the same shared SVG from a matching saved profile',async()=>{
+  const {c,rpc}=svgCell();c.signature='cart-profile';c.index=1;c.viewBox=c.box;await c.load();expect(rpc).toHaveBeenCalledWith('wc_cart_base_package',{p_signature:'cart-profile',p_index:1});expect(c.svgDrawing).toEqual(svg);expect(c.present).toBe(true);
+ });
+ it('shows a failed SVG lookup instead of claiming no file exists',async()=>{
+  const {c}=svgCell(Error('offline'));await c.load();expect(c.error).toBe(true);expect(c.label).toContain('check failed');expect(c.svgDrawing).toBeNull();
+ });
+ it('keeps the drawing after a failed signed download and allows retry',async()=>{
+  const {c,signed}=svgCell();await c.load();signed.mockResolvedValueOnce({error:Error('offline')}).mockResolvedValueOnce({data:{signedUrl:'https://example.test/svg'}});
+  await c.downloadSvg();expect(c.svgError).toContain('Retry download');expect(c.svgDrawing).toEqual(svg);
+  const click=vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{});
+  try{await c.downloadSvg();expect(c.svgError).toBe('');expect(signed).toHaveBeenLastCalledWith(svg.object_path,60,{download:svg.filename});expect(click).toHaveBeenCalledOnce();}finally{click.mockRestore();}
+ });
+});

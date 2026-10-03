@@ -80,9 +80,16 @@ Generate two RD files, review the drawing, then use the Save icon. One SVG and
 two RD files are saved to that box, with two cutting copies per RD. SVG uses the
 private `box-drawings` bucket and its own `wc_cart_box_svg_drawings` reference;
 existing CDR references remain separate. SVG is downloaded as a reference and
-does not enter the laser queue. Existing RD sets of exactly two files require
+appears in the existing CDR column alongside any CDR source. That column checks
+the SVG snapshot against packaging dimensions and refreshes after Constructor
+Save; its file dialog provides the signed SVG download. SVG does not enter
+the laser queue. Existing RD sets of exactly two files require
 explicit bottom/lid selection unless prior Constructor metadata identifies
 them. Other existing sets require review in the RD editor first.
+
+Manual packaging drawing uploads accept SVG or CDR (up to 20 MB). Cart source
+uploads require `20261003000600_packaging_svg_sources.sql`; existing access,
+revision and geometry checks remain in force.
 
 Migration `20261003000400_cart_constructor_files.sql` must be applied before
 using this integration in a deployed Hub, together with
