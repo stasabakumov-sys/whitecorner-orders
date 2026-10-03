@@ -3,7 +3,7 @@ import {FormsModule} from '@angular/forms';
 import {SupabaseService} from '../../core/services/supabase.service';
 
 @Component({selector:'app-add-main-package',standalone:true,imports:[FormsModule],template:`
- @if(!editing){<button type="button" [disabled]="!sizeKey" (click)="start()">Add packaging</button>}
+ @if(!editing){<button type="button" class="square" title="Add packaging" aria-label="Add packaging" [disabled]="!sizeKey" (click)="start()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>}
  @if(!sizeKey){<p>Select a product size before adding packaging.</p>}
  @if(editing){
   <fieldset [disabled]="saving()"><legend>New Main box · {{sizeLabel}}</legend>
@@ -14,13 +14,13 @@ import {SupabaseService} from '../../core/services/supabase.service';
     <label>H mm<input type="number" min="1" [(ngModel)]="draft.height_mm"></label>
     <label>kg<input type="number" min="0.001" step="0.1" [(ngModel)]="draft.weight_kg"></label>
    </div>
-   <button type="button" (click)="save()">{{saving()?'Saving…':'Save packaging'}}</button>
+   <button type="button" class="square" title="Save packaging" aria-label="Save packaging" (click)="save()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>
    <button type="button" (click)="cancel()">Cancel</button>
   </fieldset>
  }
  @if(error()){<p role="alert">{{error()}}</p>}
  @if(saved()){<p role="status">Packaging saved.</p>}
-`,styles:[`:host{display:block;margin:12px 0}fieldset{border:0;padding:0;min-width:0}.fields{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}label{display:flex;flex-direction:column;gap:5px}input{width:130px;max-width:100%}button{margin-right:8px}[role=alert]{color:#b91c1c}[role=status]{color:#17643d}`]})
+`,styles:[`:host{display:block;margin:12px 0}.square svg,.icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}fieldset{border:0;padding:0;min-width:0}.fields{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}label{display:flex;flex-direction:column;gap:5px}input{width:58px;max-width:100%}.fields label:first-child input{width:160px}.square{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0}button{margin-right:8px}[role=alert]{color:#b91c1c}[role=status]{color:#17643d}`]})
 export class AddMainPackageComponent {
  @Input() productId='';@Input() sizeKey='';@Input() sizeLabel='';
  @Output() packageSaved=new EventEmitter<any>();

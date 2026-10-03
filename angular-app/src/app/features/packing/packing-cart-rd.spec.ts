@@ -19,5 +19,8 @@ describe('Cart Base RD visibility in Manage cutting',()=>{
   expect(component.filesFor('regular-shelf',1).map(file=>file.filename)).toEqual(['shelf.rd']);
   expect(component.filesFor('large-shelf',0)).toEqual([]);
   expect(component.filesFor('replacement',0)).toEqual([]);
+  component.cartFileBoxes.set({'["regular-shelf",1]':'shared-shelf'});
+  component.rdFiles.update(files=>[...files,{id:'shared-addon',profile_signature:null,box_index:null,cart_base_package_id:'shared-shelf',filename:'shared-shelf.rd',copies:1}]);
+  expect(component.filesFor('regular-shelf',1).map(file=>file.filename)).toEqual(['shared-shelf.rd']);
  });
 });

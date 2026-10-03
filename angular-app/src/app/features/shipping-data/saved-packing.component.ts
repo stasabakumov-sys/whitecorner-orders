@@ -1,28 +1,28 @@
 import {Component,Input,Output,EventEmitter,signal,OnChanges} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {SupabaseService} from '../../core/services/supabase.service';
-import {PackageDrawingsComponent} from './package-drawings.component';
+import {PackingFilesCellComponent} from './packing-files-cell.component';
 import {packagingError,reviewComponents} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
-@Component({selector:'app-saved-packing',standalone:true,imports:[FormsModule,PackageDrawingsComponent],template:`
+@Component({selector:'app-saved-packing',standalone:true,imports:[FormsModule,PackingFilesCellComponent],template:`
  @if(backdrop&&backdropDimensions){
- <div class="tablewrap"><table class="backdrop-pack-table"><colgroup><col style="width:15%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:20%"><col style="width:32%"></colgroup><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Drawing</th></tr></thead><tbody><tr>
+ <div class="tablewrap"><table class="backdrop-pack-table"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>.CDR</th><th>.RD</th></tr></thead><tbody><tr>
  <td>{{backdropDimensions.package_name}}</td><td>{{backdropDimensions.length_mm}}</td><td>{{backdropDimensions.width_mm}}</td><td>{{backdropDimensions.height_mm}}</td>
  <td><input aria-label="Weight kg" type="number" min="0.001" step="0.1" [disabled]="saving()" [(ngModel)]="weightDraft" (ngModelChange)="saved.set(false)"></td>
- <td><app-package-drawings [signature]="profile.signature" [index]="0" [box]="canonical(profile.packages[0])" [backdrop]="true" [sharedSize]="sharedSize" [sizeLabel]="sharedSizeLabel" /></td>
+ <td><app-packing-files-cell [signature]="profile.signature" [box]="profile.packages[0]" [dimensions]="backdropDimensions" [backdrop]="true" [sharedSize]="sharedSize" kind="cdr" /></td><td><app-packing-files-cell [signature]="profile.signature" [box]="profile.packages[0]" [dimensions]="backdropDimensions" [backdrop]="true" [sharedSize]="sharedSize" kind="rd" /></td>
  </tr></tbody></table></div>
- <div class="actions"><button type="button" [disabled]="saving()" (click)="saveWeight()">{{saving()?'Saving…':'Save weight'}}</button><button type="button" [disabled]="saving()" (click)="resetWeight()">Cancel</button></div>
+ <div class="actions"><button type="button" class="icon" title="Save weight" aria-label="Save weight" [disabled]="saving()" (click)="saveWeight()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button><button type="button" [disabled]="saving()" (click)="resetWeight()">Cancel</button></div>
  @if(error()){<p role="alert">{{error()}}</p>}@if(saved()){<p role="status">Weight saved.</p>}
  }@else{
  <div class="actions">
- @if(!editing){<button type="button" (click)="edit()">Edit packaging</button><button type="button" (click)="replace()">Replace packaging</button>}
- @else{<button type="button" [disabled]="saving()" (click)="save()">{{saving()?'Saving…':'Save'}}</button><button type="button" [disabled]="saving()" (click)="cancel()">Cancel</button>}
+ @if(!editing){<button type="button" class="icon" title="Edit packaging" aria-label="Edit packaging" (click)="edit()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4"/></svg></button><button type="button" (click)="replace()">Replace packaging</button>}
+ @else{<button type="button" class="icon" title="Save packaging" aria-label="Save packaging" [disabled]="saving()" (click)="save()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button><button type="button" [disabled]="saving()" (click)="cancel()">Cancel</button>}
  </div>
  @if(replacing){<p>Add the new boxes below, then Save to replace the current packaging.</p>}
  @if(editing&&backdrop&&!backdropDimensions){<p role="status">Confirm these dimensions as shared for all matching Backdrops. Weight remains specific to this model and size.</p>}
  @if(error()){<p role="alert">{{error()}}</p>}
  @if(saved()){<p role="status">Packaging saved.</p>}
- <div class="tablewrap"><table><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>{{editing?'Contents':'Drawing'}}</th></tr></thead><tbody>
+ <div class="tablewrap"><table><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>.CDR</th><th>.RD</th>@if(editing){<th>Contents</th>}</tr></thead><tbody>
  @for(box of editing?draft:profile.packages;track $index){<tr>
  @if(editing){
  <td><input aria-label="Box name" [disabled]="saving()||(backdrop&&!!backdropDimensions)" [(ngModel)]="box.package_name"></td>
@@ -30,17 +30,18 @@ import {packagingError,reviewComponents} from '../../../../../supabase/functions
  <td><input aria-label="Width mm" type="number" min="1" [disabled]="saving()||(backdrop&&!!backdropDimensions)" [(ngModel)]="box.width_mm"></td>
  <td><input aria-label="Height mm" type="number" min="1" [disabled]="saving()||(backdrop&&!!backdropDimensions)" [(ngModel)]="box.height_mm"></td>
  <td><input aria-label="Weight kg" type="number" min="0.001" step="0.1" [disabled]="saving()" [(ngModel)]="box.weight_kg"></td>
+ <td><app-packing-files-cell [signature]="profile.signature" [index]="$index" [box]="profile.packages[$index]||box" [backdrop]="backdrop" [sharedSize]="backdrop?sharedSize:''" kind="cdr" [locked]="true" /></td><td><app-packing-files-cell [signature]="profile.signature" [index]="$index" [box]="profile.packages[$index]||box" [backdrop]="backdrop" [sharedSize]="backdrop?sharedSize:''" kind="rd" [locked]="true" /></td>
  <td>@if(components().length>1){@for(c of components();track c.id){<label><input type="checkbox" [disabled]="saving()" [checked]="assigned(box,c)" (change)="toggle(box,c,$any($event.target).checked)">{{c.component_name}}</label>}}@else{ {{product.product_name}} }
  @if(replacing){<button type="button" [disabled]="saving()" (click)="draft.splice($index,1)">Remove box</button>}</td>
  }@else{
  <td>{{canonical(box).package_name}}</td><td>{{canonical(box).length_mm}}</td><td>{{canonical(box).width_mm}}</td><td>{{canonical(box).height_mm}}</td><td>{{box.weight_kg??'Enter weight'}}</td>
- <td><app-package-drawings [signature]="profile.signature" [index]="$index" [box]="canonical(box)" [backdrop]="backdrop" [sharedSize]="backdrop?sharedSize:''" [sizeLabel]="sharedSizeLabel" /></td>
+ <td><app-packing-files-cell [signature]="profile.signature" [index]="$index" [box]="box" [dimensions]="backdropDimensions" [backdrop]="backdrop" [sharedSize]="backdrop?sharedSize:''" kind="cdr" /></td><td><app-packing-files-cell [signature]="profile.signature" [index]="$index" [box]="box" [dimensions]="backdropDimensions" [backdrop]="backdrop" [sharedSize]="backdrop?sharedSize:''" kind="rd" /></td>
  }
  </tr>}
  </tbody></table></div>
- @if(replacing&&!backdrop){<button type="button" [disabled]="saving()" (click)="addBox()">Add box</button>}
+ @if(replacing&&!backdrop){<button type="button" class="icon" title="Add box" aria-label="Add box" [disabled]="saving()" (click)="addBox()">+</button>}
  }
- `,styles:[`:host{display:block}.actions{display:flex;gap:8px;margin:8px 0}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse}.backdrop-pack-table{table-layout:fixed}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--wc-border)}input:not([type=checkbox]){width:90px;max-width:100%;box-sizing:border-box}td:first-child input{width:180px}label{display:block}p{font-size:.875rem}[role=alert]{color:#b91c1c}`]})
+ `,styles:[`.icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}:host{display:block}.actions{display:flex;gap:8px;margin:8px 0}.tablewrap{overflow:auto;border:1px solid var(--wc-border);border-radius:12px;background:var(--wc-surface)}table{width:100%;min-width:550px;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--wc-border)}input:not([type=checkbox]){width:58px;padding:6px;max-width:100%;box-sizing:border-box}td:first-child input{width:160px}.icon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0}label{display:block}p{font-size:.875rem}[role=alert]{color:#b91c1c}`]})
 export class SavedPackingComponent implements OnChanges{
  @Input()product:any;@Input()profile:any;@Input()rules:any[]=[];@Input()backdrop=false;@Input()sharedSize='';@Input()sharedSizeLabel='';@Input()fallbackOptions:Record<string,string>={};@Input()backdropDimensions:any=null;
  @Output()profileSaved=new EventEmitter<any>();@Output()dimensionsSaved=new EventEmitter<any>();

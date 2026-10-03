@@ -1,5 +1,7 @@
 import {Component,Input,OnChanges,signal} from '@angular/core';
 import {FormsModule} from '@angular/forms';
+import {PackingFilesCellComponent} from './packing-files-cell.component';
+import {baseDrawingBox,sameDrawingBox} from './box-drawing.component';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {packagingOptionLabels,orderItemOptionLabels,packagingError,reviewComponents,variantSignature,productId} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {catalogSizes,backdropDrawingKey,sizeKeyLabel} from './product-sizes';
@@ -13,7 +15,7 @@ export function sharedBackdropBox(options:Record<string,string>,dimensions:Recor
  return {key:target,box:row?{package_name:row.package_name,length_mm:Number(row.length_mm),width_mm:Number(row.width_mm),height_mm:Number(row.height_mm),weight_kg:0,contents:[]}:null};
 }
 
-@Component({selector:'app-packaging-variants',standalone:true,imports:[FormsModule],template:`
+@Component({selector:'app-packaging-variants',standalone:true,imports:[FormsModule,PackingFilesCellComponent],template:`
  <h3>Packaging variants</h3>
  @if(packagingScope==='shared-backdrop'){
   <p>Backdrop dimensions and drawing are shared by exact Size and Foldable/Non-foldable. Enter weight separately for this model and size; design and Colour (including Raw) do not change packaging.</p>
@@ -37,19 +39,23 @@ export function sharedBackdropBox(options:Record<string,string>,dimensions:Recor
  </details>
  @if(reuseMessage()){<p [attr.role]="reuseConflict()?'alert':'status'">{{reuseMessage()}}</p>}
  <h4>Boxes for one product</h4>
- @for(p of boxes;track $index){<section class="box"><div class="tools">
- <label>Name<input [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.package_name"></label>
- <label>L mm<input type="number" min="1" [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.length_mm"></label><label>W mm<input type="number" min="1" [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.width_mm"></label><label>H mm<input type="number" min="1" [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.height_mm"></label><label>kg<input type="number" min="0.001" step="0.1" [(ngModel)]="p.weight_kg"></label>
- @if(packagingScope!=='shared-backdrop'){<button (click)="boxes.splice($index,1)">Remove box</button>}</div>
- <details><summary>Contents ({{p.contents.length}})</summary>@for(c of components();track c.id){<label class="choice"><input type="checkbox" [checked]="assigned(p,c)" (change)="toggle(p,c,$any($event.target).checked)">{{c.component_name}} · Unit {{c.unit_index}}</label>}</details>
- </section>}
- @if(packagingScope!=='shared-backdrop'){<button (click)="addBox()">Add box</button>}
+ <div class="table-wrap"><table><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>.CDR</th><th>.RD</th><th></th></tr></thead><tbody>
+ @for(p of boxes;track $index){<tr>
+ <td><input aria-label="Box name" class="box-name" [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.package_name"></td>
+ <td><input aria-label="Length mm" type="number" min="1" [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.length_mm"></td><td><input aria-label="Width mm" type="number" min="1" [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.width_mm"></td><td><input aria-label="Height mm" type="number" min="1" [disabled]="packagingScope==='shared-backdrop'" [(ngModel)]="p.height_mm"></td><td><input aria-label="Weight kg" type="number" min="0.001" step="0.1" [(ngModel)]="p.weight_kg"></td>
+ <td><app-packing-files-cell kind="cdr" [box]="fileBox($index)" [signature]="selectedKey" [index]="$index" [backdrop]="packagingScope==='shared-backdrop'" [sharedSize]="sharedKey()" [locked]="!fileReady($index)" /></td>
+ <td><app-packing-files-cell kind="rd" [box]="fileBox($index)" [signature]="selectedKey" [index]="$index" [backdrop]="packagingScope==='shared-backdrop'" [sharedSize]="sharedKey()" [locked]="!fileReady($index)" /></td>
+ <td>@if(packagingScope!=='shared-backdrop'){<button title="Remove box" aria-label="Remove box" class="square" (click)="boxes.splice($index,1)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 7l1 13h6l1-13"/></svg></button>}</td></tr>
+ <tr><td colspan="8"><details><summary>Contents ({{p.contents.length}})</summary>@for(c of components();track c.id){<label class="choice"><input type="checkbox" [checked]="assigned(p,c)" (change)="toggle(p,c,$any($event.target).checked)">{{c.component_name}} · Unit {{c.unit_index}}</label>}</details></td></tr>}
+ </tbody></table></div>
+ @if(packagingScope!=='shared-backdrop'){<button class="square" title="Add box" aria-label="Add box" (click)="addBox()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>}
+ <p>Save packaging changes before editing its CDR or RD files.</p>
  <p>{{issue()}}</p>
  <label class="choice"><input type="checkbox" [(ngModel)]="confirmed">I checked this variant's options, box measurements and contents.</label>
- <button [disabled]="!!issue()||!confirmed" (click)="save()">{{saving()?'Saving…':busy()?'Loading packaging…':'Save changes'}}</button>
+ <button class="square" title="Save changes" aria-label="Save changes" [disabled]="!!issue()||!confirmed" (click)="save()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>
  </fieldset>
  @if(saved()){<p role="status">Variant saved. Existing orders and quotes were not changed.</p>}
- `,styles:[`:host{display:block;border:1px solid var(--wc-border);border-radius:var(--wc-radius);padding:1rem;margin-top:1rem}.tools{display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin:.6rem 0}.box{border:1px solid var(--wc-border);border-radius:var(--wc-radius);padding:.7rem;margin:.7rem 0}input,select,button{font:inherit}label input,label select{display:block;max-width:240px;margin-top:.25rem}.choice{display:flex;gap:.5rem;align-items:center;margin:.5rem 0}.choice input{display:inline}h3{margin:0 0 .5rem}p{margin:.5rem 0;color:var(--wc-muted)}select{max-width:100%}.tools input{min-width:0;max-width:100%;width:160px}.tools label{min-width:0}fieldset{border:0;padding:0;min-width:0}.variant-matching{margin:.75rem 0;border-top:1px solid var(--wc-border);border-bottom:1px solid var(--wc-border);padding:.65rem 0}.variant-matching summary{cursor:pointer;font-weight:600}[role=alert]{color:#b91c1c}`]})
+ `,styles:[`:host{display:block;border:1px solid var(--wc-border);border-radius:var(--wc-radius);padding:1rem;margin-top:1rem}.tools{display:flex;gap:.6rem;flex-wrap:wrap;align-items:end;margin:.6rem 0}.box{border:1px solid var(--wc-border);border-radius:var(--wc-radius);padding:.7rem;margin:.7rem 0}input,select,button{font:inherit}label input,label select{display:block;max-width:240px;margin-top:.25rem}.choice{display:flex;gap:.5rem;align-items:center;margin:.5rem 0}.choice input{display:inline}h3{margin:0 0 .5rem}p{margin:.5rem 0;color:var(--wc-muted)}select{max-width:100%}.tools input{min-width:0;max-width:100%;width:160px}.tools label{min-width:0}.table-wrap{overflow-x:auto;border:1px solid var(--wc-border);border-radius:12px;background:white;margin:14px 0}table{width:100%;border-collapse:collapse;min-width:550px}th,td{padding:10px 8px;text-align:left;border-bottom:1px solid var(--wc-border)}table input:not([type=checkbox]){width:58px;padding:6px;min-width:0;box-sizing:border-box}table .box-name{width:160px}.square{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0}.square i{margin:0}.square svg,.icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}fieldset{border:0;padding:0;min-width:0}.variant-matching{margin:.75rem 0;border-top:1px solid var(--wc-border);border-bottom:1px solid var(--wc-border);padding:.65rem 0}.variant-matching summary{cursor:pointer;font-weight:600}[role=alert]{color:#b91c1c}`]})
 export class PackagingVariantsComponent implements OnChanges {
  @Input() product:any;
  @Input() catalog:any;
@@ -98,6 +104,15 @@ export class PackagingVariantsComponent implements OnChanges {
   const components=this.components();
   this.boxes=[{...found.box,contents:components.length===1?components:[]}];
   this.reuseMessage.set(`Shared dimensions loaded for ${sizeKeyLabel(found.key)}. Enter this product's weight before saving.`);
+ }
+ sharedKey(){return this.packagingScope==='shared-backdrop'?sharedBackdropBox(Object.fromEntries(this.options.map(o=>[o.name,o.value])),this.backdropDimensions).key:'';}
+ fileBox(index:number){return this.variants().find(v=>v.signature===this.selectedKey)?.packages?.[index]||this.boxes[index];}
+ fileReady(index:number){
+  if(this.packagingScope==='shared-backdrop')return !!this.backdropDimensions[this.sharedKey()];
+  const profile=this.variants().find(v=>v.signature===this.selectedKey),saved=profile?.packages?.[index],draft=this.boxes[index];
+  if(!saved||!draft||variantSignature(this.item())!==this.selectedKey)return false;
+  const contents=(box:any)=>JSON.stringify((box.contents||[]).map((c:any)=>[c.component_key,c.unit_index]).sort());
+  return sameDrawingBox(baseDrawingBox(saved),baseDrawingBox(draft))&&Number(saved.weight_kg)===Number(draft.weight_kg)&&contents(saved)===contents(draft);
  }
  assigned(p:any,c:any){return p.contents.some((x:any)=>x.id===c.id);}
  toggle(p:any,c:any,on:boolean){p.contents=on?[...p.contents.filter((x:any)=>x.id!==c.id),c]:p.contents.filter((x:any)=>x.id!==c.id);this.confirmed=false;}

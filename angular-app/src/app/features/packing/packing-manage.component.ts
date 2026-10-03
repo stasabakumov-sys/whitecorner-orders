@@ -58,7 +58,7 @@ interface Task {id:string;unit_id:string;profile_signature:string;state:string;f
  `]})
 export class PackingManageComponent implements OnInit,OnDestroy {
  readonly activeTab=signal<'product'|'custom'>('product');
- readonly candidates=signal<Candidate[]>([]);readonly profiles=signal<Profile[]>([]);readonly tasks=signal<Task[]>([]);readonly rdFiles=signal<RdFile[]>([]);readonly cartBasePackages=signal<CartBasePackage[]>([]);
+ readonly candidates=signal<Candidate[]>([]);readonly profiles=signal<Profile[]>([]);readonly tasks=signal<Task[]>([]);readonly rdFiles=signal<RdFile[]>([]);readonly cartBasePackages=signal<CartBasePackage[]>([]);readonly cartFileBoxes=signal<Record<string,string>>({});
  readonly failedImages=new Set<string>();
  readonly selected=signal<Candidate|null>(null);readonly search=signal('');readonly loading=signal(false);readonly error=signal('');readonly success=signal('');readonly busy=signal('');readonly rowError=signal<{unit:string;message:string}|null>(null);
  profileSignature='';
@@ -80,18 +80,21 @@ export class PackingManageComponent implements OnInit,OnDestroy {
  }
  async load(){if(this.loading()||this.busy())return;++this.taskVersion;this.taskSyncError.set('');this.loading.set(true);this.error.set('');this.success.set('');
   try{await this.members.load();if(!this.members.manager())return;
-   const [candidateResult,taskResult,profiles,files,base]=await Promise.all([
+   const [candidateResult,taskResult,profiles,files,base,fileBoxes]=await Promise.all([
     this.db.client.rpc('wc_packing_candidates'),
     this.db.client.from('wc_packing_tasks').select('id,unit_id,profile_signature,state,files,cut_file_ids,completed_at').neq('state','cancelled'),
     this.allProfiles(),
     this.allRdFiles(),
     this.db.client.from('wc_shipping_packages').select('id,shipping_product_id,size_key,package_name,length_mm,width_mm,height_mm').eq('source_type','Base').eq('active',true),
+    this.allFileBoxes(),
    ]);
-   if(candidateResult.error)throw candidateResult.error;if(taskResult.error)throw taskResult.error;if(base.error)throw base.error;
+   if(candidateResult.error)throw candidateResult.error;if(taskResult.error)throw taskResult.error;if(base.error)throw base.error;if(fileBoxes.error)throw fileBoxes.error;
+   this.cartFileBoxes.set(Object.fromEntries((fileBoxes.data||[]).map((row:any)=>[JSON.stringify([row.signature,row.box_index]),row.package_id||''])));
    this.candidates.set((candidateResult.data||[]) as Candidate[]);this.tasks.set((taskResult.data||[]) as Task[]);this.profiles.set(profiles);this.rdFiles.set(files);this.cartBasePackages.set((base.data||[]) as CartBasePackage[]);
   }catch(e){this.error.set(`Could not load Packing work. ${(e as Error)?.message||'Check the connection and retry.'}`);}
   finally{this.loading.set(false);}
  }
+ private async allFileBoxes(){const all:any[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.rpc('wc_cart_packing_file_boxes').order('signature').order('box_index').range(start,start+249);if(error)throw error;all.push(...(data||[]));if((data||[]).length<250)return {data:all,error:null};}}
  private async allProfiles(){const all:Profile[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.from('wc_delivery_packaging_profiles').select('signature,shipping_product_id,packages,template_item').order('signature').range(start,start+249);if(error)throw error;all.push(...(data||[]) as Profile[]);if((data||[]).length<250)return all;}}
  private async allRdFiles(){const all:RdFile[]=[];for(let start=0;;start+=250){const {data,error}=await this.db.client.from('wc_box_rd_files').select('id,profile_signature,box_index,backdrop_size_key,cart_base_package_id,filename,copies').order('created_at').range(start,start+249);if(error)throw error;all.push(...(data||[]) as RdFile[]);if((data||[]).length<250)return all;}}
  visible(){const term=this.search().toLowerCase().trim();return this.candidates().filter(row=>!term||`${row.order_number} ${row.product_name}`.toLowerCase().includes(term));}
@@ -103,7 +106,7 @@ export class PackingManageComponent implements OnInit,OnDestroy {
    const key=profile.packages[0].backdrop_size_key||(/backdrop/i.test(profile.template_item?.product_name||'')?backdropDrawingKey(profile,profile.template_item.product_name):'');
    if(qualifiedDrawingKey(key)){const shared=this.rdFiles().filter(file=>file.backdrop_size_key===key);if(shared.length)return shared;}
   }
-  if(profile){const baseId=this.cartBaseId(profile,index);if(baseId){const shared=this.rdFiles().filter(file=>file.cart_base_package_id===baseId);if(shared.length)return shared;}}
+  if(profile){const key=JSON.stringify([signature,index]),mapping=this.cartFileBoxes(),baseId=Object.hasOwn(mapping,key)?mapping[key]:this.cartBaseId(profile,index);if(baseId){const shared=this.rdFiles().filter(file=>file.cart_base_package_id===baseId);if(shared.length)return shared;}}
   return this.rdFiles().filter(file=>file.profile_signature===signature&&file.box_index===index);
  }
  cartBaseId(profile:Profile,index:number){const box=profile.packages[index];if(profile.template_item?.profile_scope==='cart-main'||!box?.contents?.length||box.contents.some(content=>(content.component_key||'main')!=='main'))return'';

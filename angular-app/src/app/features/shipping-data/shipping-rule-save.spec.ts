@@ -10,10 +10,12 @@ describe('Shipping rule save feedback',()=>{
  });
  it('shows a row-level saved result after the database confirms the update',async()=>{
   const eq=vi.fn().mockResolvedValue({error:null});
-  const component=new ShippingDataComponent({client:{from:()=>({update:()=>({eq})})}} as any,undefined,{} as any);
+  const query:any={eq:()=>query,order:vi.fn().mockResolvedValue({data:[{id:'addon-box',shipping_rule_id:rule.id,package_no:1}],error:null})};
+  const component=new ShippingDataComponent({client:{from:()=>({update:()=>({eq}),select:()=>query})}} as any,undefined,{} as any);
   await component.saveRule(rule);
   expect(component.ruleFeedback()[rule.id]).toEqual({ok:true,text:'Saved ✓'});
   expect(component.ruleSaving(rule.id)).toBe(false);
+  expect(component.addonBoxes(rule.id).map(box=>box.id)).toEqual(['addon-box']);
  });
  it('selects one or several Add-ons for a Main combination without changing their package rules',()=>{
   const component=new ShippingDataComponent({} as any,undefined,{} as any),second={...rule,id:'second',match_name:'Side shelves'};

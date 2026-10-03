@@ -3,25 +3,31 @@ import {FormsModule} from '@angular/forms';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {canonicalPackagingItemKey,packagingError,reviewComponents} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {cartSizeFromOptions} from './cart-size';
+import {PackingFilesCellComponent} from './packing-files-cell.component';
+import {baseDrawingBox,sameDrawingBox} from './box-drawing.component';
 
-@Component({selector:'app-cart-main-packaging',standalone:true,imports:[FormsModule],template:`
+@Component({selector:'app-cart-main-packaging',standalone:true,imports:[FormsModule,PackingFilesCellComponent],template:`
  <section class="editor">
   <h4>Main + {{combinationLabel()}}</h4>
   <p class="mut">The reusable Main above remains unchanged. Enter the complete replacement packaging for this exact Add-on combination.</p>
   <div class="states"><span [class.ready]="hasVariant()">{{hasVariant()?'Variant saved ✓':'Variant required before quoting'}}</span></div>
   @if(error()){<p role="alert">{{error()}}</p>}
   <h5>{{sizeLabel}} · Main + {{combinationLabel()}}</h5>
-  @for(box of boxes;track $index){<div class="box">
-   <div class="tools"><label>Name<input [(ngModel)]="box.package_name"></label><label>L mm<input type="number" min="1" [(ngModel)]="box.length_mm"></label><label>W mm<input type="number" min="1" [(ngModel)]="box.width_mm"></label><label>H mm<input type="number" min="1" [(ngModel)]="box.height_mm"></label><label>kg<input type="number" min="0.01" step="0.1" [(ngModel)]="box.weight_kg">@if(weightNote(box.weight_kg);as note){<span class="weight-note" [class.over]="Number(box.weight_kg)>25">{{note}}</span>}</label><button type="button" (click)="removeBox($index)">Remove</button></div>
-   <details><summary>Contents ({{box.contents.length}})</summary>@for(component of components();track component.id){<label class="choice"><input type="checkbox" [checked]="assigned(box,component)" (change)="toggle(box,component,$any($event.target).checked)">{{component.component_name}} · Unit {{component.unit_index}}</label>}</details>
-  </div>}
-  <button type="button" [disabled]="busy()" (click)="addBox()">Add box</button>
+  <div class="tablewrap"><table><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>.CDR</th><th>.RD</th><th></th></tr></thead><tbody>
+  @for(box of boxes;track $index){<tr>
+   <td><input class="name" aria-label="Box name" [(ngModel)]="box.package_name"></td><td><input aria-label="Length mm" type="number" min="1" [(ngModel)]="box.length_mm"></td><td><input aria-label="Width mm" type="number" min="1" [(ngModel)]="box.width_mm"></td><td><input aria-label="Height mm" type="number" min="1" [(ngModel)]="box.height_mm"></td><td><input aria-label="Weight kg" type="number" min="0.01" step="0.1" [(ngModel)]="box.weight_kg">@if(weightNote(box.weight_kg);as note){<span class="weight-note" [class.over]="Number(box.weight_kg)>25">{{note}}</span>}</td>
+   <td><app-packing-files-cell [signature]="variants()[0]?.signature||''" [box]="fileBox($index)" [index]="$index" [locked]="!fileReady($index)" kind="cdr" /></td><td><app-packing-files-cell [signature]="variants()[0]?.signature||''" [box]="fileBox($index)" [index]="$index" [locked]="!fileReady($index)" kind="rd" /></td>
+   <td><button type="button" (click)="removeBox($index)">Remove</button></td>
+  </tr><tr><td colspan="8"><details><summary>Contents ({{box.contents.length}})</summary>@for(component of components();track component.id){<label class="choice"><input type="checkbox" [checked]="assigned(box,component)" (change)="toggle(box,component,$any($event.target).checked)">{{component.component_name}} · Unit {{component.unit_index}}</label>}</details></td></tr>}
+  </tbody></table></div>
+  <button type="button" class="icon" title="Add box" aria-label="Add box" [disabled]="busy()" (click)="addBox()">+</button>
+  <p class="mut">Save packaging changes before editing its CDR or RD files.</p>
   @if(issue()){<p class="mut">{{issue()}}</p>}
   <label class="choice"><input type="checkbox" [(ngModel)]="confirmed">I checked this Main variant's composition, measurements, weight and contents.</label>
-  <button type="button" class="primary" [disabled]="busy()||!!issue()||!confirmed" (click)="save()">{{busy()?'Saving…':'Save Main + Add-ons variant'}}</button>
+  <button type="button" class="primary icon" title="Save Main + Add-ons variant" aria-label="Save Main + Add-ons variant" [disabled]="busy()||!!issue()||!confirmed" (click)="save()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>
   @if(saved()){<p role="status">Main + Add-ons variant saved ✓</p>}
  </section>
- `,styles:[`:host{display:block;flex-basis:100%;width:100%}.editor{border-top:1px solid var(--wc-border);margin-top:4px;padding:14px 0 2px}.states{display:flex;gap:8px;flex-wrap:wrap}.states span{padding:5px 9px;border-radius:8px;background:var(--p-orange-50);color:var(--p-orange-800)}.states span.ready{background:var(--p-green-50);color:var(--p-green-800)}.tools{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:10px 0}.tools label{display:flex;flex-direction:column;gap:5px}.tools input{width:165px;max-width:100%}.box{border-top:1px solid var(--wc-border);padding:10px 0}.choice{display:flex;align-items:center;gap:7px;margin:8px 0}.choice input{width:auto}.mut{color:var(--wc-muted)}.weight-note{font-size:.75rem;color:var(--p-orange-700)}.weight-note.over{color:var(--p-red-600)}[role=alert]{color:var(--p-red-600)}[role=status]{color:var(--p-green-700)}h4{margin:0 0 6px}h5{margin:14px 0 6px}`]})
+ `,styles:[`.icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}:host{display:block;flex-basis:100%;width:100%}.editor{border-top:1px solid var(--wc-border);margin-top:4px;padding:14px 0 2px}.states{display:flex;gap:8px;flex-wrap:wrap}.states span{padding:5px 9px;border-radius:8px;background:var(--p-orange-50);color:var(--p-orange-800)}.states span.ready{background:var(--p-green-50);color:var(--p-green-800)}.tools{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:10px 0}.tools label{display:flex;flex-direction:column;gap:5px}.tools input{width:165px;max-width:100%}.box{border-top:1px solid var(--wc-border);padding:10px 0}.choice{display:flex;align-items:center;gap:7px;margin:8px 0}.choice input{width:auto}.mut{color:var(--wc-muted)}.weight-note{font-size:.75rem;color:var(--p-orange-700)}.weight-note.over{color:var(--p-red-600)}[role=alert]{color:var(--p-red-600)}[role=status]{color:var(--p-green-700)}h4{margin:0 0 6px}h5{margin:14px 0 6px} .tablewrap{overflow:auto;border:1px solid var(--wc-border);border-radius:12px;background:var(--wc-surface)}table{width:100%;min-width:660px;border-collapse:collapse}th,td{text-align:left;vertical-align:middle;padding:8px 6px;border-bottom:1px solid var(--wc-border)}table input:not([type=checkbox]){width:58px;padding:6px;box-sizing:border-box}table .name{width:150px}.icon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0}`]})
 export class CartMainPackagingComponent implements OnChanges{
  @Input() product:any;@Input() sizeKey='';@Input() sizeLabel='';@Input() addOns:any[]=[];
  @Output() profileSaved=new EventEmitter<any>();
@@ -41,6 +47,8 @@ export class CartMainPackagingComponent implements OnChanges{
  components(){return reviewComponents({wc_order_items:this.items()},this.rules);}
  combinationLabel(){return this.addOns.map(rule=>rule.match_name).join(' + ');}
  hasVariant(){return this.variants().length>0;}
+ fileBox(index:number){return this.variants()[0]?.packages?.[index]||this.boxes[index];}
+ fileReady(index:number){const stored=this.variants()[0]?.packages?.[index],draft=this.boxes[index];if(!stored||!draft)return false;const shape=(box:any)=>({...baseDrawingBox(box),weight_kg:box.weight_kg,contents:(box.contents||[]).map((c:any)=>[canonicalPackagingItemKey(c.profile_item_key||''),c.component_key,c.unit_index]).sort()});return sameDrawingBox(shape(stored),shape(draft));}
  remap(){const components=this.components();this.boxes=this.boxes.map(box=>({...box,contents:(box.contents||[]).flatMap((content:any)=>{const match=components.find(c=>c.profile_item_key===canonicalPackagingItemKey(content.profile_item_key||'')&&c.component_key===content.component_key&&c.unit_index===content.unit_index);return match?[match]:[];})}));}
  addBox(){this.boxes.push({package_name:'Main box '+(this.boxes.length+1),length_mm:0,width_mm:0,height_mm:0,weight_kg:0,contents:[]});this.confirmed=false;this.saved.set(false);}
  removeBox(index:number){this.boxes.splice(index,1);this.confirmed=false;this.saved.set(false);}

@@ -68,7 +68,7 @@ export class BoxDrawingComponent implements OnChanges {
  }
  async upload(event:Event){const input=event.target as HTMLInputElement;const file=input.files?.[0];input.value='';if(!file||this.readOnly||this.legacySizeDrawing||this.busy||this.loading||this.loadError)return;
   if(this.sharedSize&&!qualifiedDrawingKey(this.sharedSize)){this.error='Choose Foldable or Non-foldable for this size in the drawing library before uploading.';return;}
-  if(this.cartBaseId&&!/\.cdr$/i.test(file.name)){this.error=`${file.name}: choose a .cdr source drawing for this Base box.`;return;}
+  if(this.cartBaseId&&!/\.cdr$/i.test(file.name)){this.error=`${file.name}: choose a .cdr source drawing for this packaging box.`;return;}
   this.success='';
   if(!file.size){this.error=`${file.name}: the file is empty or unavailable locally. Download it to this computer and try again.`;return;}
   if(file.size>20971520){this.error=`${file.name} (${this.sizeLabel(file.size)}) exceeds the 20 MB limit. Choose a smaller file.`;return;}

@@ -16,9 +16,9 @@ export interface BoxRdFile {
   @if(error){<p class="error" role="alert">{{error}} @if(loadError){<button type="button" (click)="load()">Retry load</button>}</p>}
   @if(success){<p role="status">{{success}}</p>}
   @if((sharedSize||cartBaseId)&&legacyFiles.length){<div class="legacy-files"><strong>Earlier files in this product profile</strong>
-   <p>RD files for this {{sharedSize?'Backdrop size':'Cart Base box'}} now come from the shared library. These older files remain saved separately.</p>
+   <p>RD files for this {{sharedSize?'Backdrop size':'Cart box'}} now come from the shared library. These older files remain saved separately.</p>
    @for(file of legacyFiles;track file.id){<button type="button" class="filename" (click)="download(file)" [disabled]="!!busy">{{file.filename}}</button><span>{{file.copies}} ×</span>}
-   @if(!files.length&&members.manager()){<button type="button" (click)="promoteLegacy()" [disabled]="!!busy||loading">Use this set for all matching {{sharedSize?'Backdrops':'Cart Base boxes'}}</button>}
+   @if(!files.length&&members.manager()){<button type="button" (click)="promoteLegacy()" [disabled]="!!busy||loading">Use this set for all matching {{sharedSize?'Backdrops':'Cart boxes'}}</button>}
   </div>}
   @for(file of files;track file.id){<div class="file-row">
    <button type="button" class="filename" [disabled]="!!busy" (click)="download(file)" [title]="file.filename">{{file.filename}}</button>
@@ -89,7 +89,7 @@ export class BoxRdFilesComponent implements OnChanges {
   catch(e){this.error=`Could not download ${file.filename}. ${this.message(e)} Retry.`;}finally{this.refresh();}}
  async promoteLegacy(){if(this.busy||(!this.sharedSize&&!this.cartBaseId)||!this.signature||!this.legacyFiles.length)return;this.error='';this.success='';this.busy='save';
   try{const {data,error}=this.sharedSize?await this.db.client.rpc('wc_promote_backdrop_rd',{p_signature:this.signature}):await this.db.client.rpc('wc_promote_cart_base_rd',{p_signature:this.signature,p_index:this.index});if(error||data!==(this.sharedSize||this.cartBaseId))throw error||Error('Server did not confirm the shared RD set.');
-   await this.load();this.success=this.sharedSize?'RD files are now shared with all Backdrops of this size and folding option.':'RD files are now shared with this Cart Base box in all matching packaging variants.';
+   await this.load();this.success=this.sharedSize?'RD files are now shared with all Backdrops of this size and folding option.':'RD files are now shared with this Cart box in all matching packaging variants.';
   }catch(e){this.error=`Could not share these RD files. ${this.message(e)} Review the files and retry.`;}
   finally{this.busy='';this.refresh();}
  }

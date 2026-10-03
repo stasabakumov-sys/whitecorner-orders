@@ -12,8 +12,7 @@ import {ActivatedRoute} from '@angular/router';
 import { SupabaseService } from '../../core/services/supabase.service';
 import {environment} from '../../../environments/environment';
 import {BoxDrawingComponent} from './box-drawing.component';
-import {BoxRdFilesComponent} from './box-rd-files.component';
-import {PackageDrawingsComponent} from './package-drawings.component';
+import {PackingFilesCellComponent} from './packing-files-cell.component';
 import {ProductDetailsComponent} from './product-details.component';
 import {ProductPartsComponent} from './product-parts.component';
 import {ProductCncComponent} from './product-cnc.component';
@@ -47,6 +46,7 @@ type ShippingProduct = {
 
 type ShippingPackage = {
   id: string;
+  shipping_rule_id?: string | null;
   shipping_product_id: string;
   source_type?: string | null;
   package_no: number;
@@ -112,7 +112,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[AddMainPackageComponent,SavedPackingComponent,PackageDrawingsComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,ProductDraftsComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,BoxRdFilesComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[AddMainPackageComponent,SavedPackingComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,ProductDraftsComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,PackingFilesCellComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -138,16 +138,22 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
        <p>Package dimensions, CDR drawing and RD cutting files are shared by Backdrop size and folding option. Weight remains separate for every model and size.</p>
        @if(libraryError){<p role="alert">{{libraryError}}</p>}
        @if(libraryLoading){<p role="status">Loading Backdrop library…</p>}
-       <div class="product-tools"><input aria-label="New backdrop size" placeholder="e.g. 190cm x 95cm" [(ngModel)]="newSize"><select aria-label="Folding option" [(ngModel)]="newFolding"><option value="">Choose folding option</option><option value="foldable">Foldable</option><option value="nonfoldable">Non-foldable</option></select><button (click)="addLibrarySize()" [disabled]="!parseSize(newSize)||!newFolding">Add size</button></div>
+       <div class="product-tools"><input aria-label="New backdrop size" placeholder="e.g. 190cm x 95cm" [(ngModel)]="newSize"><select aria-label="Folding option" [(ngModel)]="newFolding"><option value="">Choose folding option</option><option value="foldable">Foldable</option><option value="nonfoldable">Non-foldable</option></select><button class="square" title="Add size" aria-label="Add size" (click)="addLibrarySize()" [disabled]="!parseSize(newSize)||!newFolding">+</button></div>
        @if(libraryMessage){<p role="status">{{libraryMessage}}</p>}
-       <table class="shiptable"><thead><tr><th>Backdrop size</th><th>Shared package dimensions</th><th>CDR drawing</th><th>RD cutting files</th></tr></thead><tbody>
-       @for(key of librarySizes();track key){<tr><td>{{sizeLabel(key)}}</td><td>
-       @if(qualifiedKey(key)){<div class="dimension-fields"><input aria-label="Package name" placeholder="Package name" [ngModel]="dimensionValue(key,'package_name')" (ngModelChange)="setDimensionDraft(key,'package_name',$event)"><input aria-label="Length mm" type="number" min="1" placeholder="L mm" [ngModel]="dimensionValue(key,'length_mm')" (ngModelChange)="setDimensionDraft(key,'length_mm',$event)"><input aria-label="Width mm" type="number" min="1" placeholder="W mm" [ngModel]="dimensionValue(key,'width_mm')" (ngModelChange)="setDimensionDraft(key,'width_mm',$event)"><input aria-label="Height mm" type="number" min="1" placeholder="H mm" [ngModel]="dimensionValue(key,'height_mm')" (ngModelChange)="setDimensionDraft(key,'height_mm',$event)"><button (click)="saveBackdropDimensions(key)" [disabled]="dimensionSaving===key">{{dimensionSaving===key?'Saving…':'Save dimensions'}}</button></div>@if(dimensionFeedback[key]){<p [attr.role]="dimensionFeedback[key].ok?'status':'alert'">{{dimensionFeedback[key].text}}</p>}}
-       </td><td><app-box-drawing [sharedSize]="key" [readOnly]="!qualifiedKey(key)" />
-       @if(!qualifiedKey(key)){<p>Existing drawing: folding option needs review.</p><select aria-label="Classify existing drawing" [(ngModel)]="legacyFolding[key]" [disabled]="!!classifying"><option value="">Choose folding option</option><option value="foldable">Foldable</option><option value="nonfoldable">Non-foldable</option></select><button (click)="classifyDrawing(key)" [disabled]="!legacyFolding[key]||!!classifying">{{classifying===key?'Saving…':'Confirm folding option'}}</button>}
-       </td><td>@if(qualifiedKey(key)){<app-box-rd-files [sharedSize]="key" />}@else{<small>Choose Foldable or Non-foldable before adding RD files.</small>}</td></tr>}
-       @empty{<tr><td colspan="4">Add a backdrop size to enter its dimensions and upload its first drawing or RD file.</td></tr>}
-       </tbody></table>
+       <div class="tablewrap"><table class="shiptable cart-box-table"><thead><tr><th>Backdrop size</th><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>.CDR</th><th>.RD</th><th></th></tr></thead><tbody>
+       @for(key of librarySizes();track key){<tr><td>{{sizeLabel(key)}}</td>
+        <td><input class="name" aria-label="Package name" [disabled]="!qualifiedKey(key)" [ngModel]="dimensionValue(key,'package_name')" (ngModelChange)="setDimensionDraft(key,'package_name',$event)"></td>
+        <td><input aria-label="Length mm" type="number" min="1" [disabled]="!qualifiedKey(key)" [ngModel]="dimensionValue(key,'length_mm')" (ngModelChange)="setDimensionDraft(key,'length_mm',$event)"></td>
+        <td><input aria-label="Width mm" type="number" min="1" [disabled]="!qualifiedKey(key)" [ngModel]="dimensionValue(key,'width_mm')" (ngModelChange)="setDimensionDraft(key,'width_mm',$event)"></td>
+        <td><input aria-label="Height mm" type="number" min="1" [disabled]="!qualifiedKey(key)" [ngModel]="dimensionValue(key,'height_mm')" (ngModelChange)="setDimensionDraft(key,'height_mm',$event)"></td>
+        <td><app-packing-files-cell [sharedSize]="key" kind="cdr" [readOnly]="!qualifiedKey(key)" /></td><td><app-packing-files-cell [sharedSize]="key" kind="rd" /></td>
+        <td><button class="square" aria-label="Save dimensions" title="Save dimensions" (click)="saveBackdropDimensions(key)" [disabled]="!qualifiedKey(key)||dimensionSaving===key"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button></td>
+       </tr>
+       @if(dimensionFeedback[key]){<tr><td colspan="8" [attr.role]="dimensionFeedback[key].ok?'status':'alert'">{{dimensionFeedback[key].text}}</td></tr>}
+       @if(!qualifiedKey(key)){<tr><td colspan="8"><p>Existing drawing: folding option needs review.</p><select aria-label="Classify existing drawing" [(ngModel)]="legacyFolding[key]" [disabled]="!!classifying"><option value="">Choose folding option</option><option value="foldable">Foldable</option><option value="nonfoldable">Non-foldable</option></select><button (click)="classifyDrawing(key)" [disabled]="!legacyFolding[key]||!!classifying">{{classifying===key?'Saving…':'Confirm folding option'}}</button></td></tr>}
+       }
+       @empty{<tr><td colspan="8">Add a backdrop size to enter its dimensions and upload its first drawing or RD file.</td></tr>}
+       </tbody></table></div>
       </p-dialog>
       <p-drawer [visible]="!!selectedId()" (visibleChange)="!$event&&selectedId.set(null)" header="Product" position="right" [modal]="true" [dismissible]="true" [blockScroll]="true" styleClass="products-drawer">
         <div class="shipdetail">          @if (selectedProduct(); as p) {
@@ -196,15 +202,15 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             @if(isBackdrop(p)&&!p.saved_only){@for(key of missingBackdropPacking(p);track key){
              <section class="shipsection"><h3>Packaging and box drawings · {{sizeLabel(key)}}</h3>
               <p class="small">Dimensions and drawing are shared for this size and folding option. Weight belongs only to this model and size.</p>
-              <div class="missing-packing-table"><table><colgroup><col style="width:15%"><col style="width:11%"><col style="width:11%"><col style="width:11%"><col style="width:20%"><col style="width:32%"></colgroup><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>Drawing</th></tr></thead><tbody><tr>
+              <div class="missing-packing-table"><table><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>.CDR</th><th>.RD</th></tr></thead><tbody><tr>
                <td><input aria-label="Box name" placeholder="Box name" [ngModel]="dimensionValue(key,'package_name')" (ngModelChange)="setDimensionDraft(key,'package_name',$event)" [disabled]="dimensionSaving===key"></td>
                <td><input aria-label="Length mm" type="number" min="1" placeholder="L mm" [ngModel]="dimensionValue(key,'length_mm')" (ngModelChange)="setDimensionDraft(key,'length_mm',$event)" [disabled]="dimensionSaving===key"></td>
                <td><input aria-label="Width mm" type="number" min="1" placeholder="W mm" [ngModel]="dimensionValue(key,'width_mm')" (ngModelChange)="setDimensionDraft(key,'width_mm',$event)" [disabled]="dimensionSaving===key"></td>
                <td><input aria-label="Height mm" type="number" min="1" placeholder="H mm" [ngModel]="dimensionValue(key,'height_mm')" (ngModelChange)="setDimensionDraft(key,'height_mm',$event)" [disabled]="dimensionSaving===key"></td>
                <td><input aria-label="Weight kg" type="number" placeholder="—" title="Save dimensions before entering weight" disabled></td>
-               <td><app-package-drawings [backdrop]="true" [sharedSize]="key" [sizeLabel]="sizeLabel(key)" /></td>
+               <td><app-packing-files-cell [backdrop]="true" [sharedSize]="key" kind="cdr" /></td><td><app-packing-files-cell [backdrop]="true" [sharedSize]="key" kind="rd" /></td>
               </tr></tbody></table></div>
-              <div class="missing-packing-actions"><button type="button" (click)="saveBackdropDimensions(key)" [disabled]="!!dimensionSaving">{{dimensionSaving===key?'Saving…':'Save dimensions'}}</button><button type="button" (click)="resetDimensionDraft(key)" [disabled]="!!dimensionSaving">Cancel</button></div>
+              <div class="missing-packing-actions"><button type="button" class="square" title="Save dimensions" aria-label="Save dimensions" (click)="saveBackdropDimensions(key)" [disabled]="!!dimensionSaving"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button><button type="button" (click)="resetDimensionDraft(key)" [disabled]="!!dimensionSaving">Cancel</button></div>
               @if(dimensionFeedback[key]){<p [attr.role]="dimensionFeedback[key].ok?'status':'alert'">{{dimensionFeedback[key].text}}</p>}
              </section>
             }}
@@ -230,10 +236,10 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                <app-add-main-package [productId]="p.id" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" (packageSaved)="addSavedPackage($event)" />
               }
               <div class="tablewrap">
-                <table class="shiptable">
-                  <thead><tr><th>Source</th><th>Box</th><th>Name</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th></th></tr></thead>
+                <table class="shiptable cart-box-table">
+                  <thead><tr><th>Source</th><th>Box</th><th>Name</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>.CDR</th><th>.RD</th><th></th></tr></thead>
                   <tbody>
-                    @for (pkg of productPackages(p.id,isCart(p)?activeCartSize(p):''); track pkg.id) {
+                    @for (pkg of basePackages(p.id,activeCartSize(p)); track pkg.id) {
                       <tr>
                         <td>{{ pkg.source_type }}</td>
                         <td>{{ pkg.package_no }}</td>
@@ -242,17 +248,15 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                         <td><input type="number" [disabled]="!editing(pkg.id)" [value]="pkg.width_mm??''" (input)="setDraft(pkg.id,'width_mm',$any($event.target).value)"></td>
                         <td><input type="number" [disabled]="!editing(pkg.id)" [value]="pkg.height_mm??''" (input)="setDraft(pkg.id,'height_mm',$any($event.target).value)"></td>
                         <td><input type="number" step="0.1" [disabled]="!editing(pkg.id)" [value]="pkg.weight_kg??''" (input)="setDraft(pkg.id,'weight_kg',$any($event.target).value)"></td>
+                        <td><app-packing-files-cell [box]="pkg" [locked]="editing(pkg.id)" kind="cdr" /></td><td><app-packing-files-cell [box]="pkg" kind="rd" /></td>
                         <td>
                           @if (editing(pkg.id)) {
-                            <button class="btn primary" (click)="savePackage(pkg)">Save</button>
+                            <button class="square" aria-label="Save Base packaging" title="Save Base packaging" (click)="savePackage(pkg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>
                           } @else {
-                            <span class="badge ok saved">Saved ✓</span><button class="btn" (click)="startEdit(pkg)">Rewrite</button>
+                            <button class="square" aria-label="Edit Base packaging" title="Edit Base packaging" (click)="startEdit(pkg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4"/></svg></button>
                           }
                         </td>
                       </tr>
-                      @if(pkg.source_type==='Base'){
-                        <tr class="base-files-row"><td colspan="8"><div class="base-files"><div><strong>CDR drawing</strong><app-box-drawing [cartBasePackageId]="pkg.id" [box]="pkg" /></div><app-box-rd-files [cartBasePackageId]="pkg.id" /></div></td></tr>
-                      }
                     }
                   </tbody>
                 </table>
@@ -262,22 +266,25 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             <div class="shipsection">
               <h3>{{isCart(p)?'Add-ons':'Rules'}}</h3>
               @if (productRules(p.id,isCart(p)?activeCartSize(p):'').length) {
-                @for (r of productRules(p.id,isCart(p)?activeCartSize(p):''); track r.id) {
-                  <div class="rule">
-                    <div><b>{{ r.rule_type }}</b><div class="small">{{ r.active ? 'Active' : 'Inactive' }}</div></div>
-                    <div><b>{{ r.match_name }}</b><div class="small">{{ r.match_value ? 'Value: '+r.match_value : 'Any value' }}</div></div>
-                    <div>{{ r.effect_type==='Replace profile'?'Add package':r.effect_type }}</div>
-                    <div>Boxes: <input class="delta" type="number" min="1" [value]="ruleValue(r,'package_count_delta')" (input)="setRuleDraft(r.id,'package_count_delta',$any($event.target).value)"></div>
-                    <div>Name: <input class="name" [value]="ruleValue(r,'package_name')" (input)="setRuleDraft(r.id,'package_name',$any($event.target).value)"></div>
-                    <div>L mm: <input type="number" min="1" [value]="ruleValue(r,'length_mm')" (input)="setRuleDraft(r.id,'length_mm',$any($event.target).value)"></div>
-                    <div>W mm: <input type="number" min="1" [value]="ruleValue(r,'width_mm')" (input)="setRuleDraft(r.id,'width_mm',$any($event.target).value)"></div>
-                    <div>H mm: <input type="number" min="1" [value]="ruleValue(r,'height_mm')" (input)="setRuleDraft(r.id,'height_mm',$any($event.target).value)"></div>
-                    <div>kg: <input type="number" min="0.01" step="0.01" [value]="ruleValue(r,'weight_kg')" (input)="setRuleDraft(r.id,'weight_kg',$any($event.target).value)"></div>
-                    <button class="btn" [disabled]="ruleSaving(r.id)" (click)="saveRule(r)">{{ruleSaving(r.id)?'Saving…':'Save'}}</button>
-                    @if(isCart(p)){<label class="combine-main"><input type="checkbox" [checked]="mainAddOnSelected(r)" (change)="toggleMainAddOn(r,$any($event.target).checked)"><span>Combine<br>with Main</span></label>}
-                    @if(ruleFeedback()[r.id];as feedback){<span class="rule-feedback" [class.ok-text]="feedback.ok" [class.error-text]="!feedback.ok" [attr.role]="feedback.ok?'status':'alert'">{{feedback.text}}</span>}
-                  </div>
+                <div class="tablewrap"><table class="shiptable cart-box-table addon-table"><thead><tr><th>Add-on</th><th>Boxes</th><th>Name</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>.CDR</th><th>.RD</th><th></th><th>Main</th></tr></thead><tbody>
+                @for(r of productRules(p.id,activeCartSize(p));track r.id){
+                 @for(box of addonRows(r);track box.id||box.package_no){
+                  <tr>
+                   <td><b>{{r.match_name}}</b><div class="small">{{r.match_value||'Any value'}} · Box {{box.package_no}}</div></td>
+                   <td><input type="number" min="1" [value]="ruleValue(r,'package_count_delta')" (input)="setRuleDraft(r.id,'package_count_delta',$any($event.target).value)"></td>
+                   <td><input class="name" [value]="ruleValue(r,'package_name')" (input)="setRuleDraft(r.id,'package_name',$any($event.target).value)"></td>
+                   <td><input type="number" min="1" [value]="ruleValue(r,'length_mm')" (input)="setRuleDraft(r.id,'length_mm',$any($event.target).value)"></td>
+                   <td><input type="number" min="1" [value]="ruleValue(r,'width_mm')" (input)="setRuleDraft(r.id,'width_mm',$any($event.target).value)"></td>
+                   <td><input type="number" min="1" [value]="ruleValue(r,'height_mm')" (input)="setRuleDraft(r.id,'height_mm',$any($event.target).value)"></td>
+                   <td><input type="number" min="0.01" step="0.01" [value]="ruleValue(r,'weight_kg')" (input)="setRuleDraft(r.id,'weight_kg',$any($event.target).value)"></td>
+                   <td><app-packing-files-cell [box]="box" [locked]="ruleDrafts.has(r.id)" kind="cdr" /></td><td><app-packing-files-cell [box]="box" kind="rd" /></td>
+                   <td><button class="square" aria-label="Save Add-on packaging" title="Save Add-on packaging" [disabled]="ruleSaving(r.id)" (click)="saveRule(r)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button></td>
+                   <td><input type="checkbox" [checked]="mainAddOnSelected(r)" (change)="toggleMainAddOn(r,$any($event.target).checked)" [attr.aria-label]="'Combine '+r.match_name+' with Main'" title="Combine with Main"></td>
+                  </tr>
+                 }
+                 @if(ruleFeedback()[r.id];as feedback){<tr><td colspan="11" [class.ok-text]="feedback.ok" [class.error-text]="!feedback.ok" [attr.role]="feedback.ok?'status':'alert'">{{feedback.text}}</td></tr>}
                 }
+                </tbody></table></div>
                 @if(isCart(p)&&mainAddOns().length){<app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" [addOns]="mainAddOns()" (profileSaved)="storeCartMainProfile(p,$event)" />}
               } @else {
                 <div class="mut">No rules for this product.</div>
@@ -558,6 +565,9 @@ export class ShippingDataComponent implements OnInit {
     this.ruleFeedback.update(rows=>{const next={...rows};delete next[id];return next;});
   }
   ruleSaving(id:string){return this.ruleSavingIds().has(id);}
+  addonBoxes(id:string){return this.packages().filter(box=>box.shipping_rule_id===id);}
+  private readonly unsavedAddonRows=new Map<string,any[]>();
+  addonRows(rule:ShippingRule){const boxes=this.addonBoxes(rule.id);if(boxes.length)return boxes;let rows=this.unsavedAddonRows.get(rule.id);if(!rows){rows=[{id:'',package_no:1,package_name:rule.package_name}];this.unsavedAddonRows.set(rule.id,rows);}rows[0].package_name=rule.package_name;return rows;}
 
   async saveRule(rule: ShippingRule) {
     if(this.ruleSaving(rule.id))return;
@@ -572,8 +582,13 @@ export class ShippingDataComponent implements OnInit {
     try{
       const { error } = await this.supabase.client.from('wc_shipping_rules').update(payload).eq('id',rule.id);
       if(error){this.ruleFeedback.update(rows=>({...rows,[rule.id]:{ok:false,text:`Could not save: ${error.message}. Please retry.`}}));return;}
-      this.error.set('');this.rules.update(rows => rows.map(x => x.id===rule.id ? {...x,...payload} : x));this.ruleDrafts.delete(rule.id);
+      const boxes=await this.supabase.client.from('wc_shipping_packages').select('*').eq('shipping_rule_id',rule.id).eq('active',true).order('package_no');
+      this.rules.update(rows => rows.map(x => x.id===rule.id ? {...x,...payload} : x));this.ruleDrafts.delete(rule.id);
+      if(boxes.error){this.ruleFeedback.update(rows=>({...rows,[rule.id]:{ok:false,text:'Packaging saved, but its file boxes could not be loaded. Refresh Products to retry.'}}));return;}
+      this.packages.update(rows=>[...rows.filter(box=>box.shipping_rule_id!==rule.id),...(boxes.data||[])]);
+      this.error.set('');
       this.ruleFeedback.update(rows=>({...rows,[rule.id]:{ok:true,text:'Saved ✓'}}));
-    }finally{this.ruleSavingIds.update(ids=>{const next=new Set(ids);next.delete(rule.id);return next;});}
+    }catch(e:any){this.ruleFeedback.update(rows=>({...rows,[rule.id]:{ok:false,text:'Could not save Add-on packaging: '+(e?.message||'Connection error')+'. Retry.'}}));}
+    finally{this.ruleSavingIds.update(ids=>{const next=new Set(ids);next.delete(rule.id);return next;});}
   }
 }

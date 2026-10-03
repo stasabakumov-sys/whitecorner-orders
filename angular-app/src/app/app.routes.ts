@@ -3,7 +3,6 @@ import { HomeComponent } from './features/home/home.component';
 import { OrdersComponent } from './features/orders/orders.component';
 import { FulfilmentComponent } from './features/fulfilment/fulfilment.component';
 import { AddressReviewComponent } from './features/address-review/address-review.component';
-import { ShippingDataComponent } from './features/shipping-data/shipping-data.component';
 import { EmailComponent } from './features/email/email.component';
 import { FinanceComponent } from './features/finance/finance.component';
 import { DeliveryReviewComponent } from './features/delivery-review/delivery-review.component';
@@ -31,6 +30,6 @@ export const routes:Routes=[
   {path:'email',component:EmailComponent},
   {path:'finance',component:FinanceComponent},
   {path:'address-review',component:AddressReviewComponent},
-  {path:'shipping-data',component:ShippingDataComponent},
+  {path:'shipping-data',loadComponent:()=>import('./features/shipping-data/shipping-data.component').then(m=>m.ShippingDataComponent)},
   {path:'**',redirectTo:'home'}
 ];
