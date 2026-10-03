@@ -802,5 +802,3 @@ if __name__ == '__main__':
   with open(sys.argv[1], 'wb') as fd:
     rd.write(fd)
     print(sys.argv[1] + ".rd: odometer: ", rd._odo)
-
-
