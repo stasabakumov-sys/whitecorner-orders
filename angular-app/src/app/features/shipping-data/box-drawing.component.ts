@@ -18,7 +18,7 @@ export function baseDrawingBox(box:any){return {package_name:box?.package_name??
  @if(!readOnly&&!legacySizeDrawing){<label class="upload" [class.replace]="!!current" [title]="current?'Replace drawing':'Upload drawing'">
  @if(current){<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9M17 4l3 3-3 3M4 17h9M7 14l-3 3 3 3"/></svg>}
  @else{ {{busy?'Uploading…':'Upload drawing'}} }
- <input type="file" [attr.aria-label]="(current?'Replace drawing for ':'Upload drawing for ')+(productId?'product':box?.package_name||'box')" [disabled]="busy||loading||!!loadError" (change)="upload($event)">
+ <input type="file" [attr.accept]="productId?null:'.svg,.cdr'" [attr.aria-label]="(current?'Replace drawing for ':'Upload drawing for ')+(productId?'product':box?.package_name||'box')" [disabled]="busy||loading||!!loadError" (change)="upload($event)">
  </label>}
  </div>
  @if(current){<small>{{sizeLabel(current.size_bytes)}}</small>}
@@ -26,7 +26,7 @@ export function baseDrawingBox(box:any){return {package_name:box?.package_name??
  @if(busy&&current){<small role="status">Uploading replacement…</small>}
  @if(busy&&!current){<small role="status">Uploading {{sizeLabel(pendingBytes)}}…</small>}
  @if(stale){<small>Box changed. Upload a matching drawing.</small>}
- @if(!current&&!readOnly){<small>Up to 20 MB</small>}
+ @if(!current&&!readOnly){<small>{{productId?'Up to 20 MB':'SVG or CDR · up to 20 MB'}}</small>}
  }
  @if(error){<div class="upload-error" role="alert"><strong>Drawing error</strong><div>{{error}}</div></div>}
  @if(success){<small role="status">{{success}}</small>}
@@ -68,7 +68,7 @@ export class BoxDrawingComponent implements OnChanges {
  }
  async upload(event:Event){const input=event.target as HTMLInputElement;const file=input.files?.[0];input.value='';if(!file||this.readOnly||this.legacySizeDrawing||this.busy||this.loading||this.loadError)return;
   if(this.sharedSize&&!qualifiedDrawingKey(this.sharedSize)){this.error='Choose Foldable or Non-foldable for this size in the drawing library before uploading.';return;}
-  if(this.cartBaseId&&!/\.cdr$/i.test(file.name)){this.error=`${file.name}: choose a .cdr source drawing for this packaging box.`;return;}
+  if(!this.productId&&!/\.(svg|cdr)$/i.test(file.name)){this.error=`${file.name}: choose an SVG or CDR drawing for this packaging box.`;return;}
   this.success='';
   if(!file.size){this.error=`${file.name}: the file is empty or unavailable locally. Download it to this computer and try again.`;return;}
   if(file.size>20971520){this.error=`${file.name} (${this.sizeLabel(file.size)}) exceeds the 20 MB limit. Choose a smaller file.`;return;}

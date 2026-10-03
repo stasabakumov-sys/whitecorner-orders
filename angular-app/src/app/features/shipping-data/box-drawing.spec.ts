@@ -8,6 +8,20 @@ function setup(){
 }
 const event=(size=25*1024)=>({target:{files:[new File([new Uint8Array(size)],'box.cdr',{type:'application/x-coreldraw'})],value:'chosen'}} as unknown as Event);
 describe('Private saved box drawings',()=>{
+ it('accepts SVG packaging sources in shared Cart, Backdrop and profile slots',async()=>{
+  for(const slot of ['cart','backdrop','profile']){
+   const {c,bucket,rpc}=setup();if(slot==='cart')c.cartBaseId='base';if(slot==='backdrop')c.sharedSize='2000x1000:foldable';
+   const file=new File(['<svg/>'],'box.SVG',{type:'image/svg+xml'});
+   await c.upload({target:{files:[file],value:'chosen'}} as unknown as Event);
+   expect(bucket.upload.mock.calls[0][1]).toBe(file);expect(rpc).toHaveBeenCalledWith(slot==='cart'?'wc_save_cart_base_box_drawing':slot==='backdrop'?'wc_save_backdrop_box_drawing':'wc_attach_box_drawing',expect.objectContaining({p_filename:'box.SVG'}));
+   expect(c.success).toContain('uploaded and saved');
+  }
+ });
+ it('rejects other packaging formats before upload and preserves the previous drawing',async()=>{
+  const {c,bucket}=setup();c.record={filename:'old.cdr',object_path:'old',box_snapshot:c.box};
+  await c.upload({target:{files:[new File(['x'],'box.pdf')],value:'chosen'}} as unknown as Event);
+  expect(c.error).toContain('SVG or CDR');expect(bucket.upload).not.toHaveBeenCalled();expect(c.current.filename).toBe('old.cdr');
+ });
  it('saves the Base packaging CDR against the reusable box and hides it after geometry changes',async()=>{
   const {c,rpc}=setup();c.cartBaseId='base';c.cartBasePackageId='base';c.box={package_name:'Front',length_mm:1180,width_mm:670,height_mm:60,weight_kg:22.5};
   rpc.mockResolvedValue({data:{cart_base_package_id:'base',box_snapshot:{package_name:'Front',length_mm:1180,width_mm:670,height_mm:60},filename:'box.cdr',object_path:'new',revision:'r1'},error:null} as any);
