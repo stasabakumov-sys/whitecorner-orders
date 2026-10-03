@@ -295,6 +295,15 @@ try{
   ['cart-shelf',addonPath,'shelf.rd']);
  await db.exec('reset role');
  await db.exec(await readFile('supabase/migrations/20261003000100_shared_cart_base_rd.sql','utf8'));
+ for(const file of ['20260909000100_box_drawings.sql','20260909000200_backdrop_drawing_library.sql','20260909000300_product_drawings.sql','20260909000500_drawing_upload_limit.sql'])await db.exec(await readFile(`supabase/migrations/${file}`,'utf8'));
+ await db.exec(`create function public.wc_is_active_hub_member() returns boolean language sql stable security definer as $$select exists(select 1 from wc_hub_members where user_id=auth.uid() and active)$$;`);
+ const cartDrawingPath=`${managerA}/cart-source`,drawingReplacement=`${managerA}/cart-source-new`;
+ await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-drawings',$1,$2),('box-drawings',$3,$4)",[cartDrawingPath,{size:4},drawingReplacement,{size:5}]);
+ await db.query('insert into wc_box_drawings(profile_signature,box_index,box_snapshot,object_path,filename,size_bytes) values($1,0,$2,$3,$4,4)',['cart-plain',cartBox,cartDrawingPath,'base.cdr']);
+ await db.exec(await readFile('supabase/migrations/20261003000200_cart_base_rd_from_product.sql','utf8'));
+ const sharedDrawing=(await db.query('select * from wc_cart_base_box_drawings where cart_base_package_id=$1',[basePackage])).rows[0];
+ assert.equal(sharedDrawing.filename,'base.cdr');
+ assert.equal((await db.query('select count(*)::int n from wc_box_drawings where profile_signature=$1',['cart-plain'])).rows[0].n,1);
  assert.equal((await db.query('select wc_cart_base_package($1,0) id',['cart-shelf'])).rows[0].id,basePackage);
  assert.equal((await db.query('select wc_cart_base_package($1,1) id',['cart-shelf'])).rows[0].id,null);
  assert.equal((await db.query('select wc_cart_base_package($1,0) id',['cart-large'])).rows[0].id,otherSizePackage);
@@ -303,6 +312,9 @@ try{
   {cart_base_package_id:basePackage,profile_signature:null,box_index:null});
  await assert.rejects(db.query('update wc_shipping_packages set length_mm=1190 where id=$1',[basePackage]),/shared RD files/);
  await db.exec('set role authenticated');
+ const updatedDrawing=(await db.query('select wc_save_cart_base_box_drawing($1,$2,$3,$4,5,$5) result',[basePackage,sharedDrawing.box_snapshot,drawingReplacement,'updated.cdr',sharedDrawing.revision])).rows[0].result;
+ assert.equal(updatedDrawing.filename,'updated.cdr');
+ await assert.rejects(db.query('select wc_save_cart_base_box_drawing($1,$2,$3,$4,5,$5)',[basePackage,{...sharedDrawing.box_snapshot,length_mm:1},drawingReplacement,'updated.cdr',updatedDrawing.revision]),/Base box changed/);
  const cartTask=(await db.query('select to_jsonb(wc_send_packing_task($1,$2)) result',[cartUnit,'cart-shelf'])).rows[0].result;
  assert.deepEqual(cartTask.files.map(file=>file.filename),['base.rd','shelf.rd']);
  assert.equal(cartTask.files[0].file_id,legacyCart.id);
@@ -310,6 +322,15 @@ try{
   [legacyCart.id,'cart-shelf',cartNewPath,'base-new.rd',legacyCart.revision])).rows[0].result;
  assert.equal(replacedCart.cart_base_package_id,basePackage);
  assert.equal((await db.query('select files from wc_packing_tasks where id=$1',[cartTask.id])).rows[0].files[0].filename,'base-new.rd');
+ const fromProduct=(await db.query('select to_jsonb(wc_save_cart_base_rd_file_for_package($1,$2,$3,$4,4,4,$5)) result',
+  [legacyCart.id,basePackage,cartPath,'base-final.rd',replacedCart.revision])).rows[0].result;
+ assert.equal(fromProduct.copies,4);
+ assert.equal((await db.query('select files from wc_packing_tasks where id=$1',[cartTask.id])).rows[0].files[0].filename,'base-final.rd');
+ await assert.rejects(db.query('select wc_save_cart_base_rd_file_for_package($1,$2,null,null,null,4,$3)',
+  [legacyCart.id,otherSizePackage,fromProduct.revision]),/RD file changed/);
  await assert.rejects(db.query('select wc_promote_cart_base_rd($1,0)',['cart-large']),/no RD files/);
+ await db.query("select set_config('test.actor',$1,false)",[worker]);
+ await assert.rejects(db.query('select wc_save_cart_base_box_drawing($1,$2,$3,$4,5,$5)',[basePackage,sharedDrawing.box_snapshot,drawingReplacement,'updated.cdr',updatedDrawing.revision]),/Manager access/);
+ await assert.rejects(db.query('select wc_save_cart_base_rd_file_for_package($1,$2,null,null,null,4,$3)',[legacyCart.id,basePackage,fromProduct.revision]),/Manager access/);
  console.log('Packing migration checks passed.');
 }finally{await db.close();}
