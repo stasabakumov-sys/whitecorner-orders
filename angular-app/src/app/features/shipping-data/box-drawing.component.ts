@@ -6,6 +6,7 @@ export function sameDrawingBox(a:any,b:any):boolean {
  const stable=(v:any):string=>JSON.stringify(v===null||typeof v!=='object'?v:Array.isArray(v)?v.map(x=>JSON.parse(stable(x))):Object.fromEntries(Object.keys(v).sort().map(k=>[k,JSON.parse(stable(v[k]))])));
  return a!=null&&b!=null&&stable(a)===stable(b);
 }
+export function baseDrawingBox(box:any){return {package_name:box?.package_name??null,length_mm:box?.length_mm??null,width_mm:box?.width_mm??null,height_mm:box?.height_mm??null};}
 @Component({selector:'app-box-drawing',standalone:true,template:`
  <div class="drawing">
  @if(loading){<small>Loading…</small>}
@@ -41,17 +42,21 @@ export function sameDrawingBox(a:any,b:any):boolean {
 export class BoxDrawingComponent implements OnChanges {
  @Input() signature='';@Input() index=0;@Input() box:any;@Input() sharedSize='';
  @Input() productId='';@Input() variantKey='';
+ @Input() cartBasePackageId='';cartBaseId='';
  @Input() readOnly=false;
  legacySizeDrawing=false;
  record:any=null;busy=false;loading=false;error='';success='';loadError=false;pendingBytes=0;private generation=0;
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
- get current(){return this.record&&(this.productId||this.sharedSize||sameDrawingBox(this.record.box_snapshot,this.box))?this.record:null;}
+ get current(){return this.record&&(this.productId||this.sharedSize||sameDrawingBox(this.record.box_snapshot,this.record.cart_base_package_id?baseDrawingBox(this.box):this.box))?this.record:null;}
  get stale(){return !!this.record&&!this.current;}
  sizeLabel(bytes:number){return bytes>=1048576?`${(bytes/1048576).toFixed(1)} MB`:`${Math.ceil(bytes/1024)} KB`;}
  ngOnChanges(){void this.load();}
- async load(){const generation=++this.generation;this.loading=true;this.error='';this.success='';this.loadError=false;this.record=null;this.legacySizeDrawing=false;
-  try{const query=this.productId?this.db.client.from('wc_product_drawings').select('*').eq('product_id',this.productId).eq('variant_key',this.variantKey):this.sharedSize?this.db.client.from('wc_backdrop_box_drawings').select('*').eq('size_key',this.sharedSize):this.db.client.from('wc_box_drawings').select('*').eq('profile_signature',this.signature).eq('box_index',this.index);
+ async load(){const generation=++this.generation;this.loading=true;this.error='';this.success='';this.loadError=false;this.record=null;this.legacySizeDrawing=false;this.cartBaseId=this.cartBasePackageId;
+  try{if(!this.productId&&!this.sharedSize&&!this.cartBaseId&&this.signature){const key=await this.db.client.rpc('wc_cart_base_package',{p_signature:this.signature,p_index:this.index});if(key.error)throw key.error;if(generation!==this.generation)return;this.cartBaseId=typeof key.data==='string'?key.data:'';}
+   const [table,key,value]=this.productId?['wc_product_drawings','product_id',this.productId]:this.sharedSize?['wc_backdrop_box_drawings','size_key',this.sharedSize]:this.cartBaseId?['wc_cart_base_box_drawings','cart_base_package_id',this.cartBaseId]:['wc_box_drawings','profile_signature',this.signature];
+   let query=this.db.client.from(table).select('*').eq(key,value);if(this.productId)query=query.eq('variant_key',this.variantKey);else if(!this.sharedSize&&!this.cartBaseId)query=query.eq('box_index',this.index);
    const {data,error}=await query.maybeSingle();if(error)throw error;if(generation!==this.generation)return;this.record=data;
+   if(!data&&this.cartBaseId&&this.signature){const legacy=await this.db.client.from('wc_box_drawings').select('*').eq('profile_signature',this.signature).eq('box_index',this.index).maybeSingle();if(legacy.error)throw legacy.error;if(generation!==this.generation)return;this.record=legacy.data;}
    if(!data&&qualifiedDrawingKey(this.sharedSize)){
     const legacy=await this.db.client.from('wc_backdrop_box_drawings').select('*').eq('size_key',this.sharedSize.split(':')[0]).maybeSingle();
     if(legacy.error)throw legacy.error;if(generation!==this.generation)return;
@@ -63,11 +68,12 @@ export class BoxDrawingComponent implements OnChanges {
  }
  async upload(event:Event){const input=event.target as HTMLInputElement;const file=input.files?.[0];input.value='';if(!file||this.readOnly||this.legacySizeDrawing||this.busy||this.loading||this.loadError)return;
   if(this.sharedSize&&!qualifiedDrawingKey(this.sharedSize)){this.error='Choose Foldable or Non-foldable for this size in the drawing library before uploading.';return;}
+  if(this.cartBaseId&&!/\.cdr$/i.test(file.name)){this.error=`${file.name}: choose a .cdr source drawing for this Base box.`;return;}
   this.success='';
   if(!file.size){this.error=`${file.name}: the file is empty or unavailable locally. Download it to this computer and try again.`;return;}
   if(file.size>20971520){this.error=`${file.name} (${this.sizeLabel(file.size)}) exceeds the 20 MB limit. Choose a smaller file.`;return;}
   if(file.name.length>255){this.error='Filename exceeds 255 characters. Rename the file and try again.';return;}
-  const generation=this.generation,signature=this.signature,index=this.index,box=structuredClone(this.box),previous=this.record,sharedSize=this.sharedSize,productId=this.productId,variantKey=this.variantKey;
+  const generation=this.generation,signature=this.signature,index=this.index,box=structuredClone(this.box),previous=this.record,sharedSize=this.sharedSize,productId=this.productId,variantKey=this.variantKey,cartBaseId=this.cartBaseId;
   this.busy=true;this.pendingBytes=file.size;this.error='';let path='';let uploaded=false;let attaching=false;
   try{
    const {data,error:authError}=await this.db.client.auth.getUser();if(authError||!data.user)throw new Error('Please sign in again.');
@@ -79,11 +85,8 @@ export class BoxDrawingComponent implements OnChanges {
    let uploadResult:any;try{uploadResult=await Promise.race([uploadRequest,timeout]);}catch(e){if(timedOut)void uploadRequest.then(result=>{if(!result.error)return bucket.remove([path]);return undefined;}).catch(()=>undefined);throw e;}finally{clearTimeout(timer);}
    if(uploadResult.error)throw uploadResult.error;uploaded=true;
    attaching=true;
-   const {data:drawing,error:saveError}=productId
-    ?await this.db.client.rpc('wc_save_product_drawing',{p_product:productId,p_variant:variantKey,p_path:path,p_filename:file.name,p_bytes:file.size,p_expected:previous?.revision??null})
-    :sharedSize
-    ?await this.db.client.rpc('wc_save_backdrop_box_drawing',{p_size:sharedSize,p_path:path,p_filename:file.name,p_bytes:file.size,p_expected:previous?.revision??null})
-    :await this.db.client.rpc('wc_attach_box_drawing',{p_signature:signature,p_index:index,p_box:box,p_path:path,p_filename:file.name,p_size:file.size,p_expected:previous?.revision??null});
+   const [method,owner]:[string,Record<string,unknown>]=productId?['wc_save_product_drawing',{p_product:productId,p_variant:variantKey}]:sharedSize?['wc_save_backdrop_box_drawing',{p_size:sharedSize}]:cartBaseId?['wc_save_cart_base_box_drawing',{p_package:cartBaseId,p_box:baseDrawingBox(box)}]:['wc_attach_box_drawing',{p_signature:signature,p_index:index,p_box:box}];
+   const {data:drawing,error:saveError}=await this.db.client.rpc(method,{...owner,p_path:path,p_filename:file.name,[method==='wc_attach_box_drawing'?'p_size':'p_bytes']:file.size,p_expected:cartBaseId&&!previous?.cart_base_package_id?null:previous?.revision??null});
    if(saveError)throw saveError;
    if(!drawing?.object_path||!drawing?.filename)throw new Error('The server did not confirm the saved drawing. Reopen this product to check before retrying.');
    if(generation===this.generation){this.record=drawing;this.success=`${file.name} uploaded and saved.`;}
@@ -91,7 +94,7 @@ export class BoxDrawingComponent implements OnChanges {
   }catch(e:any){if(generation===this.generation){const message=e?.message||'Upload failed.';const recovery=/timed out/i.test(message)?'':!attaching&&/failed to fetch/i.test(message)?'The browser could not read or send the selected file. If it is stored in OneDrive or another cloud folder, download it to this computer, then choose it again. Otherwise check the connection and retry.':attaching?'Reopen this product to check whether the file was saved before retrying.':'Check the file and connection, then try again.';this.error=`${file.name}: ${message}${recovery?' '+recovery:''}`;}
    // A lost RPC response may still have committed. Never delete a potentially linked file.
    if(uploaded&&!attaching)await this.db.client.storage.from('box-drawings').remove([path]);
-  }finally{this.busy=false;this.pendingBytes=0;}
+  }finally{this.busy=false;this.pendingBytes=0;this.cdr?.markForCheck();}
  }
  async download(){const drawing=this.current;if(!drawing||this.busy)return;this.error='';
   try{const {data,error}=await this.db.client.storage.from('box-drawings').createSignedUrl(drawing.object_path,60,{download:drawing.filename});

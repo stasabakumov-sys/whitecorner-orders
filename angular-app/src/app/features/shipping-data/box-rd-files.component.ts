@@ -30,7 +30,7 @@ export interface BoxRdFile {
    }@else{<span>{{file.copies}} ×</span>}
   </div>}@empty{<small>No RD files for this box.</small>}
   @if(members.manager()){
-  <small>Replacing a file also updates all unfinished Packing tasks using it. Its Done mark is cleared; load the files to the laser again before cutting.</small>
+  <small>Replacement updates unfinished tasks and clears this file's Done mark. Load the files to the laser again before cutting.</small>
   <div class="new-file"><label class="upload icon" title="Add RD file" aria-label="Add RD file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input type="file" accept=".rd" aria-label="Add RD file" [disabled]="!!busy||loading||loadError" (change)="upload($event)"></label><label>Copies <input type="number" min="1" max="1000" step="1" [(ngModel)]="newCopies" [disabled]="!!busy" aria-label="Copies for new RD file"></label></div>
   }
  </div>`,styles:[`
@@ -40,15 +40,19 @@ export interface BoxRdFile {
  .legacy-files{padding:8px;border:1px solid var(--wc-border);border-radius:8px;background:#f8fafc}.legacy-files p{margin:4px 0;font-size:.78rem}.legacy-files span{margin-right:8px}
  `]})
 export class BoxRdFilesComponent implements OnChanges {
- @Input() signature='';@Input() index=0;@Input() sharedSize='';
+ @Input() signature='';@Input() index=0;@Input() sharedSize='';@Input() cartBasePackageId='';
  files:BoxRdFile[]=[];legacyFiles:BoxRdFile[]=[];cartBaseId='';newCopies=1;loading=false;loadError=false;busy:''|'upload'|'save'='';error='';success='';private generation=0;
  constructor(private db:SupabaseService,readonly members:HubMembersService,@Optional() private cdr?:ChangeDetectorRef){}
  ngOnChanges(){void this.load();}
  private refresh(){this.cdr?.markForCheck();}
  private message(e:unknown){return e instanceof Error?e.message:(e as {message?:string})?.message||'Connection or server error.';}
  private copies(value:number){return Number.isSafeInteger(Number(value))&&Number(value)>=1&&Number(value)<=1000;}
+ private persistFile(values:Record<string,unknown>){
+  const [method,owner]=this.sharedSize?['wc_save_backdrop_rd_file',{p_size:this.sharedSize}]:this.cartBasePackageId?['wc_save_cart_base_rd_file_for_package',{p_package:this.cartBasePackageId}]:[this.cartBaseId?'wc_save_cart_base_rd_file':'wc_save_box_rd_file',{p_signature:this.signature,p_index:this.index}];
+  return this.db.client.rpc(method as string,{...owner as object,...values});
+ }
  async load(){const generation=++this.generation;this.loading=true;this.loadError=false;this.error='';this.success='';this.files=[];this.legacyFiles=[];this.cartBaseId='';
-  try{if(!this.sharedSize&&this.signature){const key=await this.db.client.rpc('wc_cart_base_package',{p_signature:this.signature,p_index:this.index});if(key.error)throw key.error;if(generation!==this.generation)return;this.cartBaseId=key.data||'';}
+  try{if(this.cartBasePackageId){this.cartBaseId=this.cartBasePackageId;}else if(!this.sharedSize&&this.signature){const key=await this.db.client.rpc('wc_cart_base_package',{p_signature:this.signature,p_index:this.index});if(key.error)throw key.error;if(generation!==this.generation)return;this.cartBaseId=key.data||'';}
    let query=this.db.client.from('wc_box_rd_files').select('*');query=this.sharedSize?query.eq('backdrop_size_key',this.sharedSize):this.cartBaseId?query.eq('cart_base_package_id',this.cartBaseId):query.eq('profile_signature',this.signature).eq('box_index',this.index);
    const {data,error}=await query.order('created_at');if(error)throw error;
    if((this.sharedSize||this.cartBaseId)&&this.signature){const older=await this.db.client.from('wc_box_rd_files').select('*').eq('profile_signature',this.signature).eq('box_index',this.index).order('created_at');if(older.error)throw older.error;if(generation===this.generation)this.legacyFiles=(older.data||[]) as BoxRdFile[];}
@@ -66,10 +70,7 @@ export class BoxRdFilesComponent implements OnChanges {
   try{const {data,error:authError}=await this.db.client.auth.getUser();if(authError||!data.user)throw Error('Sign in again.');
    path=`${data.user.id}/${crypto.randomUUID()}`;const bucket=this.db.client.storage.from('box-rd-files');
    const {error:uploadError}=await bucket.upload(path,file,{contentType:'application/octet-stream',upsert:false});if(uploadError)throw uploadError;uploaded=true;
-   attaching=true;const {data:saved,error:saveError}=this.sharedSize
-    ?await this.db.client.rpc('wc_save_backdrop_rd_file',{p_id:replacing?.id||null,p_size:this.sharedSize,p_path:path,p_filename:file.name,p_bytes:file.size,p_copies:copies,p_expected:replacing?.revision||null})
-    :this.cartBaseId?await this.db.client.rpc('wc_save_cart_base_rd_file',{p_id:replacing?.id||null,p_signature:this.signature,p_index:this.index,p_path:path,p_filename:file.name,p_bytes:file.size,p_copies:copies,p_expected:replacing?.revision||null})
-    :await this.db.client.rpc('wc_save_box_rd_file',{p_id:replacing?.id||null,p_signature:this.signature,p_index:this.index,p_path:path,p_filename:file.name,p_bytes:file.size,p_copies:copies,p_expected:replacing?.revision||null});if(saveError)throw saveError;
+   attaching=true;const {data:saved,error:saveError}=await this.persistFile({p_id:replacing?.id||null,p_path:path,p_filename:file.name,p_bytes:file.size,p_copies:copies,p_expected:replacing?.revision||null});if(saveError)throw saveError;
    if(!saved?.id)throw Error('Server did not confirm the saved file.');
    if(generation===this.generation){this.files=replacing?this.files.map(row=>row.id===saved.id?saved:row):[...this.files,saved];this.success=`${file.name} uploaded and saved with ${copies} ${copies===1?'copy':'copies'}.`+(replacing?' Updated in all unfinished Packing tasks using this file. Load the files to the laser again before cutting.':'');this.newCopies=1;}
    if(previous)await bucket.remove([previous]);
@@ -78,10 +79,7 @@ export class BoxRdFilesComponent implements OnChanges {
   }finally{this.busy='';this.refresh();}
  }
  async saveCopies(file:BoxRdFile){if(this.busy)return;this.error='';this.success='';if(!this.copies(file.copies)){this.error=`${file.filename}: enter a whole copy count from 1 to 1000.`;return;}
-  this.busy='save';try{const {data,error}=this.sharedSize
-   ?await this.db.client.rpc('wc_save_backdrop_rd_file',{p_id:file.id,p_size:this.sharedSize,p_path:null,p_filename:null,p_bytes:null,p_copies:Number(file.copies),p_expected:file.revision})
-   :this.cartBaseId?await this.db.client.rpc('wc_save_cart_base_rd_file',{p_id:file.id,p_signature:this.signature,p_index:this.index,p_path:null,p_filename:null,p_bytes:null,p_copies:Number(file.copies),p_expected:file.revision})
-   :await this.db.client.rpc('wc_save_box_rd_file',{p_id:file.id,p_signature:this.signature,p_index:this.index,p_path:null,p_filename:null,p_bytes:null,p_copies:Number(file.copies),p_expected:file.revision});if(error||!data?.revision)throw error||Error('Server did not confirm the copy count.');file.revision=data.revision;this.success=`${file.filename}: copy count saved.`;}
+  this.busy='save';try{const {data,error}=await this.persistFile({p_id:file.id,p_path:null,p_filename:null,p_bytes:null,p_copies:Number(file.copies),p_expected:file.revision});if(error||!data?.revision)throw error||Error('Server did not confirm the copy count.');file.revision=data.revision;this.success=`${file.filename}: copy count saved.`;}
   catch(e){this.error=`Could not save copies for ${file.filename}. ${this.message(e)} Retry.`;}finally{this.busy='';this.refresh();}
  }
  async remove(file:BoxRdFile){if(this.busy)return;this.error='';this.success='';this.busy='save';try{const {data,error}=await this.db.client.rpc('wc_delete_box_rd_file',{p_id:file.id,p_expected:file.revision});if(error||!data)throw error||Error('Server did not confirm removal.');this.files=this.files.filter(row=>row.id!==file.id);this.success=`${file.filename} removed.`;await this.db.client.storage.from('box-rd-files').remove([data]);}

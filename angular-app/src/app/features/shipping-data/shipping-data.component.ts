@@ -250,6 +250,9 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                           }
                         </td>
                       </tr>
+                      @if(pkg.source_type==='Base'){
+                        <tr class="base-files-row"><td colspan="8"><div class="base-files"><div><strong>CDR drawing</strong><app-box-drawing [cartBasePackageId]="pkg.id" [box]="pkg" /></div><app-box-rd-files [cartBasePackageId]="pkg.id" /></div></td></tr>
+                      }
                     }
                   </tbody>
                 </table>

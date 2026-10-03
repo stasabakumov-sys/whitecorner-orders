@@ -8,6 +8,12 @@ function setup(){
 }
 const event=(size=25*1024)=>({target:{files:[new File([new Uint8Array(size)],'box.cdr',{type:'application/x-coreldraw'})],value:'chosen'}} as unknown as Event);
 describe('Private saved box drawings',()=>{
+ it('saves the Base packaging CDR against the reusable box and hides it after geometry changes',async()=>{
+  const {c,rpc}=setup();c.cartBaseId='base';c.cartBasePackageId='base';c.box={package_name:'Front',length_mm:1180,width_mm:670,height_mm:60,weight_kg:22.5};
+  rpc.mockResolvedValue({data:{cart_base_package_id:'base',box_snapshot:{package_name:'Front',length_mm:1180,width_mm:670,height_mm:60},filename:'box.cdr',object_path:'new',revision:'r1'},error:null} as any);
+  await c.upload(event());expect(rpc).toHaveBeenCalledWith('wc_save_cart_base_box_drawing',expect.objectContaining({p_package:'base',p_box:{package_name:'Front',length_mm:1180,width_mm:670,height_mm:60},p_expected:null}));
+  expect(c.current.filename).toBe('box.cdr');c.box={...c.box,length_mm:1200};expect(c.current).toBeNull();expect(c.stale).toBe(true);
+ });
  it('accepts a 1.7 MB CDR and confirms persistence',async()=>{const {c,bucket}=setup();await c.upload(event(Math.ceil(1.7*1048576)));expect(bucket.upload).toHaveBeenCalled();expect(c.success).toContain('uploaded and saved');});
  it('reports the filename, actual size and limit for oversized drawings',async()=>{const {c,bucket}=setup();await c.upload(event(21*1048576));expect(c.error).toContain('box.cdr (21.0 MB)');expect(c.error).toContain('20 MB limit');expect(bucket.upload).not.toHaveBeenCalled();});
  it('does not claim success when the server returns no attachment',async()=>{const {c,rpc}=setup();rpc.mockResolvedValue({data:null,error:null} as any);await c.upload(event());expect(c.success).toBe('');expect(c.error).toContain('did not confirm');});

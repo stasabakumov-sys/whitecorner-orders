@@ -37,6 +37,13 @@ describe('box RD files',()=>{
   await component.saveCopies(component.files[0]);
   expect(rpc).toHaveBeenCalledWith('wc_save_cart_base_rd_file',expect.objectContaining({p_id:'saved',p_path:null}));
  });
+ it('manages the shared RD set directly from a Products Base box',async()=>{
+  const {component,rpc,event}=setup();component.cartBasePackageId='base-package';
+  await component.upload(event(new File(['rd'],'base.rd')));
+  expect(rpc).toHaveBeenCalledWith('wc_save_cart_base_rd_file_for_package',expect.objectContaining({p_package:'base-package',p_filename:'base.rd'}));
+  await component.saveCopies(component.files[0]);
+  expect(rpc).toHaveBeenCalledWith('wc_save_cart_base_rd_file_for_package',expect.objectContaining({p_package:'base-package',p_id:'saved',p_path:null}));
+ });
  it('keeps the prior file and gives a recovery step when replacement is uncertain',async()=>{
   const {component,rpc,remove,event}=setup();const existing:BoxRdFile={id:'saved',profile_signature:'profile',box_index:0,object_path:'old/path',filename:'old.rd',size_bytes:2,copies:2,revision:'old'};
   component.files=[existing];rpc.mockResolvedValueOnce({data:null,error:{message:'Network lost'}});

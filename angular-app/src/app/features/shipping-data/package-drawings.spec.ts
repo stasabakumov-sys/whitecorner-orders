@@ -7,7 +7,7 @@ import {BoxRdFilesComponent} from './box-rd-files.component';
 import {SupabaseService} from '../../core/services/supabase.service';
 async function render(backdrop:boolean,key:string,records:Record<string,any>={}){
  const lookups:string[]=[];
- const client={from:(table:string)=>{let key='';const q:any={select:()=>q,eq:(field:string,value:string)=>{if(field==='size_key')key=value;return q;},order:async()=>({data:[],error:null}),maybeSingle:async()=>{lookups.push(table+':'+key);return {data:records[key]||null};}};return q;}};
+ const client={rpc:vi.fn().mockResolvedValue({data:null,error:null}),from:(table:string)=>{let key='';const q:any={select:()=>q,eq:(field:string,value:string)=>{if(field==='size_key')key=value;return q;},order:async()=>({data:[],error:null}),maybeSingle:async()=>{lookups.push(table+':'+key);return {data:records[key]||null};}};return q;}};
  TestBed.configureTestingModule({imports:[PackageDrawingsComponent],providers:[{provide:SupabaseService,useValue:{client}}]});
  const f=TestBed.createComponent(PackageDrawingsComponent);f.componentRef.setInput('signature','original');f.componentRef.setInput('box',{length_mm:1230});f.componentRef.setInput('backdrop',backdrop);f.componentRef.setInput('sharedSize',key);f.detectChanges();await vi.waitFor(()=>{for(const d of f.debugElement.queryAll(By.directive(BoxDrawingComponent)))expect(d.componentInstance.loading).toBe(false);});f.detectChanges();return {f,lookups};
 }
