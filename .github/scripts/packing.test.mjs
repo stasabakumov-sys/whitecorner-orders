@@ -436,5 +436,20 @@ try{
   for(const rpc of ['wc_cart_standard_base_package','wc_cart_addon_rule','wc_cart_base_package'])await assert.rejects(db.query(`select ${rpc}(null,null)`),/Active Hub membership required/);
   await assert.rejects(db.query('select * from wc_cart_packing_file_boxes()'),/Active Hub membership required/);
  }
- console.log('Packing migration checks passed, including atomic Cart Constructor saves and mapping access.');
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20261003000600_packaging_svg_sources.sql','utf8'));
+ await db.query("select set_config('test.actor',$1,false)",[managerA]);
+ await db.exec('set role authenticated');
+ const sourceSql='select wc_save_cart_base_box_drawing($1,$2,$3,$4,100,$5) result';
+ const manualSvg=(await db.query(sourceSql,[constructorPackage,constructorBox,replacementPaths[0],'manual.SVG',null])).rows[0].result;
+ assert.equal(manualSvg.filename,'manual.SVG');
+ await assert.rejects(db.query(sourceSql,[constructorPackage,constructorBox,replacementPaths[0],'manual.pdf',manualSvg.revision]),/SVG or CDR/);
+ await assert.rejects(db.query(sourceSql,[constructorPackage,constructorBox,replacementPaths[0],'manual.svg',randomUUID()]),/Drawing changed/);
+ assert.equal((await db.query('select filename from wc_cart_base_box_drawings where cart_base_package_id=$1',[constructorPackage])).rows[0].filename,'manual.SVG');
+ const manualCdr=(await db.query(sourceSql,[constructorPackage,constructorBox,replacementPaths[0],'manual.cdr',manualSvg.revision])).rows[0].result;
+ assert.equal(manualCdr.filename,'manual.cdr');
+ assert.equal((await db.query('select object_path from wc_cart_box_svg_drawings where cart_base_package_id=$1',[constructorPackage])).rows[0].object_path,replacementPaths[0]);
+ await db.query("select set_config('test.actor',$1,false)",[worker]);
+ await assert.rejects(db.query(sourceSql,[constructorPackage,constructorBox,replacementPaths[0],'manual.svg',manualCdr.revision]),/Manager access/);
+ console.log('Packing migration checks passed, including atomic Cart Constructor saves, mapping access and SVG/CDR sources.');
 }finally{await db.close();}

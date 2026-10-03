@@ -6,7 +6,7 @@ if(!['--verify','--apply'].includes(mode))throw Error('Use --verify or --apply')
 const token=process.env.SUPABASE_ACCESS_TOKEN;
 if(!token)throw Error('Supabase access token required');
 const sources=[];
-for(const [version,name] of [['20261003000400','cart_constructor_files'],['20261003000500','cart_file_mapping_access']])
+for(const [version,name] of [['20261003000400','cart_constructor_files'],['20261003000500','cart_file_mapping_access'],['20261003000600','packaging_svg_sources']])
  sources.push({version,name,source:(await readFile(`supabase/migrations/${version}_${name}.sql`,'utf8')).replaceAll('\r','')});
 const quote=value=>"'"+value.replaceAll("'","''")+"'";
 async function query(sql,read_only=true){
@@ -51,10 +51,11 @@ await query(`begin;set local lock_timeout='15s';set local statement_timeout='120
   end if;
  end $release$;`).join('\n')}commit;`,false);
 const [after]=await query(`select
- (select count(*)=2 from supabase_migrations.schema_migrations where version in('20261003000400','20261003000500')) migrations_registered,
+ (select count(*)=3 from supabase_migrations.schema_migrations where version in('20261003000400','20261003000500','20261003000600')) migrations_registered,
  (select count(*)=4 from pg_proc where oid in('public.wc_cart_standard_base_package(text,integer)'::regprocedure,
   'public.wc_cart_addon_rule(text,integer)'::regprocedure,'public.wc_cart_base_package(text,integer)'::regprocedure,
   'public.wc_cart_packing_file_boxes()'::regprocedure) and prosrc like '%Active Hub membership required%') mapping_member_gates,
+ (select prosrc like '%Choose a valid SVG or CDR drawing%' from pg_proc where oid='public.wc_save_cart_base_box_drawing(uuid,jsonb,text,text,integer,uuid)'::regprocedure) svg_source_available,
  (select relrowsecurity from pg_class where oid='public.wc_cart_box_svg_drawings'::regclass) svg_rls,
  (select relrowsecurity from pg_class where oid='public.wc_cart_constructor_saves'::regclass) receipt_rls,
  not has_table_privilege('anon','public.wc_cart_box_svg_drawings','select') anon_svg_denied,
