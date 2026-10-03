@@ -13,6 +13,7 @@ import { SupabaseService } from '../../core/services/supabase.service';
 import {environment} from '../../../environments/environment';
 import {BoxDrawingComponent} from './box-drawing.component';
 import {PackingFilesCellComponent} from './packing-files-cell.component';
+import {CartBoxConstructorComponent} from './cart-box-constructor.component';
 import {ProductDetailsComponent} from './product-details.component';
 import {ProductPartsComponent} from './product-parts.component';
 import {ProductCncComponent} from './product-cnc.component';
@@ -112,7 +113,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
 @Component({
   selector: 'app-shipping-data',
   standalone: true,
-  imports:[AddMainPackageComponent,SavedPackingComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,ProductDraftsComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,PackingFilesCellComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
+  imports:[CartBoxConstructorComponent,AddMainPackageComponent,SavedPackingComponent,BackdropPaintProfileComponent,WixProductSnapshotComponent,WixCatalogReviewComponent,ProductDraftsComponent,PackagingVariantsComponent,CartMainPackagingComponent,CatalogCostEditorComponent,ProductWorkCostComponent,BoxDrawingComponent,PackingFilesCellComponent,ProductDetailsComponent,ProductPartsComponent,ProductCncComponent,DialogModule,DrawerModule,FormsModule],
   template: `
     @if (error()) { <div class="error">{{ error() }}</div> }
     <section class="shipping">
@@ -248,8 +249,9 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                         <td><input type="number" [disabled]="!editing(pkg.id)" [value]="pkg.width_mm??''" (input)="setDraft(pkg.id,'width_mm',$any($event.target).value)"></td>
                         <td><input type="number" [disabled]="!editing(pkg.id)" [value]="pkg.height_mm??''" (input)="setDraft(pkg.id,'height_mm',$any($event.target).value)"></td>
                         <td><input type="number" step="0.1" [disabled]="!editing(pkg.id)" [value]="pkg.weight_kg??''" (input)="setDraft(pkg.id,'weight_kg',$any($event.target).value)"></td>
-                        <td><app-packing-files-cell [box]="pkg" [locked]="editing(pkg.id)" kind="cdr" /></td><td><app-packing-files-cell [box]="pkg" kind="rd" /></td>
+                        <td><app-packing-files-cell [box]="pkg" [locked]="editing(pkg.id)" kind="cdr" /></td><td><app-packing-files-cell [box]="pkg" [refreshVersion]="constructorRefresh[pkg.id]||0" kind="rd" /></td>
                         <td>
+                          @if(isCart(p)){<app-cart-box-constructor [box]="pkg" [locked]="editing(pkg.id)" (filesSaved)="constructorRefresh[pkg.id]=(constructorRefresh[pkg.id]||0)+1" />}
                           @if (editing(pkg.id)) {
                             <button class="square" aria-label="Save Base packaging" title="Save Base packaging" (click)="savePackage(pkg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>
                           } @else {
@@ -277,8 +279,8 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                    <td><input type="number" min="1" [value]="ruleValue(r,'width_mm')" (input)="setRuleDraft(r.id,'width_mm',$any($event.target).value)"></td>
                    <td><input type="number" min="1" [value]="ruleValue(r,'height_mm')" (input)="setRuleDraft(r.id,'height_mm',$any($event.target).value)"></td>
                    <td><input type="number" min="0.01" step="0.01" [value]="ruleValue(r,'weight_kg')" (input)="setRuleDraft(r.id,'weight_kg',$any($event.target).value)"></td>
-                   <td><app-packing-files-cell [box]="box" [locked]="ruleDrafts.has(r.id)" kind="cdr" /></td><td><app-packing-files-cell [box]="box" kind="rd" /></td>
-                   <td><button class="square" aria-label="Save Add-on packaging" title="Save Add-on packaging" [disabled]="ruleSaving(r.id)" (click)="saveRule(r)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button></td>
+                   <td><app-packing-files-cell [box]="box" [locked]="ruleDrafts.has(r.id)" kind="cdr" /></td><td><app-packing-files-cell [box]="box" [refreshVersion]="constructorRefresh[box.id]||0" kind="rd" /></td>
+                   <td>@if(isCart(p)){<app-cart-box-constructor [box]="box" [locked]="ruleDrafts.has(r.id)||ruleSaving(r.id)" (filesSaved)="constructorRefresh[box.id]=(constructorRefresh[box.id]||0)+1" />}<button class="square" aria-label="Save Add-on packaging" title="Save Add-on packaging" [disabled]="ruleSaving(r.id)" (click)="saveRule(r)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button></td>
                    <td><input type="checkbox" [checked]="mainAddOnSelected(r)" (change)="toggleMainAddOn(r,$any($event.target).checked)" [attr.aria-label]="'Combine '+r.match_name+' with Main'" title="Combine with Main"></td>
                   </tr>
                  }
@@ -313,6 +315,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
   styleUrl: './shipping-data.component.css',
 })
 export class ShippingDataComponent implements OnInit {
+  constructorRefresh:Record<string,number>={};
   search='';libraryOpen=false;libraryLoading=false;libraryError='';newSize='';detailTab:'cost'|'packing'|'minutes'|'wix'|'cnc'='cost';selectedCartSize='';selectedPackingSize='';selectedBackdropFolding:Folding='foldable';extraSizes=signal<string[]>([]);parseSize=backdropSizeKey;sizeLabel=sizeKeyLabel;
   openProduct(id:string){this.requestedVariant='';this.detailTab='cost';this.selectedCartSize='';this.selectedPackingSize='';this.selectedBackdropFolding='foldable';this.mainAddOns.set([]);this.selectedId.set(id);void this.loadFinishCatalog(id);}
   catalogUpdating=signal(false);catalogRefreshError=signal('');private catalogRequest=0;

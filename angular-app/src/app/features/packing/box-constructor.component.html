@@ -1,0 +1,69 @@
+<section class="page">
+  <h1>Constructor</h1>
+  <p class="intro">{{fixedDimensions ? 'Bottom dimensions come from saved Cart packaging.' : 'Enter the finished bottom dimensions in millimetres.'}} The bottom and lid are created together; the lid is 10 mm longer and wider, with the same depth.</p>
+  <div class="controls">
+    <label for="box-length">L · length, mm<input id="box-length" type="number" min="0.1" step="0.1" [disabled]="fixedDimensions" [(ngModel)]="length" (ngModelChange)="update()"></label>
+    <label for="box-width">W · width, mm<input id="box-width" type="number" min="0.1" step="0.1" [disabled]="fixedDimensions" [(ngModel)]="width" (ngModelChange)="update()"></label>
+    <label for="box-depth">D · depth, mm<input id="box-depth" type="number" min="0.1" step="0.1" [disabled]="fixedDimensions" [(ngModel)]="depth" (ngModelChange)="update()"></label>
+    <label for="box-layout">File layout<select id="box-layout" [(ngModel)]="layout" (ngModelChange)="update()"><option value="pair">All four pieces</option><option value="single">One half each · cut twice</option></select></label>
+    <button type="button" (click)="download()" [disabled]="!drawing || busy">{{busy ? 'Preparing…' : 'Download SVG'}}</button>
+  </div>
+  @if(error){<p class="error" role="alert">{{error}}</p>}
+  @if(result){<p class="result" role="status">{{result}}</p>}
+  <section class="rd-section" aria-label="RD export · two files">
+    <details class="rd-settings">
+    <summary>RD Settings</summary>
+    <p class="measure">Each RD contains one half: bottom or lid. Cut each file twice. Settings are required before export.</p>
+    <div class="controls rd-controls">
+      <label for="rd-mode">Fold mode<select id="rd-mode" [(ngModel)]="rdSettings.foldMode" (ngModelChange)="rdChanged()"><option value="">Choose mode</option><option value="dot">Laser Dot · moving dashes</option><option value="line">Continuous line</option><option value="perforation">Perforation</option></select></label>
+      @if(rdSettings.foldMode === 'dot'){
+        <label for="rd-dot-time">Dot time, s<input id="rd-dot-time" type="number" min="0.001" step="0.001" [(ngModel)]="rdSettings.dotTime" (ngModelChange)="rdChanged()"></label>
+        <label for="rd-dot-interval">Dot interval, mm<input id="rd-dot-interval" type="number" min="0.1" step="0.1" [(ngModel)]="rdSettings.dotInterval" (ngModelChange)="rdChanged()"></label>
+        <label for="rd-dot-length">Dot length, mm<input id="rd-dot-length" type="number" min="0.1" step="0.1" [(ngModel)]="rdSettings.dotLength" (ngModelChange)="rdChanged()"></label>
+      }
+      @if(rdSettings.foldMode === 'perforation'){
+        <label for="rd-dash">Fold dash, mm<input id="rd-dash" type="number" min="0.1" step="0.1" [(ngModel)]="rdSettings.dash" (ngModelChange)="rdChanged()"></label>
+        <label for="rd-gap">Fold gap, mm<input id="rd-gap" type="number" min="0.1" step="0.1" [(ngModel)]="rdSettings.gap" (ngModelChange)="rdChanged()"></label>
+      }
+    </div>
+    @for(layer of rdLayers;track layer.name){
+      <div class="controls rd-controls">
+        <strong class="rd-layer">{{layer.name}}</strong>
+        <label [attr.for]="'rd-'+layer.name+'-speed'">{{layer.name}} speed, mm/s<input [id]="'rd-'+layer.name+'-speed'" type="number" min="0.1" max="1000" step="0.1" [(ngModel)]="layer.value.speed" (ngModelChange)="rdChanged()"></label>
+        <label [attr.for]="'rd-'+layer.name+'-min'">{{layer.name}} min power, %<input [id]="'rd-'+layer.name+'-min'" type="number" min="0" max="100" step="0.1" [(ngModel)]="layer.value.minPower" (ngModelChange)="rdChanged()"></label>
+        <label [attr.for]="'rd-'+layer.name+'-max'">{{layer.name}} max power, %<input [id]="'rd-'+layer.name+'-max'" type="number" min="0" max="100" step="0.1" [(ngModel)]="layer.value.maxPower" (ngModelChange)="rdChanged()"></label>
+      </div>
+    }
+    <p class="measure">Fold runs first, then the outline. Laser 1 only; air assist on; position: Anchor point. First export loads Python from the internet; geometry and settings stay in your browser.</p>
+    @if(rdSettings.foldMode === 'dot'){<p class="measure">Dot interval is start-to-start spacing. With a positive dot length, RDWorks uses moving dashes at the specified speed; dot time applies only to stationary dots (length 0), which this export does not support.</p>}
+    </details>
+    @if(rdValidation){<p class="error" role="alert">{{rdValidation}} Open RD Settings to correct it.</p>}
+    <div class="controls rd-controls">
+      <button type="button" (click)="generateRd()" [disabled]="!net || !!rdValidation || rdBusy">{{rdBusy ? 'Generating RD…' : 'Generate two RD files'}}</button>
+    </div>
+    @if(rdProgress){<p class="measure" role="status">{{rdProgress}}</p>}
+    @if(rdError){<p class="error" role="alert">{{rdError}}</p>}
+    @if(rdResult){<p class="result" role="status">{{rdResult}}</p>}
+  </section>
+  @if(drawing;as view){
+      <div class="drawing-card">
+        <div class="drawing-head"><strong>Bottom + lid · {{view.pieces === 4 ? 'four pieces' : 'cut each half twice'}}</strong><span>File size {{number(view.width)}} × {{number(view.height)}} mm</span></div>
+        <div class="parts">
+          @for(part of view.parts;track part.name){
+            <section class="part">
+              <h2>{{part.name}} · {{number(part.net.length)}} × {{number(part.net.width)}} × {{number(part.net.depth)}} mm</h2>
+              <div class="preview">
+                <svg [attr.viewBox]="'-2 -2 '+(part.drawing.width+4)+' '+(part.drawing.height+4)" role="img" [attr.aria-label]="part.name+' drawing with red cutting lines and blue folding lines'">
+                  @for(line of part.drawing.cuts;track $index){<line [attr.x1]="line.from[0]" [attr.y1]="line.from[1]" [attr.x2]="line.to[0]" [attr.y2]="line.to[1]" class="cut"/>}
+                  @for(line of part.drawing.folds;track $index){<line [attr.x1]="line.from[0]" [attr.y1]="line.from[1]" [attr.x2]="line.to[0]" [attr.y2]="line.to[1]" class="fold"/>}
+                </svg>
+              </div>
+              <p class="measure">Each piece {{number(part.net.sheetWidth)}} × {{number(part.net.sheetHeight)}} mm · {{part.drawing.pieces === 2 ? 'two mirrored pieces' : 'cut twice'}}</p>
+            </section>
+          }
+        </div>
+        <div class="drawing-footer"><p class="legend"><span class="red"></span>Cut<span class="blue"></span>Fold</p><span>Scale 1:1 in the downloaded file</span></div>
+        <p class="measure">The file separates the bottom and lid by {{view.gap}} mm for cutting. Join each part's two straight inner edges with tape.</p>
+      </div>
+  }
+</section>
