@@ -386,5 +386,55 @@ try{
  await assert.rejects(db.query('select wc_save_cart_base_rd_file_for_package($1,$2,null,null,null,2,$3)',[addonFile.id,addonPackage.id,addonReplace.revision]),/Manager access/);
  await assert.rejects(db.query('select wc_save_cart_base_box_drawing($1,$2,$3,$4,5,$5)',[basePackage,sharedDrawing.box_snapshot,drawingReplacement,'updated.cdr',updatedDrawing.revision]),/Manager access/);
  await assert.rejects(db.query('select wc_save_cart_base_rd_file_for_package($1,$2,null,null,null,4,$3)',[legacyCart.id,basePackage,fromProduct.revision]),/Manager access/);
- console.log('Packing migration checks passed.');
+ // Cart Constructor: three private references committed together, with retry receipts.
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20261003000400_cart_constructor_files.sql','utf8'));
+ const constructorPackage=randomUUID();
+ await db.query("insert into wc_shipping_packages(id,shipping_product_id,source_type,active,size_key,package_name,length_mm,width_mm,height_mm,package_no) values($1,$2,'Base',true,'constructor','Top/Bottom',1230,630,80,1)",[constructorPackage,cart]);
+ const constructorBox={package_name:'Top/Bottom',length_mm:1230,width_mm:630,height_mm:80};
+ const constructorDimensions={bottom:{length:1215,width:615,depth:80},lid:{length:1225,width:625,depth:80}};
+ const constructorPaths=[0,1,2].map(()=>`${managerA}/${randomUUID()}`);
+ for(let i=0;i<3;i++)await db.query('insert into storage.objects(bucket_id,name,metadata) values($1,$2,$3)',[i?'box-rd-files':'box-drawings',constructorPaths[i],{size:100+i}]);
+ const constructorArgs=[randomUUID(),constructorPackage,constructorBox,constructorDimensions,{path:constructorPaths[0],filename:'drawing.svg',bytes:100,expected:null},[0,1].map(i=>({id:null,expected:null,path:constructorPaths[i+1],filename:i?'lid.rd':'bottom.rd',bytes:101+i}))];
+ const constructorSql='select wc_save_cart_constructor_files($1,$2,$3,$4,$5,$6) result';
+ await db.exec('set role authenticated');
+ await assert.rejects(db.query(constructorSql,constructorArgs),/Manager access/);
+ await db.query("select set_config('test.actor',$1,false)",[managerA]);
+ await assert.rejects(db.query(constructorSql,[...constructorArgs.slice(0,3),{...constructorDimensions,lid:{length:1250,width:625,depth:80}},...constructorArgs.slice(4)]),/Use Cart dimensions/);
+ const badRd=structuredClone(constructorArgs[5]);badRd[1].bytes=999;
+ await assert.rejects(db.query(constructorSql,[...constructorArgs.slice(0,5),badRd]),/upload|Upload|bytes|size/);
+ assert.equal((await db.query('select * from wc_box_rd_files where cart_base_package_id=$1',[constructorPackage])).rows.length,0);
+ assert.equal((await db.query('select * from wc_cart_box_svg_drawings where cart_base_package_id=$1',[constructorPackage])).rows.length,0);
+ const constructorSaved=(await db.query(constructorSql,constructorArgs)).rows[0].result;
+ assert.deepEqual(constructorSaved.rd_files.map(f=>f.copies),[2,2]);
+ assert.equal(constructorSaved.drawing.constructor_data.lid.length,1225);
+ assert.deepEqual((await db.query(constructorSql,constructorArgs)).rows[0].result,constructorSaved);
+ // A stale second RD must roll back the first replacement and the SVG together.
+ await db.exec('reset role');
+ const replacementPaths=[0,1,2].map(()=>`${managerA}/${randomUUID()}`);
+ for(let i=0;i<3;i++)await db.query('insert into storage.objects(bucket_id,name,metadata) values($1,$2,$3)',[i?'box-rd-files':'box-drawings',replacementPaths[i],{size:100+i}]);
+ await db.exec('set role authenticated');
+ const replacementRd=constructorSaved.rd_files.map((file,i)=>({id:file.id,expected:i?randomUUID():file.revision,path:replacementPaths[i+1],filename:file.filename,bytes:101+i}));
+ const replacementArgs=[randomUUID(),constructorPackage,constructorBox,constructorDimensions,{path:replacementPaths[0],filename:'updated.svg',bytes:100,expected:constructorSaved.drawing.revision},replacementRd];
+ await assert.rejects(db.query(constructorSql,replacementArgs),/RD file changed/);
+ assert.equal((await db.query('select object_path from wc_box_rd_files where id=$1',[constructorSaved.rd_files[0].id])).rows[0].object_path,constructorPaths[1]);
+ assert.equal((await db.query('select object_path from wc_cart_box_svg_drawings where cart_base_package_id=$1',[constructorPackage])).rows[0].object_path,constructorPaths[0]);
+ replacementRd[1].expected=constructorSaved.rd_files[1].revision;
+ const replacementSaved=(await db.query(constructorSql,replacementArgs)).rows[0].result;
+ assert.deepEqual(replacementSaved.rd_files.map(file=>file.id),constructorSaved.rd_files.map(file=>file.id));
+ await assert.rejects(db.query(constructorSql,[constructorArgs[0],constructorPackage,{...constructorBox,height_mm:81},...constructorArgs.slice(3)]),/Save request changed/);
+ await assert.rejects(db.query(constructorSql,[randomUUID(),...constructorArgs.slice(1)]),/SVG drawing changed/);
+ await db.query("select set_config('test.actor',$1,false)",[worker]);
+ assert.equal((await db.query('select * from wc_cart_box_svg_drawings where cart_base_package_id=$1',[constructorPackage])).rows.length,1);
+ await assert.rejects(db.query('delete from wc_cart_box_svg_drawings where cart_base_package_id=$1',[constructorPackage]),/permission denied/);
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20261003000500_cart_file_mapping_access.sql','utf8'));
+ await db.exec('set role authenticated');
+ assert.equal((await db.query("select wc_cart_base_package('cart-shelf-new',1) id")).rows[0].id,addonPackage.id);
+ for(const actor of ['',randomUUID()]){
+  await db.query("select set_config('test.actor',$1,false)",[actor]);
+  for(const rpc of ['wc_cart_standard_base_package','wc_cart_addon_rule','wc_cart_base_package'])await assert.rejects(db.query(`select ${rpc}(null,null)`),/Active Hub membership required/);
+  await assert.rejects(db.query('select * from wc_cart_packing_file_boxes()'),/Active Hub membership required/);
+ }
+ console.log('Packing migration checks passed, including atomic Cart Constructor saves and mapping access.');
 }finally{await db.close();}
