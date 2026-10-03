@@ -11,6 +11,7 @@ on:
     paths:
       - 'supabase/migrations/20261003000400_cart_constructor_files.sql'
       - 'supabase/migrations/20261003000500_cart_file_mapping_access.sql'
+      - 'supabase/migrations/20261003000600_packaging_svg_sources.sql'
       - '.github/scripts/packing.test.mjs'
       - '.github/scripts/cart-constructor-release.mjs'
       - '.github/workflows/cart-constructor-release.yml'
