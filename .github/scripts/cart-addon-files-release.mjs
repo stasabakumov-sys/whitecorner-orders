@@ -1,0 +1,63 @@
+import {readFile} from 'node:fs/promises';
+
+const mode=process.argv[2];
+if(!['--verify','--apply'].includes(mode))throw Error('Use --verify or --apply');
+const token=process.env.SUPABASE_ACCESS_TOKEN;
+if(!token)throw Error('Supabase access token required');
+const version='20261003000300',name='cart_addon_files';
+const source=(await readFile(`supabase/migrations/${version}_${name}.sql`,'utf8')).replaceAll('\r','');
+const quote=value=>"'"+value.replaceAll("'","''")+"'";
+async function query(sql,read_only=true){
+ const response=await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/database/query',{
+  method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+  body:JSON.stringify({query:sql,read_only}),
+ });
+ if(!response.ok)throw Error(`Production database query failed (HTTP ${response.status}): ${(await response.text()).slice(0,400)}`);
+ return response.json();
+}
+const [before]=await query(`select
+ exists(select 1 from supabase_migrations.schema_migrations where version='20261003000200') cart_base_prerequisite,
+ to_regprocedure('public.wc_is_active_hub_member()') is not null membership_prerequisite,
+ to_regclass('public.wc_box_drawings') is not null drawing_prerequisite,
+ (select relrowsecurity from pg_class where oid='public.wc_box_rd_files'::regclass) rd_rls,
+ (select count(*)::int from public.wc_box_rd_files) rd_count,
+ (select count(*)::int from public.wc_packing_tasks) task_count,
+ (select count(*)::int from public.wc_box_drawings) drawing_count;`);
+if(!before?.cart_base_prerequisite||!before.membership_prerequisite||!before.drawing_prerequisite||!before.rd_rls)throw Error('Shared Cart Add-on file prerequisites differ; release stopped');
+const [registered]=await query(`select replace(statements[1],E'\\r','')=${quote(source)} source_matches
+ from supabase_migrations.schema_migrations where version='${version}'`);
+if(registered&&!registered.source_matches)throw Error(`Registered migration ${version} differs from reviewed source`);
+console.log(JSON.stringify({preflight:'passed',migrationRegistered:!!registered,rdCount:before.rd_count,taskCount:before.task_count,drawingCount:before.drawing_count}));
+if(mode==='--verify')process.exit(0);
+
+await query(`begin;set local lock_timeout='15s';set local statement_timeout='120s';
+ select pg_advisory_xact_lock(20260923,6);
+ do $release$ begin
+  if exists(select 1 from supabase_migrations.schema_migrations where version='${version}') then
+   if (select replace(statements[1],E'\\r','') from supabase_migrations.schema_migrations where version='${version}') is distinct from ${quote(source)}
+    then raise exception 'Migration ${version} differs'; end if;
+  else
+   execute ${quote(source)};
+   insert into supabase_migrations.schema_migrations(version,name,statements)
+   values('${version}','${name}',array[${quote(source)}]);
+  end if;
+ end $release$;commit;`,false);
+const [after]=await query(`select
+ exists(select 1 from supabase_migrations.schema_migrations where version='${version}') migration_registered,
+ (select relrowsecurity from pg_class where oid='public.wc_box_rd_files'::regclass) rd_rls,
+ has_function_privilege('authenticated','public.wc_save_cart_base_rd_file_for_package(uuid,uuid,text,text,integer,integer,uuid)','execute') manager_rpc_available,
+ not has_function_privilege('anon','public.wc_save_cart_base_rd_file_for_package(uuid,uuid,text,text,integer,integer,uuid)','execute') anon_denied,
+ (select relrowsecurity from pg_class where oid='public.wc_cart_base_box_drawings'::regclass) drawing_rls,
+ has_function_privilege('authenticated','public.wc_save_cart_base_box_drawing(uuid,jsonb,text,text,integer,uuid)','execute') drawing_rpc_available,
+ not has_function_privilege('anon','public.wc_save_cart_base_box_drawing(uuid,jsonb,text,text,integer,uuid)','execute') anon_drawing_denied,
+ (select count(*)::int from public.wc_box_rd_files) rd_count,
+ (select count(*)::int from public.wc_packing_tasks) task_count,
+ (select count(*)::int from public.wc_box_drawings) drawing_count,
+ (select count(*)::int from public.wc_cart_base_box_drawings) shared_drawing_count,
+ (select count(*)::int from public.wc_shipping_packages where shipping_rule_id is not null and active) addon_box_count,
+ has_function_privilege('authenticated','public.wc_cart_packing_file_boxes()','execute') mapping_available,
+ not has_function_privilege('anon','public.wc_cart_packing_file_boxes()','execute') anon_mapping_denied;`);
+if(!after||Object.entries(after).some(([key,value])=>!['rd_count','task_count','drawing_count','shared_drawing_count','addon_box_count'].includes(key)&&value!==true)
+ ||after.rd_count!==before.rd_count||after.task_count!==before.task_count||after.drawing_count!==before.drawing_count)
+ throw Error('Cart Add-on RD product postflight failed');
+console.log(JSON.stringify({release:'verified',rdRowsPreserved:after.rd_count,tasksPreserved:after.task_count,drawingsPreserved:after.drawing_count,sharedDrawings:after.shared_drawing_count,addonBoxes:after.addon_box_count}));

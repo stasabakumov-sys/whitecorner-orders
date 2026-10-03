@@ -24,8 +24,13 @@ try{
   create table wc_production_units(id uuid primary key,order_item_id uuid references wc_order_items(id),
    production_status text);
   create table wc_shipping_products(id uuid primary key,product_name text,product_type text);
-  create table wc_shipping_packages(id uuid primary key,shipping_product_id uuid,source_type text,active boolean,
-   size_key text,package_name text,length_mm numeric,width_mm numeric,height_mm numeric);
+  create table wc_shipping_packages(id uuid primary key default gen_random_uuid(),shipping_product_id uuid,source_type text,active boolean,
+   size_key text,package_name text,length_mm numeric,width_mm numeric,height_mm numeric,weight_kg numeric,
+   package_no integer default 1,quantity integer,notes text,updated_at timestamptz);
+  create unique index wc_shipping_packages_product_size_source_no_uq on wc_shipping_packages(shipping_product_id,size_key,source_type,package_no) nulls not distinct;
+  create table wc_shipping_rules(id uuid primary key default gen_random_uuid(),shipping_product_id uuid,size_key text,
+   rule_type text,match_name text,match_value text,effect_type text,package_count_delta integer,package_name text,
+   length_mm numeric,width_mm numeric,height_mm numeric,weight_kg numeric,active boolean,updated_at timestamptz);
   create table wc_delivery_packaging_profiles(signature text primary key,shipping_product_id uuid,template_item jsonb,packages jsonb);
   create function wc_cart_size_key(options jsonb) returns text language sql immutable as $$
    select lower(btrim(coalesce(options->>'Size','')))
@@ -329,7 +334,56 @@ try{
  await assert.rejects(db.query('select wc_save_cart_base_rd_file_for_package($1,$2,null,null,null,4,$3)',
   [legacyCart.id,otherSizePackage,fromProduct.revision]),/RD file changed/);
  await assert.rejects(db.query('select wc_promote_cart_base_rd($1,0)',['cart-large']),/no RD files/);
+ await db.exec('reset role');
+ const shelfRule=randomUUID();
+ await db.query(`insert into wc_shipping_rules(id,shipping_product_id,size_key,rule_type,match_name,match_value,effect_type,package_count_delta,package_name,length_mm,width_mm,height_mm,weight_kg,active)
+  values($1,$2,'regular','Option','Internal Shelf','Yes','Add package',1,'Shelf',300,200,40,5,true)`,[shelfRule,cart]);
+ const addonDrawingPath=`${managerA}/addon-source`,addonDrawingNewPath=`${managerA}/addon-new`;
+ await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-drawings',$1,'{\"size\":4}')",[addonDrawingPath]);
+ await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-drawings',$1,'{\"size\":5}')",[addonDrawingNewPath]);
+ await db.query('insert into wc_box_drawings(profile_signature,box_index,box_snapshot,object_path,filename,size_bytes) values($1,1,$2,$3,$4,4)',['cart-shelf',addonBox,addonDrawingPath,'shelf.cdr']);
+ await db.exec(await readFile('supabase/migrations/20261003000300_cart_addon_files.sql','utf8'));
+ const addonPackage=(await db.query('select * from wc_shipping_packages where shipping_rule_id=$1',[shelfRule])).rows[0];
+ assert.equal(addonPackage.package_no,1);
+ assert.equal((await db.query('select wc_cart_base_package($1,1) id',['cart-shelf'])).rows[0].id,addonPackage.id);
+ assert.equal((await db.query('select * from wc_cart_base_box_drawings where cart_base_package_id=$1',[addonPackage.id])).rows[0].filename,'shelf.cdr');
+ const addonFile=(await db.query('select * from wc_box_rd_files where cart_base_package_id=$1',[addonPackage.id])).rows[0];
+ assert.equal(addonFile.filename,'shelf.rd');
+ assert.equal((await db.query('select files from wc_packing_tasks where id=$1',[cartTask.id])).rows[0].files[1].file_id,addonFile.id);
+ await db.query(`insert into wc_delivery_packaging_profiles values('cart-shelf-new',$1,$2,$3),('cart-shelf-no',$1,$4,$3),('cart-shelf-custom',$1,$5,$3)`,
+  [cart,{wix_options:{Size:'Regular','Internal Shelf':'Yes',Colour:'Raw'}},[cartBox,addonBox],{wix_options:{Size:'Regular','Internal Shelf':'No'}},{profile_scope:'cart-main',wix_options:{Size:'Regular','Internal Shelf':'Yes'}}]);
+ assert.equal((await db.query("select wc_cart_base_package('cart-shelf-new',1) id")).rows[0].id,addonPackage.id);
+ for(const signature of ['cart-shelf-no','cart-shelf-custom'])assert.equal((await db.query('select wc_cart_base_package($1,1) id',[signature])).rows[0].id,null);
+ await assert.rejects(db.query('update wc_shipping_rules set length_mm=301 where id=$1',[shelfRule]),/shared RD files/);
+ await db.exec('set role authenticated');
+ const addonDrawing=(await db.query('select wc_save_cart_base_box_drawing($1,$2,$3,$4,5,$5) result',[addonPackage.id,{package_name:'Shelf',length_mm:300,width_mm:200,height_mm:40},addonDrawingNewPath,'shelf-new.cdr',(await db.query('select revision from wc_cart_base_box_drawings where cart_base_package_id=$1',[addonPackage.id])).rows[0].revision])).rows[0].result;
+ assert.equal(addonDrawing.filename,'shelf-new.cdr');
+ const addonReplace=(await db.query('select to_jsonb(wc_save_cart_base_rd_file_for_package($1,$2,$3,$4,5,2,$5)) result',[addonFile.id,addonPackage.id,cartNewPath,'shelf-new.rd',addonFile.revision])).rows[0].result;
+ assert.equal((await db.query('select files from wc_packing_tasks where id=$1',[cartTask.id])).rows[0].files[1].filename,'shelf-new.rd');
+ assert.equal((await db.query('select * from wc_cart_packing_file_boxes() where signature=$1 and box_index=1',['cart-shelf-new'])).rows[0].package_id,addonPackage.id);
+ await db.exec('reset role');
+ const addonUnit=randomUUID(),sideRule=randomUUID(),doorsRule=randomUUID();
+ await db.query("insert into wc_production_units values($1,$2,'New')",[addonUnit,cartItem]);
+ await db.query(`insert into wc_shipping_rules(id,shipping_product_id,size_key,rule_type,match_name,match_value,effect_type,package_count_delta,package_name,length_mm,width_mm,height_mm,weight_kg,active)
+  values($1,$2,'regular','Option','Side shelves','Yes','Add package',2,'Side',600,250,50,2,true),
+        ($3,$2,'regular','Add-on','Back panel doors',null,'Add package',1,'Doors',1180,670,49,13,true)`,[sideRule,cart,doorsRule]);
+ const sideBox={package_name:'Side',length_mm:600,width_mm:250,height_mm:50,contents:[{component_key:'option:side shelves'}]},doorsBox={package_name:'Doors',length_mm:1180,width_mm:670,height_mm:49,contents:[{component_key:'main',product_name:'Back panel doors'}]};
+ await db.query('insert into wc_delivery_packaging_profiles values($1,$2,$3,$4),($5,$2,$3,$6)',
+  ['cart-side',cart,{wix_options:{Size:'Regular','Side shelves':'Yes'}},[cartBox,sideBox,sideBox,doorsBox],'cart-side-incomplete',[cartBox,sideBox]]);
+ const sidePackages=(await db.query('select * from wc_shipping_packages where shipping_rule_id=$1 order by package_no',[sideRule])).rows;
+ assert.equal(sidePackages.length,2);
+ assert.equal((await db.query("select wc_cart_base_package('cart-side',1) id")).rows[0].id,sidePackages[0].id);
+ assert.equal((await db.query("select wc_cart_base_package('cart-side',2) id")).rows[0].id,sidePackages[1].id);
+ assert.equal((await db.query("select wc_cart_base_package('cart-side-incomplete',1) id")).rows[0].id,null);
+ assert.notEqual((await db.query("select wc_cart_base_package('cart-side',3) id")).rows[0].id,null);
+ await assert.rejects(db.query('update wc_shipping_rules set match_value=$1 where id=$2',['No',shelfRule]),/saved files/);
+ await db.exec('set role authenticated');
+ const freshAddonTask=(await db.query('select to_jsonb(wc_send_packing_task($1,$2)) result',[addonUnit,'cart-shelf-new'])).rows[0].result;
+ assert.deepEqual(freshAddonTask.files.map(file=>file.filename),['base-final.rd','shelf-new.rd']);
+ assert.equal(freshAddonTask.files[1].file_id,addonFile.id);
  await db.query("select set_config('test.actor',$1,false)",[worker]);
+ assert.equal((await db.query('select * from wc_cart_packing_file_boxes()')).rows.length,0);
+ await assert.rejects(db.query('select wc_save_cart_base_rd_file_for_package($1,$2,null,null,null,2,$3)',[addonFile.id,addonPackage.id,addonReplace.revision]),/Manager access/);
  await assert.rejects(db.query('select wc_save_cart_base_box_drawing($1,$2,$3,$4,5,$5)',[basePackage,sharedDrawing.box_snapshot,drawingReplacement,'updated.cdr',updatedDrawing.revision]),/Manager access/);
  await assert.rejects(db.query('select wc_save_cart_base_rd_file_for_package($1,$2,null,null,null,4,$3)',[legacyCart.id,basePackage,fromProduct.revision]),/Manager access/);
  console.log('Packing migration checks passed.');
