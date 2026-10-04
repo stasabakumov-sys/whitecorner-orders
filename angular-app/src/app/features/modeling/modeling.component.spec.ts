@@ -67,7 +67,7 @@ describe('Modeling dimensions', () => {
     expect(after / before).toBeCloseTo(1500 / 1200);
   });
 
-  it('limits length to 120–150 cm and height to 900–1000 mm', () => {
+  it('limits length to 120–150 cm and height to 85–100 cm in 5 cm steps', () => {
     const { component } = setup();
     component.setDimension('width', '2000');
     component.setDimension('height', '1300');
@@ -76,9 +76,87 @@ describe('Modeling dimensions', () => {
     component.setDimension('width', '800');
     component.setDimension('height', '650');
     expect(component.width()).toBe(1200);
-    expect(component.height()).toBe(900);
+    expect(component.height()).toBe(850);
+    component.setDimension('height', '942');
+    expect(component.height()).toBe(950);
     component.setDimension('width', '1340');
     expect(component.width()).toBe(1300);
     expect(component.depth()).toBe(600);
+  });
+});
+
+describe('Plywood finishes', () => {
+  it('runs pine grain along rails and plywood layers along vertical edges', () => {
+    const { component } = setup();
+    const editor = component as any;
+    editor.modelPineTexture = new THREE.Texture();
+    editor.modelPlywoodEdgeTexture = new THREE.Texture();
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute([0.1, 0.1, 0.02, 1.1, 0.1, 0.02], 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, -1, 0, 0, -1], 3));
+    editor.addWoodUvs(geometry, 'Buttom part2', false, true);
+    let uv = geometry.getAttribute('uv');
+    expect(uv.getX(0)).toBeCloseTo(uv.getX(1));
+    expect(uv.getY(1)).toBeGreaterThan(uv.getY(0));
+    for (const name of ['Front part1', 'Left side part1', 'Right side part2', 'Front part2']) {
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute([0.03, 0.11, 0.02, 0.03, 0.885, 0.02], 3));
+      editor.addWoodUvs(geometry, name, true);
+      uv = geometry.getAttribute('uv');
+      expect(uv.getY(0)).toBeCloseTo(uv.getY(1));
+      expect(uv.getX(1)).toBeGreaterThan(uv.getX(0));
+    }
+    geometry.dispose();
+  });
+  it('uses the embedded birch texture for RAW and varnished plywood and restores it after painting', () => {
+    const { component } = setup();
+    const editor = component as any;
+    const birch = new THREE.Texture();
+    const layers = new THREE.Texture();
+    const pine = new THREE.Texture();
+    editor.modelPlywoodTexture = birch;
+    editor.modelPlywoodEdgeTexture = layers;
+    editor.modelPineTexture = pine;
+    editor.rawTexture = new THREE.Texture();
+    editor.oakTexture = new THREE.Texture();
+    editor.plywoodTexture = new THREE.Texture();
+    editor.body = new THREE.Group();
+    const front = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
+    const top = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
+    const edge = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
+    const topEdge = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
+    const trim = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
+    front.name = 'Front_part1';
+    top.name = 'Top_part1';
+    edge.name = 'Front_part1_1';
+    edge.material.name = 'Front part1 plywood edge';
+    topEdge.name = 'Top_part1_1';
+    topEdge.material.name = 'Top part1 plywood edge';
+    trim.name = 'Top_part2';
+    trim.material.name = 'Top part2 pine trim';
+    editor.body.add(front, top, edge, topEdge, trim);
+    component.setRawBody();
+    expect(front.material.map).toBe(birch);
+    expect(top.material.map).toBe(birch);
+    expect(edge.material.map).toBe(layers);
+    expect(edge.material.color.r).toBeCloseTo(1.15);
+    expect(topEdge.material.map).toBe(layers);
+    expect(trim.material.map).toBe(pine);
+    expect(trim.material.color.r).toBeCloseTo(1.15);
+    expect(trim.material.color.b).toBeCloseTo(2.4);
+    expect(top.material.roughness).toBeLessThan(front.material.roughness);
+    component.setBodyColor('#33383e');
+    expect(front.material.map).toBeNull();
+    expect(edge.material.map).toBeNull();
+    expect(trim.material.map).toBeNull();
+    expect(top.material.map).toBe(birch);
+    component.setRawBody();
+    expect(front.material.map).toBe(birch);
+    expect(edge.material.map).toBe(layers);
+    expect(trim.material.map).toBe(pine);
+    component.setTopFinish('oak');
+    expect(top.material.map).toBe(editor.oakTexture);
+    expect(topEdge.material.map).toBe(editor.oakTexture);
+    expect(trim.material.map).toBe(pine);
+    expect(front.material.map).toBe(birch);
   });
 });

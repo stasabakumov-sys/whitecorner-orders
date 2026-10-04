@@ -29,8 +29,29 @@
             <button type="button" [class.selected]="width() === length" [attr.aria-pressed]="width() === length" (click)="setDimension('width', length.toString())">{{length / 10}} cm</button>
           }
         </div>
-        <label for="model-height">Height <output>{{height()}} mm</output></label>
-        <input id="model-height" type="range" min="900" max="1000" step="10" [value]="height()" (input)="setDimension('height', $any($event.target).value)">
+        <label id="model-height-label">Height <output>{{height() / 10}} cm</output></label>
+        <div class="length-options" role="group" aria-labelledby="model-height-label">
+          @for (value of [850, 900, 950, 1000]; track value) {
+            <button type="button" [class.selected]="height() === value" [attr.aria-pressed]="height() === value" (click)="setDimension('height', value.toString())">{{value / 10}} cm</button>
+          }
+        </div>
+        <label id="model-rounding-label">Edge rounding <output>{{rounding()}} mm</output></label>
+        <div class="length-options rounding-options" role="group" aria-labelledby="model-rounding-label">
+          @for (radius of [0, 1, 1.5, 2, 2.5, 3]; track radius) {
+            <button type="button" [disabled]="!roundingSupported() || roundingBusy()" [class.selected]="rounding() === radius" [attr.aria-pressed]="rounding() === radius" (click)="setRounding(radius)">{{radius === 0 ? 'None' : radius + ' mm'}}</button>
+          }
+        </div>
+        @if (roundingBusy()) {<p class="progress" role="status">Скругление деревянных деталей…</p>}
+        @if (!loading() && !roundingSupported()) {<p class="help">Для скругления загрузите обновлённую GLB-модель с контурами деталей.</p>}
+      </section>
+
+      <section class="setting-card">
+        <h2>Front panel moulding</h2>
+        <p class="help">Сосна · профиль 31 × 15 мм · отступ 90 мм от края панели.</p>
+        <div class="length-options" role="group" aria-label="Moulding">
+          <button type="button" [class.selected]="moulding()" [attr.aria-pressed]="moulding()" (click)="setMoulding(true)">On</button>
+          <button type="button" [class.selected]="!moulding()" [attr.aria-pressed]="!moulding()" (click)="setMoulding(false)">Off</button>
+        </div>
       </section>
 
       <section class="setting-card">

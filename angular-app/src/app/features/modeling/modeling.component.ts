@@ -5,6 +5,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { HubMembersService } from '../../core/services/hub-members.service';
 import { resizePlywoodPosition } from './modeling-geometry';
+import { createRoundedPart, keepTrimJointSquare, RoundingProfile } from './modeling-rounding';
+import { createFrontMoulding } from './modeling-moulding';
+import { pineWoodUv } from './modeling-textures';
 
 interface ModelRecord {
   model_path: string | null;
@@ -43,6 +46,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly width = signal(1200);
   readonly depth = signal(600);
   readonly height = signal(900);
+  readonly rounding = signal(0);
+  readonly moulding = signal(true);
+  private frontMoulding?: THREE.Mesh;
+  readonly roundingSupported = signal(false);
+  readonly roundingBusy = signal(false);
+  private sourceParts: THREE.Object3D[] = [];
+  private generatedGeometries: THREE.BufferGeometry[] = [];
+  private sourcePositions = new Map<THREE.BufferGeometry, THREE.BufferAttribute>();
   readonly bodyColor = signal('#d4b894');
   readonly rawBody = signal(true);
   readonly topFinish = signal<TopFinish>('plywood');
@@ -71,6 +82,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private rawTexture?: THREE.CanvasTexture;
   private oakTexture?: THREE.CanvasTexture;
   private plywoodTexture?: THREE.CanvasTexture;
+  private modelPlywoodTexture?: THREE.Texture;
+  private modelPlywoodEdgeTexture?: THREE.Texture;
+  private modelPineTexture?: THREE.Texture;
 
   constructor(readonly members: HubMembersService, private readonly db: SupabaseService) {}
 
@@ -169,6 +183,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         }
         group.add(node);
       } else {
+        this.sourceParts.push(node);
         this.body.add(node);
       }
     }
@@ -176,8 +191,23 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.body.traverse(node => {
       if (node instanceof THREE.Mesh) {
         this.originalPositions.set(node, node.geometry.getAttribute('position').clone());
+        this.sourcePositions.set(node.geometry, node.geometry.getAttribute('position').clone());
+        const materials = Array.isArray(node.material) ? node.material : [node.material];
+        for (const material of materials) {
+          if (material instanceof THREE.MeshStandardMaterial && material.map) {
+            if (/pine[ _]trim$/i.test(material.name)) this.modelPineTexture ||= material.map;
+            else if (/plywood[ _]edge$/i.test(material.name)) this.modelPlywoodEdgeTexture ||= material.map;
+            else this.modelPlywoodTexture ||= material.map;
+          }
+        }
       }
     });
+    this.roundingSupported.set(this.sourceParts.every(part => {
+      let profile = false;
+      part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) profile = true; });
+      return profile;
+    }));
+    this.rounding.set(0);
     this.scene.add(this.model);
     this.applyDimensions();
     this.applyFinishes();
@@ -193,9 +223,23 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const materials = Array.isArray(node.material) ? node.material : [node.material];
       for (const material of materials) material.dispose();
     });
+    for (const part of this.sourceParts) part.traverse(node => {
+      if (node instanceof THREE.Mesh) node.geometry.dispose();
+    });
+    for (const geometry of this.generatedGeometries) geometry.dispose();
+    this.sourceParts = [];
+    this.sourcePositions.clear();
+    this.generatedGeometries = [];
+    this.frontMoulding = undefined;
     this.model = undefined;
     this.body = undefined;
     this.originalPositions.clear();
+    this.modelPlywoodTexture?.dispose();
+    this.modelPlywoodTexture = undefined;
+    this.modelPlywoodEdgeTexture?.dispose();
+    this.modelPlywoodEdgeTexture = undefined;
+    this.modelPineTexture?.dispose();
+    this.modelPineTexture = undefined;
   }
 
   onFileChange(event: Event): void {
@@ -280,11 +324,69 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   setDimension(axis: 'width' | 'height', raw: string): void {
     const value = Number(raw);
     if (!Number.isFinite(value)) return;
-    const limits = axis === 'width' ? [1200, 1500] : [900, 1000];
-    const step = axis === 'width' ? 100 : 10;
+    const limits = axis === 'width' ? [1200, 1500] : [850, 1000];
+    const step = axis === 'width' ? 100 : 50;
     const next = Math.round(Math.max(limits[0], Math.min(limits[1], value)) / step) * step;
     this[axis].set(next);
     this.applyDimensions();
+  }
+
+  async setRounding(raw: number): Promise<void> {
+    if (!this.body || !this.roundingSupported() || this.roundingBusy() || ![0, 1, 1.5, 2, 2.5, 3].includes(raw)) return;
+    this.roundingBusy.set(true);
+    this.error.set('');
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    const geometries: THREE.BufferGeometry[] = [];
+    try {
+      const nodes = this.sourceParts.map(part => {
+        if (!raw || /^(Top|Buttom|Bottom)[ _]part1$/i.test(part.name)) {
+          const copy = part.clone(true);
+          copy.traverse(node => {
+            if (!(node instanceof THREE.Mesh)) return;
+            const original = this.sourcePositions.get(node.geometry)!;
+            node.geometry = node.geometry.clone();
+            node.geometry.setAttribute('position', original.clone());
+            geometries.push(node.geometry);
+          });
+          return copy;
+        }
+        let profile: RoundingProfile | undefined;
+        let name = part.name;
+        const materials: THREE.Material[] = [];
+        part.traverse(node => {
+          if (!(node instanceof THREE.Mesh)) return;
+          profile ||= node.userData['roundingProfile'];
+          name = node.userData['plywoodPart'] || name;
+          materials.push(...(Array.isArray(node.material) ? node.material : [node.material]));
+        });
+        if (!profile) throw new Error('В GLB отсутствует контур детали. Загрузите обновлённую модель.');
+        const geometry = createRoundedPart(profile, raw);
+        if (/^(Top|Buttom|Bottom)[ _]part2$/i.test(name)) keepTrimJointSquare(geometry, profile, raw);
+        geometries.push(geometry);
+        const face = materials.find(material => !/plywood[ _]edge$/i.test(material.name)) || materials[0];
+        const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
+        const mesh = new THREE.Mesh(geometry, [face, edge]);
+        mesh.name = name;
+        mesh.userData['plywoodPart'] = name;
+        return mesh;
+      });
+      this.body!.clear();
+      for (const geometry of this.generatedGeometries) geometry.dispose();
+      this.generatedGeometries = geometries;
+      this.originalPositions.clear();
+      for (const node of nodes) {
+        this.body!.add(node);
+        node.traverse(child => {
+          if (child instanceof THREE.Mesh) this.originalPositions.set(child, child.geometry.getAttribute('position').clone());
+        });
+      }
+      this.rounding.set(raw);
+      this.applyDimensions();
+      this.applyFinishes();
+    } catch (cause) {
+      for (const geometry of geometries) geometry.dispose();
+      this.error.set(`Не удалось скруглить детали: ${this.message(cause)}. Выберите меньший радиус или загрузите обновлённую модель.`);
+    } finally { this.roundingBusy.set(false); }
   }
 
   resetDimensions(): void {
@@ -316,14 +418,17 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     for (const [node, original] of this.originalPositions) {
       const positions = node.geometry.getAttribute('position');
       for (let i = 0; i < original.count; i++) {
-        const [x, y, z] = resizePlywoodPosition(node.name,
+        const [x, y, z] = resizePlywoodPosition(node.userData['plywoodPart'] || node.name,
           original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height());
         positions.setXYZ(i, x, y, z);
       }
       positions.needsUpdate = true;
       node.geometry.computeBoundingBox();
       node.geometry.computeBoundingSphere();
-      if (node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry);
+      const materials = Array.isArray(node.material) ? node.material : [node.material];
+      this.addWoodUvs(node.geometry,
+        node.userData['plywoodPart'] || node.name, materials.some(material => /plywood[ _]edge$/i.test(material.name)),
+        materials.some(material => /pine[ _]trim$/i.test(material.name)));
     }
     for (const [key, group] of this.casters) {
       const [side, row] = key.split('-');
@@ -342,6 +447,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.controls.update();
     }
     this.cameraSpan = span;
+    this.updateMoulding();
   }
 
   private applyFinishes(): void {
@@ -352,32 +458,94 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const body = new THREE.Color(this.bodyColor());
     this.body.traverse(node => {
       if (!(node instanceof THREE.Mesh)) return;
-      const isTop = isTopPanelName(node.name);
-      const finish = isTop ? this.topFinish() : 'body';
-      const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? this.plywoodTexture : this.rawBody() ? this.rawTexture : null;
-      const source = map ? new THREE.Color('#ffffff') : body;
-      if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry);
+      const partName = node.userData['plywoodPart'] || node.name;
       const materials = Array.isArray(node.material) ? node.material : [node.material];
       for (const material of materials) {
         if (!(material instanceof THREE.MeshStandardMaterial)) continue;
+        const pine = /pine[ _]trim$/i.test(material.name);
+        const finish = isTopPanelName(partName) && !pine ? this.topFinish() : 'body';
+        const edge = /plywood[ _]edge$/i.test(material.name);
+        const plywood = (pine ? this.modelPineTexture : edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
+        const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? plywood || this.plywoodTexture : this.rawBody() ? plywood || this.rawTexture : null;
+        const source = map ? new THREE.Color(finish === 'plywood' && plywood ? '#f5e6c9' : '#ffffff') : body;
+        if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry, partName, edge, pine);
         material.color.copy(source);
+        if (edge && map && finish !== 'oak') material.color.multiplyScalar(1.15);
+        if (pine && map) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4));
         material.map = map;
         material.roughness = finish === 'plywood' ? 0.34 : finish === 'oak' ? 0.55 : 0.78;
         material.metalness = 0;
         material.needsUpdate = true;
       }
     });
+    this.updateMoulding();
   }
 
-  private addWoodUvs(geometry: THREE.BufferGeometry): void {
+  setMoulding(enabled: boolean): void {
+    this.moulding.set(enabled);
+    this.updateMoulding();
+  }
+
+  private updateMoulding(): void {
+    if (!this.model) return;
+    if (this.frontMoulding) {
+      this.model.remove(this.frontMoulding);
+      this.frontMoulding.geometry.dispose();
+      (this.frontMoulding.material as THREE.Material).dispose();
+      this.frontMoulding = undefined;
+    }
+    if (!this.moulding()) return;
+    const material = new THREE.MeshStandardMaterial({
+      map: this.rawBody() ? this.modelPineTexture || this.modelPlywoodTexture || this.rawTexture : null,
+      color: this.rawBody() ? '#ffffff' : this.bodyColor(), roughness: 0.78, side: THREE.DoubleSide,
+    });
+    if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4));
+    this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height()), material);
+    this.frontMoulding.name = 'Front moulding';
+    this.model.add(this.frontMoulding);
+  }
+
+  private addWoodUvs(geometry: THREE.BufferGeometry, partName = '', edge = false, pine = false): void {
     const positions = geometry.getAttribute('position');
     const normals = geometry.getAttribute('normal');
     const uv = new Float32Array(positions.count * 2);
+    // The supplied birch texture represents a 2439 mm wide sheet. Preserve its
+    // physical grain size as panels grow, rather than stretching the image.
+    const width = this.modelPlywoodTexture ? 2.439 : 0.32;
+    const textureImage = this.modelPlywoodTexture?.image;
+    const height = textureImage?.width && textureImage?.height ? width * textureImage.height / textureImage.width : width;
+    const horizontal = /^(Top|Buttom|Bottom)[ _]part|^Shelf/i.test(partName);
+    const ring = /^(Top|Buttom|Bottom)[ _]part2/i.test(partName);
+    const side = /^(Left|Right)[ _]side/i.test(partName);
+    let groupIndex = 0;
     for (let i = 0; i < positions.count; i++) {
+      while (groupIndex < geometry.groups.length - 1 && i >= geometry.groups[groupIndex].start + geometry.groups[groupIndex].count) groupIndex++;
+      const useEdge = geometry.userData['plywoodFacesAndEdges'] ? geometry.groups[groupIndex]?.materialIndex === 1 : edge;
       const nx = Math.abs(normals.getX(i));
       const ny = Math.abs(normals.getY(i));
-      uv[i * 2] = (nx > 0.5 ? positions.getZ(i) : positions.getX(i)) / 0.32;
-      uv[i * 2 + 1] = (ny > 0.5 ? positions.getZ(i) : positions.getY(i)) / 0.32;
+      const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
+      if (pine && this.modelPineTexture) {
+        const frontOrRear = z <= 0.01901 || z >= 0.58099;
+        // Pine grain runs vertically in the source image: V follows the rail.
+        const [u, v] = pineWoodUv(ny > 0.5 ? frontOrRear ? z : x : y,
+          ny > 0.5 ? frontOrRear ? x : z : nx > 0.5 ? z : x);
+        uv[i * 2] = u;
+        uv[i * 2 + 1] = v;
+      } else if (useEdge && this.modelPlywoodEdgeTexture) {
+        // The edge image has horizontal layers: V crosses the panel thickness.
+        // A 120 mm tile keeps the veneers at approximately 2 mm per layer.
+        if (ring) {
+          const frontOrRear = z <= 0.01901 || z >= 0.58099;
+          uv[i * 2] = (frontOrRear ? x : z) / 0.12;
+          uv[i * 2 + 1] = (frontOrRear ? z : x) / 0.12;
+        } else {
+          uv[i * 2] = (horizontal ? nx > 0.5 ? z : x : side ? ny > 0.5 ? z : y : ny > 0.5 ? x : y) / 0.12;
+          uv[i * 2 + 1] = (horizontal ? y : side ? x : z) / 0.12;
+        }
+      } else {
+        uv[i * 2] = (nx > 0.5 || ny > 0.5 ? z : x) / width;
+        uv[i * 2 + 1] = (ny > 0.5 ? x : y) / height;
+      }
     }
     geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   }
