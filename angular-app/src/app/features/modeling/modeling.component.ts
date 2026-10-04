@@ -477,7 +477,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   private paintRoughness(): number {
-    return this.paintFinish() === 'semi-gloss' ? 0.18 : 0.78;
+    return this.paintFinish() === 'semi-gloss' ? 0.24 : 0.78;
   }
 
   private paintReflection(): THREE.Texture | null {
@@ -486,7 +486,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const studio = new THREE.Scene();
       studio.background = new THREE.Color('#181818');
       const geometry = new THREE.BoxGeometry(3, 7, 0.05);
-      const material = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(8, 8, 8) });
+      const material = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(4, 4, 4) });
       // Large vertical softboxes below eye level remain visible in reflections
       // on upright panels, even when the preview camera looks down at the cart.
       for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
@@ -601,10 +601,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         material.roughness = map ? finish === 'oak' ? 0.55 : 0.78 : this.paintRoughness();
         material.metalness = 0;
         material.envMap = map ? null : reflection;
-        material.envMapIntensity = 0.65;
+        material.envMapIntensity = 0.2;
         if (material instanceof THREE.MeshPhysicalMaterial) {
-          material.clearcoat = !map && reflection ? 0.7 : 0;
-          material.clearcoatRoughness = 0.08;
+          material.clearcoat = !map && reflection ? 0.25 : 0;
+          material.clearcoatRoughness = 0.16;
         }
         material.needsUpdate = true;
       }
@@ -629,8 +629,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const material = new THREE.MeshPhysicalMaterial({
       map: this.rawBody() ? this.modelPineTexture || this.modelPlywoodTexture || this.rawTexture : null,
       color: this.rawBody() ? '#ffffff' : this.bodyColor(), roughness: this.rawBody() ? 0.78 : this.paintRoughness(), side: THREE.DoubleSide,
-      envMap: this.rawBody() ? null : this.paintReflection(), envMapIntensity: 0.65,
-      clearcoat: !this.rawBody() && this.paintFinish() === 'semi-gloss' ? 0.7 : 0, clearcoatRoughness: 0.08,
+      envMap: this.rawBody() ? null : this.paintReflection(), envMapIntensity: 0.2,
+      clearcoat: !this.rawBody() && this.paintFinish() === 'semi-gloss' ? 0.25 : 0, clearcoatRoughness: 0.16,
     });
     if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
     this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height()), material);

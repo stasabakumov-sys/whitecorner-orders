@@ -169,7 +169,7 @@ describe('Plywood finishes', () => {
       component.setBodyColor(colour);
       for (const panel of [front, top, trim]) {
         expect(panel.material.bumpMap).toBeNull();
-        expect(panel.material.roughness).toBe(0.18);
+        expect(panel.material.roughness).toBe(0.24);
         expect(panel.material.envMap).toBe(reflection);
         expect(panel.material.color.getHexString()).toBe(colour.slice(1));
       }
