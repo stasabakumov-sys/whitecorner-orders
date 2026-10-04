@@ -162,21 +162,26 @@ describe('Plywood finishes', () => {
     expect(trim.material.map).toBeNull();
     expect(trim.material.bumpMap).toBe(paintBump);
     expect(front.material.roughness).toBe(0.78);
+    const reflection = new THREE.Texture();
+    vi.spyOn(editor, 'paintReflection').mockImplementation(() => component.paintFinish() === 'semi-gloss' ? reflection : null);
     component.setPaintFinish('semi-gloss');
     for (const colour of ['#f6f6f3', '#33383e', '#708471', '#aa6553', '#123456']) {
       component.setBodyColor(colour);
       for (const panel of [front, top, trim]) {
         expect(panel.material.bumpMap).toBeNull();
-        expect(panel.material.roughness).toBe(0.3);
+        expect(panel.material.roughness).toBe(0.26);
+        expect(panel.material.envMap).toBe(reflection);
         expect(panel.material.color.getHexString()).toBe(colour.slice(1));
       }
     }
     component.setPaintFinish('matte');
     expect(front.material.bumpMap).toBe(paintBump);
     expect(front.material.roughness).toBe(0.78);
+    expect(front.material.envMap).toBeNull();
     component.setTopFinish('plywood');
     component.setRawBody();
     expect(front.material.map).toBe(birch);
+    expect(top.material.envMap).toBeNull();
     expect(edge.material.map).toBe(layers);
     expect(trim.material.map).toBe(pine);
     expect(front.material.bumpMap).toBeNull();
