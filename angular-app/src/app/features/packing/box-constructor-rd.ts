@@ -32,10 +32,17 @@ export function rdSettingsError(settings: RdSettings): string {
 }
 
 export function prepareRdRequest(bottom: BoxNet, settings: RdSettings): RdRequest {
+  return prepareNetJobs([bottom, boxNet(bottom.length + 10, bottom.width + 10, bottom.depth)], settings, ['box-bottom', 'box-lid'], '-half');
+}
+
+export function prepareSmallRdRequest(net: BoxNet, settings: RdSettings, tuck = 40): RdRequest {
+  return prepareNetJobs([net], settings, ['small-box'], `-T${drawingNumber(tuck)}`);
+}
+
+function prepareNetJobs(nets: BoxNet[], settings: RdSettings, names: string[], suffix: string): RdRequest {
   const error = rdSettingsError(settings);
   if (error) throw Error(error);
-  const lid = boxNet(bottom.length + 10, bottom.width + 10, bottom.depth);
-  const jobs = [bottom, lid].map((net, index) => {
+  const jobs = nets.map((net, index) => {
     // Absolute coordinates are encoded to 1 µm by the upstream generator.
     if (net.sheetWidth > 10000 || net.sheetHeight > 10000) throw Error('RD export supports piece dimensions up to 10000 mm. Check the box dimensions.');
     let paths: Point[][] = net.folds.map(line => [line.from, line.to]);
@@ -55,10 +62,17 @@ export function prepareRdRequest(bottom: BoxNet, settings: RdSettings): RdReques
       });
     }
     const layer = (paths: Point[][], value: RdLayerSettings, color: number[]): RdLayer => ({paths, speed: value.speed!, minPower: value.minPower!, maxPower: value.maxPower!, color});
+    const cuts: Point[][] = [];
+    for (const line of net.cuts) {
+      const previous=cuts.at(-1);
+      const end=previous?.at(-1);
+      if(end && end[0]===line.from[0] && end[1]===line.from[1]) previous!.push(line.to);
+      else cuts.push([line.from,line.to]);
+    }
     return {
-      filename: `box-${index === 0 ? 'bottom' : 'lid'}-L${drawingNumber(net.length)}-W${drawingNumber(net.width)}-D${drawingNumber(net.depth)}-half.rd`,
+      filename: `${names[index]}-L${drawingNumber(net.length)}-W${drawingNumber(net.width)}-D${drawingNumber(net.depth)}${suffix}.rd`,
       // Fold first, while the outline is still attached to the sheet.
-      layers: [layer(paths, settings.fold, [69, 214, 255]), layer([[net.cuts[0].from, ...net.cuts.map(line => line.to)]], settings.cut, [255, 0, 0])],
+      layers: [layer(paths, settings.fold, [69, 214, 255]), layer(cuts, settings.cut, [255, 0, 0])],
     };
   });
   return {jobs};
@@ -77,7 +91,7 @@ export function generateRdFiles(request: RdRequest, progress: (stage: string) =>
       if (data.stage) progress(data.stage);
       if (data.error) fail(data.error);
       if (data.files) {
-        if (data.files.length !== 2 || data.files.some((file: RdFile, index: number) => file.filename !== request.jobs[index].filename || !(file.bytes instanceof Uint8Array) || file.bytes.length < 100)) {
+        if (data.files.length !== request.jobs.length || data.files.some((file: RdFile, index: number) => file.filename !== request.jobs[index].filename || !(file.bytes instanceof Uint8Array) || file.bytes.length < 100)) {
           fail('RD generator returned incomplete files. Retry export.'); return;
         }
         cleanup(); resolve(data.files);

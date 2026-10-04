@@ -1,7 +1,8 @@
 import {ChangeDetectorRef, Component, Input, Output, EventEmitter, OnChanges, OnDestroy, inject} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {BoxDrawing, BoxLayout, BoxNet, boxNet, drawingWithLid, drawingNumber, exportBoxSvg} from './box-constructor-geometry';
-import {RdFile, RdSettings, generateRdFiles, prepareRdRequest, rdSettingsError} from './box-constructor-rd';
+import {RdFile, RdSettings, generateRdFiles, prepareRdRequest, prepareSmallRdRequest, rdSettingsError} from './box-constructor-rd';
+import {smallBoxNet, smallBoxDrawing} from './small-box-geometry';
 
 @Component({
   selector: 'app-box-constructor', standalone: true, imports: [FormsModule],
@@ -10,6 +11,7 @@ import {RdFile, RdSettings, generateRdFiles, prepareRdRequest, rdSettingsError} 
 })
 export class BoxConstructorComponent implements OnChanges, OnDestroy {
   @Input() showHeading = true;
+  @Input() boxType: 'card' | 'small' = 'card';
   @Input() customCut = false;
   @Output() customCutRequested = new EventEmitter<void>();
   @Input() initialDimensions: {length: number; width: number; depth: number} | null = null;
@@ -27,6 +29,9 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
   length: number | null = 1515;
   width: number | null = 615;
   depth: number | null = 70;
+  tuck: number | null = 40;
+  get small(): boolean {return this.boxType === 'small';}
+  get idPrefix(): string {return this.small ? 'small-' : '';}
   layout: BoxLayout = 'pair';
   net: BoxNet | null = null;
   drawing: BoxDrawing | null = null;
@@ -50,8 +55,13 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
     this.rdChanged();
     this.result = '';
     try {
-      this.net = boxNet(Number(this.length), Number(this.width), Number(this.depth));
-      this.drawing = drawingWithLid(this.net, this.layout);
+      if(this.small){
+        const net=smallBoxNet(Number(this.length),Number(this.width),Number(this.depth),Number(this.tuck));
+        this.net=net;this.drawing=smallBoxDrawing(net);
+      }else{
+        this.net = boxNet(Number(this.length), Number(this.width), Number(this.depth));
+        this.drawing = drawingWithLid(this.net, this.layout);
+      }
       this.error = '';
     } catch (error) {
       this.net = null;
@@ -81,14 +91,14 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
     this.rdResult = '';
     this.rdProgress = 'Preparing RD export…';
     try {
-      const generation = generateRdFiles(prepareRdRequest(this.net, this.rdSettings), stage => {
+      const generation = generateRdFiles(this.small ? prepareSmallRdRequest(this.net,this.rdSettings,Number(this.tuck)) : prepareRdRequest(this.net, this.rdSettings), stage => {
         if (revision === this.rdRevision) {this.rdProgress = stage; this.changeDetector.markForCheck();}
       });
       this.rdCancel = generation.cancel;
       const files = await generation.result;
       if (revision !== this.rdRevision) return;
       this.rdFiles = files;
-      this.rdResult = 'Two RD files prepared: bottom and lid. Cut each half twice.';
+      this.rdResult = this.small ? 'One RD file prepared. Cut once for each box.' : 'Two RD files prepared: bottom and lid. Cut each half twice.';
     } catch (error) {
       if (revision === this.rdRevision) this.rdError = (error instanceof Error ? error.message : 'Could not prepare RD files.') + ' Your dimensions and settings are kept.';
     } finally {
@@ -122,7 +132,9 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
     let url = '';
     try {
       const content = exportBoxSvg(this.drawing);
-      const filename = `box-L${this.number(this.net.length)}-W${this.number(this.net.width)}-D${this.number(this.net.depth)}-bottom-and-lid-${this.layout === 'pair' ? '4-pieces' : '2-pieces-cut-each-twice'}.svg`;
+      const filename = this.small
+        ? `small-box-L${this.number(this.net.length)}-W${this.number(this.net.width)}-D${this.number(this.net.depth)}-T${this.number(Number(this.tuck))}.svg`
+        : `box-L${this.number(this.net.length)}-W${this.number(this.net.width)}-D${this.number(this.net.depth)}-bottom-and-lid-${this.layout === 'pair' ? '4-pieces' : '2-pieces-cut-each-twice'}.svg`;
       url = URL.createObjectURL(new Blob([content], {type: 'image/svg+xml'}));
       const link = document.createElement('a');
       link.href = url;

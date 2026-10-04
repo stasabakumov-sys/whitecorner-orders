@@ -120,9 +120,9 @@ transfer was performed.
 
 ## Constructor tabs and Custom cut
 
-The independent Constructor has Card box (the current editor), Small box and
-Backdrop box tabs. The latter two are empty until their logic is implemented.
-Switching tabs keeps Card box inputs, settings and generated files.
+The independent Constructor has Card box, Small box and Backdrop box tabs.
+Backdrop box remains empty. Switching tabs keeps each editor's inputs,
+settings and generated files independently.
 
 Managers can press Send to Custom cut and review a separate confirmation.
 Cancel preserves the drawing. Confirm generates RD if needed, uploads one SVG
@@ -136,3 +136,22 @@ in the existing private Custom drawing library and adds manager-only atomic
 creation with a private retry receipt. Existing jobs and task snapshots stay
 unchanged. Generated SVG is reference material; only RD enters the cutting
 workflow. No laser upload or cutting starts from Constructor.
+
+## Small box
+
+Small box follows the supplied `Small box.ai` one-piece hinged-lid net. The
+measured reference is L270 x W140 x D140 mm, with a 40 mm rounded tuck flap;
+its flat sheet is 830 x 600 mm. L/W/D refer to the folded box. Width changes
+the base and lid, depth changes the walls and side flaps, and length changes
+the panels between the side folds. Corner reliefs and the tuck-flap radius
+are retained; the flap length is separately editable and validated.
+
+Download SVG exports millimetre units at 1:1, red cut paths and cyan folds.
+Rounded corners remain cubic curves in SVG and are tessellated for RD.
+Generate RD file creates one full-box file, cut once for each box. Disconnected
+cut paths stay separate, preserving the gap at the lid's tuck fold. The shared
+RD settings and browser worker support one Small job or two Card jobs;
+Card's bottom/lid geometry and copy instructions remain unchanged. Small's
+RD filename includes the tuck length to distinguish different geometries.
+Small exports are downloaded locally; the existing Custom job editor accepts
+their SVG and RD files. Send to Custom cut remains the Card two-file flow.
