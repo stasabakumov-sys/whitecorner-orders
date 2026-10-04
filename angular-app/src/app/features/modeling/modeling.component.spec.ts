@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ModelingComponent } from './modeling.component';
+import * as THREE from 'three';
+import { ModelingComponent, casterGroupKey, isTopPanelName } from './modeling.component';
 import { HubMembersService } from '../../core/services/hub-members.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 
@@ -36,5 +37,33 @@ describe('Modeling GLB upload', () => {
     expect(component.selectedFile()).toBe(original);
     expect(component.error()).toContain('network failed');
     expect(remove).not.toHaveBeenCalled();
+  });
+});
+
+describe('STEP part names after GLTF loading', () => {
+  it('keeps each caster separate from the scalable body', () => {
+    expect(casterGroupKey('Caster_L_front_rubber_tire')).toBe('L-front');
+    expect(casterGroupKey('Caster R rear plate')).toBe('R-rear');
+    expect(casterGroupKey('Buttom_part1')).toBeNull();
+  });
+
+  it('identifies top panels for their independent finish', () => {
+    expect(isTopPanelName('Top_part2')).toBe(true);
+    expect(isTopPanelName('Top part1')).toBe(true);
+    expect(isTopPanelName('Front_part1')).toBe(false);
+  });
+});
+
+describe('Modeling dimensions', () => {
+  it('moves the camera back as the cart grows', () => {
+    const { component } = setup();
+    const editor = component as any;
+    editor.body = new THREE.Group();
+    editor.controls = { target: new THREE.Vector3(0.6, 0.45, 0.3), update: vi.fn() };
+    editor.camera.position.set(1.92, 1.05, 1.8);
+    const before = editor.camera.position.distanceTo(editor.controls.target);
+    component.setDimension('width', '1600');
+    const after = editor.camera.position.distanceTo(editor.controls.target);
+    expect(after / before).toBeCloseTo(1600 / 1200);
   });
 });

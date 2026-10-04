@@ -19,6 +19,16 @@ const BUCKET = 'hub-modeling-models';
 const SLUG = 'classic-bar-plywood';
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
+// GLTFLoader sanitizes spaces in node names to underscores for animation paths.
+export function casterGroupKey(name: string): string | null {
+  const match = /^Caster[ _](L|R)[ _](front|rear)(?:[ _]|$)/i.exec(name);
+  return match ? `${match[1].toUpperCase()}-${match[2].toLowerCase()}` : null;
+}
+
+export function isTopPanelName(name: string): boolean {
+  return /^Top[ _]part/i.test(name);
+}
+
 @Component({
   selector: 'app-modeling',
   standalone: true,
@@ -52,6 +62,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private model?: THREE.Group;
   private body?: THREE.Group;
   private readonly casters = new Map<string, THREE.Group>();
+  private cameraSpan = 1.2;
   private record?: ModelRecord;
   private loadVersion = 0;
   private alive = true;
@@ -146,9 +157,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.casters.clear();
     const nodes = [...gltf.scene.children];
     for (const node of nodes) {
-      const caster = /^Caster (L|R) (front|rear)\b/.exec(node.name);
-      if (caster) {
-        const key = `${caster[1]}-${caster[2]}`;
+      const key = casterGroupKey(node.name);
+      if (key) {
         let group = this.casters.get(key);
         if (!group) {
           group = new THREE.Group();
@@ -307,8 +317,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         row === 'rear' ? (this.depth() - 600) / 1000 : 0,
       );
     }
-    this.controls?.target.set(this.width() / 2000, this.height() / 2000, this.depth() / 2000);
-    this.controls?.update();
+    const span = Math.max(this.width(), this.depth(), this.height()) / 1000;
+    if (this.controls) {
+      const nextTarget = new THREE.Vector3(this.width() / 2000, this.height() / 2000, this.depth() / 2000);
+      const offset = this.camera.position.clone().sub(this.controls.target);
+      this.camera.position.copy(nextTarget).addScaledVector(offset, span / this.cameraSpan);
+      this.controls.target.copy(nextTarget);
+      this.controls.update();
+    }
+    this.cameraSpan = span;
   }
 
   private applyFinishes(): void {
@@ -319,7 +336,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const body = new THREE.Color(this.bodyColor());
     this.body.traverse(node => {
       if (!(node instanceof THREE.Mesh)) return;
-      const isTop = /^Top part/i.test(node.name);
+      const isTop = isTopPanelName(node.name);
       const finish = isTop ? this.topFinish() : 'body';
       const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? this.plywoodTexture : this.rawBody() ? this.rawTexture : null;
       const source = map ? new THREE.Color('#ffffff') : body;
@@ -376,6 +393,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   private focusCamera(): void {
     const span = Math.max(this.width(), this.depth(), this.height()) / 1000;
+    this.cameraSpan = span;
     this.camera.position.set(this.width() / 2000 + span * 1.1, this.height() / 2000 + span * 0.5, this.depth() / 2000 + span * 1.25);
     this.camera.lookAt(this.width() / 2000, this.height() / 2000, this.depth() / 2000);
     this.controls?.update();
