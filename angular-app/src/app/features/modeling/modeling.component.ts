@@ -72,6 +72,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private oakTexture?: THREE.CanvasTexture;
   private plywoodTexture?: THREE.CanvasTexture;
   private modelPlywoodTexture?: THREE.Texture;
+  private modelPlywoodEdgeTexture?: THREE.Texture;
 
   constructor(readonly members: HubMembersService, private readonly db: SupabaseService) {}
 
@@ -180,7 +181,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const materials = Array.isArray(node.material) ? node.material : [node.material];
         for (const material of materials) {
           if (material instanceof THREE.MeshStandardMaterial && material.map) {
-            this.modelPlywoodTexture ||= material.map;
+            if (/plywood[ _]edge$/i.test(material.name)) this.modelPlywoodEdgeTexture ||= material.map;
+            else this.modelPlywoodTexture ||= material.map;
           }
         }
       }
@@ -205,6 +207,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.originalPositions.clear();
     this.modelPlywoodTexture?.dispose();
     this.modelPlywoodTexture = undefined;
+    this.modelPlywoodEdgeTexture?.dispose();
+    this.modelPlywoodEdgeTexture = undefined;
   }
 
   onFileChange(event: Event): void {
@@ -325,14 +329,16 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     for (const [node, original] of this.originalPositions) {
       const positions = node.geometry.getAttribute('position');
       for (let i = 0; i < original.count; i++) {
-        const [x, y, z] = resizePlywoodPosition(node.name,
+        const [x, y, z] = resizePlywoodPosition(node.userData['plywoodPart'] || node.name,
           original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height());
         positions.setXYZ(i, x, y, z);
       }
       positions.needsUpdate = true;
       node.geometry.computeBoundingBox();
       node.geometry.computeBoundingSphere();
-      if (node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry);
+      const materials = Array.isArray(node.material) ? node.material : [node.material];
+      if (node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry,
+        node.userData['plywoodPart'] || node.name, materials.some(material => /plywood[ _]edge$/i.test(material.name)));
     }
     for (const [key, group] of this.casters) {
       const [side, row] = key.split('-');
@@ -361,14 +367,17 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const body = new THREE.Color(this.bodyColor());
     this.body.traverse(node => {
       if (!(node instanceof THREE.Mesh)) return;
-      const isTop = isTopPanelName(node.name);
+      const partName = node.userData['plywoodPart'] || node.name;
+      const isTop = isTopPanelName(partName);
       const finish = isTop ? this.topFinish() : 'body';
-      const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? this.modelPlywoodTexture || this.plywoodTexture : this.rawBody() ? this.modelPlywoodTexture || this.rawTexture : null;
-      const source = map ? new THREE.Color(finish === 'plywood' && this.modelPlywoodTexture ? '#f5e6c9' : '#ffffff') : body;
-      if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry);
       const materials = Array.isArray(node.material) ? node.material : [node.material];
       for (const material of materials) {
         if (!(material instanceof THREE.MeshStandardMaterial)) continue;
+        const edge = /plywood[ _]edge$/i.test(material.name);
+        const plywood = (edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
+        const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? plywood || this.plywoodTexture : this.rawBody() ? plywood || this.rawTexture : null;
+        const source = map ? new THREE.Color(finish === 'plywood' && plywood ? '#f5e6c9' : '#ffffff') : body;
+        if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry, partName, edge);
         material.color.copy(source);
         material.map = map;
         material.roughness = finish === 'plywood' ? 0.34 : finish === 'oak' ? 0.55 : 0.78;
@@ -378,7 +387,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     });
   }
 
-  private addWoodUvs(geometry: THREE.BufferGeometry): void {
+  private addWoodUvs(geometry: THREE.BufferGeometry, partName = '', edge = false): void {
     const positions = geometry.getAttribute('position');
     const normals = geometry.getAttribute('normal');
     const uv = new Float32Array(positions.count * 2);
@@ -390,8 +399,25 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     for (let i = 0; i < positions.count; i++) {
       const nx = Math.abs(normals.getX(i));
       const ny = Math.abs(normals.getY(i));
-      uv[i * 2] = (nx > 0.5 || ny > 0.5 ? positions.getZ(i) : positions.getX(i)) / width;
-      uv[i * 2 + 1] = (ny > 0.5 ? positions.getX(i) : positions.getY(i)) / height;
+      const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
+      if (edge && this.modelPlywoodEdgeTexture) {
+        // The edge image has horizontal layers: V crosses the panel thickness.
+        // A 120 mm tile keeps the veneers at approximately 2 mm per layer.
+        const horizontal = /^(Top|Buttom|Bottom)[ _]part|^Shelf/i.test(partName);
+        const ring = /^(Top|Buttom|Bottom)[ _]part2/i.test(partName);
+        const side = /^(Left|Right)[ _]side/i.test(partName);
+        if (ring) {
+          const frontOrRear = z <= 0.01901 || z >= 0.58099;
+          uv[i * 2] = (frontOrRear ? x : z) / 0.12;
+          uv[i * 2 + 1] = (frontOrRear ? z : x) / 0.12;
+        } else {
+          uv[i * 2] = (horizontal ? nx > 0.5 ? z : x : side ? ny > 0.5 ? z : y : ny > 0.5 ? x : y) / 0.12;
+          uv[i * 2 + 1] = (horizontal ? y : side ? x : z) / 0.12;
+        }
+      } else {
+        uv[i * 2] = (nx > 0.5 || ny > 0.5 ? z : x) / width;
+        uv[i * 2 + 1] = (ny > 0.5 ? x : y) / height;
+      }
     }
     geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   }
