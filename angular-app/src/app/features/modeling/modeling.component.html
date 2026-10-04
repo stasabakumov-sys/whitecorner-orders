@@ -13,16 +13,38 @@
         <strong>3D preview</strong>
         <span>{{width()}} × {{depth()}} × {{height()}} mm</span>
       </div>
-      <div #canvasHost class="canvas-host" role="img" aria-label="Интерактивная 3D-модель Classic Bar / Plywood"></div>
-      @if (loading()) { <div class="viewer-status">Загрузка модели…</div> }
-      @if (!loading() && !fileName()) { <div class="viewer-status">Выберите GLB-файл модели, чтобы начать просмотр</div> }
-      <div class="viewer-footer"><span>Перетащите мышью для поворота · колёсико для масштаба</span><span>{{fileName()}}</span></div>
+      <div #canvasHost class="canvas-host" role="img" aria-label="Interactive 3D model Classic Bar / Plywood"></div>
+      @if (loading()) { <div class="viewer-status">Loading model…</div> }
+      @if (!loading() && !fileName()) { <div class="viewer-status">Choose a GLB model to start previewing</div> }
+      <div class="viewer-footer"><span>Drag to rotate · Scroll to zoom</span><span>{{fileName()}}</span></div>
     </div>
 
     <div class="settings">
+      <section class="setting-card assembly-card">
+        <div class="setting-title"><h2>Parts & assembly</h2><button type="button" class="text-action" (click)="restoreAssembly()">Return all</button></div>
+        <p class="help">Select a part and drag its arrow. Clear Top and Bottom by 60 mm to release the panels. Shelf stays fixed.</p>
+        <div class="length-options paint-options" role="group" aria-label="Assembly view">
+          <button type="button" [class.selected]="!assemblyMode()" [attr.aria-pressed]="!assemblyMode()" (click)="setAssemblyMode(false)">Rotate</button>
+          <button type="button" [class.selected]="assemblyMode()" [attr.aria-pressed]="assemblyMode()" (click)="setAssemblyMode(true)">Select parts</button>
+        </div>
+        <div class="parts-list">
+          @for (part of parts; track part.key) {
+            <div class="part-row">
+              <input type="checkbox" [checked]="partVisible(part.key)" [disabled]="!partAvailable(part.key)" (change)="setPartVisible(part.key,$any($event.target).checked)" [attr.aria-label]="'Show '+part.label">
+              <button type="button" [class.selected]="selectedPart()===part.key" [disabled]="!partAvailable(part.key)||!partVisible(part.key)" (click)="selectPart(part.key)">{{part.label}}</button>
+              <span>{{partOffset(part.key)}} mm</span>
+            </div>
+          }
+        </div>
+        @if (selectedPart(); as key) {
+          <div class="setting-title"><label for="part-offset">Move out <output>{{partOffset(key)}} mm</output></label><button type="button" class="text-action" (click)="restorePart()">Return part</button></div>
+          <input id="part-offset" type="range" min="0" max="500" step="1" [value]="partOffset(key)" [disabled]="!partMovable(key)" (input)="movePart($any($event.target).value)" aria-label="Selected part distance in millimetres">
+          @if (!partMovable(key)) { <p class="help">{{key==='shelf'||key==='wheels' ? 'This part stays fixed.' : 'Move or hide Top and Bottom first.'}}</p> }
+        }
+      </section>
       <section class="setting-card">
         <div class="setting-title"><h2>Dimensions</h2><button type="button" class="text-action" (click)="resetDimensions()">Reset</button></div>
-        <p class="help">Общие габариты тележки. Колёса остаются высотой 95 мм.</p>
+        <p class="help">Overall cart dimensions. Caster height stays 95 mm.</p>
         <label id="model-length-label">Length <output>{{width() / 10}} cm</output></label>
         <div class="length-options" role="group" aria-labelledby="model-length-label">
           @for (length of [1200, 1300, 1400, 1500]; track length) {
@@ -41,13 +63,13 @@
             <button type="button" [disabled]="!roundingSupported() || roundingBusy()" [class.selected]="rounding() === radius" [attr.aria-pressed]="rounding() === radius" (click)="setRounding(radius)">{{radius === 0 ? 'None' : radius + ' mm'}}</button>
           }
         </div>
-        @if (roundingBusy()) {<p class="progress" role="status">Скругление деревянных деталей…</p>}
-        @if (!loading() && !roundingSupported()) {<p class="help">Для скругления загрузите обновлённую GLB-модель с контурами деталей.</p>}
+        @if (roundingBusy()) {<p class="progress" role="status">Rounding wooden parts…</p>}
+        @if (!loading() && !roundingSupported()) {<p class="help">Upload an updated GLB with part profiles to enable rounding.</p>}
       </section>
 
       <section class="setting-card">
         <h2>Front panel moulding</h2>
-        <p class="help">Сосна · профиль 31 × 15 мм · отступ 90 мм от края панели.</p>
+        <p class="help">Pine · 31 × 15 mm profile · 90 mm inset.</p>
         <div class="length-options" role="group" aria-label="Moulding">
           <button type="button" [class.selected]="moulding()" [attr.aria-pressed]="moulding()" (click)="setMoulding(true)">On</button>
           <button type="button" [class.selected]="!moulding()" [attr.aria-pressed]="!moulding()" (click)="setMoulding(false)">Off</button>
@@ -56,14 +78,14 @@
 
       <section class="setting-card">
         <h2>Cart body colour</h2>
-        <p class="help">RAW показывает фактуру фанеры. Выбор цвета окрашивает корпус.</p>
-        <div class="swatches" role="group" aria-label="Цвет корпуса">
+        <p class="help">RAW shows plywood grain. Choose a colour to paint the body.</p>
+        <div class="swatches" role="group" aria-label="Body colour">
           <button type="button" class="raw-choice" style="background:repeating-linear-gradient(92deg,#d6b98e 0 7px,#cda97b 7px 9px,#dec399 9px 13px)!important" [class.selected]="rawBody()" (click)="setRawBody()">RAW plywood</button>
           <button type="button" class="swatch" style="background:#f6f6f3!important" [class.selected]="bodyColor()==='#f6f6f3'" (click)="setBodyColor('#f6f6f3')" title="White · RGB 246, 246, 243" aria-label="White"></button>
           <button type="button" class="swatch" style="background:#33383e!important" [class.selected]="bodyColor()==='#33383e'" (click)="setBodyColor('#33383e')" title="Charcoal" aria-label="Charcoal"></button>
           <button type="button" class="swatch" style="background:#708471!important" [class.selected]="bodyColor()==='#708471'" (click)="setBodyColor('#708471')" title="Sage" aria-label="Sage"></button>
           <button type="button" class="swatch" style="background:#aa6553!important" [class.selected]="bodyColor()==='#aa6553'" (click)="setBodyColor('#aa6553')" title="Terracotta" aria-label="Terracotta"></button>
-          <label class="custom-colour" title="Custom colour">Custom <input type="color" [value]="bodyColor()" (input)="setBodyColor($any($event.target).value)" aria-label="Выбрать цвет корпуса"></label>
+          <label class="custom-colour" title="Custom colour">Custom <input type="color" [value]="bodyColor()" (input)="setBodyColor($any($event.target).value)" aria-label="Choose body colour"></label>
         </div>
         <div class="colour-value"><span class="colour-dot" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>{{rawBody() ? 'Raw plywood' : bodyColor()}}</div>
         <p class="help">Paint finish</p>
@@ -75,8 +97,8 @@
 
       <section class="setting-card">
         <h2>Table top finish</h2>
-        <p class="help">Выберите отделку столешницы.</p>
-        <div class="finish-options" role="group" aria-label="Отделка столешницы">
+        <p class="help">Choose the table top finish.</p>
+        <div class="finish-options" role="group" aria-label="Table top finish">
           <button type="button" [class.selected]="topFinish()==='body'" (click)="setTopFinish('body')"><span class="finish-chip" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>In cart finish / colour</button>
           <button type="button" [class.selected]="topFinish()==='oak'" (click)="setTopFinish('oak')"><span class="finish-chip oak"></span>Tasmanian oak</button>
           <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>Varnished plywood</button>
@@ -85,14 +107,14 @@
 
       <section class="setting-card model-file">
         <h2>Model file</h2>
-        <p class="help">GLB-файл хранится в закрытом разделе Hub. Изменения габаритов и цвета сейчас служат для просмотра.</p>
+        <p class="help">GLB files are private to Hub. Dimensions and colours are preview settings.</p>
         <input #fileInput type="file" accept=".glb,model/gltf-binary" class="visually-hidden" (change)="onFileChange($event)">
         <div class="file-actions">
-          <button type="button" class="icon-action" (click)="fileInput.click()" title="Выбрать GLB-файл" aria-label="Выбрать GLB-файл">＋</button>
-          @if (members.manager()) {<button type="button" class="icon-action primary" [disabled]="!selectedFile() || saving()" (click)="saveModel()" title="Сохранить модель в Hub" aria-label="Сохранить модель в Hub">▣</button>}
-          <span>{{selectedFile()?.name || fileName() || 'Файл не выбран'}}</span>
+          <button type="button" class="icon-action" (click)="fileInput.click()" title="Choose GLB file" aria-label="Choose GLB file">＋</button>
+          @if (members.manager()) {<button type="button" class="icon-action primary" [disabled]="!selectedFile() || saving()" (click)="saveModel()" title="Save model to Hub" aria-label="Save model to Hub">▣</button>}
+          <span>{{selectedFile()?.name || fileName() || 'No file selected'}}</span>
         </div>
-        @if (saving()) {<p class="progress" role="status">Сохранение модели…</p>}
+        @if (saving()) {<p class="progress" role="status">Saving model…</p>}
         @if (notice()) {<p class="notice" role="status">{{notice()}}</p>}
         @if (error()) {<p class="error" role="alert">{{error()}}</p>}
       </section>

@@ -8,6 +8,7 @@ import { resizePlywoodPosition } from './modeling-geometry';
 import { createRoundedPart, keepTrimJointSquare, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv } from './modeling-textures';
+import { ASSEMBLY_PARTS, AssemblyController, PartKey } from './modeling-assembly';
 
 interface ModelRecord {
   model_path: string | null;
@@ -64,6 +65,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly notice = signal('');
   readonly fileName = signal('');
   readonly selectedFile = signal<File | null>(null);
+  readonly assemblyMode = signal(false);
+  readonly assemblyRevision = signal(0);
+  readonly parts = ASSEMBLY_PARTS;
+  private assembly?: AssemblyController;
 
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(42, 1, 0.01, 30);
@@ -128,6 +133,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.controls.enableDamping = true;
       this.controls.maxPolarAngle = Math.PI / 2.05;
       this.controls.update();
+      this.assembly = new AssemblyController(this.scene, this.camera, this.renderer.domElement,
+        this.controls, () => this.assemblyRevision.update(value => value + 1));
       this.resizeObserver = new ResizeObserver(() => this.resize());
       this.resizeObserver.observe(this.canvasHost.nativeElement);
       this.resize();
@@ -135,7 +142,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       void this.loadSavedModel();
     } catch {
       this.loading.set(false);
-      this.error.set('3D-просмотр недоступен в этом браузере. Включите WebGL и обновите страницу.');
+      this.error.set('3D preview is unavailable in this browser. Enable WebGL and reload.');
     }
   }
 
@@ -159,6 +166,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.camera.lookAt(this.controls.target);
       if (this.turntable) this.turntable.rotation.y = this.viewAzimuth - spherical.theta;
     }
+    this.assembly?.update();
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -173,16 +181,16 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.record = data as ModelRecord;
       this.resetDimensions();
       if (!data.model_path) {
-        this.notice.set('Модель ещё не загружена в Hub. Выберите GLB-файл, чтобы открыть её в редакторе.');
+        this.notice.set('No model has been uploaded to Hub yet. Choose a GLB file to open it in the editor.');
         return;
       }
       const signed = await this.db.client.storage.from(BUCKET).createSignedUrl(data.model_path, 600);
-      if (signed.error || !signed.data?.signedUrl) throw signed.error || new Error('Не удалось получить ссылку на модель.');
+      if (signed.error || !signed.data?.signedUrl) throw signed.error || new Error('Could not retrieve the model link.');
       if (!this.alive || requestVersion !== this.loadVersion) return;
       await this.openModel(signed.data.signedUrl);
       if (this.alive) this.fileName.set(data.model_filename || 'Classic Bar / Plywood');
     } catch (cause) {
-      if (this.alive) this.error.set(`Не удалось открыть сохранённую 3D-модель: ${this.message(cause)}. Обновите страницу или выберите локальный GLB-файл.`);
+      if (this.alive) this.error.set(`Could not open the saved 3D model: ${this.message(cause)}. Reload the page or choose a local GLB file.`);
     } finally {
       if (this.alive) this.loading.set(false);
     }
@@ -258,6 +266,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   private disposeModel(): void {
+    this.assembly?.clear();
     if (!this.model) return;
     if (this.turntable) this.scene.remove(this.turntable);
     this.turntable = undefined;
@@ -295,12 +304,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.error.set('');
     this.notice.set('');
     if (!file.name.toLowerCase().endsWith('.glb')) {
-      this.error.set(`${file.name}: требуется файл GLB (.glb). Выберите экспорт этой модели в формате GLB.`);
+      this.error.set(`${file.name}: a GLB (.glb) file is required. Choose a GLB export of this model.`);
       input.value = '';
       return;
     }
     if (file.size > MAX_FILE_BYTES || file.size === 0) {
-      this.error.set(`${file.name}: размер ${this.fileSize(file.size)}. Допустимый размер: от 1 байта до 20 МБ.`);
+      this.error.set(`${file.name}: size ${this.fileSize(file.size)}. Allowed size: 1 byte to 20 MB.`);
       input.value = '';
       return;
     }
@@ -310,10 +319,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if (this.alive) {
         this.selectedFile.set(file);
         this.fileName.set(file.name);
-        this.notice.set('Локальный просмотр открыт. Чтобы сохранить модель для команды, нажмите значок сохранения.');
+        this.notice.set('Local preview is ready. Use Save to store the model for the team.');
       }
     }).catch(cause => {
-      if (this.alive) this.error.set(`Не удалось прочитать ${file.name}: ${this.message(cause)}. Проверьте GLB и выберите файл снова.`);
+      if (this.alive) this.error.set(`Could not read ${file.name}: ${this.message(cause)}. Check the GLB and choose the file again.`);
     }).finally(() => {
       URL.revokeObjectURL(url);
       if (this.alive) this.loading.set(false);
@@ -326,7 +335,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (!file || !this.members.manager() || this.saving()) return;
     this.saving.set(true);
     this.error.set('');
-    this.notice.set(`Загрузка ${file.name}…`);
+    this.notice.set(`Uploading ${file.name}…`);
     const path = `${SLUG}/${crypto.randomUUID()}.glb`;
     const previousPath = this.record?.model_path;
     let uploaded = false;
@@ -339,7 +348,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const upload = await storage.upload(path, typedFile, { contentType: 'model/gltf-binary', upsert: false });
       if (upload.error) throw upload.error;
       uploaded = true;
-      this.notice.set('Файл загружен. Сохранение записи модели…');
+      this.notice.set('File uploaded. Saving the model record…');
       const update = await this.db.client.from('wc_modeling_models').update({
         model_path: path,
         model_filename: file.name,
@@ -352,14 +361,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         base_width_mm: 1200, base_depth_mm: 600, base_body_height_mm: 805, caster_height_mm: 95,
       }), model_path: path, model_filename: file.name };
       this.selectedFile.set(null);
-      this.notice.set(`${file.name} сохранён в Hub. Модель доступна участникам команды.`);
+      this.notice.set(`${file.name} saved to Hub. The model is available to team members.`);
       if (previousPath && previousPath !== path) {
         try { await storage.remove([previousPath]); } catch { /* Old unreferenced file can be cleaned up later. */ }
       }
     } catch (cause) {
       if (uploaded) await this.db.client.storage.from(BUCKET).remove([path]);
       if (this.alive) {
-        this.error.set(`Не удалось сохранить ${file.name}: ${this.message(cause)}. Локальный файл и прежняя сохранённая модель сохранены; повторите загрузку.`);
+        this.error.set(`Could not save ${file.name}: ${this.message(cause)}. Your local file and previous saved model are retained; retry the upload.`);
         this.notice.set('');
       }
     } finally {
@@ -405,7 +414,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
           name = node.userData['plywoodPart'] || name;
           materials.push(...(Array.isArray(node.material) ? node.material : [node.material]));
         });
-        if (!profile) throw new Error('В GLB отсутствует контур детали. Загрузите обновлённую модель.');
+        if (!profile) throw new Error('The GLB is missing a part profile. Upload an updated model.');
         const geometry = createRoundedPart(profile, raw);
         if (/^(Top|Buttom|Bottom)[ _]part2$/i.test(name)) keepTrimJointSquare(geometry, profile, raw);
         geometries.push(geometry);
@@ -433,7 +442,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.applyFinishes();
     } catch (cause) {
       for (const geometry of geometries) geometry.dispose();
-      this.error.set(`Не удалось скруглить детали: ${this.message(cause)}. Выберите меньший радиус или загрузите обновлённую модель.`);
+      this.error.set(`Could not round the parts: ${this.message(cause)}. Choose a smaller radius or upload an updated model.`);
     } finally { this.roundingBusy.set(false); }
   }
 
@@ -468,6 +477,26 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   private paintRoughness(): number {
     return this.paintFinish() === 'semi-gloss' ? 0.3 : 0.78;
+  }
+
+  setAssemblyMode(enabled: boolean): void {
+    this.assemblyMode.set(enabled);
+    this.assembly?.setEnabled(enabled);
+  }
+  selectPart(key: PartKey): void { this.setAssemblyMode(true); this.assembly?.select(key); }
+  selectedPart(): PartKey | null { this.assemblyRevision(); return this.assembly?.state.selected || null; }
+  partVisible(key: PartKey): boolean { this.assemblyRevision(); return this.assembly?.state.visible[key] ?? true; }
+  partAvailable(key: PartKey): boolean { this.assemblyRevision(); return this.assembly?.has(key) ?? false; }
+  partMovable(key: PartKey): boolean { this.assemblyRevision(); return this.assembly?.state.canMove(key) ?? false; }
+  partOffset(key: PartKey): number { this.assemblyRevision(); return Math.round(this.assembly?.state.offsets[key] || 0); }
+  setPartVisible(key: PartKey, visible: boolean): void { this.assembly?.setVisible(key, visible); }
+  movePart(mm: string): void { this.assembly?.move(Number(mm)); }
+  restorePart(): void { const key = this.selectedPart(); if (key) this.assembly?.restore(key); }
+  restoreAssembly(): void { this.assembly?.restore(); }
+  private bindAssembly(): void {
+    if (!this.model || !this.body) return;
+    this.assembly?.bind(this.model, [...this.body.children, ...(this.frontMoulding ? [this.frontMoulding] : []),
+      ...[...this.casters.values()].flatMap(group => group.children)]);
   }
 
   private applyDimensions(): void {
@@ -515,7 +544,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private applyFinishes(): void {
     if (!this.body) return;
     this.rawTexture ||= this.woodTexture('#d5b88d', '#b99466', 0.35);
-    this.oakTexture ||= this.woodTexture('#c6935c', '#a96d3d', 0.26);
+    this.oakTexture ||= this.woodTexture('#b59b84', '#765c49', 0.32);
     this.plywoodTexture ||= this.woodTexture('#d9ba8e', '#b78c60', 0.22);
     const body = new THREE.Color(this.bodyColor());
     this.body.traverse(node => {
@@ -560,7 +589,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       (this.frontMoulding.material as THREE.Material).dispose();
       this.frontMoulding = undefined;
     }
-    if (!this.moulding()) return;
+    if (!this.moulding()) { this.bindAssembly(); return; }
     const material = new THREE.MeshStandardMaterial({
       map: this.rawBody() ? this.modelPineTexture || this.modelPlywoodTexture || this.rawTexture : null,
       color: this.rawBody() ? '#ffffff' : this.bodyColor(), roughness: this.rawBody() ? 0.78 : this.paintRoughness(), side: THREE.DoubleSide,
@@ -572,8 +601,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.addPaintUvs(this.frontMoulding.geometry);
     this.frontMoulding.name = 'Front moulding';
     this.frontMoulding.castShadow = true;
-    this.frontMoulding.receiveShadow = true;
+    // The shallow curved mould self-shadows poorly at this scale; it still casts
+    // its real outline onto the receiving panel beneath it.
+    this.frontMoulding.receiveShadow = false;
     this.model.add(this.frontMoulding);
+    this.bindAssembly();
   }
 
   private addWoodUvs(geometry: THREE.BufferGeometry, partName = '', edge = false, pine = false): void {
@@ -667,7 +699,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.controls?.update();
   }
 
-  private fileSize(bytes: number): string { return `${(bytes / 1024 / 1024).toFixed(2)} МБ`; }
+  private fileSize(bytes: number): string { return `${(bytes / 1024 / 1024).toFixed(2)} MB`; }
   private message(cause: unknown): string { return cause instanceof Error ? cause.message : String(cause); }
 
   ngOnDestroy(): void {
@@ -676,6 +708,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     cancelAnimationFrame(this.frame);
     this.resizeObserver?.disconnect();
     this.controls?.dispose();
+    this.assembly?.dispose();
     this.disposeModel();
     this.rawTexture?.dispose();
     this.oakTexture?.dispose();
