@@ -66,6 +66,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(42, 1, 0.01, 30);
+  private readonly orbitCamera = this.camera.clone();
+  private viewAzimuth = Math.atan2(1.1, 1.25);
+  private turntable?: THREE.Group;
   private readonly loader = new GLTFLoader();
   private renderer?: THREE.WebGLRenderer;
   private controls?: OrbitControls;
@@ -95,17 +98,30 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1;
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       this.canvasHost.nativeElement.appendChild(this.renderer.domElement);
-      this.scene.background = new THREE.Color('#f8fafc');
+      this.scene.background = new THREE.Color('#eceae8');
       this.scene.add(new THREE.HemisphereLight('#ffffff', '#c7d0d9', 1.2));
       const light = new THREE.DirectionalLight('#ffffff', 1.3);
       light.position.set(2, 4, 3);
+      light.castShadow = true;
+      light.shadow.mapSize.set(1024, 1024);
+      light.shadow.camera.left = light.shadow.camera.bottom = -2;
+      light.shadow.camera.right = light.shadow.camera.top = 2;
+      light.shadow.camera.near = 0.1;
+      light.shadow.camera.far = 12;
+      light.shadow.bias = -0.0001;
+      light.shadow.normalBias = 0.0005;
       this.scene.add(light);
-      const ground = new THREE.GridHelper(4, 20, '#cbd5e1', '#e2e8f0');
-      ground.position.y = -0.006;
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.ShadowMaterial({ opacity: 0.18 }));
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.001;
+      ground.receiveShadow = true;
       this.scene.add(ground);
       this.camera.position.set(1.7, 1.42, 2.1);
-      this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+      this.orbitCamera.position.copy(this.camera.position);
+      this.controls = new OrbitControls(this.orbitCamera, this.renderer.domElement);
       this.controls.target.set(0.6, 0.45, 0.3);
       this.controls.enableDamping = true;
       this.controls.maxPolarAngle = Math.PI / 2.05;
@@ -134,6 +150,13 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (!this.alive || !this.renderer) return;
     this.frame = requestAnimationFrame(this.animate);
     this.controls?.update();
+    if (this.controls) {
+      const offset = this.orbitCamera.position.clone().sub(this.controls.target);
+      const spherical = new THREE.Spherical().setFromVector3(offset);
+      this.camera.position.copy(this.controls.target).add(new THREE.Vector3().setFromSphericalCoords(spherical.radius, spherical.phi, this.viewAzimuth));
+      this.camera.lookAt(this.controls.target);
+      if (this.turntable) this.turntable.rotation.y = this.viewAzimuth - spherical.theta;
+    }
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -188,8 +211,13 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       }
     }
     this.model.add(this.body);
+    this.model.traverse(node => {
+      if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = true; }
+    });
     this.body.traverse(node => {
       if (node instanceof THREE.Mesh) {
+        node.castShadow = true;
+        node.receiveShadow = true;
         this.originalPositions.set(node, node.geometry.getAttribute('position').clone());
         this.sourcePositions.set(node.geometry, node.geometry.getAttribute('position').clone());
         const materials = Array.isArray(node.material) ? node.material : [node.material];
@@ -208,7 +236,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       return profile;
     }));
     this.rounding.set(0);
-    this.scene.add(this.model);
+    this.turntable = new THREE.Group();
+    this.turntable.add(this.model);
+    this.scene.add(this.turntable);
     this.applyDimensions();
     this.applyFinishes();
     this.focusCamera();
@@ -216,7 +246,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   private disposeModel(): void {
     if (!this.model) return;
-    this.scene.remove(this.model);
+    if (this.turntable) this.scene.remove(this.turntable);
+    this.turntable = undefined;
     this.model.traverse(node => {
       if (!(node instanceof THREE.Mesh)) return;
       node.geometry.dispose();
@@ -366,6 +397,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const face = materials.find(material => !/plywood[ _]edge$/i.test(material.name)) || materials[0];
         const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
         const mesh = new THREE.Mesh(geometry, [face, edge]);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         mesh.name = name;
         mesh.userData['plywoodPart'] = name;
         return mesh;
@@ -439,10 +472,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       );
     }
     const span = Math.max(this.width(), this.depth(), this.height()) / 1000;
+    const centerX = this.width() / 2000, centerZ = this.depth() / 2000;
+    this.turntable?.position.set(centerX, 0, centerZ);
+    this.model?.position.set(-centerX, 0, -centerZ);
     if (this.controls) {
       const nextTarget = new THREE.Vector3(this.width() / 2000, this.height() / 2000, this.depth() / 2000);
       const offset = this.camera.position.clone().sub(this.controls.target);
       this.camera.position.copy(nextTarget).addScaledVector(offset, span / this.cameraSpan);
+      const orbitOffset = this.orbitCamera.position.clone().sub(this.controls.target);
+      this.orbitCamera.position.copy(nextTarget).addScaledVector(orbitOffset, span / this.cameraSpan);
       this.controls.target.copy(nextTarget);
       this.controls.update();
     }
@@ -466,14 +504,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const finish = isTopPanelName(partName) && !pine ? this.topFinish() : 'body';
         const edge = /plywood[ _]edge$/i.test(material.name);
         const plywood = (pine ? this.modelPineTexture : edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
-        const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? plywood || this.plywoodTexture : this.rawBody() ? plywood || this.rawTexture : null;
-        const source = map ? new THREE.Color(finish === 'plywood' && plywood ? '#f5e6c9' : '#ffffff') : body;
+        const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? plywood || this.rawTexture : this.rawBody() ? plywood || this.rawTexture : null;
+        const source = map ? new THREE.Color('#ffffff') : body;
         if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry, partName, edge, pine);
         material.color.copy(source);
-        if (edge && map && finish !== 'oak') material.color.multiplyScalar(1.15);
-        if (pine && map) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4));
+        if (map && finish !== 'oak' && !pine && !edge) material.color.multiplyScalar(1.05);
+        if (edge && map && finish !== 'oak') material.color.multiplyScalar(1.08);
+        if (pine && map) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
         material.map = map;
-        material.roughness = finish === 'plywood' ? 0.34 : finish === 'oak' ? 0.55 : 0.78;
+        material.roughness = finish === 'oak' ? 0.55 : 0.78;
         material.metalness = 0;
         material.needsUpdate = true;
       }
@@ -499,9 +538,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       map: this.rawBody() ? this.modelPineTexture || this.modelPlywoodTexture || this.rawTexture : null,
       color: this.rawBody() ? '#ffffff' : this.bodyColor(), roughness: 0.78, side: THREE.DoubleSide,
     });
-    if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4));
+    if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
     this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height()), material);
     this.frontMoulding.name = 'Front moulding';
+    this.frontMoulding.castShadow = true;
+    this.frontMoulding.receiveShadow = true;
     this.model.add(this.frontMoulding);
   }
 
@@ -579,6 +620,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const span = Math.max(this.width(), this.depth(), this.height()) / 1000;
     this.cameraSpan = span;
     this.camera.position.set(this.width() / 2000 + span * 1.1, this.height() / 2000 + span * 0.5, this.depth() / 2000 + span * 1.25);
+    this.orbitCamera.position.copy(this.camera.position);
     this.camera.lookAt(this.width() / 2000, this.height() / 2000, this.depth() / 2000);
     this.controls?.update();
   }
