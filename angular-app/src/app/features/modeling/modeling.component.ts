@@ -95,6 +95,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private modelPlywoodEdgeTexture?: THREE.Texture;
   private modelPineTexture?: THREE.Texture;
   private modelPaintBumpTexture?: THREE.Texture;
+  private paintEnvironment?: THREE.WebGLRenderTarget;
 
   constructor(readonly members: HubMembersService, private readonly db: SupabaseService) {}
 
@@ -476,7 +477,29 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   private paintRoughness(): number {
-    return this.paintFinish() === 'semi-gloss' ? 0.3 : 0.78;
+    return this.paintFinish() === 'semi-gloss' ? 0.18 : 0.78;
+  }
+
+  private paintReflection(): THREE.Texture | null {
+    if (this.paintFinish() !== 'semi-gloss' || !this.renderer) return null;
+    if (!this.paintEnvironment) {
+      const studio = new THREE.Scene();
+      studio.background = new THREE.Color('#181818');
+      const geometry = new THREE.BoxGeometry(3, 7, 0.05);
+      const material = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(8, 8, 8) });
+      // Large vertical softboxes below eye level remain visible in reflections
+      // on upright panels, even when the preview camera looks down at the cart.
+      for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+        const softbox = new THREE.Mesh(geometry, material);
+        softbox.position.set(Math.sin(angle) * 5, -2, Math.cos(angle) * 5);
+        softbox.rotation.y = angle;
+        studio.add(softbox);
+      }
+      const generator = new THREE.PMREMGenerator(this.renderer);
+      try { this.paintEnvironment = generator.fromScene(studio, 0.04); }
+      finally { geometry.dispose(); material.dispose(); generator.dispose(); }
+    }
+    return this.paintEnvironment.texture;
   }
 
   setAssemblyMode(enabled: boolean): void {
@@ -543,6 +566,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   private applyFinishes(): void {
     if (!this.body) return;
+    const reflection = this.paintReflection();
     this.rawTexture ||= this.woodTexture('#d5b88d', '#b99466', 0.35);
     this.oakTexture ||= this.woodTexture('#b59b84', '#765c49', 0.32);
     this.plywoodTexture ||= this.woodTexture('#d9ba8e', '#b78c60', 0.22);
@@ -550,7 +574,13 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.body.traverse(node => {
       if (!(node instanceof THREE.Mesh)) return;
       const partName = node.userData['plywoodPart'] || node.name;
-      const materials = Array.isArray(node.material) ? node.material : [node.material];
+      const materials = (Array.isArray(node.material) ? node.material : [node.material]).map(material => {
+        if (!(material instanceof THREE.MeshStandardMaterial) || material instanceof THREE.MeshPhysicalMaterial) return material;
+        const paint = new THREE.MeshPhysicalMaterial();
+        THREE.MeshStandardMaterial.prototype.copy.call(paint, material);
+        return paint;
+      });
+      node.material = Array.isArray(node.material) ? materials : materials[0];
       for (const material of materials) {
         if (!(material instanceof THREE.MeshStandardMaterial)) continue;
         const pine = /pine[ _]trim$/i.test(material.name);
@@ -570,6 +600,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         material.bumpScale = 0.00015;
         material.roughness = map ? finish === 'oak' ? 0.55 : 0.78 : this.paintRoughness();
         material.metalness = 0;
+        material.envMap = map ? null : reflection;
+        material.envMapIntensity = 0.65;
+        if (material instanceof THREE.MeshPhysicalMaterial) {
+          material.clearcoat = !map && reflection ? 0.7 : 0;
+          material.clearcoatRoughness = 0.08;
+        }
         material.needsUpdate = true;
       }
     });
@@ -590,9 +626,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.frontMoulding = undefined;
     }
     if (!this.moulding()) { this.bindAssembly(); return; }
-    const material = new THREE.MeshStandardMaterial({
+    const material = new THREE.MeshPhysicalMaterial({
       map: this.rawBody() ? this.modelPineTexture || this.modelPlywoodTexture || this.rawTexture : null,
       color: this.rawBody() ? '#ffffff' : this.bodyColor(), roughness: this.rawBody() ? 0.78 : this.paintRoughness(), side: THREE.DoubleSide,
+      envMap: this.rawBody() ? null : this.paintReflection(), envMapIntensity: 0.65,
+      clearcoat: !this.rawBody() && this.paintFinish() === 'semi-gloss' ? 0.7 : 0, clearcoatRoughness: 0.08,
     });
     if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
     this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height()), material);
@@ -713,6 +751,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.rawTexture?.dispose();
     this.oakTexture?.dispose();
     this.plywoodTexture?.dispose();
+    this.paintEnvironment?.dispose();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
   }
