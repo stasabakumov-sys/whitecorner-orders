@@ -524,8 +524,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
       if (pine && this.modelPineTexture) {
         const frontOrRear = z <= 0.01901 || z >= 0.58099;
-        uv[i * 2] = (ny > 0.5 ? frontOrRear ? z : x : y) / 0.6;
-        uv[i * 2 + 1] = (ny > 0.5 ? frontOrRear ? x : z : nx > 0.5 ? z : x) / 1.2;
+        // Rotate the pine grain 90 degrees so it follows each rail.
+        uv[i * 2] = (ny > 0.5 ? frontOrRear ? x : z : nx > 0.5 ? z : x) / 1.2;
+        uv[i * 2 + 1] = -(ny > 0.5 ? frontOrRear ? z : x : y) / 0.6;
       } else if (useEdge && this.modelPlywoodEdgeTexture) {
         // The edge image has horizontal layers: V crosses the panel thickness.
         // A 120 mm tile keeps the veneers at approximately 2 mm per layer.

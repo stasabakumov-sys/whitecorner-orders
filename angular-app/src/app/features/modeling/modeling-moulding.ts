@@ -26,7 +26,7 @@ export function createFrontMoulding(lengthMm: number, heightMm: number): THREE.B
       const next = (side + 1) % 4;
       for (const vertex of [a[side], a[next], b[next], a[side], b[next], b[side]]) {
         positions.push(...vertex);
-        uv.push(vertex[2] / 0.6, (side % 2 ? vertex[1] : vertex[0]) / 1.2);
+        uv.push((side % 2 ? vertex[1] : vertex[0]) / 1.2, -vertex[2] / 0.6);
       }
     }
   }
