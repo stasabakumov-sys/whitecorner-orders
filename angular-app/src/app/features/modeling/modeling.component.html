@@ -35,11 +35,11 @@
         <h2>Cart body colour</h2>
         <p class="help">RAW показывает фактуру фанеры. Выбор цвета окрашивает корпус.</p>
         <div class="swatches" role="group" aria-label="Цвет корпуса">
-          <button type="button" class="raw-choice" [class.selected]="rawBody()" (click)="setRawBody()">RAW plywood</button>
-          <button type="button" class="swatch" style="--swatch:#f5f3ed" [class.selected]="bodyColor()==='#f5f3ed'" (click)="setBodyColor('#f5f3ed')" title="White" aria-label="White"></button>
-          <button type="button" class="swatch" style="--swatch:#33383e" [class.selected]="bodyColor()==='#33383e'" (click)="setBodyColor('#33383e')" title="Charcoal" aria-label="Charcoal"></button>
-          <button type="button" class="swatch" style="--swatch:#708471" [class.selected]="bodyColor()==='#708471'" (click)="setBodyColor('#708471')" title="Sage" aria-label="Sage"></button>
-          <button type="button" class="swatch" style="--swatch:#aa6553" [class.selected]="bodyColor()==='#aa6553'" (click)="setBodyColor('#aa6553')" title="Terracotta" aria-label="Terracotta"></button>
+          <button type="button" class="raw-choice" style="background:repeating-linear-gradient(92deg,#d6b98e 0 7px,#cda97b 7px 9px,#dec399 9px 13px)!important" [class.selected]="rawBody()" (click)="setRawBody()">RAW plywood</button>
+          <button type="button" class="swatch" style="background:#f5f3ed!important" [class.selected]="bodyColor()==='#f5f3ed'" (click)="setBodyColor('#f5f3ed')" title="White" aria-label="White"></button>
+          <button type="button" class="swatch" style="background:#33383e!important" [class.selected]="bodyColor()==='#33383e'" (click)="setBodyColor('#33383e')" title="Charcoal" aria-label="Charcoal"></button>
+          <button type="button" class="swatch" style="background:#708471!important" [class.selected]="bodyColor()==='#708471'" (click)="setBodyColor('#708471')" title="Sage" aria-label="Sage"></button>
+          <button type="button" class="swatch" style="background:#aa6553!important" [class.selected]="bodyColor()==='#aa6553'" (click)="setBodyColor('#aa6553')" title="Terracotta" aria-label="Terracotta"></button>
           <label class="custom-colour" title="Custom colour">Custom <input type="color" [value]="bodyColor()" (input)="setBodyColor($any($event.target).value)" aria-label="Выбрать цвет корпуса"></label>
         </div>
         <div class="colour-value"><span class="colour-dot" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>{{rawBody() ? 'Raw plywood' : bodyColor()}}</div>
