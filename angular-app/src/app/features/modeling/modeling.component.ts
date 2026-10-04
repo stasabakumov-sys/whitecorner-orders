@@ -107,15 +107,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const light = new THREE.DirectionalLight('#ffffff', 1.3);
       light.position.set(2, 4, 3);
       light.castShadow = true;
-      light.shadow.mapSize.set(1024, 1024);
+      light.shadow.mapSize.set(2048, 2048);
       light.shadow.camera.left = light.shadow.camera.bottom = -2;
       light.shadow.camera.right = light.shadow.camera.top = 2;
       light.shadow.camera.near = 0.1;
       light.shadow.camera.far = 12;
-      light.shadow.bias = -0.0001;
-      light.shadow.normalBias = 0.0005;
+      light.shadow.bias = -0.00002;
+      light.shadow.normalBias = 0.003;
       this.scene.add(light);
-      const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.ShadowMaterial({ opacity: 0.18 }));
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.ShadowMaterial({ opacity: 0.22 }));
       ground.rotation.x = -Math.PI / 2;
       ground.position.y = -0.001;
       ground.receiveShadow = true;
@@ -223,12 +223,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     }
     this.model.add(this.body);
     this.model.traverse(node => {
-      if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = false; }
+      if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = true; }
     });
     this.body.traverse(node => {
       if (node instanceof THREE.Mesh) {
         node.castShadow = true;
-        node.receiveShadow = false;
+        node.receiveShadow = true;
         this.originalPositions.set(node, node.geometry.getAttribute('position').clone());
         this.sourcePositions.set(node.geometry, node.geometry.getAttribute('position').clone());
         const materials = Array.isArray(node.material) ? node.material : [node.material];
@@ -412,7 +412,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
         const mesh = new THREE.Mesh(geometry, [face, edge]);
         mesh.castShadow = true;
-        mesh.receiveShadow = false;
+        mesh.receiveShadow = true;
         mesh.name = name;
         mesh.userData['plywoodPart'] = name;
         return mesh;
@@ -562,7 +562,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.addPaintUvs(this.frontMoulding.geometry);
     this.frontMoulding.name = 'Front moulding';
     this.frontMoulding.castShadow = true;
-    this.frontMoulding.receiveShadow = false;
+    this.frontMoulding.receiveShadow = true;
     this.model.add(this.frontMoulding);
   }
 
