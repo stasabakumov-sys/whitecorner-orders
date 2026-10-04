@@ -71,6 +71,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private rawTexture?: THREE.CanvasTexture;
   private oakTexture?: THREE.CanvasTexture;
   private plywoodTexture?: THREE.CanvasTexture;
+  private modelPlywoodTexture?: THREE.Texture;
 
   constructor(readonly members: HubMembersService, private readonly db: SupabaseService) {}
 
@@ -176,6 +177,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.body.traverse(node => {
       if (node instanceof THREE.Mesh) {
         this.originalPositions.set(node, node.geometry.getAttribute('position').clone());
+        const materials = Array.isArray(node.material) ? node.material : [node.material];
+        for (const material of materials) {
+          if (material instanceof THREE.MeshStandardMaterial && material.map) {
+            this.modelPlywoodTexture ||= material.map;
+          }
+        }
       }
     });
     this.scene.add(this.model);
@@ -196,6 +203,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.model = undefined;
     this.body = undefined;
     this.originalPositions.clear();
+    this.modelPlywoodTexture?.dispose();
+    this.modelPlywoodTexture = undefined;
   }
 
   onFileChange(event: Event): void {
@@ -354,8 +363,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if (!(node instanceof THREE.Mesh)) return;
       const isTop = isTopPanelName(node.name);
       const finish = isTop ? this.topFinish() : 'body';
-      const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? this.plywoodTexture : this.rawBody() ? this.rawTexture : null;
-      const source = map ? new THREE.Color('#ffffff') : body;
+      const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? this.modelPlywoodTexture || this.plywoodTexture : this.rawBody() ? this.modelPlywoodTexture || this.rawTexture : null;
+      const source = map ? new THREE.Color(finish === 'plywood' && this.modelPlywoodTexture ? '#f5e6c9' : '#ffffff') : body;
       if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry);
       const materials = Array.isArray(node.material) ? node.material : [node.material];
       for (const material of materials) {
@@ -373,11 +382,16 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const positions = geometry.getAttribute('position');
     const normals = geometry.getAttribute('normal');
     const uv = new Float32Array(positions.count * 2);
+    // The supplied birch texture represents a 2439 mm wide sheet. Preserve its
+    // physical grain size as panels grow, rather than stretching the image.
+    const width = this.modelPlywoodTexture ? 2.439 : 0.32;
+    const textureImage = this.modelPlywoodTexture?.image;
+    const height = textureImage?.width && textureImage?.height ? width * textureImage.height / textureImage.width : width;
     for (let i = 0; i < positions.count; i++) {
       const nx = Math.abs(normals.getX(i));
       const ny = Math.abs(normals.getY(i));
-      uv[i * 2] = (nx > 0.5 ? positions.getZ(i) : positions.getX(i)) / 0.32;
-      uv[i * 2 + 1] = (ny > 0.5 ? positions.getZ(i) : positions.getY(i)) / 0.32;
+      uv[i * 2] = (nx > 0.5 || ny > 0.5 ? positions.getZ(i) : positions.getX(i)) / width;
+      uv[i * 2 + 1] = (ny > 0.5 ? positions.getX(i) : positions.getY(i)) / height;
     }
     geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   }

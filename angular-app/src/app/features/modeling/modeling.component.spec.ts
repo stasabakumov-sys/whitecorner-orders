@@ -82,3 +82,33 @@ describe('Modeling dimensions', () => {
     expect(component.depth()).toBe(600);
   });
 });
+
+describe('Plywood finishes', () => {
+  it('uses the embedded birch texture for RAW and varnished plywood and restores it after painting', () => {
+    const { component } = setup();
+    const editor = component as any;
+    const birch = new THREE.Texture();
+    editor.modelPlywoodTexture = birch;
+    editor.rawTexture = new THREE.Texture();
+    editor.oakTexture = new THREE.Texture();
+    editor.plywoodTexture = new THREE.Texture();
+    editor.body = new THREE.Group();
+    const front = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
+    const top = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
+    front.name = 'Front_part1';
+    top.name = 'Top_part1';
+    editor.body.add(front, top);
+    component.setRawBody();
+    expect(front.material.map).toBe(birch);
+    expect(top.material.map).toBe(birch);
+    expect(top.material.roughness).toBeLessThan(front.material.roughness);
+    component.setBodyColor('#33383e');
+    expect(front.material.map).toBeNull();
+    expect(top.material.map).toBe(birch);
+    component.setRawBody();
+    expect(front.material.map).toBe(birch);
+    component.setTopFinish('oak');
+    expect(top.material.map).toBe(editor.oakTexture);
+    expect(front.material.map).toBe(birch);
+  });
+});
