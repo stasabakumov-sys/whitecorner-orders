@@ -451,5 +451,27 @@ try{
  assert.equal((await db.query('select object_path from wc_cart_box_svg_drawings where cart_base_package_id=$1',[constructorPackage])).rows[0].object_path,replacementPaths[0]);
  await db.query("select set_config('test.actor',$1,false)",[worker]);
  await assert.rejects(db.query(sourceSql,[constructorPackage,constructorBox,replacementPaths[0],'manual.svg',manualCdr.revision]),/Manager access/);
- console.log('Packing migration checks passed, including atomic Cart Constructor saves, mapping access and SVG/CDR sources.');
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20261004000100_constructor_custom_jobs.sql','utf8'));
+ const customPaths=[0,1,2].map(()=>`${managerA}/${randomUUID()}`);
+ for(let i=0;i<3;i++)await db.query('insert into storage.objects(bucket_id,name,metadata) values($1,$2,$3)',[i?'box-rd-files':'custom-packing-drawings',customPaths[i],{size:200+i}]);
+ await db.exec('set role authenticated');
+ const customSql='select wc_create_constructor_custom_job($1,$2,$3,$4,$5) result';
+ const customArgs=[randomUUID(),'Card box 1215 × 615 × 80',constructorDimensions,{path:customPaths[0],filename:'card.svg',bytes:200},[0,1].map(i=>({path:customPaths[i+1],filename:i?'lid.rd':'bottom.rd',bytes:201+i}))];
+ await assert.rejects(db.query(customSql,customArgs),/Manager access/);
+ await db.query("select set_config('test.actor',$1,false)",[managerA]);
+ const jobsBefore=(await db.query('select count(*)::int n from wc_custom_packing_jobs')).rows[0].n;
+ const tasksBefore=(await db.query('select count(*)::int n from wc_packing_tasks')).rows[0].n;
+ const invalidCustom=structuredClone(customArgs);invalidCustom[4][1].bytes=999;
+ await assert.rejects(db.query(customSql,invalidCustom),/RD upload/);
+ assert.equal((await db.query('select count(*)::int n from wc_custom_packing_jobs')).rows[0].n,jobsBefore);
+ const customSaved=(await db.query(customSql,customArgs)).rows[0].result;
+ assert.deepEqual(customSaved.rd_files.map(file=>file.copies),[2,2]);
+ assert.equal(customSaved.drawing.filename,'card.svg');
+ assert.deepEqual((await db.query(customSql,customArgs)).rows[0].result,customSaved);
+ assert.equal((await db.query('select count(*)::int n from wc_custom_packing_jobs')).rows[0].n,jobsBefore+1);
+ assert.equal((await db.query('select count(*)::int n from wc_packing_tasks')).rows[0].n,tasksBefore);
+ await assert.rejects(db.query(customSql,[customArgs[0],'Changed',...customArgs.slice(2)]),/Save request changed/);
+ await assert.rejects(db.query('select * from wc_constructor_custom_saves'),/permission denied/);
+ console.log('Packing checks passed, including atomic Custom creation, rollback and idempotent retry.');
 }finally{await db.close();}

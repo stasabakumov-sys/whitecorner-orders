@@ -6,7 +6,7 @@ if(!['--verify','--apply'].includes(mode))throw Error('Use --verify or --apply')
 const token=process.env.SUPABASE_ACCESS_TOKEN;
 if(!token)throw Error('Supabase access token required');
 const sources=[];
-for(const [version,name] of [['20261003000400','cart_constructor_files'],['20261003000500','cart_file_mapping_access'],['20261003000600','packaging_svg_sources']])
+for(const [version,name] of [['20261003000400','cart_constructor_files'],['20261003000500','cart_file_mapping_access'],['20261003000600','packaging_svg_sources'],['20261004000100','constructor_custom_jobs']])
  sources.push({version,name,source:(await readFile(`supabase/migrations/${version}_${name}.sql`,'utf8')).replaceAll('\r','')});
 const quote=value=>"'"+value.replaceAll("'","''")+"'";
 async function query(sql,read_only=true){
@@ -26,8 +26,9 @@ const [before]=await query(`select
  (select count(*)::int from public.wc_box_rd_files) rd_count,
  (select count(*)::int from public.wc_packing_tasks) task_count,
  (select count(*)::int from public.wc_cart_base_box_drawings) cdr_count,
- (select count(*)::int from public.wc_shipping_packages) package_count;`);
-const counters=['rd_count','task_count','cdr_count','package_count'];
+ (select count(*)::int from public.wc_shipping_packages) package_count,
+ (select count(*)::int from public.wc_custom_packing_jobs) custom_count;`);
+const counters=['rd_count','task_count','cdr_count','package_count','custom_count'];
 if(!before||Object.entries(before).some(([key,value])=>!counters.includes(key)&&value!==true))throw Error('Cart Constructor prerequisites differ; release stopped');
 const registrations=[];
 for(const {version,source} of sources){
@@ -51,11 +52,15 @@ await query(`begin;set local lock_timeout='15s';set local statement_timeout='120
   end if;
  end $release$;`).join('\n')}commit;`,false);
 const [after]=await query(`select
- (select count(*)=3 from supabase_migrations.schema_migrations where version in('20261003000400','20261003000500','20261003000600')) migrations_registered,
+ (select count(*)=4 from supabase_migrations.schema_migrations where version in('20261003000400','20261003000500','20261003000600','20261004000100')) migrations_registered,
  (select count(*)=4 from pg_proc where oid in('public.wc_cart_standard_base_package(text,integer)'::regprocedure,
   'public.wc_cart_addon_rule(text,integer)'::regprocedure,'public.wc_cart_base_package(text,integer)'::regprocedure,
   'public.wc_cart_packing_file_boxes()'::regprocedure) and prosrc like '%Active Hub membership required%') mapping_member_gates,
  (select prosrc like '%Choose a valid SVG or CDR drawing%' from pg_proc where oid='public.wc_save_cart_base_box_drawing(uuid,jsonb,text,text,integer,uuid)'::regprocedure) svg_source_available,
+ has_function_privilege('authenticated','public.wc_create_constructor_custom_job(uuid,text,jsonb,jsonb,jsonb)','execute') custom_save_available,
+ not has_function_privilege('anon','public.wc_create_constructor_custom_job(uuid,text,jsonb,jsonb,jsonb)','execute') anon_custom_denied,
+ (select relrowsecurity from pg_class where oid='public.wc_constructor_custom_saves'::regclass) custom_receipt_rls,
+ not has_table_privilege('authenticated','public.wc_constructor_custom_saves','select,insert,update,delete') custom_receipt_denied,
  (select relrowsecurity from pg_class where oid='public.wc_cart_box_svg_drawings'::regclass) svg_rls,
  (select relrowsecurity from pg_class where oid='public.wc_cart_constructor_saves'::regclass) receipt_rls,
  not has_table_privilege('anon','public.wc_cart_box_svg_drawings','select') anon_svg_denied,
@@ -69,6 +74,7 @@ const [after]=await query(`select
  (select count(*)::int from public.wc_box_rd_files) rd_count,
  (select count(*)::int from public.wc_packing_tasks) task_count,
  (select count(*)::int from public.wc_cart_base_box_drawings) cdr_count,
- (select count(*)::int from public.wc_shipping_packages) package_count;`);
+ (select count(*)::int from public.wc_shipping_packages) package_count,
+ (select count(*)::int from public.wc_custom_packing_jobs) custom_count;`);
 if(!after||Object.entries(after).some(([key,value])=>counters.includes(key)?value!==before[key]:value!==true))throw Error('Cart Constructor postflight failed');
 console.log(JSON.stringify({release:'verified',...Object.fromEntries(counters.map(key=>[key,after[key]]))}));
