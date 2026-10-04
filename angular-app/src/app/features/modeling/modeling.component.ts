@@ -67,11 +67,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 1.5;
+      this.renderer.toneMappingExposure = 1;
       this.canvasHost.nativeElement.appendChild(this.renderer.domElement);
       this.scene.background = new THREE.Color('#f8fafc');
-      this.scene.add(new THREE.HemisphereLight('#ffffff', '#c7d0d9', 2.3));
-      const light = new THREE.DirectionalLight('#ffffff', 2.2);
+      this.scene.add(new THREE.HemisphereLight('#ffffff', '#c7d0d9', 1.2));
+      const light = new THREE.DirectionalLight('#ffffff', 1.3);
       light.position.set(2, 4, 3);
       this.scene.add(light);
       const ground = new THREE.GridHelper(4, 20, '#cbd5e1', '#e2e8f0');
@@ -224,7 +224,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     let uploaded = false;
     try {
       const storage = this.db.client.storage.from(BUCKET);
-      const upload = await storage.upload(path, file, { contentType: 'model/gltf-binary', upsert: false });
+      // Storage uploads Blob/File bodies as multipart and uses the File MIME type.
+      // Windows commonly labels .glb as application/octet-stream, so give the
+      // successfully parsed GLB an explicit MIME type before sending it.
+      const typedFile = new File([file], file.name, { type: 'model/gltf-binary' });
+      const upload = await storage.upload(path, typedFile, { contentType: 'model/gltf-binary', upsert: false });
       if (upload.error) throw upload.error;
       uploaded = true;
       this.notice.set('Файл загружен. Сохранение записи модели…');
@@ -372,7 +376,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   private focusCamera(): void {
     const span = Math.max(this.width(), this.depth(), this.height()) / 1000;
-    this.camera.position.set(this.width() / 2000 + span * 1.1, this.height() / 2000 + span * 0.85, this.depth() / 2000 + span * 1.25);
+    this.camera.position.set(this.width() / 2000 + span * 1.1, this.height() / 2000 + span * 0.5, this.depth() / 2000 + span * 1.25);
     this.camera.lookAt(this.width() / 2000, this.height() / 2000, this.depth() / 2000);
     this.controls?.update();
   }
