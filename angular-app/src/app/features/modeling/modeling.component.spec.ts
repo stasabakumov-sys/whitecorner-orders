@@ -62,8 +62,23 @@ describe('Modeling dimensions', () => {
     editor.controls = { target: new THREE.Vector3(0.6, 0.45, 0.3), update: vi.fn() };
     editor.camera.position.set(1.92, 1.05, 1.8);
     const before = editor.camera.position.distanceTo(editor.controls.target);
-    component.setDimension('width', '1600');
+    component.setDimension('width', '1500');
     const after = editor.camera.position.distanceTo(editor.controls.target);
-    expect(after / before).toBeCloseTo(1600 / 1200);
+    expect(after / before).toBeCloseTo(1500 / 1200);
+  });
+
+  it('limits length to 120–150 cm and height to 900–1000 mm', () => {
+    const { component } = setup();
+    component.setDimension('width', '2000');
+    component.setDimension('height', '1300');
+    expect(component.width()).toBe(1500);
+    expect(component.height()).toBe(1000);
+    component.setDimension('width', '800');
+    component.setDimension('height', '650');
+    expect(component.width()).toBe(1200);
+    expect(component.height()).toBe(900);
+    component.setDimension('width', '1340');
+    expect(component.width()).toBe(1300);
+    expect(component.depth()).toBe(600);
   });
 });

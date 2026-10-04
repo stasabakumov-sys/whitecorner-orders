@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { HubMembersService } from '../../core/services/hub-members.service';
+import { resizePlywoodPosition } from './modeling-geometry';
 
 interface ModelRecord {
   model_path: string | null;
@@ -62,6 +63,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private model?: THREE.Group;
   private body?: THREE.Group;
   private readonly casters = new Map<string, THREE.Group>();
+  private readonly originalPositions = new Map<THREE.Mesh, THREE.BufferAttribute>();
   private cameraSpan = 1.2;
   private record?: ModelRecord;
   private loadVersion = 0;
@@ -171,6 +173,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       }
     }
     this.model.add(this.body);
+    this.body.traverse(node => {
+      if (node instanceof THREE.Mesh) {
+        this.originalPositions.set(node, node.geometry.getAttribute('position').clone());
+      }
+    });
     this.scene.add(this.model);
     this.applyDimensions();
     this.applyFinishes();
@@ -188,6 +195,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     });
     this.model = undefined;
     this.body = undefined;
+    this.originalPositions.clear();
   }
 
   onFileChange(event: Event): void {
@@ -269,19 +277,20 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  setDimension(axis: 'width' | 'depth' | 'height', raw: string): void {
+  setDimension(axis: 'width' | 'height', raw: string): void {
     const value = Number(raw);
     if (!Number.isFinite(value)) return;
-    const limits = axis === 'width' ? [800, 2000] : axis === 'depth' ? [400, 1000] : [650, 1300];
-    const next = Math.round(Math.max(limits[0], Math.min(limits[1], value)));
+    const limits = axis === 'width' ? [1200, 1500] : [900, 1000];
+    const step = axis === 'width' ? 100 : 10;
+    const next = Math.round(Math.max(limits[0], Math.min(limits[1], value)) / step) * step;
     this[axis].set(next);
     this.applyDimensions();
   }
 
   resetDimensions(): void {
-    this.width.set(this.record?.base_width_mm || 1200);
-    this.depth.set(this.record?.base_depth_mm || 600);
-    this.height.set((this.record?.base_body_height_mm || 805) + (this.record?.caster_height_mm || 95));
+    this.width.set(1200);
+    this.depth.set(600);
+    this.height.set(900);
     this.applyDimensions();
   }
 
@@ -304,11 +313,18 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   private applyDimensions(): void {
     if (!this.body) return;
-    const caster = (this.record?.caster_height_mm || 95) / 1000;
-    const baseBody = (this.record?.base_body_height_mm || 805) / 1000;
-    const sy = (this.height() / 1000 - caster) / baseBody;
-    this.body.scale.set(this.width() / 1200, sy, this.depth() / 600);
-    this.body.position.y = caster * (1 - sy);
+    for (const [node, original] of this.originalPositions) {
+      const positions = node.geometry.getAttribute('position');
+      for (let i = 0; i < original.count; i++) {
+        const [x, y, z] = resizePlywoodPosition(node.name,
+          original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height());
+        positions.setXYZ(i, x, y, z);
+      }
+      positions.needsUpdate = true;
+      node.geometry.computeBoundingBox();
+      node.geometry.computeBoundingSphere();
+      if (node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry);
+    }
     for (const [key, group] of this.casters) {
       const [side, row] = key.split('-');
       group.position.set(
