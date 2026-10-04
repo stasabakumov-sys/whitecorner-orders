@@ -1,4 +1,4 @@
-import {ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, inject} from '@angular/core';
+import {ChangeDetectorRef, Component, Input, Output, EventEmitter, OnChanges, OnDestroy, inject} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {BoxDrawing, BoxLayout, BoxNet, boxNet, drawingWithLid, drawingNumber, exportBoxSvg} from './box-constructor-geometry';
 import {RdFile, RdSettings, generateRdFiles, prepareRdRequest, rdSettingsError} from './box-constructor-rd';
@@ -9,6 +9,9 @@ import {RdFile, RdSettings, generateRdFiles, prepareRdRequest, rdSettingsError} 
   styleUrl: './box-constructor.component.css',
 })
 export class BoxConstructorComponent implements OnChanges, OnDestroy {
+  @Input() showHeading = true;
+  @Input() customCut = false;
+  @Output() customCutRequested = new EventEmitter<void>();
   @Input() initialDimensions: {length: number; width: number; depth: number} | null = null;
   @Input() fixedDimensions = false;
   private readonly changeDetector = inject(ChangeDetectorRef);

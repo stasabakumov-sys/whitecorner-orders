@@ -29,8 +29,8 @@
               @else { <span class="file-empty" role="img" aria-label="No RD file" title="No RD file">—</span> }
             </td>
             <td class="status-col">
-              @if (drawingsFor(job).length) { <span class="file-check" role="img" aria-label="CDR drawing uploaded" title="CDR drawing uploaded">✓</span> }
-              @else { <span class="file-empty" role="img" aria-label="No CDR drawing" title="No CDR drawing">—</span> }
+              @if (drawingsFor(job).length) { <span class="file-check" role="img" aria-label="SVG/CDR drawing uploaded" title="SVG/CDR drawing uploaded">✓</span> }
+              @else { <span class="file-empty" role="img" aria-label="No SVG/CDR drawing" title="No SVG/CDR drawing">—</span> }
             </td>
             <td class="action-col">
               <button type="button" [attr.aria-label]="'Send ' + job.title + ' to Packing work'"
@@ -92,7 +92,7 @@
       @if (fileError()) { <p class="error" role="alert">{{ fileError() }}</p> }
       @if (fileSuccess()) { <p class="success" role="status">{{ fileSuccess() }}</p> }
       @if (fileBusy()) {
-        <p class="busy" role="status">{{ fileBusy() === 'upload' ? 'Uploading and saving RD file…' : fileBusy() === 'drawing-upload' ? 'Uploading and saving CDR drawing…' : fileBusy() === 'send' ? 'Sending Custom job…' : fileBusy() === 'cancel' ? 'Cancelling Packing task…' : 'Saving files…' }}</p>
+        <p class="busy" role="status">{{ fileBusy() === 'upload' ? 'Uploading and saving RD file…' : fileBusy() === 'drawing-upload' ? 'Uploading and saving SVG/CDR drawing…' : fileBusy() === 'send' ? 'Sending Custom job…' : fileBusy() === 'cancel' ? 'Cancelling Packing task…' : 'Saving files…' }}</p>
       }
 
       <section class="detail-card">
@@ -116,12 +116,12 @@
       </section>
 
       <section class="detail-card">
-        <div class="section-heading"><div><h3>CDR drawings <span class="type-tag private">MANAGER ONLY</span></h3><p>Source drawings for preparing RD files. They are never sent to Packing work or the laser.</p></div></div>
+        <div class="section-heading"><div><h3>SVG/CDR drawings <span class="type-tag private">MANAGER ONLY</span></h3><p>Source drawings for preparing RD files. They are never sent to Packing work or the laser.</p></div></div>
         @for (drawing of drawingsFor(job); track drawing.id) {
-          <div class="file-item"><div class="file-main"><span class="file-type cdr">CDR</span><div><button type="button" class="file-name" (click)="downloadDrawing(drawing)" [disabled]="!!fileBusy()">{{ drawing.filename }}</button><small>{{ size(drawing.size_bytes) }} · source drawing</small></div></div><div class="file-actions"><button type="button" [attr.aria-label]="'Remove ' + drawing.filename" (click)="removeDrawing(drawing)" [disabled]="!!fileBusy()">Remove</button></div></div>
-        } @empty { <p class="empty-note">No CDR drawings saved yet.</p> }
-        <div class="add-file"><label class="upload icon" title="Add CDR drawing" aria-label="Add CDR drawing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input type="file" accept=".cdr" aria-label="Add CDR drawing" [disabled]="!!fileBusy()" (change)="uploadDrawing($event,job)"></label><span>Add CDR drawing</span></div>
-        @if (pendingDrawing()?.jobId === job.id) { <button type="button" (click)="retryDrawing(job)" [disabled]="!!fileBusy()">Retry CDR upload</button> }
+          <div class="file-item"><div class="file-main"><span class="file-type cdr">{{drawing.filename.toLowerCase().endsWith('.svg')?'SVG':'CDR'}}</span><div><button type="button" class="file-name" (click)="downloadDrawing(drawing)" [disabled]="!!fileBusy()">{{ drawing.filename }}</button><small>{{ size(drawing.size_bytes) }} · source drawing</small></div></div><div class="file-actions"><button type="button" [attr.aria-label]="'Remove ' + drawing.filename" (click)="removeDrawing(drawing)" [disabled]="!!fileBusy()">Remove</button></div></div>
+        } @empty { <p class="empty-note">No SVG/CDR drawings saved yet.</p> }
+        <div class="add-file"><label class="upload icon" title="Add SVG/CDR drawing" aria-label="Add SVG/CDR drawing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input type="file" accept=".cdr,.svg" aria-label="Add SVG/CDR drawing" [disabled]="!!fileBusy()" (change)="uploadDrawing($event,job)"></label><span>Add SVG/CDR drawing</span></div>
+        @if (pendingDrawing()?.jobId === job.id) { <button type="button" (click)="retryDrawing(job)" [disabled]="!!fileBusy()">Retry drawing upload</button> }
         @if (cleanupPending()) { <button type="button" (click)="retryDrawingCleanup()" [disabled]="!!fileBusy()">Retry drawing cleanup</button> }
       </section>
 

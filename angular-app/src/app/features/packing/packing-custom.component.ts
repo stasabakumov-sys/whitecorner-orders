@@ -85,7 +85,7 @@ export class PackingCustomComponent implements OnInit {
  async download(file:CustomRdFile){this.fileError.set('');try{const {data,error}=await this.db.client.storage.from('box-rd-files').createSignedUrl(file.object_path,60,{download:file.filename});if(error||!data)throw error||Error('File unavailable.');const link=document.createElement('a');link.href=data.signedUrl;link.download=file.filename;link.rel='noopener';link.click();}catch(e){this.fileError.set(`Could not download ${file.filename}. ${(e as Error)?.message||'Retry.'}`);}}
  async uploadDrawing(event:Event,job:CustomJob){const input=event.target as HTMLInputElement,file=input.files?.[0];input.value='';if(!file||this.fileBusy())return;
   this.fileError.set('');this.fileSuccess.set('');this.pendingDrawing.set(null);
-  if(!/\.cdr$/i.test(file.name)){this.fileError.set(`${file.name}: choose a .cdr source drawing.`);return;}
+  if(!/\.(cdr|svg)$/i.test(file.name)){this.fileError.set(`${file.name}: choose an SVG or CDR source drawing.`);return;}
   if(!file.size||file.size>52428800){this.fileError.set(`${file.name} (${this.size(file.size)}) cannot be uploaded. File must be non-empty and at most 50 MB.`);return;}
   if(file.name.length>255){this.fileError.set(`${file.name}: filename is over 255 characters. Rename it and retry.`);return;}
   this.pendingDrawing.set({jobId:job.id,file});await this.saveDrawingUpload(file,job);

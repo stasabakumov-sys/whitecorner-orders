@@ -1,8 +1,8 @@
-import {Component,OnInit,OnDestroy,signal} from '@angular/core';
+import {Component,OnInit,OnDestroy,Optional,signal} from '@angular/core';
 import {DatePipe} from '@angular/common';
 import {packingStateLabel} from './packing-state';
 import {FormsModule} from '@angular/forms';
-import {RouterLink} from '@angular/router';
+import {ActivatedRoute,RouterLink} from '@angular/router';
 import {DrawerModule} from 'primeng/drawer';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {HubMembersService} from '../../core/services/hub-members.service';
@@ -62,12 +62,12 @@ export class PackingManageComponent implements OnInit,OnDestroy {
  readonly failedImages=new Set<string>();
  readonly selected=signal<Candidate|null>(null);readonly search=signal('');readonly loading=signal(false);readonly error=signal('');readonly success=signal('');readonly busy=signal('');readonly rowError=signal<{unit:string;message:string}|null>(null);
  profileSignature='';
- constructor(private db:SupabaseService,readonly members:HubMembersService){}
+ constructor(private db:SupabaseService,readonly members:HubMembersService,@Optional() private route?:ActivatedRoute){}
  readonly stateLabel=packingStateLabel;
  readonly taskSyncError=signal('');
  private refreshTimer?:ReturnType<typeof setInterval>;
  private taskVersion=0;private refreshingTasks=false;
- ngOnInit(){void this.load();this.refreshTimer=setInterval(()=>void this.refreshTasks(),10000);}
+ ngOnInit(){if(this.route?.snapshot.queryParamMap.get('tab')==='custom')this.activeTab.set('custom');void this.load();this.refreshTimer=setInterval(()=>void this.refreshTasks(),10000);}
  ngOnDestroy(){if(this.refreshTimer)clearInterval(this.refreshTimer);++this.taskVersion;}
  async refreshTasks(){
   if(this.loading()||this.busy()||this.refreshingTasks||!this.members.manager())return;
