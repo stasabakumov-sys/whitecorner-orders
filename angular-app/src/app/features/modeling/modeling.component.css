@@ -5,3 +5,4 @@
 .length-options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.length-options button{min-height:34px;padding:6px 4px;border:1px solid #dce3e9;border-radius:8px;background:#fff;color:#425162;font-size:12px;cursor:pointer}.length-options button.selected{border-color:#556b82;background:#f3f6f9;color:#25384a}.length-options button:focus-visible{outline:2px solid #35485d;outline-offset:2px}
 
 .rounding-options{grid-template-columns:repeat(3,minmax(0,1fr))}.rounding-options button:disabled{opacity:.45;cursor:default}
+.paint-options{grid-template-columns:repeat(2,minmax(0,1fr))}

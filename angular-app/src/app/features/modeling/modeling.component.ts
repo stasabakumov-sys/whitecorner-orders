@@ -56,6 +56,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private sourcePositions = new Map<THREE.BufferGeometry, THREE.BufferAttribute>();
   readonly bodyColor = signal('#d4b894');
   readonly rawBody = signal(true);
+  readonly paintFinish = signal<'matte' | 'semi-gloss'>('matte');
   readonly topFinish = signal<TopFinish>('plywood');
   readonly loading = signal(true);
   readonly saving = signal(false);
@@ -460,6 +461,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.applyFinishes();
   }
 
+  setPaintFinish(finish: 'matte' | 'semi-gloss'): void {
+    this.paintFinish.set(finish);
+    this.applyFinishes();
+  }
+
+  private paintRoughness(): number {
+    return this.paintFinish() === 'semi-gloss' ? 0.3 : 0.78;
+  }
+
   private applyDimensions(): void {
     if (!this.body) return;
     for (const [node, original] of this.originalPositions) {
@@ -527,9 +537,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         if (edge && map && finish !== 'oak') material.color.multiplyScalar(1.30);
         if (pine && map && finish !== 'oak') material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
         material.map = map;
-        material.bumpMap = map ? null : this.modelPaintBumpTexture || null;
+        material.bumpMap = map || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
         material.bumpScale = 0.00015;
-        material.roughness = finish === 'oak' ? 0.55 : 0.78;
+        material.roughness = map ? finish === 'oak' ? 0.55 : 0.78 : this.paintRoughness();
         material.metalness = 0;
         material.needsUpdate = true;
       }
@@ -553,11 +563,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (!this.moulding()) return;
     const material = new THREE.MeshStandardMaterial({
       map: this.rawBody() ? this.modelPineTexture || this.modelPlywoodTexture || this.rawTexture : null,
-      color: this.rawBody() ? '#ffffff' : this.bodyColor(), roughness: 0.78, side: THREE.DoubleSide,
+      color: this.rawBody() ? '#ffffff' : this.bodyColor(), roughness: this.rawBody() ? 0.78 : this.paintRoughness(), side: THREE.DoubleSide,
     });
     if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
     this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height()), material);
-    material.bumpMap = this.rawBody() ? null : this.modelPaintBumpTexture || null;
+    material.bumpMap = this.rawBody() || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
     material.bumpScale = 0.00015;
     this.addPaintUvs(this.frontMoulding.geometry);
     this.frontMoulding.name = 'Front moulding';

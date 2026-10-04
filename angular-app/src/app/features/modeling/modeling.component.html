@@ -66,6 +66,11 @@
           <label class="custom-colour" title="Custom colour">Custom <input type="color" [value]="bodyColor()" (input)="setBodyColor($any($event.target).value)" aria-label="Выбрать цвет корпуса"></label>
         </div>
         <div class="colour-value"><span class="colour-dot" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>{{rawBody() ? 'Raw plywood' : bodyColor()}}</div>
+        <p class="help">Paint finish</p>
+        <div class="length-options paint-options" role="group" aria-label="Paint finish">
+          <button type="button" [class.selected]="paintFinish()==='matte'" [attr.aria-pressed]="paintFinish()==='matte'" (click)="setPaintFinish('matte')">Matte</button>
+          <button type="button" [class.selected]="paintFinish()==='semi-gloss'" [attr.aria-pressed]="paintFinish()==='semi-gloss'" (click)="setPaintFinish('semi-gloss')">Semi-gloss</button>
+        </div>
       </section>
 
       <section class="setting-card">

@@ -161,6 +161,19 @@ describe('Plywood finishes', () => {
     component.setTopFinish('body');
     expect(trim.material.map).toBeNull();
     expect(trim.material.bumpMap).toBe(paintBump);
+    expect(front.material.roughness).toBe(0.78);
+    component.setPaintFinish('semi-gloss');
+    for (const colour of ['#f6f6f3', '#33383e', '#708471', '#aa6553', '#123456']) {
+      component.setBodyColor(colour);
+      for (const panel of [front, top, trim]) {
+        expect(panel.material.bumpMap).toBeNull();
+        expect(panel.material.roughness).toBe(0.3);
+        expect(panel.material.color.getHexString()).toBe(colour.slice(1));
+      }
+    }
+    component.setPaintFinish('matte');
+    expect(front.material.bumpMap).toBe(paintBump);
+    expect(front.material.roughness).toBe(0.78);
     component.setTopFinish('plywood');
     component.setRawBody();
     expect(front.material.map).toBe(birch);
