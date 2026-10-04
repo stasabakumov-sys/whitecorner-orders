@@ -13,27 +13,43 @@ export function createFrontMoulding(lengthMm: number, heightMm: number): THREE.B
   profile.bezierCurveTo(0.012, 0.003, 0.022, 0.003, 0.023, 0.01);
   profile.bezierCurveTo(0.024, 0.015, 0.031, 0.016, 0.031, 0.011);
   profile.lineTo(0.031, 0); profile.closePath();
-  const points = profile.getPoints(12);
-  const positions: number[] = [], uv: number[] = [];
+  // Mirror across the width: the stepped lip faces the opening of the frame.
+  // Reverse the contour too so the outward face winding stays unchanged.
+  const points = profile.getPoints(48).map(point => new THREE.Vector2(0.031 - point.x, point.y)).reverse();
+  const positions: number[] = [], uv: number[] = [], normals: number[] = [];
   const ring = (point: THREE.Vector2) => [
     [left + point.x, bottom + point.x, 0.019 - point.y],
     [right - point.x, bottom + point.x, 0.019 - point.y],
     [right - point.x, top - point.x, 0.019 - point.y],
     [left + point.x, top - point.x, 0.019 - point.y],
   ];
+  const faceNormals = points.slice(0, -1).map((point, i) => {
+    const a = ring(point), b = ring(points[i + 1]);
+    return a.map((vertex, side) => {
+      const origin = new THREE.Vector3(...vertex);
+      const along = new THREE.Vector3(...a[(side + 1) % 4]).sub(origin);
+      return along.cross(new THREE.Vector3(...b[(side + 1) % 4]).sub(origin)).normalize();
+    });
+  });
+  const smoothNormal = (face: THREE.Vector3, neighbour?: THREE.Vector3) =>
+    neighbour && face.dot(neighbour) > 0.9 ? face.clone().add(neighbour).normalize() : face;
   for (let i = 0; i < points.length - 1; i++) {
     const a = ring(points[i]), b = ring(points[i + 1]);
     for (let side = 0; side < 4; side++) {
       const next = (side + 1) % 4;
-      for (const vertex of [a[side], a[next], b[next], a[side], b[next], b[side]]) {
+      const startNormal = smoothNormal(faceNormals[i][side], faceNormals[i - 1]?.[side]);
+      const endNormal = smoothNormal(faceNormals[i][side], faceNormals[i + 1]?.[side]);
+      const vertices = [a[side], a[next], b[next], a[side], b[next], b[side]];
+      for (const [index, vertex] of vertices.entries()) {
         positions.push(...vertex);
         uv.push(...pineWoodUv(vertex[2], side % 2 ? vertex[1] : vertex[0]));
+        normals.push(...(index === 0 || index === 1 || index === 3 ? startNormal : endNormal).toArray());
       }
     }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  geometry.computeVertexNormals();
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   return geometry;
 }
