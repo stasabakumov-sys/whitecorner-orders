@@ -1,5 +1,5 @@
 <section class="page">
-  <h1>Constructor</h1>
+  @if(showHeading){<h1>Constructor</h1>}
   <p class="intro">{{fixedDimensions ? 'Bottom dimensions come from saved Cart packaging.' : 'Enter the finished bottom dimensions in millimetres.'}} The bottom and lid are created together; the lid is 10 mm longer and wider, with the same depth.</p>
   <div class="controls">
     <label for="box-length">L · length, mm<input id="box-length" type="number" min="0.1" step="0.1" [disabled]="fixedDimensions" [(ngModel)]="length" (ngModelChange)="update()"></label>
@@ -40,6 +40,7 @@
     @if(rdValidation){<p class="error" role="alert">{{rdValidation}} Open RD Settings to correct it.</p>}
     <div class="controls rd-controls">
       <button type="button" (click)="generateRd()" [disabled]="!net || !!rdValidation || rdBusy">{{rdBusy ? 'Generating RD…' : 'Generate two RD files'}}</button>
+      @if(customCut){<button type="button" (click)="customCutRequested.emit()" [disabled]="!net || !!rdValidation || rdBusy">Send to Custom cut</button>}
     </div>
     @if(rdProgress){<p class="measure" role="status">{{rdProgress}}</p>}
     @if(rdError){<p class="error" role="alert">{{rdError}}</p>}

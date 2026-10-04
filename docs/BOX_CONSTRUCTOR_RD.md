@@ -117,3 +117,22 @@ from a simulated save failure, and verified the separate editable Constructor.
 The dialog had no horizontal overflow at 390 px. Screenshots and command logs
 are local review artifacts. No production migration, deployment or laser
 transfer was performed.
+
+## Constructor tabs and Custom cut
+
+The independent Constructor has Card box (the current editor), Small box and
+Backdrop box tabs. The latter two are empty until their logic is implemented.
+Switching tabs keeps Card box inputs, settings and generated files.
+
+Managers can press Send to Custom cut and review a separate confirmation.
+Cancel preserves the drawing. Confirm generates RD if needed, uploads one SVG
+and two RD files privately, then creates a Custom job atomically. Each RD has
+2 copies. A failed save keeps the original request for idempotent Retry.
+Open Custom jobs goes directly to Manage Packing's Custom tab. Sending that
+saved job to Packing work remains a separate action in Custom.
+
+Migration `20261004000100_constructor_custom_jobs.sql` enables SVG references
+in the existing private Custom drawing library and adds manager-only atomic
+creation with a private retry receipt. Existing jobs and task snapshots stay
+unchanged. Generated SVG is reference material; only RD enters the cutting
+workflow. No laser upload or cutting starts from Constructor.
