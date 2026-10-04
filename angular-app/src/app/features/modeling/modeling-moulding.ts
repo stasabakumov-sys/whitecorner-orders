@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { pineWoodUv } from './modeling-textures';
 
 // Decorative pine panel mould, 31 mm wide and 15 mm deep. The curved face is
 // approximated from the supplied reference; the four rails meet at mitres.
@@ -42,7 +41,10 @@ export function createFrontMoulding(lengthMm: number, heightMm: number): THREE.B
       const vertices = [a[side], a[next], b[next], a[side], b[next], b[side]];
       for (const [index, vertex] of vertices.entries()) {
         positions.push(...vertex);
-        uv.push(...pineWoodUv(vertex[2], side % 2 ? vertex[1] : vertex[0]));
+        // Width across the contour, rather than its changing depth: depth-based
+        // UVs fold back on every bead and turn straight grain into repeated waves.
+        const width = index === 0 || index === 1 || index === 3 ? points[i].x : points[i + 1].x;
+        uv.push(0.72 + width / 0.031 * 0.16, 0.12 + (side % 2 ? vertex[1] : vertex[0]) * 0.22);
         normals.push(...(index === 0 || index === 1 || index === 3 ? startNormal : endNormal).toArray());
       }
     }
