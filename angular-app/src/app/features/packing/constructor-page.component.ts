@@ -18,7 +18,9 @@ import {HubMembersService} from '../../core/services/hub-members.service';
       <fieldset [disabled]="sender.busy||!!sender.pending"><app-box-constructor #editor [showHeading]="false" [customCut]="members.manager()" (customCutRequested)="sender.open()" /></fieldset>
       <app-constructor-custom-send #sender [editor]="editor" />
     </section>
-    <section id="constructor-panel-small" role="tabpanel" aria-labelledby="constructor-tab-small" [hidden]="active!=='small'"></section>
+    <section id="constructor-panel-small" role="tabpanel" aria-labelledby="constructor-tab-small" [hidden]="active!=='small'">
+      <app-box-constructor [showHeading]="false" boxType="small" [initialDimensions]="smallDimensions" />
+    </section>
     <section id="constructor-panel-backdrop" role="tabpanel" aria-labelledby="constructor-tab-backdrop" [hidden]="active!=='backdrop'"></section>
   `,
   styles: [`
@@ -34,6 +36,7 @@ export class ConstructorPageComponent {
   constructor(readonly members:HubMembersService){}
   readonly tabs=[{id:'card',label:'Card box'},{id:'small',label:'Small box'},{id:'backdrop',label:'Backdrop box'}];
   active='card';
+  readonly smallDimensions={length:270,width:140,depth:140};
   navigate(event:KeyboardEvent,id:string):void {
     const index=this.tabs.findIndex(tab=>tab.id===id);
     const next=event.key==='ArrowRight'?(index+1)%3:event.key==='ArrowLeft'?(index+2)%3:event.key==='Home'?0:event.key==='End'?2:-1;

@@ -20,6 +20,7 @@ export interface BoxDrawing {
   gap: number;
   cuts: Line[];
   folds: Line[];
+  cutPaths?: string[];
   parts?: BoxDrawingPart[];
 }
 
@@ -109,7 +110,7 @@ export function exportBoxSvg(drawing: BoxDrawing): string {
   const n = drawingNumber;
   const lines = (items: Line[]) => items.map(line => `<line x1="${n(line.from[0])}" y1="${n(line.from[1])}" x2="${n(line.to[0])}" y2="${n(line.to[1])}"/>`).join('\n');
   const groups = (view: BoxDrawing, prefix = '') => `<g id="${prefix}Cut" fill="none" stroke="#ff0000" stroke-width="0.2">
-${lines(view.cuts)}
+${view.cutPaths ? view.cutPaths.map(d => `<path d="${d}"/>`).join('\n') : lines(view.cuts)}
 </g>
 <g id="${prefix}Fold" fill="none" stroke="#45d6ff" stroke-width="0.264583">
 ${lines(view.folds)}

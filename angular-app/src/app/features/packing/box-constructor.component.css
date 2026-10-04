@@ -9,3 +9,4 @@
 @media(max-width:800px){.parts{grid-template-columns:minmax(0,1fr)}}
 .rd-section{margin:20px 0}.rd-section h2{font-size:1rem;margin:0}.rd-controls{margin-top:14px}.rd-layer{width:40px;align-self:center}.rd-section .measure{max-width:900px}
 .rd-settings>summary{width:fit-content;box-sizing:border-box;min-height:38px;padding:9px 12px;border:1px solid var(--wc-border);border-radius:8px;background:#fff;cursor:pointer;font-size:.85rem}.rd-settings>summary:focus-visible{outline:2px solid #32a69a;outline-offset:2px}
+.preview path{vector-effect:non-scaling-stroke;stroke-width:1.5;fill:none}
