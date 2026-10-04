@@ -5,8 +5,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { HubMembersService } from '../../core/services/hub-members.service';
 import { resizePlywoodPosition } from './modeling-geometry';
-import { createRoundedPart, RoundingProfile } from './modeling-rounding';
+import { createRoundedPart, keepTrimJointSquare, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
+import { pineWoodUv } from './modeling-textures';
 
 interface ModelRecord {
   model_path: string | null;
@@ -338,7 +339,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const geometries: THREE.BufferGeometry[] = [];
     try {
       const nodes = this.sourceParts.map(part => {
-        if (!raw) {
+        if (!raw || /^(Top|Buttom|Bottom)[ _]part1$/i.test(part.name)) {
           const copy = part.clone(true);
           copy.traverse(node => {
             if (!(node instanceof THREE.Mesh)) return;
@@ -360,6 +361,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         });
         if (!profile) throw new Error('В GLB отсутствует контур детали. Загрузите обновлённую модель.');
         const geometry = createRoundedPart(profile, raw);
+        if (/^(Top|Buttom|Bottom)[ _]part2$/i.test(name)) keepTrimJointSquare(geometry, profile, raw);
         geometries.push(geometry);
         const face = materials.find(material => !/plywood[ _]edge$/i.test(material.name)) || materials[0];
         const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
@@ -524,9 +526,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
       if (pine && this.modelPineTexture) {
         const frontOrRear = z <= 0.01901 || z >= 0.58099;
-        // Rotate the pine grain 90 degrees so it follows each rail.
-        uv[i * 2] = (ny > 0.5 ? frontOrRear ? x : z : nx > 0.5 ? z : x) / 1.2;
-        uv[i * 2 + 1] = -(ny > 0.5 ? frontOrRear ? z : x : y) / 0.6;
+        // Pine grain runs vertically in the source image: V follows the rail.
+        const [u, v] = pineWoodUv(ny > 0.5 ? frontOrRear ? z : x : y,
+          ny > 0.5 ? frontOrRear ? x : z : nx > 0.5 ? z : x);
+        uv[i * 2] = u;
+        uv[i * 2 + 1] = v;
       } else if (useEdge && this.modelPlywoodEdgeTexture) {
         // The edge image has horizontal layers: V crosses the panel thickness.
         // A 120 mm tile keeps the veneers at approximately 2 mm per layer.

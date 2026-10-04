@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createRoundedPart, RoundingProfile } from './modeling-rounding';
+import { createRoundedPart, keepTrimJointSquare, RoundingProfile } from './modeling-rounding';
 import { resizePlywoodPosition } from './modeling-geometry';
 
 describe('Wooden part rounding', () => {
@@ -28,5 +28,20 @@ describe('Wooden part rounding', () => {
       expect(bottomArc[1] - bottom[1]).toBeCloseTo(0.003, 8);
       expect(top[1] - topArc[1]).toBeCloseTo(0.003, 8);
     }
+  });
+  it('keeps the inner pine border flush against its panel', () => {
+    const trim = { ...profile, thickness: 0.042, holes: [[[0.019, 0.019], [1.181, 0.019], [1.181, 0.581], [0.019, 0.581]]] };
+    const geometry = createRoundedPart(trim, 3);
+    keepTrimJointSquare(geometry, trim, 3);
+    const positions = geometry.getAttribute('position');
+    let jointVertices = 0;
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i), z = positions.getZ(i);
+      if (Math.abs(x - 0.019) < 0.006 && z >= 0.0189 && z <= 0.5811) {
+        expect(x).toBeCloseTo(0.019, 6); jointVertices++;
+      }
+    }
+    expect(jointVertices).toBeGreaterThan(0);
+    geometry.dispose();
   });
 });

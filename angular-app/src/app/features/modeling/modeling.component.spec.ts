@@ -86,6 +86,27 @@ describe('Modeling dimensions', () => {
 });
 
 describe('Plywood finishes', () => {
+  it('runs pine grain along rails and plywood layers along vertical edges', () => {
+    const { component } = setup();
+    const editor = component as any;
+    editor.modelPineTexture = new THREE.Texture();
+    editor.modelPlywoodEdgeTexture = new THREE.Texture();
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute([0.1, 0.1, 0.02, 1.1, 0.1, 0.02], 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, -1, 0, 0, -1], 3));
+    editor.addWoodUvs(geometry, 'Buttom part2', false, true);
+    let uv = geometry.getAttribute('uv');
+    expect(uv.getX(0)).toBeCloseTo(uv.getX(1));
+    expect(uv.getY(1)).toBeGreaterThan(uv.getY(0));
+    for (const name of ['Front part1', 'Left side part1', 'Right side part2', 'Front part2']) {
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute([0.03, 0.11, 0.02, 0.03, 0.885, 0.02], 3));
+      editor.addWoodUvs(geometry, name, true);
+      uv = geometry.getAttribute('uv');
+      expect(uv.getY(0)).toBeCloseTo(uv.getY(1));
+      expect(uv.getX(1)).toBeGreaterThan(uv.getX(0));
+    }
+    geometry.dispose();
+  });
   it('uses the embedded birch texture for RAW and varnished plywood and restores it after painting', () => {
     const { component } = setup();
     const editor = component as any;

@@ -70,3 +70,37 @@ export function createRoundedPart(profile: RoundingProfile, radiusMm: number): T
   geometry.userData['plywoodFacesAndEdges'] = true;
   return geometry;
 }
+
+// Pine borders surround the panel. Their inner faces must remain square so
+// the tabletop and bottom panel meet them without a rounded groove or gap.
+export function keepTrimJointSquare(geometry: THREE.BufferGeometry, profile: RoundingProfile, radiusMm: number): void {
+  if (profile.axis !== 'y' || profile.holes.length !== 1) return;
+  const hole = profile.holes[0];
+  const left = Math.min(...hole.map(p => p[0])), right = Math.max(...hole.map(p => p[0]));
+  const front = Math.min(...hole.map(p => p[1])), rear = Math.max(...hole.map(p => p[1]));
+  const tolerance = radiusMm / 1000 * 2 + 1e-6;
+  const positions = geometry.getAttribute('position');
+  const changed = new Set<number>();
+  for (let i = 0; i < positions.count; i++) {
+    let x = positions.getX(i), z = positions.getZ(i);
+    let adjusted = false;
+    if (z >= front - tolerance && z <= rear + tolerance) {
+      if (Math.abs(x - left) <= tolerance) { x = left; adjusted = true; }
+      else if (Math.abs(x - right) <= tolerance) { x = right; adjusted = true; }
+    }
+    if (x >= left - tolerance && x <= right + tolerance) {
+      if (Math.abs(z - front) <= tolerance) { z = front; adjusted = true; }
+      else if (Math.abs(z - rear) <= tolerance) { z = rear; adjusted = true; }
+    }
+    if (adjusted) {
+      positions.setXYZ(i, x, positions.getY(i), z);
+      changed.add(Math.floor(i / 3));
+    }
+  }
+  const originalNormals = geometry.getAttribute('normal').clone();
+  geometry.computeVertexNormals();
+  const normals = geometry.getAttribute('normal');
+  for (let i = 0; i < normals.count; i++) {
+    if (!changed.has(Math.floor(i / 3))) normals.setXYZ(i, originalNormals.getX(i), originalNormals.getY(i), originalNormals.getZ(i));
+  }
+}
