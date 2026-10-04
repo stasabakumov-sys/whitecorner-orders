@@ -67,7 +67,7 @@ describe('Modeling dimensions', () => {
     expect(after / before).toBeCloseTo(1500 / 1200);
   });
 
-  it('limits length to 120–150 cm and height to 900–1000 mm', () => {
+  it('limits length to 120–150 cm and height to 85–100 cm in 5 cm steps', () => {
     const { component } = setup();
     component.setDimension('width', '2000');
     component.setDimension('height', '1300');
@@ -76,7 +76,9 @@ describe('Modeling dimensions', () => {
     component.setDimension('width', '800');
     component.setDimension('height', '650');
     expect(component.width()).toBe(1200);
-    expect(component.height()).toBe(900);
+    expect(component.height()).toBe(850);
+    component.setDimension('height', '942');
+    expect(component.height()).toBe(950);
     component.setDimension('width', '1340');
     expect(component.width()).toBe(1300);
     expect(component.depth()).toBe(600);
@@ -89,8 +91,10 @@ describe('Plywood finishes', () => {
     const editor = component as any;
     const birch = new THREE.Texture();
     const layers = new THREE.Texture();
+    const pine = new THREE.Texture();
     editor.modelPlywoodTexture = birch;
     editor.modelPlywoodEdgeTexture = layers;
+    editor.modelPineTexture = pine;
     editor.rawTexture = new THREE.Texture();
     editor.oakTexture = new THREE.Texture();
     editor.plywoodTexture = new THREE.Texture();
@@ -99,29 +103,39 @@ describe('Plywood finishes', () => {
     const top = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
     const edge = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
     const topEdge = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
+    const trim = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
     front.name = 'Front_part1';
     top.name = 'Top_part1';
     edge.name = 'Front_part1_1';
     edge.material.name = 'Front part1 plywood edge';
     topEdge.name = 'Top_part1_1';
     topEdge.material.name = 'Top part1 plywood edge';
-    editor.body.add(front, top, edge, topEdge);
+    trim.name = 'Top_part2';
+    trim.material.name = 'Top part2 pine trim';
+    editor.body.add(front, top, edge, topEdge, trim);
     component.setRawBody();
     expect(front.material.map).toBe(birch);
     expect(top.material.map).toBe(birch);
     expect(edge.material.map).toBe(layers);
+    expect(edge.material.color.r).toBeCloseTo(1.15);
     expect(topEdge.material.map).toBe(layers);
+    expect(trim.material.map).toBe(pine);
+    expect(trim.material.color.r).toBeCloseTo(1.15);
+    expect(trim.material.color.b).toBeCloseTo(2.4);
     expect(top.material.roughness).toBeLessThan(front.material.roughness);
     component.setBodyColor('#33383e');
     expect(front.material.map).toBeNull();
     expect(edge.material.map).toBeNull();
+    expect(trim.material.map).toBeNull();
     expect(top.material.map).toBe(birch);
     component.setRawBody();
     expect(front.material.map).toBe(birch);
     expect(edge.material.map).toBe(layers);
+    expect(trim.material.map).toBe(pine);
     component.setTopFinish('oak');
     expect(top.material.map).toBe(editor.oakTexture);
     expect(topEdge.material.map).toBe(editor.oakTexture);
+    expect(trim.material.map).toBe(pine);
     expect(front.material.map).toBe(birch);
   });
 });

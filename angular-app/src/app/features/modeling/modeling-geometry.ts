@@ -18,7 +18,8 @@ export function resizePlywoodPosition(
     nextY = y + heightChange / 2;
   } else {
     // Upright panels span between the unchanged 15 mm bottom and top panels.
-    nextY = y + heightChange * (y - 0.11) / (0.885 - 0.11);
+    nextY = y <= 0.113 ? y : y >= 0.882 ? y + heightChange
+      : y + heightChange * (y - 0.113) / (0.882 - 0.113);
   }
   return [nextX, nextY, z];
 }
