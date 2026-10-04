@@ -21,6 +21,8 @@ export const routes:Routes=[
   {path:'product-costing',loadComponent:()=>import('./features/costing/product-costing.component').then(m=>m.ProductCostingComponent)},
   {path:'production',loadComponent:()=>import('./features/production-board/production-board.component').then(m=>m.ProductionBoardComponent)},
   {path:'shop-floor',loadComponent:()=>import('./features/shop-floor/shop-floor.component').then(m=>m.ShopFloorComponent)},
+  {path:'modeling',pathMatch:'full',redirectTo:'modeling/3d-models'},
+  {path:'modeling/3d-models',loadComponent:()=>import('./features/modeling/modeling.component').then(m=>m.ModelingComponent)},
   {path:'packing',pathMatch:'full',redirectTo:'packing/manage'},
   {path:'packing/manage',loadComponent:()=>import('./features/packing/packing-manage.component').then(m=>m.PackingManageComponent)},
   {path:'packing/constructor',loadComponent:()=>import('./features/packing/constructor-page.component').then(m=>m.ConstructorPageComponent)},

@@ -1,0 +1,73 @@
+<section class="modeling-page">
+  <header class="page-head">
+    <div>
+      <h1>Modeling</h1>
+      <p>3D Models / Classic Bar / Plywood</p>
+    </div>
+    <span class="model-tag">Classic Bar / Plywood</span>
+  </header>
+
+  <div class="workspace">
+    <div class="viewer-card">
+      <div class="viewer-toolbar">
+        <strong>3D preview</strong>
+        <span>{{width()}} × {{depth()}} × {{height()}} mm</span>
+      </div>
+      <div #canvasHost class="canvas-host" role="img" aria-label="Интерактивная 3D-модель Classic Bar / Plywood"></div>
+      @if (loading()) { <div class="viewer-status">Загрузка модели…</div> }
+      @if (!loading() && !fileName()) { <div class="viewer-status">Выберите GLB-файл модели, чтобы начать просмотр</div> }
+      <div class="viewer-footer"><span>Перетащите мышью для поворота · колёсико для масштаба</span><span>{{fileName()}}</span></div>
+    </div>
+
+    <div class="settings">
+      <section class="setting-card">
+        <div class="setting-title"><h2>Dimensions</h2><button type="button" class="text-action" (click)="resetDimensions()">Reset</button></div>
+        <p class="help">Общие габариты тележки. Колёса остаются высотой 95 мм.</p>
+        <label for="model-width">Width <output>{{width()}} mm</output></label>
+        <input id="model-width" type="range" min="800" max="2000" step="10" [value]="width()" (input)="setDimension('width', $any($event.target).value)">
+        <label for="model-depth">Depth <output>{{depth()}} mm</output></label>
+        <input id="model-depth" type="range" min="400" max="1000" step="10" [value]="depth()" (input)="setDimension('depth', $any($event.target).value)">
+        <label for="model-height">Height <output>{{height()}} mm</output></label>
+        <input id="model-height" type="range" min="650" max="1300" step="10" [value]="height()" (input)="setDimension('height', $any($event.target).value)">
+      </section>
+
+      <section class="setting-card">
+        <h2>Cart body colour</h2>
+        <p class="help">RAW показывает фактуру фанеры. Выбор цвета окрашивает корпус.</p>
+        <div class="swatches" role="group" aria-label="Цвет корпуса">
+          <button type="button" class="raw-choice" [class.selected]="rawBody()" (click)="setRawBody()">RAW plywood</button>
+          <button type="button" class="swatch" style="--swatch:#f5f3ed" [class.selected]="bodyColor()==='#f5f3ed'" (click)="setBodyColor('#f5f3ed')" title="White" aria-label="White"></button>
+          <button type="button" class="swatch" style="--swatch:#33383e" [class.selected]="bodyColor()==='#33383e'" (click)="setBodyColor('#33383e')" title="Charcoal" aria-label="Charcoal"></button>
+          <button type="button" class="swatch" style="--swatch:#708471" [class.selected]="bodyColor()==='#708471'" (click)="setBodyColor('#708471')" title="Sage" aria-label="Sage"></button>
+          <button type="button" class="swatch" style="--swatch:#aa6553" [class.selected]="bodyColor()==='#aa6553'" (click)="setBodyColor('#aa6553')" title="Terracotta" aria-label="Terracotta"></button>
+          <label class="custom-colour" title="Custom colour">Custom <input type="color" [value]="bodyColor()" (input)="setBodyColor($any($event.target).value)" aria-label="Выбрать цвет корпуса"></label>
+        </div>
+        <div class="colour-value"><span class="colour-dot" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>{{rawBody() ? 'Raw plywood' : bodyColor()}}</div>
+      </section>
+
+      <section class="setting-card">
+        <h2>Table top finish</h2>
+        <p class="help">Выберите отделку столешницы.</p>
+        <div class="finish-options" role="group" aria-label="Отделка столешницы">
+          <button type="button" [class.selected]="topFinish()==='body'" (click)="setTopFinish('body')"><span class="finish-chip" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>In cart finish / colour</button>
+          <button type="button" [class.selected]="topFinish()==='oak'" (click)="setTopFinish('oak')"><span class="finish-chip oak"></span>Tasmanian oak</button>
+          <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>Varnished plywood</button>
+        </div>
+      </section>
+
+      <section class="setting-card model-file">
+        <h2>Model file</h2>
+        <p class="help">GLB-файл хранится в закрытом разделе Hub. Изменения габаритов и цвета сейчас служат для просмотра.</p>
+        <input #fileInput type="file" accept=".glb,model/gltf-binary" class="visually-hidden" (change)="onFileChange($event)">
+        <div class="file-actions">
+          <button type="button" class="icon-action" (click)="fileInput.click()" title="Выбрать GLB-файл" aria-label="Выбрать GLB-файл">＋</button>
+          @if (members.manager()) {<button type="button" class="icon-action primary" [disabled]="!selectedFile() || saving()" (click)="saveModel()" title="Сохранить модель в Hub" aria-label="Сохранить модель в Hub">▣</button>}
+          <span>{{selectedFile()?.name || fileName() || 'Файл не выбран'}}</span>
+        </div>
+        @if (saving()) {<p class="progress" role="status">Сохранение модели…</p>}
+        @if (notice()) {<p class="notice" role="status">{{notice()}}</p>}
+        @if (error()) {<p class="error" role="alert">{{error()}}</p>}
+      </section>
+    </div>
+  </div>
+</section>

@@ -34,6 +34,7 @@ const inviteEntry = new URLSearchParams(window.location.hash.replace(/^#/, '')).
         <a routerLink="/production" routerLinkActive="active"><span>▦</span>Production Board</a>
         <a routerLink="/shop-floor" routerLinkActive="active"><span>◷</span>Shop Floor</a>
         <details class="nav-menu" [open]="router.url.startsWith('/packing')"><summary><span>▣</span>Box cutting</summary><div class="nav-submenu">@if(members.manager()){<a routerLink="/packing/manage" routerLinkActive="active">Manage cutting</a>}<a routerLink="/packing/constructor" routerLinkActive="active">Constructor</a><a routerLink="/packing/work" routerLinkActive="active">Cutting work</a></div></details>
+        <details class="nav-menu" [open]="router.url.startsWith('/modeling')"><summary><span>⬡</span>Modeling</summary><div class="nav-submenu"><a routerLink="/modeling/3d-models" routerLinkActive="active">3D Models</a></div></details>
         <details class="nav-menu" [open]="isReferenceRoute()"><summary><span>▤</span>Reference</summary><div class="nav-submenu">
           <a routerLink="/materials" routerLinkActive="active">Materials</a>
           <a routerLink="/work-rates" routerLinkActive="active">Work Rates</a>
