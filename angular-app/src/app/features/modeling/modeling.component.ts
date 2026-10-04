@@ -46,7 +46,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly width = signal(1200);
   readonly depth = signal(600);
   readonly height = signal(900);
-  readonly rounding = signal(0);
+  readonly rounding = signal(1.5);
   readonly moulding = signal(true);
   private frontMoulding?: THREE.Mesh;
   readonly roundingSupported = signal(false);
@@ -88,6 +88,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private modelPlywoodTexture?: THREE.Texture;
   private modelPlywoodEdgeTexture?: THREE.Texture;
   private modelPineTexture?: THREE.Texture;
+  private modelPaintBumpTexture?: THREE.Texture;
 
   constructor(readonly members: HubMembersService, private readonly db: SupabaseService) {}
 
@@ -190,7 +191,17 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const version = ++this.loadVersion;
     const gltf = await this.loader.loadAsync(url);
     if (!this.alive || version !== this.loadVersion) return;
+    const bumpIndex = gltf.userData['paintBumpTexture'];
+    const paintBump = Number.isInteger(bumpIndex) && bumpIndex >= 0
+      ? await gltf.parser.getDependency('texture', bumpIndex) as THREE.Texture : undefined;
+    if (!this.alive || version !== this.loadVersion) { paintBump?.dispose(); return; }
     this.disposeModel();
+    this.modelPaintBumpTexture = paintBump;
+    if (paintBump) {
+      paintBump.colorSpace = THREE.NoColorSpace;
+      paintBump.wrapS = paintBump.wrapT = THREE.RepeatWrapping;
+      paintBump.channel = 1;
+    }
     this.model = new THREE.Group();
     this.body = new THREE.Group();
     this.casters.clear();
@@ -212,12 +223,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     }
     this.model.add(this.body);
     this.model.traverse(node => {
-      if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = true; }
+      if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = false; }
     });
     this.body.traverse(node => {
       if (node instanceof THREE.Mesh) {
         node.castShadow = true;
-        node.receiveShadow = true;
+        node.receiveShadow = false;
         this.originalPositions.set(node, node.geometry.getAttribute('position').clone());
         this.sourcePositions.set(node.geometry, node.geometry.getAttribute('position').clone());
         const materials = Array.isArray(node.material) ? node.material : [node.material];
@@ -241,6 +252,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.scene.add(this.turntable);
     this.applyDimensions();
     this.applyFinishes();
+    if (this.roundingSupported()) await this.setRounding(1.5);
     this.focusCamera();
   }
 
@@ -271,6 +283,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.modelPlywoodEdgeTexture = undefined;
     this.modelPineTexture?.dispose();
     this.modelPineTexture = undefined;
+    this.modelPaintBumpTexture?.dispose();
+    this.modelPaintBumpTexture = undefined;
   }
 
   onFileChange(event: Event): void {
@@ -398,7 +412,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
         const mesh = new THREE.Mesh(geometry, [face, edge]);
         mesh.castShadow = true;
-        mesh.receiveShadow = true;
+        mesh.receiveShadow = false;
         mesh.name = name;
         mesh.userData['plywoodPart'] = name;
         return mesh;
@@ -501,17 +515,20 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       for (const material of materials) {
         if (!(material instanceof THREE.MeshStandardMaterial)) continue;
         const pine = /pine[ _]trim$/i.test(material.name);
-        const finish = isTopPanelName(partName) && !pine ? this.topFinish() : 'body';
+        const finish = isTopPanelName(partName) ? this.topFinish() : 'body';
         const edge = /plywood[ _]edge$/i.test(material.name);
         const plywood = (pine ? this.modelPineTexture : edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
         const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? plywood || this.rawTexture : this.rawBody() ? plywood || this.rawTexture : null;
         const source = map ? new THREE.Color('#ffffff') : body;
         if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry, partName, edge, pine);
+        if (!map && this.modelPaintBumpTexture && !node.geometry.hasAttribute('uv1')) this.addPaintUvs(node.geometry);
         material.color.copy(source);
         if (map && finish !== 'oak' && !pine && !edge) material.color.multiplyScalar(1.05);
-        if (edge && map && finish !== 'oak') material.color.multiplyScalar(1.08);
-        if (pine && map) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
+        if (edge && map && finish !== 'oak') material.color.multiplyScalar(1.30);
+        if (pine && map && finish !== 'oak') material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
         material.map = map;
+        material.bumpMap = map ? null : this.modelPaintBumpTexture || null;
+        material.bumpScale = 0.00015;
         material.roughness = finish === 'oak' ? 0.55 : 0.78;
         material.metalness = 0;
         material.needsUpdate = true;
@@ -540,9 +557,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     });
     if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
     this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height()), material);
+    material.bumpMap = this.rawBody() ? null : this.modelPaintBumpTexture || null;
+    material.bumpScale = 0.00015;
+    this.addPaintUvs(this.frontMoulding.geometry);
     this.frontMoulding.name = 'Front moulding';
     this.frontMoulding.castShadow = true;
-    this.frontMoulding.receiveShadow = true;
+    this.frontMoulding.receiveShadow = false;
     this.model.add(this.frontMoulding);
   }
 
@@ -589,6 +609,18 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       }
     }
     geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    this.addPaintUvs(geometry);
+  }
+
+  private addPaintUvs(geometry: THREE.BufferGeometry): void {
+    const positions = geometry.getAttribute('position'), normals = geometry.getAttribute('normal');
+    const uv = new Float32Array(positions.count * 2);
+    for (let i = 0; i < positions.count; i++) {
+      const nx = Math.abs(normals.getX(i)), ny = Math.abs(normals.getY(i));
+      uv[i * 2] = (nx > 0.5 ? positions.getZ(i) : positions.getX(i)) / 0.12;
+      uv[i * 2 + 1] = (ny > 0.5 ? positions.getZ(i) : positions.getY(i)) / 0.12;
+    }
+    geometry.setAttribute('uv1', new THREE.BufferAttribute(uv, 2));
   }
 
   private woodTexture(base: string, grain: string, strength: number): THREE.CanvasTexture {
