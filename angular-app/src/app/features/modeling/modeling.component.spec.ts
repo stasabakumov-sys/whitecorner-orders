@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { ModelingComponent, casterGroupKey, isTopPanelName } from './modeling.component';
 import { HubMembersService } from '../../core/services/hub-members.service';
 import { SupabaseService } from '../../core/services/supabase.service';
+import { TestBed } from '@angular/core/testing';
 
 function setup(uploadError: Error | null = null) {
   const upload = vi.fn().mockResolvedValue({ error: uploadError });
@@ -59,6 +60,25 @@ describe('Independent editor models', () => {
     model_path: null, model_filename: null, base_width_mm: 1200, base_depth_mm: 600, base_body_height_mm: 805, caster_height_mm: 95 };
   const roof = { ...classic, slug: 'decorative-wheel-roof-cart-mdf', product_name: 'Cart with decorative wheels & roof',
     material_name: 'MDF', base_body_height_mm: 827, caster_height_mm: 73 };
+
+  it('keeps the picker aligned with the open model when its options arrive asynchronously', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ imports: [ModelingComponent], providers: [
+      { provide: HubMembersService, useValue: { manager: () => true } },
+      { provide: SupabaseService, useValue: { client: {} } },
+    ] });
+    const fixture = TestBed.createComponent(ModelingComponent);
+    fixture.componentInstance.ngAfterViewInit = () => {};
+    try {
+      fixture.detectChanges();
+      fixture.componentInstance.models.set([roof, classic]);
+      await fixture.whenStable(); fixture.detectChanges();
+      const picker = fixture.nativeElement.querySelector('#model-choice') as HTMLSelectElement;
+      expect(picker.value).toBe(classic.slug);
+      await fixture.componentInstance.selectModel(roof.slug);
+      fixture.detectChanges(); expect(picker.value).toBe(roof.slug);
+    } finally { fixture.destroy(); TestBed.resetTestingModule(); }
+  });
 
   it('loads the roof dimensions independently and resets Classic when switching back', async () => {
     const { component } = setup();
