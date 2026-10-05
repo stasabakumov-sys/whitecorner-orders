@@ -22,7 +22,7 @@
     <div class="settings">
       <section class="setting-card assembly-card">
         <div class="setting-title"><h2>Parts & assembly</h2><button type="button" class="text-action" (click)="restoreAssembly()">Return all</button></div>
-        <p class="help">Select a part and drag its arrow. Clear Top and Bottom by 60 mm to release the panels. @if (isClassic()) { Shelf stays fixed. } @else { Roof, supports, legs and wheels stay fixed. }</p>
+        <p class="help">Select a part and drag its arrow. Clear Top and Bottom by 60 mm to release the panels. @if (isClassic()) { Shelf stays fixed. } @else { Shelf, roof, supports, legs and wheels stay fixed. }</p>
         <div class="length-options paint-options" role="group" aria-label="Assembly view">
           <button type="button" [class.selected]="!assemblyMode()" [attr.aria-pressed]="!assemblyMode()" (click)="setAssemblyMode(false)">Rotate</button>
           <button type="button" [class.selected]="assemblyMode()" [attr.aria-pressed]="assemblyMode()" (click)="setAssemblyMode(true)">Select parts</button>

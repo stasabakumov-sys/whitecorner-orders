@@ -5,7 +5,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { HubMembersService } from '../../core/services/hub-members.service';
 import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
-import { createRoundedPart, keepTrimJointSquare, RoundingProfile } from './modeling-rounding';
+import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, roofPartJoints, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges } from './modeling-textures';
 import { ASSEMBLY_PARTS, AssemblyController, PartKey } from './modeling-assembly';
@@ -80,7 +80,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly assemblyRevision = signal(0);
   get parts() { return ASSEMBLY_PARTS.filter(part => this.isClassic()
     ? !['roof', 'posts', 'legs', 'decorative-wheels'].includes(part.key)
-    : part.key !== 'shelf'); }
+    : true); }
   private assembly?: AssemblyController;
 
   private readonly scene = new THREE.Scene();
@@ -451,10 +451,20 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     const geometries: THREE.BufferGeometry[] = [];
     try {
+      // CAD profiles and positions share model coordinates. Read the original
+      // positions so rotation, resized previews and assembly offsets do not
+      // alter which roof faces meet.
+      const roofJoints = roofPartJoints(this.sourceParts.map(part => {
+        const bounds = new THREE.Box3();
+        part.traverse(node => {
+          if (node instanceof THREE.Mesh) bounds.union(new THREE.Box3().setFromBufferAttribute(this.sourcePositions.get(node.geometry)!));
+        });
+        return { name: part.name, bounds };
+      }));
       const nodes = this.sourceParts.map(part => {
         let supported = false;
         part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) supported = true; });
-        if (!raw || !supported || /^(Top|Buttom|Bottom)[ _]part1$/i.test(part.name)) {
+        if (!raw || !supported || /^(Top|Buttom|Bottom)[ _](?:part)?1$/i.test(part.name)) {
           const copy = part.clone(true);
           copy.traverse(node => {
             if (!(node instanceof THREE.Mesh)) return;
@@ -477,6 +487,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         if (!profile) throw new Error('The GLB is missing a part profile. Upload an updated model.');
         const geometry = createRoundedPart(profile, raw);
         if (/^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name)) keepTrimJointSquare(geometry, profile, raw);
+        keepPartJointsSquare(geometry, roofJoints.get(name) || [], raw);
         geometries.push(geometry);
         const face = materials.find(material => !/plywood[ _]edge$/i.test(material.name)) || materials[0];
         const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
