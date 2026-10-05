@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { HubMembersService } from '../../core/services/hub-members.service';
-import { fitFurnitureBolts } from './modeling-hardware';
+import { fitFurnitureBolts, shortenCastorBrakes } from './modeling-hardware';
 import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
@@ -271,7 +271,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.model = new THREE.Group();
     this.body = new THREE.Group();
     this.casters.clear();
-    if (!this.isClassic()) fitFurnitureBolts(gltf.scene);
+    if (!this.isClassic()) { fitFurnitureBolts(gltf.scene); shortenCastorBrakes(gltf.scene); }
     const nodes = [...gltf.scene.children];
     for (const node of nodes) {
       const key = casterGroupKey(node.name);

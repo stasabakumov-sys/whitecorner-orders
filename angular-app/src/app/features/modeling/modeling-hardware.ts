@@ -39,3 +39,28 @@ export function fitFurnitureBolts(root: THREE.Object3D): void {
     root.add(neck);
   }
 }
+
+
+export function shortenCastorBrakes(root: THREE.Object3D): void {
+  const plates = new Map<string, number>();
+  root.traverse(node => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const match = /^(Caster_[LR]_(?:front|rear))_plate$/i.exec(node.name);
+    if (!match) return;
+    node.geometry.computeBoundingBox();
+    plates.set(match[1].toLowerCase(), node.geometry.boundingBox!.getCenter(new THREE.Vector3()).z);
+  });
+  root.traverse(node => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const match = /^(Caster_[LR]_(?:front|rear))_brake_(?:linkage|pedal)$/i.exec(node.name);
+    if (!match) return;
+    const center = plates.get(match[1].toLowerCase());
+    if (center === undefined) return;
+    const geometry = node.geometry.clone(), positions = geometry.getAttribute('position');
+    const anchor = center + .006;
+    for (let i = 0; i < positions.count; i++) positions.setZ(i, anchor + (positions.getZ(i) - anchor) * .65);
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals(); geometry.computeBoundingBox(); geometry.computeBoundingSphere();
+    node.geometry.dispose(); node.geometry = geometry;
+  });
+}
