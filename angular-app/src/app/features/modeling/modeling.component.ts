@@ -164,6 +164,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const span=Math.max(this.width(),this.depth(),this.overallHeight())/1000;
       const target=new THREE.Vector3(this.width()/2000,this.overallHeight()/2000,this.depth()/2000);
       const camera=new THREE.PerspectiveCamera(42,4/3,.01,30);
+      camera.zoom=1.25;camera.updateProjectionMatrix();
       camera.position.copy(target).add(new THREE.Vector3(span*1.05,span*.4,span*1.65));camera.lookAt(target);
       this.scene.background=new THREE.Color('#eceae8');renderer.setSize(960,720,false);
       const capture=(angle:number)=>{turntable.rotation.y=angle;this.scene.updateMatrixWorld(true);renderer.render(this.scene,camera);return renderer.domElement.toDataURL('image/png');};
