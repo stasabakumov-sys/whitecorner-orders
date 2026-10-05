@@ -1,0 +1,36 @@
+<div class="logo-actions">
+ <label class="upload">Upload PNG<input type="file" accept="image/png,.png" [disabled]="busy()" (change)="upload($event)" aria-label="Upload front panel logo PNG"></label>
+ @if(applied()){<button type="button" class="icon" aria-label="Edit placement" title="Edit placement" [disabled]="busy()" (click)="open()"><svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m15 4 5 5-11 11H4v-5L15 4Z"/></svg></button>}@else{<button type="button" [disabled]="!draft()||busy()" (click)="open()">Place logo</button>}
+ @if(applied()){<button class="icon" type="button" aria-label="Remove front logo" title="Remove front logo" (click)="remove()">×</button>}
+</div>
+@if(busy()){<p role="status">Reading PNG…</p>}
+@if(error()){<p class="error" role="alert">{{error()}}</p>}
+@if(notice()){<p role="status">{{notice()}}</p>}
+@if(applied();as logo){<p>{{logo.width.toFixed(1)}} × {{height(logo).toFixed(1)}} mm · left {{logo.x.toFixed(1)}} · top {{logo.y.toFixed(1)}}</p>}
+<dialog #editor aria-label="Front panel logo placement" (cancel)="cancel()">
+ <header><div><h2>Front panel logo</h2><p>Front view · mm · drag the logo to move</p></div><button class="icon" type="button" aria-label="Close logo placement" title="Close logo placement" (click)="cancel()">×</button></header>
+ @if(draft();as logo){
+ <div class="editor-body">
+  <div class="surface">
+   <svg class="panel" [attr.viewBox]="'0 0 '+panel().width+' '+panel().height" role="img" aria-label="Front panel with available logo placement area" (pointerdown)="start($event)" (pointermove)="dragMove($event)" (pointerup)="end()" (pointercancel)="end()">
+    <rect x="0" y="0" [attr.width]="panel().width" [attr.height]="panel().height" fill="#dedbd6" stroke="#7b8da5" stroke-width="2"/>
+    <rect [attr.x]="panel().inset" [attr.y]="panel().inset" [attr.width]="panel().width-2*panel().inset" [attr.height]="panel().height-2*panel().inset" fill="#fff" stroke="#7b8da5" stroke-dasharray="6 6"/>
+    <image [attr.href]="logo.png" [attr.x]="logo.x" [attr.y]="logo.y" [attr.width]="logo.width" [attr.height]="height(logo)"/>
+    <rect [attr.x]="logo.x" [attr.y]="logo.y" [attr.width]="logo.width" [attr.height]="height(logo)" fill="transparent" stroke="#1884e8" stroke-width="2"/>
+   </svg>
+  </div>
+  <aside>
+   <p>{{panel().width.toFixed(1)}} × {{panel().height.toFixed(1)}} mm</p>
+   <p>{{panel().inset ? 'Logo stays inside the frame.' : 'Full panel available.'}}</p>
+   <label>Width (mm)<input type="number" min="1" step="1" [value]="+logo.width.toFixed(1)" (input)="previewField('width',$any($event.target).value)" (change)="adjust('width',$any($event.target).value)" aria-label="Logo width in millimetres"></label>
+   <p>Height {{height(logo).toFixed(1)}} mm</p>
+   <div class="tools"><button type="button" title="Decrease logo size" aria-label="Decrease logo size" (click)="scale(1/1.1)">−</button><button type="button" title="Increase logo size" aria-label="Increase logo size" (click)="scale(1.1)">+</button></div>
+   <label>Left (mm)<input type="number" step="1" [value]="+logo.x.toFixed(1)" (input)="previewField('x',$any($event.target).value)" (change)="adjust('x',$any($event.target).value)" aria-label="Logo left offset in millimetres"></label>
+   <label>Top (mm)<input type="number" step="1" [value]="+logo.y.toFixed(1)" (input)="previewField('y',$any($event.target).value)" (change)="adjust('y',$any($event.target).value)" aria-label="Logo top offset in millimetres"></label>
+   <div class="tools"><button type="button" aria-label="Move logo left 5 mm" title="Move left 5 mm" (click)="move(-5,0)">←</button><button type="button" aria-label="Move logo up 5 mm" title="Move up 5 mm" (click)="move(0,-5)">↑</button><button type="button" aria-label="Move logo down 5 mm" title="Move down 5 mm" (click)="move(0,5)">↓</button><button type="button" aria-label="Move logo right 5 mm" title="Move right 5 mm" (click)="move(5,0)">→</button></div>
+   <button type="button" (click)="centre()">Centre</button>
+  </aside>
+ </div>
+ <footer><button type="button" (click)="download()">Download SVG</button><span>PNG embedded · dimensions in mm</span><button type="button" (click)="cancel()">Cancel</button><button class="apply" type="button" (click)="apply()">Apply logo</button></footer>
+ }
+</dialog>

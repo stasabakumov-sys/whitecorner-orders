@@ -11,6 +11,8 @@ import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
 import { readModelingCatalog, linkedModelProduct, catalogPricing, formatModelingPrice, ModelingCatalog, ConfigurationPricing } from './modeling-pricing';
 import { ModelingSectionComponent } from './modeling-section.component';
+import { ModelingLogoComponent } from './modeling-logo.component';
+import { LogoPlacement,fitLogo,logoHeight } from './modeling-logo';
 import type { ConfigurationDocument } from './modeling-configuration-pdf';
 import { shelfDrawingSvg, ShelfSupport } from './modeling-shelf-drawing';
 import { createHangingGlass, hangingGlassLayout } from './modeling-glasses';
@@ -47,7 +49,7 @@ export function isTopPanelName(name: string): boolean {
 @Component({
   selector: 'app-modeling',
   standalone: true,
-  imports: [ModelingSectionComponent],
+  imports: [ModelingSectionComponent,ModelingLogoComponent],
   templateUrl: './modeling.component.html',
   styleUrl: './modeling.component.css',
 })
@@ -144,6 +146,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         {label:'Front panel',value:this.isClassic()?(this.moulding()?'With moulding':'Plain'):this.frontStyle()==='shaker'?'Shaker':this.frontStyle()==='moulding'?'With moulding':'Plain'},
         {label:'Castors',value:'Ø'+(this.isClassic()?'75':'50')+' mm'},
         {label:'Shelf',value:this.shelfIncluded()?'Middle':'None'}];
+      if(this.frontLogo()){const logo=fitLogo(this.logoPanel(),this.frontLogo()!);fields.push({label:'Front logo',value:`${logo.width.toFixed(1)} x ${logoHeight(logo).toFixed(1)} mm · left ${logo.x.toFixed(1)} · top ${logo.y.toFixed(1)} mm`});}
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
       if(!this.isClassic())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
@@ -221,6 +224,36 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly moulding = signal(true);
   readonly frontStyle = signal<'shaker' | 'plain' | 'moulding'>('plain');
   private frontMoulding?: THREE.Mesh;
+  readonly frontLogo=signal<LogoPlacement|null>(null);
+  readonly logoError=signal('');
+  readonly logoBusy=signal(false);
+  readonly logoPanel=computed(()=>({width:this.width()-(this.isClassic()?38:32),height:this.height()-(this.isClassic()?125:255),inset:this.moulding()?121:!this.isClassic()&&this.frontStyle()==='shaker'?Math.max(73,70*(this.height()-255)/645+3):0}));
+  private logoMesh?:THREE.Mesh<THREE.PlaneGeometry,THREE.MeshStandardMaterial>;
+  private logoTexture?:THREE.Texture;
+  private logoVersion=0;
+  async placeFrontLogo(logo:LogoPlacement|null):Promise<void>{
+    const version=++this.logoVersion;this.logoError.set('');
+    if(!logo){this.frontLogo.set(null);this.logoBusy.set(false);this.logoMesh?.removeFromParent();this.logoMesh?.geometry.dispose();this.logoMesh?.material.dispose();this.logoMesh=undefined;this.logoTexture?.dispose();this.logoTexture=undefined;this.bindAssembly();return;}
+    this.logoBusy.set(true);
+    try {
+      const texture=await new THREE.TextureLoader().loadAsync(logo.png);
+      if(version!==this.logoVersion||!this.alive){texture.dispose();return;}
+      texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=Math.min(this.renderer?.capabilities.getMaxAnisotropy()||1,8);
+      this.logoTexture?.dispose();this.logoTexture=texture;this.frontLogo.set(logo);this.bindAssembly();
+    }catch(cause){if(version===this.logoVersion)this.logoError.set('Could not display the logo: '+this.message(cause)+'. Retry placing the PNG.');}
+    finally{if(version===this.logoVersion)this.logoBusy.set(false);}
+  }
+  private updateFrontLogo():void{
+    this.logoMesh?.removeFromParent();this.logoMesh?.geometry.dispose();this.logoMesh?.material.dispose();this.logoMesh=undefined;
+    const saved=this.frontLogo();if(!saved||!this.logoTexture||!this.model)return;
+    const panel=this.logoPanel(),logo=fitLogo(panel,saved),h=logoHeight(logo);
+    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(logo.width/1000,h/1000),new THREE.MeshStandardMaterial({map:this.logoTexture,transparent:true,alphaTest:.01,depthWrite:false,roughness:.8,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));
+    mesh.name='Front logo';
+    mesh.position.set(this.isClassic()?(this.width()-19-logo.x-logo.width/2)/1000:(16+logo.x+logo.width/2)/1000,(this.height()-(this.isClassic()?15:16)-logo.y-h/2)/1000,this.isClassic()?.0185:this.frontStyle()==='shaker'?.5725004:.5845004);
+    if(this.isClassic())mesh.rotation.y=Math.PI;
+    mesh.receiveShadow=true;this.logoMesh=mesh;this.model.add(mesh);
+  }
+
   readonly roofClosed = signal(false);
   private roofBottom?: THREE.Mesh;
   // Temporarily hide photographic scenes while their scale is calibrated.
@@ -553,6 +586,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.sourcePositions.clear();
     this.generatedGeometries = [];
     this.frontMoulding = undefined;
+    this.logoMesh = undefined;
     this.roofBottom = undefined;
     this.glassRacks = undefined;
     this.model = undefined;
@@ -839,6 +873,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   restorePart(): void { const key = this.selectedPart(); if (key) this.assembly?.restore(key); }
   restoreAssembly(): void { this.assembly?.restore(); }
   private bindAssembly(): void {
+    this.updateFrontLogo();
     if (!this.model || !this.body) return;
     this.body.traverse(node=>{
       if(!/^Shelf/i.test(node.userData['plywoodPart']||node.name))return;
@@ -850,7 +885,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       node.userData['assemblyHidden'] = this.frontStyle() !== 'shaker';
     });
     if (this.assembly) this.assembly.normals = this.isClassic() ? {} : { front: [0, 0, 1], left: [1, 0, 0], right: [-1, 0, 0] };
-    this.assembly?.bind(this.model, [...this.body.children, ...(this.frontMoulding ? [this.frontMoulding] : []),
+    this.assembly?.bind(this.model, [...this.body.children, ...(this.frontMoulding ? [this.frontMoulding] : []), ...(this.logoMesh ? [this.logoMesh] : []),
       ...[...this.casters.values()].flatMap(group => group.children)]);
   }
 
@@ -1172,6 +1207,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.alive = false;
+    this.logoVersion++;this.logoTexture?.dispose();
     const configuration=this.savedConfiguration();if(configuration)URL.revokeObjectURL(configuration.url);
     const drawing = this.shelfDrawing(); if (drawing) URL.revokeObjectURL(drawing.url);
     this.loadVersion++;
