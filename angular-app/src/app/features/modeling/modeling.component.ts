@@ -227,7 +227,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly frontLogo=signal<LogoPlacement|null>(null);
   readonly logoError=signal('');
   readonly logoBusy=signal(false);
-  readonly logoPanel=computed(()=>({width:this.width()-(this.isClassic()?38:32),height:this.height()-(this.isClassic()?125:255),inset:this.moulding()?121:!this.isClassic()&&this.frontStyle()==='shaker'?73:0}));
+  readonly logoPanel=computed(()=>({width:this.width()-(this.isClassic()?38:32),height:this.height()-(this.isClassic()?125:255),inset:this.moulding()?121:!this.isClassic()&&this.frontStyle()==='shaker'?Math.max(73,70*(this.height()-255)/645+3):0}));
   private logoMesh?:THREE.Mesh<THREE.PlaneGeometry,THREE.MeshStandardMaterial>;
   private logoTexture?:THREE.Texture;
   private logoVersion=0;
