@@ -99,10 +99,13 @@
       <section class="setting-card">
         <h2>Table top finish</h2>
         <p class="help">Choose the table top finish.</p>
+        @if (finishLoading()) { <p class="help" role="status">Loading table top texture…</p> }
+        @if (finishError()) { <p class="error" role="alert">{{finishError()}}</p> }
         <div class="finish-options" role="group" aria-label="Table top finish">
           <button type="button" [class.selected]="topFinish()==='body'" (click)="setTopFinish('body')"><span class="finish-chip" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>In cart finish / colour</button>
           <button type="button" [class.selected]="topFinish()==='oak'" (click)="setTopFinish('oak')"><span class="finish-chip oak"></span>Tasmanian oak</button>
-          <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>{{isClassic() ? "Varnished plywood" : "RAW MDF"}}</button>
+          <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>{{isClassic() ? "Varnished plywood" : "Plywood"}}</button>
+          @if (!isClassic()) { <button type="button" [class.selected]="topFinish()==='mdf'" (click)="setTopFinish('mdf')"><span class="finish-chip" style="background:#b99b78"></span>RAW MDF</button> }
         </div>
       </section>
 
