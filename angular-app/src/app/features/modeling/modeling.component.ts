@@ -142,7 +142,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const top=this.topFinish()==='body'?'In cart finish / colour':this.topFinish()==='oak'?'Tasmanian oak':this.topFinish()==='mdf'?'RAW MDF':this.isClassic()?'Varnished plywood':'Plywood';
       const fields=[{label:'Dimensions',value:`${this.width()} x ${this.depth()} x ${this.height()} mm`},{label:'Cart body',value:body},{label:'Table top',value:top},
         {label:'Front panel',value:this.isClassic()?(this.moulding()?'With moulding':'Plain'):this.frontStyle()==='shaker'?'Shaker':this.frontStyle()==='moulding'?'With moulding':'Plain'},
-        {label:'Castors',value:(this.isClassic()?'95':'73')+' mm'},
+        {label:'Castors',value:'Ø'+(this.isClassic()?'75':'50')+' mm'},
         {label:'Shelf',value:this.shelfIncluded()?'Middle':'None'}];
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
       if(!this.isClassic())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
