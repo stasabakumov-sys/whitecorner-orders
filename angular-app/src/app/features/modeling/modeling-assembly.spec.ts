@@ -3,6 +3,19 @@ import * as THREE from 'three';
 import { AssemblyController, AssemblyState, assemblyPartKey } from './modeling-assembly';
 
 describe('Assembly preview', () => {
+  it('keeps roof supports and decorative wheels fixed, while allowing visibility changes', () => {
+    expect(assemblyPartKey('Roof_5')).toBe('roof');
+    expect(assemblyPartKey('Dar_4')).toBe('posts');
+    expect(assemblyPartKey('Legs_1')).toBe('legs');
+    expect(assemblyPartKey('Decorative_wheel_left')).toBe('decorative-wheels');
+    const state = new AssemblyState();
+    for (const key of ['roof', 'posts', 'legs', 'decorative-wheels'] as const) {
+      state.move(key, 100); expect(state.offsets[key]).toBe(0);
+      state.setVisible(key, false); expect(state.visible[key]).toBe(false);
+    }
+    state.locked = true; state.move('top', 100); expect(state.offsets.top).toBe(0);
+    state.locked = false; state.move('top', 100); expect(state.offsets.top).toBe(100);
+  });
   it('releases the walls only after both caps are clear and keeps the shelf fixed', () => {
     const state = new AssemblyState();
     state.move('front', 200); expect(state.offsets.front).toBe(0);

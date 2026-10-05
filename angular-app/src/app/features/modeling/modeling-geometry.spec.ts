@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { resizePlywoodPosition } from './modeling-geometry';
+import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
+
+describe('MDF roof cart dimensions', () => {
+  it('keeps wheel axes aligned with bottom holes at every length and height', () => {
+    for (const length of [1200, 1300, 1400, 1500]) for (const height of [850, 900, 950, 1000]) {
+      const hole = resizeRoofCartPosition('Buttom_part2', 1.047, 0.2530002, 0.6, length, height);
+      const wheel = resizeRoofCartPosition('Decorative_wheel_front', 1.047, 0.2530002, 0.614, length, height);
+      expect(wheel[0]).toBeCloseTo(hole[0]); expect(wheel[1]).toBeCloseTo(hole[1]);
+      const rim = resizeRoofCartPosition('Decorative_wheel_front', 0.802, 0.0080002, 0.614, length, height);
+      expect(wheel[0] - rim[0]).toBeCloseTo(0.245);
+      expect(rim[1]).toBeCloseTo(0.0080002);
+    }
+  });
+  it('moves the roof and its posts with the tabletop while retaining their dimensions', () => {
+    const table = resizeRoofCartPosition('Top_1', 0.6, 0.9, 0.3, 1500, 1000);
+    const roof = resizeRoofCartPosition('Roof_1', 0.6, 1.93, 0.3, 1500, 1000);
+    expect(table[1]).toBeCloseTo(1); expect(roof[1] - table[1]).toBeCloseTo(1.03);
+    const low = resizeRoofCartPosition('Dar1', 0.0615, 0.784, 0.495, 1500, 1000);
+    const high = resizeRoofCartPosition('Dar1', 0.1035, 1.918, 0.495, 1500, 1000);
+    expect(high[0] - low[0]).toBeCloseTo(0.042); expect(high[1] - low[1]).toBeCloseTo(1.134);
+    expect(resizeRoofCartPosition('Legs_1', 0.1665, 0.073, 0.49, 1500, 1000)).toEqual([0.1665,0.073,0.49]);
+  });
+});
 
 describe('Classic plywood parts', () => {
   it('keeps both trim rings 42 × 19 mm at every available length and height', () => {

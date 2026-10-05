@@ -54,6 +54,57 @@ describe('STEP part names after GLTF loading', () => {
   });
 });
 
+describe('Independent editor models', () => {
+  const classic = { slug: 'classic-bar-plywood', product_name: 'Classic Bar', material_name: 'Plywood',
+    model_path: null, model_filename: null, base_width_mm: 1200, base_depth_mm: 600, base_body_height_mm: 805, caster_height_mm: 95 };
+  const roof = { ...classic, slug: 'decorative-wheel-roof-cart-mdf', product_name: 'Cart with decorative wheels & roof',
+    material_name: 'MDF', base_body_height_mm: 827, caster_height_mm: 73 };
+
+  it('loads the roof dimensions independently and resets Classic when switching back', async () => {
+    const { component } = setup();
+    component.models.set([classic, roof]);
+    await component.selectModel(roof.slug);
+    expect(component.height()).toBe(900);
+    expect(component.materialLabel()).toBe('MDF');
+    expect(component.modelLabel()).toBe('Cart with decorative wheels & roof / MDF');
+    expect(component.selectedFile()).toBeNull();
+    component.setDimension('height', '850');
+    expect(component.height()).toBe(850);
+    expect(component.overallHeight()).toBe(1880);
+    await component.selectModel(classic.slug);
+    expect(component.height()).toBe(900);
+    expect(component.isClassic()).toBe(true);
+  });
+
+  it('saves an uploaded roof model only into its own record and Storage folder', async () => {
+    const { component, upload } = setup();
+    component.models.set([classic, roof]);
+    await component.selectModel(roof.slug);
+    const file = new File(['roof'], 'roof-cart.glb');
+    component.selectedFile.set(file);
+    await component.saveModel();
+    expect(upload.mock.calls[0][0]).toMatch(/^decorative-wheel-roof-cart-mdf\//);
+    expect(component.models().find(model => model.slug === classic.slug)?.model_path).toBeNull();
+    expect(component.models().find(model => model.slug === roof.slug)?.model_filename).toBe(file.name);
+  });
+
+  it('discards an earlier signed-link request after the user switches models', async () => {
+    const { component } = setup();
+    const editor = component as any;
+    let finishLink!: (value: any) => void;
+    editor.db.client.storage.from = () => ({ createSignedUrl: () => new Promise(resolve => { finishLink = resolve; }) });
+    const open = vi.spyOn(editor, 'openModel').mockResolvedValue(undefined);
+    component.models.set([classic, { ...roof, model_path: `${roof.slug}/old.glb` }]);
+    const previous = component.selectModel(roof.slug);
+    await component.selectModel(classic.slug);
+    finishLink({ data: { signedUrl: 'https://example.test/old' }, error: null });
+    await previous;
+    expect(open).not.toHaveBeenCalled();
+    expect(component.activeSlug()).toBe(classic.slug);
+    expect(component.height()).toBe(900);
+  });
+});
+
 describe('Modeling dimensions', () => {
   it('moves the camera back as the cart grows', () => {
     const { component } = setup();

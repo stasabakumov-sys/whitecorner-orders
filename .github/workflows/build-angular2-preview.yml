@@ -6,6 +6,8 @@ on:
       - 'codex/**'
     paths:
       - 'angular-app/**'
+      - 'supabase/migrations/*_modeling*.sql'
+      - '.github/scripts/modeling-roof-cart*'
       - 'supabase/functions/_shared/**'
       - 'supabase/functions/wix-orders-sync/**'
       - 'supabase/functions/delivery-cost-review/**'
@@ -59,6 +61,8 @@ on:
   pull_request:
     paths:
       - 'angular-app/**'
+      - 'supabase/migrations/*_modeling*.sql'
+      - '.github/scripts/modeling-roof-cart*'
       - 'supabase/functions/_shared/**'
       - 'supabase/functions/wix-orders-sync/**'
       - 'supabase/functions/delivery-cost-review/**'
@@ -175,6 +179,8 @@ jobs:
         run: node .github/scripts/product-cnc-sheets-migration.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Rehearse Hub-only test orders
         run: node .github/scripts/hub-test-orders.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Rehearse private Modeling models and access policies
+        run: node .github/scripts/modeling-roof-cart.test.mjs "$RUNNER_TEMP/delivery-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Publish clean preview path
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash

@@ -23,3 +23,19 @@ export function resizePlywoodPosition(
   }
   return [nextX, nextY, z];
 }
+
+// The MDF roof cart has a 900 mm tabletop, 73 mm castors and 150 mm legs.
+// Keep hardware, decorative wheels, legs and roof posts rigid. Extend panels
+// between the fixed lower deck and the moving tabletop; lift the roof intact.
+export function resizeRoofCartPosition(name: string, x: number, y: number, z: number,
+  lengthMm: number, heightMm: number): [number, number, number] {
+  const dx = (lengthMm - 1200) / 1000, dy = (heightMm - 900) / 1000;
+  const rigid = /^(Legs|Decorative[ _]wheel)/i.test(name);
+  const nextX = rigid ? x + (/Decorative/i.test(name) || x > 0.6 ? dx : 0)
+    : x <= 0.2 ? x : x >= 1 ? x + dx : x + dx * (x - 0.2) / 0.8;
+  const fixed = /^(Buttom|Bottom|Legs|Decorative[ _]wheel)/i.test(name);
+  const elevated = /^(Top|Roof|Dar)/i.test(name);
+  const nextY = fixed ? y : elevated ? y + dy
+    : y <= 0.239 ? y : y >= 0.884 ? y + dy : y + dy * (y - 0.239) / 0.645;
+  return [nextX, nextY, z];
+}
