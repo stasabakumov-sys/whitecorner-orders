@@ -51,6 +51,7 @@ describe('Tabletop image textures', () => {
       expect(load.mock.calls[0][0]).toMatch(/modeling-textures\/tasmanian-oak\.png$/);
       expect(component.topFinish()).toBe('oak');
       expect(texture.channel).toBe(2);
+      expect(texture.repeat.toArray()).toEqual([2.5, 2.5]);
       expect(texture.colorSpace).toBe(THREE.SRGBColorSpace);
       await component.setTopFinish('oak');
       expect(load).toHaveBeenCalledOnce();
@@ -63,7 +64,7 @@ describe('Tabletop image textures', () => {
     try {
       await component.setTopFinish('plywood');
       expect(load.mock.calls.map(call => call[0])).toEqual([
-        expect.stringMatching(/plywood-face\.jpg$/), expect.stringMatching(/plywood-edge\.jpg$/),
+        expect.stringMatching(/plywood-face\.jpg$/), expect.stringMatching(/plywood-edge\.jpg$/), expect.stringMatching(/pine\.jpg$/),
       ]);
       expect(component.topFinish()).toBe('plywood');
       await component.setTopFinish('mdf');
@@ -339,4 +340,23 @@ describe('MDF front variants', () => {
     }
     expect(apply).toHaveBeenCalledTimes(3); expect(moulding).toHaveBeenCalledTimes(3);
   });
+});
+
+
+it('uses Classic plywood layers and a pine border on the MDF cart tabletop', async () => {
+  const { component } = setup(); const editor = component as any;
+  component.activeSlug.set('decorative-wheel-roof-cart-mdf');
+  editor.body = new THREE.Group(); editor.rawTexture = new THREE.Texture(); editor.plywoodTexture = new THREE.Texture();
+  const face = new THREE.Texture(), edge = new THREE.Texture(), pine = new THREE.Texture();
+  editor.finishTextures.set('plywood-face.jpg', face); editor.finishTextures.set('plywood-edge.jpg', edge); editor.finishTextures.set('pine.jpg', pine);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(1.2, .016, .6), new THREE.MeshStandardMaterial()); top.name = 'Top_1';
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(1.2, .045, .016), new THREE.MeshStandardMaterial()); trim.name = 'Top_2';
+  editor.body.add(top, trim); await component.setTopFinish('plywood');
+  const topMaterials = top.material as unknown as THREE.MeshPhysicalMaterial[], trimMaterials = trim.material as unknown as THREE.MeshPhysicalMaterial[];
+  expect(topMaterials.map(material => material.map)).toEqual([face, edge]);
+  expect(topMaterials[0].color.r).toBeCloseTo(1.05); expect(topMaterials[1].color.r).toBeCloseTo(1.30);
+  expect(trimMaterials.every(material => material.map === pine)).toBe(true);
+  expect(trimMaterials[0].color.r).toBeCloseTo(1.15 * 1.05);
+  expect(trimMaterials[0].color.b).toBeCloseTo(2.4 * 1.05);
+  expect(trim.geometry.hasAttribute('uv')).toBe(true);
 });

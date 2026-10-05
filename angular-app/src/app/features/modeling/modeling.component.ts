@@ -548,7 +548,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     try {
       if (finish === 'oak') await this.loadFinishTexture('tasmanian-oak.png');
       else if (finish === 'plywood' && !this.isClassic()) await Promise.all([
-        this.loadFinishTexture('plywood-face.jpg'), this.loadFinishTexture('plywood-edge.jpg'),
+        this.loadFinishTexture('plywood-face.jpg'), this.loadFinishTexture('plywood-edge.jpg'), this.loadFinishTexture('pine.jpg'),
       ]);
       if (!this.alive || version !== this.finishVersion) return;
       this.topFinish.set(finish);
@@ -568,9 +568,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const request = new THREE.TextureLoader().loadAsync(new URL(`modeling-textures/${file}`, document.baseURI).href).then(texture => {
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.channel = file === 'plywood-edge.jpg' ? 3 : 2;
-      texture.repeat.set(file === 'tasmanian-oak.png' ? 1 / 1.2 : file === 'plywood-face.jpg' ? 1 / 2.439 : 1,
-        file === 'tasmanian-oak.png' ? 1 / 1.2 : file === 'plywood-face.jpg' ? 1 / 2.439 : 1);
+      texture.channel = file === 'pine.jpg' ? 0 : file === 'plywood-edge.jpg' ? 3 : 2;
+      texture.repeat.set(file === 'tasmanian-oak.png' ? 3 / 1.2 : file === 'plywood-face.jpg' ? 1 / 2.439 : 1,
+        file === 'tasmanian-oak.png' ? 3 / 1.2 : file === 'plywood-face.jpg' ? 1 / 2.439 : 1);
+      if (file === 'plywood-face.jpg' && texture.image?.width && texture.image?.height) texture.repeat.y *= texture.image.width / texture.image.height;
       texture.anisotropy = Math.min(this.renderer?.capabilities.getMaxAnisotropy() || 1, 8);
       if (this.alive) this.finishTextures.set(file, texture); else texture.dispose();
       return texture;
@@ -706,21 +707,22 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       node.material = Array.isArray(node.material) ? materials : materials[0];
       for (const material of materials) {
         if (!(material instanceof THREE.MeshStandardMaterial)) continue;
-        const pine = /pine[ _]trim$/i.test(material.name);
         const finish = isTopPanelName(partName) ? this.topFinish() : 'body';
+        const pine = /pine[ _]trim$/i.test(material.name) || (!this.isClassic() && finish === 'plywood' && /^Top[ _]2$/i.test(partName));
         const edge = /plywood[ _]edge$/i.test(material.name);
         const plywood = (pine ? this.modelPineTexture : edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
         const map = finish === 'oak' ? this.finishTextures.get('tasmanian-oak.png') || null
-          : finish === 'mdf' ? null : !this.isClassic() ? finish === 'plywood' ? this.finishTextures.get(edge ? 'plywood-edge.jpg' : 'plywood-face.jpg') || null : null
+          : finish === 'mdf' ? null : !this.isClassic() ? finish === 'plywood' ? this.finishTextures.get(pine ? 'pine.jpg' : edge ? 'plywood-edge.jpg' : 'plywood-face.jpg') || null : null
           : finish === 'plywood' ? plywood || this.rawTexture : this.rawBody() ? plywood || this.rawTexture : null;
         const rawMdf = !this.isClassic() && !map && (this.rawBody() || finish === 'mdf');
         const source = rawMdf ? new THREE.Color('#b99b78') : map ? new THREE.Color('#ffffff') : body;
         if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry, partName, edge, pine);
-        if (map && (finish === 'oak' || (finish === 'plywood' && !this.isClassic()))) addTopFinishUvs(node.geometry);
+        if (map && !this.isClassic() && finish === 'plywood' && pine) this.addWoodUvs(node.geometry, partName, false, true);
+        if (map && (finish === 'oak' || (finish === 'plywood' && !this.isClassic() && !pine))) addTopFinishUvs(node.geometry, finish === 'oak' && !this.isClassic() && /^Top[ _][3-6]$/i.test(partName));
         if (!map && this.modelPaintBumpTexture && !node.geometry.hasAttribute('uv1')) this.addPaintUvs(node.geometry);
         material.color.copy(source);
         if (map && finish !== 'oak' && !pine && !edge) material.color.multiplyScalar(1.05);
-        if (edge && map && finish !== 'oak' && this.isClassic()) material.color.multiplyScalar(1.30);
+        if (edge && map && finish !== 'oak' && !pine) material.color.multiplyScalar(1.30);
         if (pine && map && finish !== 'oak') material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
         material.map = map;
         material.bumpMap = rawMdf || map || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
@@ -802,7 +804,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const nx = Math.abs(normals.getX(i));
       const ny = Math.abs(normals.getY(i));
       const x = positions.getX(i), y = positions.getY(i), z = positions.getZ(i);
-      if (pine && this.modelPineTexture) {
+      if (pine && (this.modelPineTexture || this.finishTextures.get('pine.jpg'))) {
         const frontOrRear = z <= 0.01901 || z >= 0.58099;
         // Pine grain runs vertically in the source image: V follows the rail.
         const [u, v] = pineWoodUv(ny > 0.5 ? frontOrRear ? z : x : y,
@@ -861,7 +863,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = Math.min(this.renderer?.capabilities.getMaxAnisotropy() || 1, 8);
+      texture.anisotropy = Math.min(this.renderer?.capabilities.getMaxAnisotropy() || 1, 8);
     return texture;
   }
 
