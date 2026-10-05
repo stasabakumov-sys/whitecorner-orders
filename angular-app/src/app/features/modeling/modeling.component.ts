@@ -68,6 +68,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private frontMoulding?: THREE.Mesh;
   readonly roofClosed = signal(false);
   private roofBottom?: THREE.Mesh;
+  // Temporarily hide photographic scenes while their scale is calibrated.
+  readonly photographicScenesEnabled = false;
   readonly previewScene = signal<'studio' | 'event' | 'office'>('studio');
   setPreviewScene(scene: 'studio' | 'event' | 'office'): void {
     this.previewScene.set(scene);
@@ -209,6 +211,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const { width, height } = this.canvasHost.nativeElement.getBoundingClientRect();
     if (!width || !height) return;
     this.camera.aspect = width / height;
+    if (window.matchMedia('(min-width: 981px)').matches) {
+      const settings = this.canvasHost.nativeElement.parentElement?.parentElement?.querySelector('.settings');
+      const panelWidth = settings?.getBoundingClientRect().width || 0;
+      // Keep the product centred in the exposed stage while rendering behind the panel.
+      this.camera.setViewOffset(width, height, (panelWidth + 28) / 2, 0, width, height);
+    } else {
+      this.camera.clearViewOffset();
+    }
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
   }
