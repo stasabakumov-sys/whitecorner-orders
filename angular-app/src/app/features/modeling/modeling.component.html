@@ -16,23 +16,6 @@
       <div class="viewer-footer"><span>Drag to rotate · Scroll to zoom</span><span>{{width()}} × {{depth()}} × {{height()}} mm</span></div>
     </div>
     <div class="settings">
-      <section class="setting-card building-card">
-        <h2>Building</h2>
-        <button type="button" class="building-entry" [attr.aria-expanded]="shelfPositionEditing()" aria-controls="shelf-position-settings" (click)="shelfPositionEditing.set(!shelfPositionEditing())">Shelf Position <span aria-hidden="true">{{shelfPositionEditing() ? '−' : '+'}}</span></button>
-        @if (shelfPositionEditing()) {
-          <div id="shelf-position-settings">
-            <label for="shelf-position">Position</label><select id="shelf-position" aria-label="Shelf position"><option>Middle</option></select>
-            <label>Support</label>
-            <div class="length-options paint-options" role="group" aria-label="Shelf support">
-              <button type="button" [class.selected]="shelfSupport()==='plastic'" [attr.aria-pressed]="shelfSupport()==='plastic'" (click)="shelfSupport.set('plastic')">Plastic support</button>
-              <button type="button" [class.selected]="shelfSupport()==='rail'" [attr.aria-pressed]="shelfSupport()==='rail'" (click)="shelfSupport.set('rail')">Support rail</button>
-            </div>
-            <p class="help">{{shelfSupport()==='rail' ? 'Rail section: 20 × '+(isClassic() ? '15' : '16')+' mm.' : 'Two Ø5 mm support holes per side.'}}</p>
-            <button type="button" class="building-ok" [disabled]="loading() || roundingBusy()" (click)="generateShelfDrawing()">OK</button>
-            @if (buildingError()) { <p class="error" role="alert">{{buildingError()}}</p> }
-          </div>
-        }
-      </section>
       <section class="setting-card assembly-card">
         <div class="setting-title"><h2>Parts & assembly</h2>@if (assemblyMode()) { <button type="button" class="text-action" (click)="restoreAssembly()">Return all</button> }</div>
         <div class="length-options paint-options" role="group" aria-label="Assembly view">
@@ -74,21 +57,13 @@
             <button type="button" [class.selected]="height() === value" [attr.aria-pressed]="height() === value" (click)="setDimension('height', value.toString())">{{value / 10}} cm</button>
           }
         </div>
-        <div class="rounding-heading">
-          <label id="model-rounding-label">Edge rounding <output>{{rounding()}} mm</output></label>
-          <button type="button" class="icon-action rounding-edit" [attr.aria-label]="roundingEditing() ? 'Close edge rounding editor' : 'Edit edge rounding'" [attr.title]="roundingEditing() ? 'Done' : 'Edit'" [attr.aria-expanded]="roundingEditing()" aria-controls="rounding-options" (click)="roundingEditing.set(!roundingEditing())">
-            @if (roundingEditing()) { <span aria-hidden="true">✓</span> } @else { <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/></svg> }
-          </button>
+      </section>
+      <section class="setting-card shelf-card">
+        <h2>Shelf</h2>
+        <div class="length-options paint-options" role="group" aria-label="Shelf option">
+          <button type="button" [disabled]="loading() || roundingBusy()" [class.selected]="shelfIncluded()" [attr.aria-pressed]="shelfIncluded()" (click)="setShelfIncluded(true)">On</button>
+          <button type="button" [disabled]="loading() || roundingBusy()" [class.selected]="!shelfIncluded()" [attr.aria-pressed]="!shelfIncluded()" (click)="setShelfIncluded(false)">Off</button>
         </div>
-        @if (roundingEditing()) {
-        <div id="rounding-options" class="length-options rounding-options" role="group" aria-labelledby="model-rounding-label">
-          @for (radius of [0, 1, 1.5, 2, 2.5, 3]; track radius) {
-            <button type="button" [disabled]="!roundingSupported() || roundingBusy()" [class.selected]="rounding() === radius" [attr.aria-pressed]="rounding() === radius" (click)="setRounding(radius)">{{radius === 0 ? 'None' : radius + ' mm'}}</button>
-          }
-        </div>
-        }
-        @if (roundingBusy()) {<p class="progress" role="status">Rounding wooden parts…</p>}
-        @if (!loading() && !roundingSupported()) {<p class="help">Upload an updated GLB with part profiles to enable rounding.</p>}
       </section>
       <section class="setting-card">
         <h2>{{isClassic() ? 'Front panel moulding' : 'Front panel'}}</h2>
@@ -196,6 +171,42 @@
         @if (notice()) {<p class="notice" role="status">{{notice()}}</p>}
         @if (error()) {<p class="error" role="alert">{{error()}}</p>}
       </section>
+      <section class="setting-card advanced-settings">
+        <h2>Settings</h2>
+        <div class="rounding-heading">
+          <label id="model-rounding-label">Edge rounding <output>{{rounding()}} mm</output></label>
+          <button type="button" class="icon-action rounding-edit" [attr.aria-label]="roundingEditing() ? 'Close edge rounding editor' : 'Edit edge rounding'" [attr.title]="roundingEditing() ? 'Done' : 'Edit'" [attr.aria-expanded]="roundingEditing()" aria-controls="rounding-options" (click)="roundingEditing.set(!roundingEditing())">
+            @if (roundingEditing()) { <span aria-hidden="true">✓</span> } @else { <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/></svg> }
+          </button>
+        </div>
+        @if (roundingEditing()) {
+        <div id="rounding-options" class="length-options rounding-options" role="group" aria-labelledby="model-rounding-label">
+          @for (radius of [0, 1, 1.5, 2, 2.5, 3]; track radius) {
+            <button type="button" [disabled]="!roundingSupported() || roundingBusy()" [class.selected]="rounding() === radius" [attr.aria-pressed]="rounding() === radius" (click)="setRounding(radius)">{{radius === 0 ? 'None' : radius + ' mm'}}</button>
+          }
+        </div>
+        }
+        @if (roundingBusy()) {<p class="progress" role="status">Rounding wooden parts…</p>}
+        @if (!loading() && !roundingSupported()) {<p class="help">Upload an updated GLB with part profiles to enable rounding.</p>}
+      </section>
+      <section class="setting-card building-card">
+        <h2>Building</h2>
+        <button type="button" class="building-entry" [attr.aria-expanded]="shelfPositionEditing()" aria-controls="shelf-position-settings" (click)="shelfPositionEditing.set(!shelfPositionEditing())">Shelf Position <span aria-hidden="true">{{shelfPositionEditing() ? '−' : '+'}}</span></button>
+        @if (shelfPositionEditing()) {
+          <div id="shelf-position-settings">
+            <label for="shelf-position">Position</label><select id="shelf-position" aria-label="Shelf position"><option>Middle</option></select>
+            <label>Support</label>
+            <div class="length-options paint-options" role="group" aria-label="Shelf support">
+              <button type="button" [class.selected]="shelfSupport()==='plastic'" [attr.aria-pressed]="shelfSupport()==='plastic'" (click)="shelfSupport.set('plastic')">Plastic support</button>
+              <button type="button" [class.selected]="shelfSupport()==='rail'" [attr.aria-pressed]="shelfSupport()==='rail'" (click)="shelfSupport.set('rail')">Support rail</button>
+            </div>
+            <p class="help">{{shelfSupport()==='rail' ? 'Rail section: 20 × '+(isClassic() ? '15' : '16')+' mm.' : 'Two Ø5 mm support holes per side.'}}</p>
+            <button type="button" class="building-ok" [disabled]="loading() || roundingBusy() || !shelfIncluded()" (click)="generateShelfDrawing()">OK</button>
+            @if (!shelfIncluded()) { <p class="help">Turn Shelf on to generate the drawing.</p> }
+            @if (buildingError()) { <p class="error" role="alert">{{buildingError()}}</p> }
+          </div>
+        }
+      </section>
     </div>
   </div>
 </section>
@@ -212,6 +223,7 @@
   <header><div><h2>Configuration</h2><p>PDF preview</p></div><button type="button" class="icon-action" title="Close configuration" aria-label="Close configuration" (click)="closeConfiguration()">×</button></header>
   @if(savedConfiguration();as configuration){
     <div class="configuration-sheet">
+      @if(configuration.document.logo){<img class="configuration-logo" [src]="configuration.document.logo" alt="White Corner logo">}
       <h3>{{configuration.document.product}}</h3><p>{{configuration.document.material}}</p>
       <div class="configuration-views"><figure><img [src]="configuration.document.front" alt="Front view for configuration PDF"><figcaption>FRONT</figcaption></figure><figure><img [src]="configuration.document.rear" alt="Rear view for configuration PDF"><figcaption>REAR</figcaption></figure></div>
       <h4>SPECIFICATION</h4><div class="configuration-fields">@for(field of configuration.document.fields;track field.label){<div><h5>{{field.label}}</h5><p>{{field.value}}</p></div>}</div>

@@ -15,7 +15,7 @@ export function shelfPlacement(input: ShelfDrawingInput) {
 const mm = (n:number) => Number(n.toFixed(1)).toString();
 const escape = (s:string) => s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]!));
 export function shelfDrawingSvg(input: ShelfDrawingInput): string {
- const layout=shelfPlacement(input), w=input.width, h=input.height, top=105, left=115;
+ const layout=shelfPlacement(input), w=input.width, h=input.height, top=50, left=115;
  const x=(n:number)=>left+n, y=(n:number)=>top+h-n;
  const text=(px:number,py:number,label:string,extra='')=>`<text x="${px}" y="${py}" ${extra}>${escape(label)}</text>`;
  const line=(x1:number,y1:number,x2:number,y2:number,cls='')=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="${cls}"/>`;
@@ -25,28 +25,26 @@ export function shelfDrawingSvg(input: ShelfDrawingInput): string {
  drawing+=line(x(12),y(0),x(12),y(h),'reference')+line(x(82),y(0),x(82),y(h),'reference');
  drawing+=line(x(0),y(layout.shelfBottom),x(w),y(layout.shelfBottom),'shelf')+line(x(0),y(layout.shelfTop),x(w),y(layout.shelfTop),'shelf');
  drawing+=horizontal(0,w,y(0)+42,`${mm(w)} mm`)+vertical(left-65,0,h,`${mm(h)} mm`);
- drawing+=text(left,top-20,'Front edge')+text(x(w),top-20,'Rear edge','text-anchor="end"');
- drawing+=vertical(x(w)+42,0,layout.shelfBottom,`${mm(layout.shelfBottom)} mm - shelf underside`);
+ drawing+=vertical(x(w)+42,0,layout.shelfBottom,`${mm(layout.shelfBottom)} mm`);
  if(input.support==='rail'){
   const r=layout.rail;
   drawing+=`<rect x="${x(r.x)}" y="${y(r.y+r.height)}" width="${r.width}" height="${r.height}" class="rail"/>`;
-  drawing+=horizontal(0,r.x,y(0)+80,`${mm(r.x)} mm`)+horizontal(r.x,w,y(0)+118,`${mm(r.width)} mm - rail length`);
-  drawing+=vertical(x(w)+83,0,r.y,`${mm(r.y)} mm - rail bottom`);
+  drawing+=horizontal(0,r.x,y(0)+80,`${mm(r.x)} mm`)+horizontal(r.x,w,y(0)+118,`${mm(r.width)} mm`);
+  drawing+=vertical(x(w)+83,0,r.y,`${mm(r.y)} mm`);
  }else{
   for(const hole of layout.holes){
    drawing+=`<circle cx="${x(hole.x)}" cy="${y(hole.y)}" r="2.5" class="hole"/>`;
    drawing+=line(x(hole.x)-9,y(hole.y),x(hole.x)+9,y(hole.y),'centre')+line(x(hole.x),y(hole.y)-9,x(hole.x),y(hole.y)+9,'centre');
   }
-  drawing+=horizontal(0,layout.holes[0].x,y(0)+80,`${mm(layout.holes[0].x)} mm`)+horizontal(layout.holes[0].x,layout.holes[1].x,y(0)+118,`${mm(layout.holes[1].x-layout.holes[0].x)} mm - centres`)+horizontal(layout.holes[1].x,w,y(0)+80,'80 mm');
-  drawing+=vertical(x(w)+83,0,layout.holes[0].y,`${mm(layout.holes[0].y)} mm - hole centres`);
+  drawing+=horizontal(0,layout.holes[0].x,y(0)+80,`${mm(layout.holes[0].x)} mm`)+horizontal(layout.holes[0].x,layout.holes[1].x,y(0)+118,`${mm(layout.holes[1].x-layout.holes[0].x)} mm`)+horizontal(layout.holes[1].x,w,y(0)+80,'80 mm');
+  drawing+=vertical(x(w)+83,0,layout.holes[0].y,`${mm(layout.holes[0].y)} mm`);
  }
- const support=input.support==='rail'?`Support rail: ${mm(layout.rail.width)} x 20 x ${layout.rail.thickness} mm (2 pieces).`:'Plastic supports: 2 x diameter 5 mm holes per side. Hole depth is not specified.';
- return `<svg xmlns="http://www.w3.org/2000/svg" width="${w+270}mm" height="${h+335}mm" viewBox="0 0 ${w+270} ${h+335}">
- <style>text{font-family:Arial,sans-serif;font-size:12px;fill:#263241}line,rect,circle{stroke:#263241;stroke-width:.7;fill:none}.panel{stroke-width:1}.dimension{stroke:#596778}.reference{stroke:#a1abb6;stroke-dasharray:4 4}.shelf{stroke:#4380a3;stroke-dasharray:5 3}.rail{fill:#e9eef2}.hole{fill:#fff;stroke:#111}.centre{stroke:#4380a3;stroke-width:.4} .title{font-size:18px;font-weight:bold}</style>
+ const support=input.support==='rail'?`2 × ${mm(layout.rail.width)} × 20 × ${layout.rail.thickness} mm`:'2 × Ø5 mm';
+ return `<svg xmlns="http://www.w3.org/2000/svg" width="${w+270}mm" height="${h+220}mm" viewBox="0 0 ${w+270} ${h+220}">
+ <style>text{font-family:Inter,Arial,sans-serif;font-size:32px;font-weight:500;fill:#263241}line,rect,circle{stroke:#263241;stroke-width:1;fill:none}.panel{stroke-width:1.3}.dimension{stroke:#596778}.reference{stroke:#a1abb6;stroke-dasharray:4 4}.shelf{stroke:#4380a3;stroke-dasharray:5 3}.rail{fill:#e9eef2}.hole{fill:#fff;stroke:#111}.centre{stroke:#4380a3;stroke-width:.4} .title{font-size:18px;font-weight:bold}</style>
  <rect width="100%" height="100%" fill="white" stroke="none"/>
- ${text(30,30,'Shelf Position - Side panel','class="title"')}${text(30,51,input.product)}${text(30,70,`${input.material} ${mm(input.panelThickness)} mm | Middle | ${input.support==='rail'?'Support rail':'Plastic support'}`)}
+ ${text(left,32,`${mm(input.panelThickness)} mm`)}
  ${drawing}
- ${text(30,h+265,support)}${text(30,h+284,`Shelf: ${mm(input.shelfThickness)} mm; centre ${mm(h/2)} mm above panel bottom.`)}${text(30,h+303,'Inner face. Two mirrored side panels. Dimensions in mm; do not scale the screen.')}
- ${text(30,h+322,'Dashed vertical lines: 12 / 82 mm front reference from Sides.ai.')}
+ ${text(left,h+200,support)}
  </svg>`;
 }

@@ -17,9 +17,9 @@ describe('Shelf positioning drawings',()=>{
  });
  it('shows hole coordinates and diameter without drawing a rail for plastic support',()=>{
   const svg=shelfDrawingSvg({...classic,support:'plastic',product:'Cart <test> & sample'});
-  expect(svg).toContain('142 mm');expect(svg).toContain('325 mm - centres');expect(svg).toContain('375 mm - hole centres');
-  expect(svg).toContain('diameter 5 mm');expect(svg.match(/class="hole"/g)).toHaveLength(2);expect(svg).not.toContain('class="rail"/>');
-  expect(svg).toContain('Cart &lt;test&gt; &amp; sample');
+  expect(svg).toContain('142 mm');expect(svg).toContain('325 mm');expect(svg).toContain('375 mm');
+  expect(svg).toContain('2 × Ø5 mm');expect(svg.match(/class="hole"/g)).toHaveLength(2);expect(svg).not.toContain('class="rail"/>');
+  expect(svg).not.toContain('Cart');expect(svg).not.toContain('Shelf Position - Side panel');expect(svg).toContain('font-size:32px');
  });
  it('rejects missing dimensions and layouts where supports overlap',()=>{
   expect(()=>shelfPlacement({...classic,width:0})).toThrow('dimensions');

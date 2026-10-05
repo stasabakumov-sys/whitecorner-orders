@@ -70,6 +70,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     try {
       if (!this.model || !this.renderer || this.loading()) throw new Error('Wait for the model to load, then retry.');
       const {createConfigurationPdf}=await import('./modeling-configuration-pdf');
+      const response=await fetch(new URL('branding/white-corner-logo.png',document.baseURI));
+      if(!response.ok)throw new Error('The White Corner logo could not be loaded. Retry the export.');
+      const logo=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error('The White Corner logo could not be read. Retry the export.'));response.blob().then(blob=>reader.readAsDataURL(blob)).catch(reject);});
       const views=this.configurationViews();
       const colourNames:Record<string,string>={'#f6f6f3':'White','#aecde5':'Dulux Featherbed','#33383e':'Charcoal','#708471':'Sage','#aa6553':'Terracotta'};
       const body=this.rawBody()?'RAW '+this.materialLabel():`2-pack painted - ${colourNames[this.bodyColor()]||this.bodyColor()} - ${this.paintFinish()==='matte'?'Matte':'Semi-gloss'}`;
@@ -77,10 +80,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const fields=[{label:'Dimensions',value:`${this.width()} x ${this.depth()} x ${this.height()} mm`},{label:'Cart body',value:body},{label:'Table top',value:top},
         {label:'Front panel',value:this.isClassic()?(this.moulding()?'With moulding':'Plain'):this.frontStyle()==='shaker'?'Shaker':this.frontStyle()==='moulding'?'With moulding':'Plain'},
         {label:'Castors',value:(this.isClassic()?'95':'73')+' mm'},
-        {label:'Shelf position',value:'Middle'},{label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`}];
+        {label:'Shelf',value:this.shelfIncluded()?'Middle':'None'}];
+      if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
       if(!this.isClassic())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
-      const snapshot:ConfigurationDocument={product:this.record?.product_name||this.modelLabel(),material:this.materialLabel(),code:this.activeSlug(),produced:new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric',timeZone:'Australia/Brisbane'}).format(new Date()),...views,fields};
+      const snapshot:ConfigurationDocument={product:this.record?.product_name||this.modelLabel(),material:this.materialLabel(),code:this.activeSlug(),produced:new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric',timeZone:'Australia/Brisbane'}).format(new Date()),logo,...views,fields};
       const blob=createConfigurationPdf(snapshot).output('blob');
       const previous=this.savedConfiguration();if(previous)URL.revokeObjectURL(previous.url);
       this.savedConfiguration.set({url:URL.createObjectURL(blob),filename:this.activeSlug()+'-configuration.pdf',document:snapshot});
@@ -112,6 +116,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   @ViewChild('shelfDrawingDialog') shelfDrawingDialog?: ElementRef<HTMLDialogElement>;
   readonly shelfPositionEditing = signal(false);
+  readonly shelfIncluded = signal(true);
+  setShelfIncluded(included:boolean):void {
+    this.shelfIncluded.set(included);
+    if(included)this.assembly?.setVisible('shelf',true);
+    this.bindAssembly();
+  }
   readonly shelfSupport = signal<ShelfSupport>('rail');
   readonly buildingError = signal('');
   readonly drawingZoomed = signal(false);
@@ -119,6 +129,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   generateShelfDrawing(): void {
     this.buildingError.set('');
     try {
+      if(!this.shelfIncluded())throw new Error('Turn the shelf on to generate its positioning drawing.');
       if (!this.body || this.loading()) throw new Error('Wait for the complete model to load, then retry.');
       const boundsFor = (pattern: RegExp): THREE.Box3[] => this.body!.children.filter(part => pattern.test(part.userData['plywoodPart'] || part.name)).map(part => {
         const bounds = new THREE.Box3();
@@ -358,6 +369,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.moulding.set(this.isClassic());
     this.roundingEditing.set(false);
     this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
+    this.shelfIncluded.set(true);
     this.roofClosed.set(false);
     this.glassRackCount.set(0);
     this.showGlasses.set(false);
@@ -753,8 +765,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
   selectPart(key: PartKey): void { this.setAssemblyMode(true); this.assembly?.select(key); }
   selectedPart(): PartKey | null { this.assemblyRevision(); return this.assembly?.state.selected || null; }
-  partVisible(key: PartKey): boolean { this.assemblyRevision(); return this.assembly?.state.visible[key] ?? true; }
-  partAvailable(key: PartKey): boolean { this.assemblyRevision(); return this.assembly?.has(key) ?? false; }
+  partVisible(key: PartKey): boolean { if(key==='shelf'&&!this.shelfIncluded())return false; this.assemblyRevision(); return this.assembly?.state.visible[key] ?? true; }
+  partAvailable(key: PartKey): boolean { if(key==='shelf'&&!this.shelfIncluded())return false; this.assemblyRevision(); return this.assembly?.has(key) ?? false; }
   partMovable(key: PartKey): boolean { this.assemblyRevision(); return this.assembly?.state.canMove(key) ?? false; }
   partOffset(key: PartKey): number { this.assemblyRevision(); return Math.round(this.assembly?.state.offsets[key] || 0); }
   setPartVisible(key: PartKey, visible: boolean): void { this.assembly?.setVisible(key, visible); }
@@ -763,6 +775,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   restoreAssembly(): void { this.assembly?.restore(); }
   private bindAssembly(): void {
     if (!this.model || !this.body) return;
+    this.body.traverse(node=>{
+      if(!/^Shelf/i.test(node.userData['plywoodPart']||node.name))return;
+      node.userData['assemblyHidden']=!this.shelfIncluded();
+      node.visible=this.shelfIncluded()&&(this.assembly?.state.visible.shelf??true);
+    });
     if (!this.isClassic()) this.body.traverse(node => {
       if (!/^Front[ _]part2$/i.test(node.userData['plywoodPart'] || node.name)) return;
       node.userData['assemblyHidden'] = this.frontStyle() !== 'shaker';
