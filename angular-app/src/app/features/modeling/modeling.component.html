@@ -4,8 +4,10 @@
       <h1>Modeling</h1>
       <p>{{modelLabel()}}</p>
     </div>
-    <div class="model-picker"><label for="model-choice">Model</label><select id="model-choice" [value]="activeSlug()" [disabled]="saving() || roundingBusy()" (change)="selectModel($any($event.target).value)">@for (model of models(); track model.slug) {<option [value]="model.slug" [selected]="model.slug === activeSlug()">{{model.product_name}} / {{model.material_name}}</option>}</select></div>
+    <div class="model-picker"><label for="model-choice">Model</label><select id="model-choice" [value]="activeSlug()" [disabled]="saving() || roundingBusy()" (change)="selectModel($any($event.target).value)">@for (model of models(); track model.slug) {<option [value]="model.slug" [selected]="model.slug === activeSlug()">{{model.product_name}} / {{model.material_name}}</option>}</select><button type="button" class="icon-action configuration-save" [disabled]="loading() || roundingBusy() || configurationBusy()" title="Save configuration" aria-label="Save configuration" (click)="saveConfiguration()"><svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 3h13l4 4v14H3V3Z"/><path d="M7 3v6h10V3M7 21v-8h10v8"/></svg></button></div>
   </header>
+  @if(configurationBusy()){<p class="progress" role="status">Preparing configuration PDF…</p>}
+  @if(configurationError()){<p class="error" role="alert">{{configurationError()}}</p>}
   <div class="workspace">
     <div class="viewer-card">
       <div #canvasHost class="canvas-host" [class.scene-event]="previewScene()==='event'" [class.scene-office]="previewScene()==='office'" role="img" [attr.aria-label]="'Interactive 3D model '+modelLabel()"></div>
@@ -14,6 +16,23 @@
       <div class="viewer-footer"><span>Drag to rotate · Scroll to zoom</span><span>{{width()}} × {{depth()}} × {{height()}} mm</span></div>
     </div>
     <div class="settings">
+      <section class="setting-card building-card">
+        <h2>Building</h2>
+        <button type="button" class="building-entry" [attr.aria-expanded]="shelfPositionEditing()" aria-controls="shelf-position-settings" (click)="shelfPositionEditing.set(!shelfPositionEditing())">Shelf Position <span aria-hidden="true">{{shelfPositionEditing() ? '−' : '+'}}</span></button>
+        @if (shelfPositionEditing()) {
+          <div id="shelf-position-settings">
+            <label for="shelf-position">Position</label><select id="shelf-position" aria-label="Shelf position"><option>Middle</option></select>
+            <label>Support</label>
+            <div class="length-options paint-options" role="group" aria-label="Shelf support">
+              <button type="button" [class.selected]="shelfSupport()==='plastic'" [attr.aria-pressed]="shelfSupport()==='plastic'" (click)="shelfSupport.set('plastic')">Plastic support</button>
+              <button type="button" [class.selected]="shelfSupport()==='rail'" [attr.aria-pressed]="shelfSupport()==='rail'" (click)="shelfSupport.set('rail')">Support rail</button>
+            </div>
+            <p class="help">{{shelfSupport()==='rail' ? 'Rail section: 20 × '+(isClassic() ? '15' : '16')+' mm.' : 'Two Ø5 mm support holes per side.'}}</p>
+            <button type="button" class="building-ok" [disabled]="loading() || roundingBusy()" (click)="generateShelfDrawing()">OK</button>
+            @if (buildingError()) { <p class="error" role="alert">{{buildingError()}}</p> }
+          </div>
+        }
+      </section>
       <section class="setting-card assembly-card">
         <div class="setting-title"><h2>Parts & assembly</h2>@if (assemblyMode()) { <button type="button" class="text-action" (click)="restoreAssembly()">Return all</button> }</div>
         <div class="length-options paint-options" role="group" aria-label="Assembly view">
@@ -117,10 +136,15 @@
       </section>
       }
       <section class="setting-card">
-        <h2>Cart body colour</h2>
-        <p class="help">{{isClassic() ? "RAW shows plywood grain." : "RAW shows unpainted MDF."}} Choose a colour to paint the body.</p>
-        <div class="swatches" role="group" aria-label="Body colour">
-          <button type="button" class="raw-choice" [style.background]="isClassic() ? 'repeating-linear-gradient(92deg,#d6b98e 0 7px,#cda97b 7px 9px,#dec399 9px 13px)' : '#b99b78'" [class.selected]="rawBody()" (click)="setRawBody()">RAW {{materialLabel()}}</button>
+        <h2>Finish</h2>
+        <div class="length-options paint-options" role="group" aria-label="Body finish">
+          <button type="button" [class.selected]="rawBody()" [attr.aria-pressed]="rawBody()" (click)="setRawBody()">RAW {{materialLabel()}}</button>
+          <button type="button" [class.selected]="!rawBody()" [attr.aria-pressed]="!rawBody()" [attr.aria-expanded]="!rawBody()" aria-controls="paint-colour-settings" (click)="setPaintedBody()">2-pack painted</button>
+        </div>
+        @if (!rawBody()) {
+          <div id="paint-colour-settings">
+          <h3 class="setting-subtitle">Colour</h3>
+          <div class="swatches" role="group" aria-label="Body colour">
           <button type="button" class="swatch" style="background:#f6f6f3!important" [class.selected]="bodyColor()==='#f6f6f3'" (click)="setBodyColor('#f6f6f3')" title="White · RGB 246, 246, 243" aria-label="White"></button>
           <button type="button" class="swatch" style="background:#aecde5!important" [class.selected]="bodyColor()==='#aecde5'" (click)="setBodyColor('#aecde5')" title="Dulux Featherbed · RGB 174, 205, 229" aria-label="Dulux Featherbed"></button>
           <button type="button" class="swatch" style="background:#33383e!important" [class.selected]="bodyColor()==='#33383e'" (click)="setBodyColor('#33383e')" title="Charcoal" aria-label="Charcoal"></button>
@@ -128,12 +152,14 @@
           <button type="button" class="swatch" style="background:#aa6553!important" [class.selected]="bodyColor()==='#aa6553'" (click)="setBodyColor('#aa6553')" title="Terracotta" aria-label="Terracotta"></button>
           <label class="custom-colour" title="Custom colour">Custom <input type="color" [value]="bodyColor()" (input)="setBodyColor($any($event.target).value)" aria-label="Choose body colour"></label>
         </div>
-        <div class="colour-value"><span class="colour-dot" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>{{rawBody() ? 'Raw '+materialLabel() : bodyColor()}}</div>
-        <p class="help">Paint finish</p>
-        <div class="length-options paint-options" role="group" aria-label="Paint finish">
-          <button type="button" [class.selected]="paintFinish()==='matte'" [attr.aria-pressed]="paintFinish()==='matte'" (click)="setPaintFinish('matte')">Matte</button>
-          <button type="button" [class.selected]="paintFinish()==='semi-gloss'" [attr.aria-pressed]="paintFinish()==='semi-gloss'" (click)="setPaintFinish('semi-gloss')">Semi-gloss</button>
-        </div>
+          <div class="colour-value"><span class="colour-dot" [style.background]="bodyColor()"></span>{{bodyColor()}}</div>
+          <p class="help">Paint finish</p>
+          <div class="length-options paint-options" role="group" aria-label="Paint finish">
+            <button type="button" [class.selected]="paintFinish()==='matte'" [attr.aria-pressed]="paintFinish()==='matte'" (click)="setPaintFinish('matte')">Matte</button>
+            <button type="button" [class.selected]="paintFinish()==='semi-gloss'" [attr.aria-pressed]="paintFinish()==='semi-gloss'" (click)="setPaintFinish('semi-gloss')">Semi-gloss</button>
+          </div>
+          </div>
+        }
       </section>
       <section class="setting-card">
         <h2>Table top finish</h2>
@@ -173,3 +199,24 @@
     </div>
   </div>
 </section>
+
+<dialog #shelfDrawingDialog class="drawing-dialog" aria-label="Shelf positioning drawing">
+  <header><div><h2>Shelf Position</h2><p>Side panel · inner face · dimensions in mm</p></div><button type="button" class="icon-action" title="Close drawing" aria-label="Close drawing" (click)="closeShelfDrawing()">×</button></header>
+  @if (shelfDrawing(); as drawing) {
+    <div class="drawing-sheet" [class.zoomed]="drawingZoomed()"><img [src]="drawing.url" alt="Dimensioned side panel drawing with shelf support positions"></div>
+    <footer><button type="button" class="text-action" [attr.aria-pressed]="drawingZoomed()" (click)="drawingZoomed.set(!drawingZoomed())">{{drawingZoomed() ? 'Fit drawing' : 'Zoom drawing'}}</button><a class="drawing-download" [href]="drawing.url" [download]="drawing.filename">Download SVG</a><span>Two mirrored side panels</span></footer>
+  }
+</dialog>
+
+<dialog #configurationDialog class="configuration-dialog" aria-label="Configuration PDF preview">
+  <header><div><h2>Configuration</h2><p>PDF preview</p></div><button type="button" class="icon-action" title="Close configuration" aria-label="Close configuration" (click)="closeConfiguration()">×</button></header>
+  @if(savedConfiguration();as configuration){
+    <div class="configuration-sheet">
+      <h3>{{configuration.document.product}}</h3><p>{{configuration.document.material}}</p>
+      <div class="configuration-views"><figure><img [src]="configuration.document.front" alt="Front view for configuration PDF"><figcaption>FRONT</figcaption></figure><figure><img [src]="configuration.document.rear" alt="Rear view for configuration PDF"><figcaption>REAR</figcaption></figure></div>
+      <h4>SPECIFICATION</h4><div class="configuration-fields">@for(field of configuration.document.fields;track field.label){<div><h5>{{field.label}}</h5><p>{{field.value}}</p></div>}</div>
+      <p class="help">Produced {{configuration.document.produced}}</p>
+    </div>
+    <footer><a class="drawing-download" [href]="configuration.url" [download]="configuration.filename">Download PDF</a></footer>
+  }
+</dialog>
