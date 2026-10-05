@@ -2,20 +2,16 @@
   <header class="page-head">
     <div>
       <h1>Modeling</h1>
-      <p>3D Models / {{modelLabel()}}</p>
+      <p>{{modelLabel()}}</p>
     </div>
     <div class="model-picker"><label for="model-choice">Model</label><select id="model-choice" [value]="activeSlug()" [disabled]="saving() || roundingBusy()" (change)="selectModel($any($event.target).value)">@for (model of models(); track model.slug) {<option [value]="model.slug" [selected]="model.slug === activeSlug()">{{model.product_name}} / {{model.material_name}}</option>}</select></div>
   </header>
   <div class="workspace">
     <div class="viewer-card">
-      <div class="viewer-toolbar">
-        <strong>3D preview</strong>
-        <span>{{width()}} × {{depth()}} × {{height()}} mm</span>
-      </div>
       <div #canvasHost class="canvas-host" [class.scene-event]="previewScene()==='event'" [class.scene-office]="previewScene()==='office'" role="img" [attr.aria-label]="'Interactive 3D model '+modelLabel()"></div>
       @if (loading()) { <div class="viewer-status">Loading model…</div> }
       @if (!loading() && !fileName()) { <div class="viewer-status">Choose a GLB model to start previewing</div> }
-      <div class="viewer-footer"><span>Drag to rotate · Scroll to zoom</span><span>{{fileName()}}</span></div>
+      <div class="viewer-footer"><span>Drag to rotate · Scroll to zoom</span><span>{{width()}} × {{depth()}} × {{height()}} mm</span></div>
     </div>
     <div class="settings">
       <section class="setting-card assembly-card">
@@ -151,6 +147,7 @@
           @if (!isClassic()) { <button type="button" [class.selected]="topFinish()==='mdf'" (click)="setTopFinish('mdf')"><span class="finish-chip" style="background:#b99b78"></span>RAW MDF</button> }
         </div>
       </section>
+      @if (photographicScenesEnabled) {
       <section class="setting-card">
         <h2>Scene</h2>
         <div class="length-options scene-options" role="group" aria-label="Preview scene">
@@ -159,6 +156,7 @@
           <button type="button" [class.selected]="previewScene()==='office'" [attr.aria-pressed]="previewScene()==='office'" (click)="setPreviewScene('office')">Office</button>
         </div>
       </section>
+      }
       <section class="setting-card model-file">
         <h2>Model file</h2>
         <p class="help">GLB files are private to Hub. Dimensions and colours are preview settings.</p>

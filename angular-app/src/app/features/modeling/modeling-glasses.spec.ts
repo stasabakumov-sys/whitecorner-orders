@@ -25,10 +25,16 @@ describe('Hanging glasses', () => {
     expect(bounds.max.y).toBeCloseTo(.003);
     expect(bounds.min.y).toBeCloseTo(-.185);
     expect(bounds.max.x - bounds.min.x).toBeCloseTo(.08);
+    const bowl = glass.children[2] as THREE.Mesh;
+    const positions = bowl.geometry.getAttribute('position'), normals = bowl.geometry.getAttribute('normal');
+    let outermost = 0;
+    for (let i = 1; i < positions.count; i++) if (positions.getX(i) > positions.getX(outermost)) outermost = i;
+    expect(normals.getX(outermost)).toBeGreaterThan(.9);
     glass.traverse(object => {
       if (!(object instanceof THREE.Mesh)) return;
       expect(object.userData['fixedMaterial']).toBe(true);
-      expect((object.material as THREE.MeshPhysicalMaterial).transparent).toBe(true);
+      expect((object.material as THREE.MeshPhysicalMaterial).transmission).toBeGreaterThan(.9);
+      expect((object.material as THREE.MeshPhysicalMaterial).thickness).toBe(.001);
       expect(object.castShadow).toBe(false);
     });
   });
