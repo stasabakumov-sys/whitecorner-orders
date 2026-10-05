@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import * as THREE from 'three';
-import { resizePlywoodPosition } from './modeling-geometry';
+import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
 
 describe('Wooden part rounding', () => {
   it('keeps the two 12 mm Shaker sheets glued together and retains a 12 mm recess', () => {
@@ -96,4 +96,27 @@ describe('Wooden part rounding', () => {
     expect(jointVertices).toBeGreaterThan(0);
     geometry.dispose();
   });
+});
+
+it('closes MDF front-to-side mating faces for Shaker and 16 mm Plain without moving the outside face',()=>{
+ const front:RoundingProfile={axis:'z',origin:.5600004,thickness:.012,outline:[[.016,.239],[1.184,.239],[1.184,.884],[.016,.884]],holes:[]};
+ const side:RoundingProfile={axis:'x',origin:.016,thickness:.012,outline:[[.0160004,.239],[.5600004,.239],[.5600004,.884],[.0160004,.884]],holes:[]};
+ const joints=matingPartJoints([
+  {name:'Front_part1',bounds:new THREE.Box3(new THREE.Vector3(.016,.239,.5600004),new THREE.Vector3(1.184,.884,.5720004))},
+  {name:'Right_side1',bounds:new THREE.Box3(new THREE.Vector3(.016,.239,.0160004),new THREE.Vector3(.028,.884,.5600004))},
+  {name:'Legs 1',bounds:new THREE.Box3(new THREE.Vector3(.016,.089,.0160004),new THREE.Vector3(.028,.239,.5600004))},
+ ]);
+ expect(joints.get('Front_part1')).toHaveLength(1);expect(joints.has('Legs 1')).toBe(false);
+ for(const radius of [1,1.5,2,2.5,3])for(const plain of [false,true]){
+  const geometries=[front,side].map(p=>createRoundedPart(p,radius));
+  geometries.forEach((g,index)=>{
+   const name=index?'Right_side1':'Front_part1';keepPartJointsSquare(g,joints.get(name)!,radius);
+   const p=g.getAttribute('position');let seam=0;
+   for(let i=0;i<p.count;i++)if(p.getX(i)<=.028&&Math.abs(p.getZ(i)-.5600004)<radius/1000*2){
+    const z=resizeRoofCartPosition(name,p.getX(i),p.getY(i),p.getZ(i),1200,900,plain)[2];
+    expect(z).toBeCloseTo(plain?.5680004:.5600004,6);seam++;
+   }
+   expect(seam).toBeGreaterThan(0);g.dispose();
+  });
+ }
 });

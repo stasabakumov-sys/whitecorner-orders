@@ -20,7 +20,11 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3 }[]):
     const a = parts[i], b = parts[j];
     const roof = /^Roof[ _]/i.test(a.name) && /^Roof[ _]/i.test(b.name);
     const shaker = /^Front[ _]part[12]$/i.test(a.name) && /^Front[ _]part[12]$/i.test(b.name);
-    if (!roof && !shaker) continue;
+    // MDF body panels and their inner reinforcement rails meet on square faces.
+    // Rounding the two mating faces independently opens a visible light slit.
+    const bodyPanel = (name: string) => /^Front[ _]part[1-4]\)?$/i.test(name.trim()) || /^(Left|Right)[ _]side[ _]?[12]$/i.test(name.trim());
+    const body = bodyPanel(a.name) && bodyPanel(b.name);
+    if (!roof && !shaker && !body) continue;
     for (const axis of axes) {
       const others = axes.filter(value => value !== axis);
       if (!others.every(value => Math.min(a.bounds.max[value], b.bounds.max[value]) - Math.max(a.bounds.min[value], b.bounds.min[value]) > 1e-5)) continue;
