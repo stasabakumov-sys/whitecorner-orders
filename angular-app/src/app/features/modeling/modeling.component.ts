@@ -4,13 +4,16 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { HubMembersService } from '../../core/services/hub-members.service';
-import { resizePlywoodPosition } from './modeling-geometry';
+import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
 import { createRoundedPart, keepTrimJointSquare, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv } from './modeling-textures';
 import { ASSEMBLY_PARTS, AssemblyController, PartKey } from './modeling-assembly';
 
 interface ModelRecord {
+  slug: string;
+  product_name: string;
+  material_name: string;
   model_path: string | null;
   model_filename: string | null;
   base_width_mm: number;
@@ -21,7 +24,7 @@ interface ModelRecord {
 
 type TopFinish = 'body' | 'oak' | 'plywood';
 const BUCKET = 'hub-modeling-models';
-const SLUG = 'classic-bar-plywood';
+const CLASSIC_SLUG = 'classic-bar-plywood';
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 // GLTFLoader sanitizes spaces in node names to underscores for animation paths.
@@ -31,7 +34,7 @@ export function casterGroupKey(name: string): string | null {
 }
 
 export function isTopPanelName(name: string): boolean {
-  return /^Top[ _]part/i.test(name);
+  return /^Top[ _](?:part)?\d/i.test(name);
 }
 
 @Component({
@@ -43,6 +46,14 @@ export function isTopPanelName(name: string): boolean {
 })
 export class ModelingComponent implements AfterViewInit, OnDestroy {
   @ViewChild('canvasHost') canvasHost!: ElementRef<HTMLDivElement>;
+
+  readonly activeSlug = signal(CLASSIC_SLUG);
+  readonly models = signal<ModelRecord[]>([]);
+  readonly modelLabel = signal('Classic Bar / Plywood');
+  private selectionVersion = 0;
+  isClassic(): boolean { return this.activeSlug() === CLASSIC_SLUG; }
+  materialLabel(): string { return this.record?.material_name || 'Plywood'; }
+  overallHeight(): number { return this.height() + (this.isClassic() ? 0 : 1030); }
 
   readonly width = signal(1200);
   readonly depth = signal(600);
@@ -67,7 +78,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly selectedFile = signal<File | null>(null);
   readonly assemblyMode = signal(false);
   readonly assemblyRevision = signal(0);
-  readonly parts = ASSEMBLY_PARTS;
+  get parts() { return ASSEMBLY_PARTS.filter(part => this.isClassic()
+    ? !['roof', 'posts', 'legs', 'decorative-wheels'].includes(part.key)
+    : part.key !== 'shelf'); }
   private assembly?: AssemblyController;
 
   private readonly scene = new THREE.Scene();
@@ -172,14 +185,52 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   };
 
   private async loadSavedModel(): Promise<void> {
-    const requestVersion = this.loadVersion;
+    const requestVersion = ++this.selectionVersion;
     try {
       const { data, error } = await this.db.client.from('wc_modeling_models')
-        .select('model_path,model_filename,base_width_mm,base_depth_mm,base_body_height_mm,caster_height_mm')
-        .eq('slug', SLUG).single();
+        .select('slug,product_name,material_name,model_path,model_filename,base_width_mm,base_depth_mm,base_body_height_mm,caster_height_mm')
+        .order('product_name');
       if (error) throw error;
-      if (!this.alive || requestVersion !== this.loadVersion) return;
-      this.record = data as ModelRecord;
+      if (!this.alive || requestVersion !== this.selectionVersion) return;
+      this.models.set(data as ModelRecord[]);
+      const record = this.models().find(model => model.slug === this.activeSlug());
+      if (!record) throw new Error('The selected model is not available to your account');
+      await this.loadRecord(record, requestVersion);
+    } catch (cause) {
+      if (this.alive && requestVersion === this.selectionVersion) this.error.set(`Could not open the saved 3D model: ${this.message(cause)}. Reload the page or choose a local GLB file.`);
+    } finally {
+      if (this.alive && requestVersion === this.selectionVersion) this.loading.set(false);
+    }
+  }
+
+  async selectModel(slug: string): Promise<void> {
+    if (this.saving() || this.roundingBusy() || slug === this.activeSlug()) return;
+    const record = this.models().find(model => model.slug === slug);
+    if (!record) return;
+    const version = ++this.selectionVersion;
+    ++this.loadVersion;
+    this.disposeModel();
+    this.activeSlug.set(slug);
+    this.selectedFile.set(null);
+    this.fileName.set('');
+    this.error.set('');
+    this.notice.set('');
+    this.loading.set(true);
+    this.rawBody.set(true);
+    this.moulding.set(this.isClassic());
+    this.topFinish.set(this.isClassic() ? 'plywood' : 'body');
+    this.paintFinish.set('matte');
+    try { await this.loadRecord(record, version); }
+    catch (cause) {
+      if (this.alive && version === this.selectionVersion) this.error.set(`Could not open ${record.product_name}: ${this.message(cause)}. Select the model again or reload the page.`);
+    } finally {
+      if (this.alive && version === this.selectionVersion) this.loading.set(false);
+    }
+  }
+
+  private async loadRecord(data: ModelRecord, version: number): Promise<void> {
+      this.record = data;
+      this.modelLabel.set(`${data.product_name} / ${data.material_name}`);
       this.resetDimensions();
       if (!data.model_path) {
         this.notice.set('No model has been uploaded to Hub yet. Choose a GLB file to open it in the editor.');
@@ -187,14 +238,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       }
       const signed = await this.db.client.storage.from(BUCKET).createSignedUrl(data.model_path, 600);
       if (signed.error || !signed.data?.signedUrl) throw signed.error || new Error('Could not retrieve the model link.');
-      if (!this.alive || requestVersion !== this.loadVersion) return;
+      if (!this.alive || version !== this.selectionVersion) return;
       await this.openModel(signed.data.signedUrl);
-      if (this.alive) this.fileName.set(data.model_filename || 'Classic Bar / Plywood');
-    } catch (cause) {
-      if (this.alive) this.error.set(`Could not open the saved 3D model: ${this.message(cause)}. Reload the page or choose a local GLB file.`);
-    } finally {
-      if (this.alive) this.loading.set(false);
-    }
+      if (this.alive && version === this.selectionVersion) this.fileName.set(data.model_filename || this.modelLabel());
   }
 
   private async openModel(url: string): Promise<void> {
@@ -251,7 +297,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         }
       }
     });
-    this.roundingSupported.set(this.sourceParts.every(part => {
+    this.roundingSupported.set(this.sourceParts.some(part => {
       let profile = false;
       part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) profile = true; });
       return profile;
@@ -314,19 +360,20 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       input.value = '';
       return;
     }
+    const selectionVersion = ++this.selectionVersion;
     this.loading.set(true);
     const url = URL.createObjectURL(file);
     void this.openModel(url).then(() => {
-      if (this.alive) {
+      if (this.alive && selectionVersion === this.selectionVersion) {
         this.selectedFile.set(file);
         this.fileName.set(file.name);
         this.notice.set('Local preview is ready. Use Save to store the model for the team.');
       }
     }).catch(cause => {
-      if (this.alive) this.error.set(`Could not read ${file.name}: ${this.message(cause)}. Check the GLB and choose the file again.`);
+      if (this.alive && selectionVersion === this.selectionVersion) this.error.set(`Could not read ${file.name}: ${this.message(cause)}. Check the GLB and choose the file again.`);
     }).finally(() => {
       URL.revokeObjectURL(url);
-      if (this.alive) this.loading.set(false);
+      if (this.alive && selectionVersion === this.selectionVersion) this.loading.set(false);
     });
     input.value = '';
   }
@@ -337,7 +384,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.saving.set(true);
     this.error.set('');
     this.notice.set(`Uploading ${file.name}…`);
-    const path = `${SLUG}/${crypto.randomUUID()}.glb`;
+    const slug = this.activeSlug();
+    const path = `${slug}/${crypto.randomUUID()}.glb`;
     const previousPath = this.record?.model_path;
     let uploaded = false;
     try {
@@ -355,12 +403,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         model_filename: file.name,
         model_bytes: file.size,
         updated_at: new Date().toISOString(),
-      }).eq('slug', SLUG).select('model_path').single();
+      }).eq('slug', slug).select('model_path').single();
       if (update.error) throw update.error;
       if (!this.alive) return;
       this.record = { ...(this.record || {
+        slug, product_name: 'Classic Bar', material_name: 'Plywood',
         base_width_mm: 1200, base_depth_mm: 600, base_body_height_mm: 805, caster_height_mm: 95,
       }), model_path: path, model_filename: file.name };
+      this.models.update(models => models.map(model => model.slug === slug ? this.record! : model));
       this.selectedFile.set(null);
       this.notice.set(`${file.name} saved to Hub. The model is available to team members.`);
       if (previousPath && previousPath !== path) {
@@ -395,7 +445,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const geometries: THREE.BufferGeometry[] = [];
     try {
       const nodes = this.sourceParts.map(part => {
-        if (!raw || /^(Top|Buttom|Bottom)[ _]part1$/i.test(part.name)) {
+        let supported = false;
+        part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) supported = true; });
+        if (!raw || !supported || /^(Top|Buttom|Bottom)[ _]part1$/i.test(part.name)) {
           const copy = part.clone(true);
           copy.traverse(node => {
             if (!(node instanceof THREE.Mesh)) return;
@@ -417,7 +469,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         });
         if (!profile) throw new Error('The GLB is missing a part profile. Upload an updated model.');
         const geometry = createRoundedPart(profile, raw);
-        if (/^(Top|Buttom|Bottom)[ _]part2$/i.test(name)) keepTrimJointSquare(geometry, profile, raw);
+        if (/^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name)) keepTrimJointSquare(geometry, profile, raw);
         geometries.push(geometry);
         const face = materials.find(material => !/plywood[ _]edge$/i.test(material.name)) || materials[0];
         const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
@@ -448,9 +500,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   resetDimensions(): void {
-    this.width.set(1200);
-    this.depth.set(600);
-    this.height.set(900);
+    this.width.set(this.record?.base_width_mm || 1200);
+    this.depth.set(this.record?.base_depth_mm || 600);
+    this.height.set(this.record ? this.record.base_body_height_mm + this.record.caster_height_mm : 900);
     this.applyDimensions();
   }
 
@@ -518,6 +570,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   restoreAssembly(): void { this.assembly?.restore(); }
   private bindAssembly(): void {
     if (!this.model || !this.body) return;
+    if (this.assembly) this.assembly.normals = this.isClassic() ? {} : { front: [0, 0, 1], left: [1, 0, 0], right: [-1, 0, 0] };
     this.assembly?.bind(this.model, [...this.body.children, ...(this.frontMoulding ? [this.frontMoulding] : []),
       ...[...this.casters.values()].flatMap(group => group.children)]);
   }
@@ -527,7 +580,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     for (const [node, original] of this.originalPositions) {
       const positions = node.geometry.getAttribute('position');
       for (let i = 0; i < original.count; i++) {
-        const [x, y, z] = resizePlywoodPosition(node.userData['plywoodPart'] || node.name,
+        const [x, y, z] = (this.isClassic() ? resizePlywoodPosition : resizeRoofCartPosition)(node.userData['plywoodPart'] || node.name,
           original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height());
         positions.setXYZ(i, x, y, z);
       }
@@ -535,7 +588,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       node.geometry.computeBoundingBox();
       node.geometry.computeBoundingSphere();
       const materials = Array.isArray(node.material) ? node.material : [node.material];
-      this.addWoodUvs(node.geometry,
+      if (this.isClassic()) this.addWoodUvs(node.geometry,
         node.userData['plywoodPart'] || node.name, materials.some(material => /plywood[ _]edge$/i.test(material.name)),
         materials.some(material => /pine[ _]trim$/i.test(material.name)));
     }
@@ -547,12 +600,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         row === 'rear' ? (this.depth() - 600) / 1000 : 0,
       );
     }
-    const span = Math.max(this.width(), this.depth(), this.height()) / 1000;
+    const span = Math.max(this.width(), this.depth(), this.overallHeight()) / 1000;
     const centerX = this.width() / 2000, centerZ = this.depth() / 2000;
     this.turntable?.position.set(centerX, 0, centerZ);
     this.model?.position.set(-centerX, 0, -centerZ);
     if (this.controls) {
-      const nextTarget = new THREE.Vector3(this.width() / 2000, this.height() / 2000, this.depth() / 2000);
+      const nextTarget = new THREE.Vector3(this.width() / 2000, this.overallHeight() / 2000, this.depth() / 2000);
       const offset = this.camera.position.clone().sub(this.controls.target);
       this.camera.position.copy(nextTarget).addScaledVector(offset, span / this.cameraSpan);
       const orbitOffset = this.orbitCamera.position.clone().sub(this.controls.target);
@@ -574,6 +627,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.body.traverse(node => {
       if (!(node instanceof THREE.Mesh)) return;
       const partName = node.userData['plywoodPart'] || node.name;
+      if (node.userData['fixedMaterial']) return;
       const materials = (Array.isArray(node.material) ? node.material : [node.material]).map(material => {
         if (!(material instanceof THREE.MeshStandardMaterial) || material instanceof THREE.MeshPhysicalMaterial) return material;
         const paint = new THREE.MeshPhysicalMaterial();
@@ -587,8 +641,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const finish = isTopPanelName(partName) ? this.topFinish() : 'body';
         const edge = /plywood[ _]edge$/i.test(material.name);
         const plywood = (pine ? this.modelPineTexture : edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
-        const map = finish === 'oak' ? this.oakTexture : finish === 'plywood' ? plywood || this.rawTexture : this.rawBody() ? plywood || this.rawTexture : null;
-        const source = map ? new THREE.Color('#ffffff') : body;
+        const map = finish === 'oak' ? this.oakTexture : !this.isClassic() ? null : finish === 'plywood' ? plywood || this.rawTexture : this.rawBody() ? plywood || this.rawTexture : null;
+        const rawMdf = !this.isClassic() && !map && (this.rawBody() || finish === 'plywood');
+        const source = rawMdf ? new THREE.Color('#b99b78') : map ? new THREE.Color('#ffffff') : body;
         if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry, partName, edge, pine);
         if (!map && this.modelPaintBumpTexture && !node.geometry.hasAttribute('uv1')) this.addPaintUvs(node.geometry);
         material.color.copy(source);
@@ -596,14 +651,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         if (edge && map && finish !== 'oak') material.color.multiplyScalar(1.30);
         if (pine && map && finish !== 'oak') material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
         material.map = map;
-        material.bumpMap = map || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
+        material.bumpMap = rawMdf || map || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
         material.bumpScale = 0.00015;
-        material.roughness = map ? finish === 'oak' ? 0.55 : 0.78 : this.paintRoughness();
+        material.roughness = rawMdf ? 0.85 : map ? finish === 'oak' ? 0.55 : 0.78 : this.paintRoughness();
         material.metalness = 0;
-        material.envMap = map ? null : reflection;
+        material.envMap = rawMdf || map ? null : reflection;
         material.envMapIntensity = 0.128;
         if (material instanceof THREE.MeshPhysicalMaterial) {
-          material.clearcoat = !map && reflection ? 0.2 : 0;
+          material.clearcoat = !rawMdf && !map && reflection ? 0.2 : 0;
           material.clearcoatRoughness = 0.16;
         }
         material.needsUpdate = true;
@@ -633,7 +688,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       clearcoat: !this.rawBody() && this.paintFinish() === 'semi-gloss' ? 0.2 : 0, clearcoatRoughness: 0.16,
     });
     if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
-    this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height()), material);
+    this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height(), this.isClassic() ? undefined
+      : { panelLeft: 0.016, panelBottom: 0.239, panelTopInset: 0.016, front: 0.584, direction: 1 }), material);
     material.bumpMap = this.rawBody() || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
     material.bumpScale = 0.00015;
     this.addPaintUvs(this.frontMoulding.geometry);
@@ -729,11 +785,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   private focusCamera(): void {
-    const span = Math.max(this.width(), this.depth(), this.height()) / 1000;
+    const span = Math.max(this.width(), this.depth(), this.overallHeight()) / 1000;
     this.cameraSpan = span;
-    this.camera.position.set(this.width() / 2000 + span * 1.1, this.height() / 2000 + span * 0.5, this.depth() / 2000 + span * 1.25);
+    this.camera.position.set(this.width() / 2000 + span * 1.1, this.overallHeight() / 2000 + span * 0.5, this.depth() / 2000 + span * 1.25);
     this.orbitCamera.position.copy(this.camera.position);
-    this.camera.lookAt(this.width() / 2000, this.height() / 2000, this.depth() / 2000);
+    this.camera.lookAt(this.width() / 2000, this.overallHeight() / 2000, this.depth() / 2000);
     this.controls?.update();
   }
 

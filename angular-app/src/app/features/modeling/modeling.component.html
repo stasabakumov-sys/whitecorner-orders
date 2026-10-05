@@ -2,9 +2,9 @@
   <header class="page-head">
     <div>
       <h1>Modeling</h1>
-      <p>3D Models / Classic Bar / Plywood</p>
+      <p>3D Models / {{modelLabel()}}</p>
     </div>
-    <span class="model-tag">Classic Bar / Plywood</span>
+    <div class="model-picker"><label for="model-choice">Model</label><select id="model-choice" [value]="activeSlug()" [disabled]="saving() || roundingBusy()" (change)="selectModel($any($event.target).value)">@for (model of models(); track model.slug) {<option [value]="model.slug">{{model.product_name}} / {{model.material_name}}</option>}</select></div>
   </header>
 
   <div class="workspace">
@@ -13,7 +13,7 @@
         <strong>3D preview</strong>
         <span>{{width()}} × {{depth()}} × {{height()}} mm</span>
       </div>
-      <div #canvasHost class="canvas-host" role="img" aria-label="Interactive 3D model Classic Bar / Plywood"></div>
+      <div #canvasHost class="canvas-host" role="img" [attr.aria-label]="'Interactive 3D model '+modelLabel()"></div>
       @if (loading()) { <div class="viewer-status">Loading model…</div> }
       @if (!loading() && !fileName()) { <div class="viewer-status">Choose a GLB model to start previewing</div> }
       <div class="viewer-footer"><span>Drag to rotate · Scroll to zoom</span><span>{{fileName()}}</span></div>
@@ -22,7 +22,7 @@
     <div class="settings">
       <section class="setting-card assembly-card">
         <div class="setting-title"><h2>Parts & assembly</h2><button type="button" class="text-action" (click)="restoreAssembly()">Return all</button></div>
-        <p class="help">Select a part and drag its arrow. Clear Top and Bottom by 60 mm to release the panels. Shelf stays fixed.</p>
+        <p class="help">Select a part and drag its arrow. Clear Top and Bottom by 60 mm to release the panels. @if (isClassic()) { Shelf stays fixed. } @else { Roof, supports, legs and wheels stay fixed. }</p>
         <div class="length-options paint-options" role="group" aria-label="Assembly view">
           <button type="button" [class.selected]="!assemblyMode()" [attr.aria-pressed]="!assemblyMode()" (click)="setAssemblyMode(false)">Rotate</button>
           <button type="button" [class.selected]="assemblyMode()" [attr.aria-pressed]="assemblyMode()" (click)="setAssemblyMode(true)">Select parts</button>
@@ -39,12 +39,12 @@
         @if (selectedPart(); as key) {
           <div class="setting-title"><label for="part-offset">Move out <output>{{partOffset(key)}} mm</output></label><button type="button" class="text-action" (click)="restorePart()">Return part</button></div>
           <input id="part-offset" type="range" min="0" max="500" step="1" [value]="partOffset(key)" [disabled]="!partMovable(key)" (input)="movePart($any($event.target).value)" aria-label="Selected part distance in millimetres">
-          @if (!partMovable(key)) { <p class="help">{{key==='shelf'||key==='wheels' ? 'This part stays fixed.' : 'Move or hide Top and Bottom first.'}}</p> }
+          @if (!partMovable(key)) { <p class="help">{{["shelf","wheels","roof","posts","legs","decorative-wheels"].includes(key) ? "This part stays fixed." : "Move or hide Top and Bottom first."}}</p> }
         }
       </section>
       <section class="setting-card">
         <div class="setting-title"><h2>Dimensions</h2><button type="button" class="text-action" (click)="resetDimensions()">Reset</button></div>
-        <p class="help">Overall cart dimensions. Caster height stays 95 mm.</p>
+        <p class="help">Tabletop height includes {{isClassic() ? 95 : 73}} mm castors. @if (!isClassic()) { Roof height: {{overallHeight()}} mm. }</p>
         <label id="model-length-label">Length <output>{{width() / 10}} cm</output></label>
         <div class="length-options" role="group" aria-labelledby="model-length-label">
           @for (length of [1200, 1300, 1400, 1500]; track length) {
@@ -65,6 +65,7 @@
         </div>
         @if (roundingBusy()) {<p class="progress" role="status">Rounding wooden parts…</p>}
         @if (!loading() && !roundingSupported()) {<p class="help">Upload an updated GLB with part profiles to enable rounding.</p>}
+
       </section>
 
       <section class="setting-card">
@@ -78,16 +79,16 @@
 
       <section class="setting-card">
         <h2>Cart body colour</h2>
-        <p class="help">RAW shows plywood grain. Choose a colour to paint the body.</p>
+        <p class="help">{{isClassic() ? "RAW shows plywood grain." : "RAW shows unpainted MDF."}} Choose a colour to paint the body.</p>
         <div class="swatches" role="group" aria-label="Body colour">
-          <button type="button" class="raw-choice" style="background:repeating-linear-gradient(92deg,#d6b98e 0 7px,#cda97b 7px 9px,#dec399 9px 13px)!important" [class.selected]="rawBody()" (click)="setRawBody()">RAW plywood</button>
+          <button type="button" class="raw-choice" [style.background]="isClassic() ? 'repeating-linear-gradient(92deg,#d6b98e 0 7px,#cda97b 7px 9px,#dec399 9px 13px)' : '#b99b78'" [class.selected]="rawBody()" (click)="setRawBody()">RAW {{materialLabel()}}</button>
           <button type="button" class="swatch" style="background:#f6f6f3!important" [class.selected]="bodyColor()==='#f6f6f3'" (click)="setBodyColor('#f6f6f3')" title="White · RGB 246, 246, 243" aria-label="White"></button>
           <button type="button" class="swatch" style="background:#33383e!important" [class.selected]="bodyColor()==='#33383e'" (click)="setBodyColor('#33383e')" title="Charcoal" aria-label="Charcoal"></button>
           <button type="button" class="swatch" style="background:#708471!important" [class.selected]="bodyColor()==='#708471'" (click)="setBodyColor('#708471')" title="Sage" aria-label="Sage"></button>
           <button type="button" class="swatch" style="background:#aa6553!important" [class.selected]="bodyColor()==='#aa6553'" (click)="setBodyColor('#aa6553')" title="Terracotta" aria-label="Terracotta"></button>
           <label class="custom-colour" title="Custom colour">Custom <input type="color" [value]="bodyColor()" (input)="setBodyColor($any($event.target).value)" aria-label="Choose body colour"></label>
         </div>
-        <div class="colour-value"><span class="colour-dot" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>{{rawBody() ? 'Raw plywood' : bodyColor()}}</div>
+        <div class="colour-value"><span class="colour-dot" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>{{rawBody() ? 'Raw '+materialLabel() : bodyColor()}}</div>
         <p class="help">Paint finish</p>
         <div class="length-options paint-options" role="group" aria-label="Paint finish">
           <button type="button" [class.selected]="paintFinish()==='matte'" [attr.aria-pressed]="paintFinish()==='matte'" (click)="setPaintFinish('matte')">Matte</button>
@@ -101,7 +102,7 @@
         <div class="finish-options" role="group" aria-label="Table top finish">
           <button type="button" [class.selected]="topFinish()==='body'" (click)="setTopFinish('body')"><span class="finish-chip" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>In cart finish / colour</button>
           <button type="button" [class.selected]="topFinish()==='oak'" (click)="setTopFinish('oak')"><span class="finish-chip oak"></span>Tasmanian oak</button>
-          <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>Varnished plywood</button>
+          <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>{{isClassic() ? "Varnished plywood" : "RAW MDF"}}</button>
         </div>
       </section>
 

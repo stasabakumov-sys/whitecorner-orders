@@ -2,9 +2,10 @@ import * as THREE from 'three';
 
 // Decorative pine panel mould, 31 mm wide and 15 mm deep. The curved face is
 // approximated from the supplied reference; the four rails meet at mitres.
-export function createFrontMoulding(lengthMm: number, heightMm: number): THREE.BufferGeometry {
-  const left = 0.019 + 0.09, right = lengthMm / 1000 - 0.019 - 0.09;
-  const bottom = 0.11 + 0.09, top = heightMm / 1000 - 0.015 - 0.09;
+export function createFrontMoulding(lengthMm: number, heightMm: number,
+  placement = { panelLeft: 0.019, panelBottom: 0.11, panelTopInset: 0.015, front: 0.019, direction: -1 }): THREE.BufferGeometry {
+  const left = placement.panelLeft + 0.09, right = lengthMm / 1000 - placement.panelLeft - 0.09;
+  const bottom = placement.panelBottom + 0.09, top = heightMm / 1000 - placement.panelTopInset - 0.09;
   const profile = new THREE.Shape();
   profile.moveTo(0, 0); profile.lineTo(0, 0.007);
   profile.lineTo(0.003, 0.007); profile.lineTo(0.003, 0.009);
@@ -17,10 +18,10 @@ export function createFrontMoulding(lengthMm: number, heightMm: number): THREE.B
   const points = profile.getPoints(48).map(point => new THREE.Vector2(0.031 - point.x, point.y)).reverse();
   const positions: number[] = [], uv: number[] = [], normals: number[] = [];
   const ring = (point: THREE.Vector2) => [
-    [left + point.x, bottom + point.x, 0.019 - point.y],
-    [right - point.x, bottom + point.x, 0.019 - point.y],
-    [right - point.x, top - point.x, 0.019 - point.y],
-    [left + point.x, top - point.x, 0.019 - point.y],
+    [left + point.x, bottom + point.x, placement.front + placement.direction * point.y],
+    [right - point.x, bottom + point.x, placement.front + placement.direction * point.y],
+    [right - point.x, top - point.x, placement.front + placement.direction * point.y],
+    [left + point.x, top - point.x, placement.front + placement.direction * point.y],
   ];
   const faceNormals = points.slice(0, -1).map((point, i) => {
     const a = ring(point), b = ring(points[i + 1]);

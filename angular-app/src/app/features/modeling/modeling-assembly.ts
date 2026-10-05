@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type PartKey = 'top' | 'bottom' | 'left' | 'right' | 'front' | 'shelf' | 'wheels';
+export type PartKey = 'top' | 'bottom' | 'left' | 'right' | 'front' | 'shelf' | 'wheels' | 'roof' | 'posts' | 'legs' | 'decorative-wheels';
 export const ASSEMBLY_PARTS: { key: PartKey; label: string; normal: [number, number, number] }[] = [
   { key: 'top', label: 'Top', normal: [0, 1, 0] },
   { key: 'bottom', label: 'Bottom', normal: [0, -1, 0] },
@@ -9,6 +9,10 @@ export const ASSEMBLY_PARTS: { key: PartKey; label: string; normal: [number, num
   { key: 'front', label: 'Front panel', normal: [0, 0, -1] },
   { key: 'shelf', label: 'Shelf · fixed', normal: [0, 0, 0] },
   { key: 'wheels', label: 'Wheels · fixed', normal: [0, 0, 0] },
+  { key: 'roof', label: 'Roof · fixed', normal: [0, 0, 0] },
+  { key: 'posts', label: 'Roof supports · fixed', normal: [0, 0, 0] },
+  { key: 'legs', label: 'Legs · fixed', normal: [0, 0, 0] },
+  { key: 'decorative-wheels', label: 'Decorative wheels · fixed', normal: [0, 0, 0] },
 ];
 const WALLS: PartKey[] = ['left', 'right', 'front'];
 export function assemblyPartKey(name: string): PartKey | null {
@@ -19,15 +23,20 @@ export function assemblyPartKey(name: string): PartKey | null {
   if (/^Front[ _]/i.test(name)) return 'front';
   if (/^Shelf/i.test(name)) return 'shelf';
   if (/^Caster/i.test(name)) return 'wheels';
+  if (/^Roof/i.test(name)) return 'roof';
+  if (/^Dar[ _]?\d/i.test(name)) return 'posts';
+  if (/^Legs/i.test(name)) return 'legs';
+  if (/^Decorative[ _]wheel/i.test(name)) return 'decorative-wheels';
   return null;
 }
 
 export class AssemblyState {
+  locked = false;
   selected: PartKey | null = null;
   readonly offsets = Object.fromEntries(ASSEMBLY_PARTS.map(p => [p.key, 0])) as Record<PartKey, number>;
   readonly visible = Object.fromEntries(ASSEMBLY_PARTS.map(p => [p.key, true])) as Record<PartKey, boolean>;
   canMove(key: PartKey): boolean {
-    if (key === 'shelf' || key === 'wheels' || !this.visible[key]) return false;
+    if (this.locked || !this.visible[key] || ASSEMBLY_PARTS.find(part => part.key === key)?.normal.every(value => value === 0)) return false;
     return !WALLS.includes(key) || ['top', 'bottom'].every(k =>
       !this.visible[k as PartKey] || this.offsets[k as PartKey] >= 60);
   }
@@ -54,6 +63,10 @@ export class AssemblyState {
 
 // Preview-only transforms. Original geometry and dimensions are never rewritten.
 export class AssemblyController {
+  normals: Partial<Record<PartKey, [number, number, number]>> = {};
+  private normal(key: PartKey): THREE.Vector3 {
+    return new THREE.Vector3(...(this.normals[key] || ASSEMBLY_PARTS.find(part => part.key === key)!.normal));
+  }
   readonly state = new AssemblyState();
   private enabled = false;
   private bindings = new Map<PartKey, THREE.Object3D[]>();
@@ -126,7 +139,7 @@ export class AssemblyController {
   has(key: PartKey): boolean { return this.bindings.has(key); }
   private apply(): void {
     for (const part of ASSEMBLY_PARTS) for (const node of this.bindings.get(part.key) || []) {
-      node.position.copy(this.bases.get(node)!).addScaledVector(new THREE.Vector3(...part.normal), this.state.offsets[part.key] / 1000);
+      node.position.copy(this.bases.get(node)!).addScaledVector(this.normal(part.key), this.state.offsets[part.key] / 1000);
       node.visible = this.state.visible[part.key];
     }
     this.root?.updateWorldMatrix(true, true);
@@ -139,7 +152,7 @@ export class AssemblyController {
     const box = new THREE.Box3();
     for (const node of this.bindings.get(key) || []) box.union(new THREE.Box3().setFromObject(node));
     this.arrow.position.copy(box.getCenter(new THREE.Vector3()));
-    const normal = new THREE.Vector3(...ASSEMBLY_PARTS.find(p => p.key === key)!.normal).transformDirection(this.root.matrixWorld);
+    const normal = this.normal(key).transformDirection(this.root.matrixWorld);
     this.arrow.setDirection(normal);
     this.arrow.updateMatrixWorld(true);
   }
@@ -176,7 +189,7 @@ export class AssemblyController {
     this.down = { id: event.pointerId, x: event.clientX, y: event.clientY };
     this.cast(event);
     if (!this.arrow.visible || !this.ray.intersectObject(this.arrow, true).length || !this.root || !this.state.selected) return;
-    const normal = new THREE.Vector3(...ASSEMBLY_PARTS.find(p => p.key === this.state.selected)!.normal).transformDirection(this.root.matrixWorld);
+    const normal = this.normal(this.state.selected).transformDirection(this.root.matrixWorld);
     const start = this.arrow.position.clone().project(this.camera), end = this.arrow.position.clone().addScaledVector(normal, 0.1).project(this.camera);
     const rect = this.canvas.getBoundingClientRect();
     const dx = (end.x - start.x) * rect.width / 2, dy = -(end.y - start.y) * rect.height / 2;
