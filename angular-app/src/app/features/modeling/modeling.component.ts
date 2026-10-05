@@ -9,6 +9,7 @@ import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geomet
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
+import { createHangingGlass, hangingGlassLayout } from './modeling-glasses';
 import { createRoofBottom, createGlassRack, glassRackLayout } from './modeling-roof';
 import { ASSEMBLY_PARTS, AssemblyController, PartKey } from './modeling-assembly';
 
@@ -61,6 +62,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly depth = signal(600);
   readonly height = signal(900);
   readonly rounding = signal(1.5);
+  readonly roundingEditing = signal(false);
   readonly moulding = signal(true);
   readonly frontStyle = signal<'shaker' | 'plain' | 'moulding'>('plain');
   private frontMoulding?: THREE.Mesh;
@@ -71,6 +73,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.previewScene.set(scene);
     // The stationary photographic floor remains visible through the renderer.
     this.scene.background = scene === 'studio' ? new THREE.Color('#eceae8') : null;
+  }
+  readonly showGlasses = signal(false);
+  readonly glassDiameter = signal(80);
+  glassLayout() { return hangingGlassLayout(this.glassDiameter(), this.rackLayout().bowlDiameter); }
+  setShowGlasses(visible: boolean): void { this.showGlasses.set(visible); this.updateRoofBottom(); this.applyFinishes(); }
+  setGlassDiameter(raw: string): void {
+    const value = Number(raw); if (!Number.isFinite(value)) return;
+    this.glassDiameter.set(hangingGlassLayout(value, null).diameter);
+    this.updateRoofBottom(); this.applyFinishes();
   }
   readonly glassRackCount = signal(0);
   private glassRacks?: THREE.Group;
@@ -151,13 +162,13 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const light = new THREE.DirectionalLight('#ffffff', 1.3);
       light.position.set(2, 4, 3);
       light.castShadow = true;
-      light.shadow.mapSize.set(2048, 2048);
+      light.shadow.mapSize.set(4096, 4096);
       light.shadow.camera.left = light.shadow.camera.bottom = -2;
       light.shadow.camera.right = light.shadow.camera.top = 2;
       light.shadow.camera.near = 0.1;
       light.shadow.camera.far = 12;
       light.shadow.bias = -0.00002;
-      light.shadow.normalBias = 0.003;
+      light.shadow.normalBias = 0.001;
       this.scene.add(light);
       const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.ShadowMaterial({ opacity: 0.22 }));
       ground.rotation.x = -Math.PI / 2;
@@ -175,6 +186,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         this.controls, () => this.assemblyRevision.update(value => value + 1));
       this.resizeObserver = new ResizeObserver(() => this.resize());
       this.resizeObserver.observe(this.canvasHost.nativeElement);
+      window.addEventListener('resize', this.onPreviewResize);
+      document.addEventListener('scroll', this.onPreviewResize, true);
       this.resize();
       this.animate();
       void this.loadSavedModel();
@@ -184,7 +197,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  private readonly onPreviewResize = () => this.resize();
+
   private resize(): void {
+    if (this.canvasHost && window.matchMedia('(min-width: 981px)').matches) {
+      const card = this.canvasHost.nativeElement.parentElement!;
+      const top = Math.max(10, card.getBoundingClientRect().top);
+      card.style.setProperty('--viewer-top', `${top}px`);
+    }
     if (!this.renderer) return;
     const { width, height } = this.canvasHost.nativeElement.getBoundingClientRect();
     if (!width || !height) return;
@@ -245,9 +265,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.loading.set(true);
     this.rawBody.set(true);
     this.moulding.set(this.isClassic());
+    this.roundingEditing.set(false);
     this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
     this.roofClosed.set(false);
     this.glassRackCount.set(0);
+    this.showGlasses.set(false);
+    this.glassDiameter.set(80);
     this.topFinish.set(this.isClassic() ? 'plywood' : 'body');
     this.paintFinish.set('matte');
     try { await this.loadRecord(record, version); }
@@ -611,8 +634,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     return this.paintFinish() === 'semi-gloss' ? 0.26 : 0.78;
   }
 
-  private paintReflection(): THREE.Texture | null {
-    if (this.paintFinish() !== 'semi-gloss' || !this.renderer) return null;
+  private paintReflection(forGlass = false): THREE.Texture | null {
+    if ((!forGlass && this.paintFinish() !== 'semi-gloss') || !this.renderer) return null;
     if (!this.paintEnvironment) {
       const studio = new THREE.Scene();
       studio.background = new THREE.Color('#181818');
@@ -757,6 +780,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       for (const x of layout.centres) {
         const rack = createGlassRack();
         rack.position.set(x / 1000, envelope.min.y, (envelope.min.z + envelope.max.z) / 2);
+        if (this.showGlasses()) for (const z of this.glassLayout().positions) {
+          const glass = createHangingGlass(this.glassDiameter(), this.paintReflection(true));
+          glass.position.set(0, -.067, z); rack.add(glass);
+        }
         this.glassRacks.add(rack);
       }
       this.body.add(this.glassRacks);
@@ -975,6 +1002,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.loadVersion++;
     cancelAnimationFrame(this.frame);
     this.resizeObserver?.disconnect();
+    window.removeEventListener('resize', this.onPreviewResize);
+    document.removeEventListener('scroll', this.onPreviewResize, true);
     this.controls?.dispose();
     this.assembly?.dispose();
     this.disposeModel();

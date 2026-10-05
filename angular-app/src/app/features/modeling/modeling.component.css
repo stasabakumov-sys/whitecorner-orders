@@ -10,3 +10,8 @@
 .parts-list{margin-top:12px;display:grid;gap:5px}.part-row{display:grid;grid-template-columns:16px minmax(0,1fr) 42px;gap:5px;align-items:center}.part-row input{accent-color:#1884e8}.part-row button{min-height:28px;text-align:left;border:1px solid #dce3e9;border-radius:7px;background:#fff;color:#425162;padding:5px 8px;font-size:11px;cursor:pointer}.part-row button.selected{border-color:#1884e8;background:#eef6ff}.part-row button:disabled{opacity:.45;cursor:default}.part-row span{font-size:10px;color:#798696;text-align:right}.assembly-card .setting-title label{flex:1;gap:8px;margin-right:12px}
 
 .scene-options{grid-template-columns:repeat(3,minmax(0,1fr))}.canvas-host.scene-event{background:#eceae8 url('../../../../public/modeling-scenes/event.jpg') center/cover no-repeat}.canvas-host.scene-office{background:#eceae8 url('../../../../public/modeling-scenes/office.jpg') center/cover no-repeat}
+
+.rounding-heading{display:flex;align-items:center;gap:8px;margin-top:12px}.setting-card .rounding-heading label{flex:1;margin:0}.rounding-edit{width:27px;height:27px;font-size:14px}
+
+@media(min-width:981px){.viewer-card{display:flex;flex-direction:column;height:calc(100dvh - var(--viewer-top,80px) - 12px);min-height:360px}.viewer-card .canvas-host{flex:1;height:auto;min-height:0}.viewer-toolbar,.viewer-footer{flex:none}}
+.glasses-toggle input{accent-color:#334155}

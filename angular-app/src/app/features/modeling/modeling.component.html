@@ -59,12 +59,19 @@
             <button type="button" [class.selected]="height() === value" [attr.aria-pressed]="height() === value" (click)="setDimension('height', value.toString())">{{value / 10}} cm</button>
           }
         </div>
-        <label id="model-rounding-label">Edge rounding <output>{{rounding()}} mm</output></label>
-        <div class="length-options rounding-options" role="group" aria-labelledby="model-rounding-label">
+        <div class="rounding-heading">
+          <label id="model-rounding-label">Edge rounding <output>{{rounding()}} mm</output></label>
+          <button type="button" class="icon-action rounding-edit" [attr.aria-label]="roundingEditing() ? 'Close edge rounding editor' : 'Edit edge rounding'" [attr.title]="roundingEditing() ? 'Done' : 'Edit'" [attr.aria-expanded]="roundingEditing()" aria-controls="rounding-options" (click)="roundingEditing.set(!roundingEditing())">
+            @if (roundingEditing()) { <span aria-hidden="true">✓</span> } @else { <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 5 5-12 12-6 1 1-6Z"/><path d="m14 5 5 5"/></svg> }
+          </button>
+        </div>
+        @if (roundingEditing()) {
+        <div id="rounding-options" class="length-options rounding-options" role="group" aria-labelledby="model-rounding-label">
           @for (radius of [0, 1, 1.5, 2, 2.5, 3]; track radius) {
             <button type="button" [disabled]="!roundingSupported() || roundingBusy()" [class.selected]="rounding() === radius" [attr.aria-pressed]="rounding() === radius" (click)="setRounding(radius)">{{radius === 0 ? 'None' : radius + ' mm'}}</button>
           }
         </div>
+        }
         @if (roundingBusy()) {<p class="progress" role="status">Rounding wooden parts…</p>}
         @if (!loading() && !roundingSupported()) {<p class="help">Upload an updated GLB with part profiles to enable rounding.</p>}
       </section>
@@ -101,6 +108,15 @@
             <p class="help" aria-live="polite">Clear gap between racks: <strong>{{rackLayout().gap!.toFixed(1)}} mm</strong><br>Maximum bowl diameter: <strong>{{rackLayout().bowlDiameter!.toFixed(1)}} mm</strong> (4 mm clearance).</p>
           } @else if (glassRackCount() === 1) { <p class="help">One centred rack — no adjacent rack limits the bowl diameter.</p> }
           <p class="help">Bowl diameter is based on rack spacing. Check the actual stem and base fit before manufacture.</p>
+          @if (glassRackCount() > 0) {
+            <label class="glasses-toggle"><span>Show glasses</span><input type="checkbox" [checked]="showGlasses()" (change)="setShowGlasses($any($event.target).checked)" aria-label="Show glasses on racks"></label>
+            @if (showGlasses()) {
+              <label for="glass-diameter">Bowl diameter <output>{{glassDiameter()}} mm</output></label>
+              <input id="glass-diameter" type="range" min="60" max="160" step="5" [value]="glassDiameter()" (input)="setGlassDiameter($any($event.target).value)" aria-label="Glass bowl diameter in millimetres">
+              @if (glassLayout().count) { <p class="help" aria-live="polite">{{glassLayout().count}} glasses per rack · {{glassLayout().count * glassRackCount()}} total. Preview wine glasses with a 70 mm foot.</p> }
+              @else { <p class="error" role="alert">These glasses exceed the spacing between racks. Reduce the bowl diameter or remove racks.</p> }
+            }
+          }
         }
       </section>
       }
