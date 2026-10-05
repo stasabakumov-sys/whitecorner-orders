@@ -4,10 +4,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { HubMembersService } from '../../core/services/hub-members.service';
+import { fitFurnitureBolts, shortenCastorBrakes } from './modeling-hardware';
 import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
-import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, roofPartJoints, RoundingProfile } from './modeling-rounding';
+import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
-import { pineWoodUv } from './modeling-textures';
+import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges } from './modeling-textures';
 import { ASSEMBLY_PARTS, AssemblyController, PartKey } from './modeling-assembly';
 
 interface ModelRecord {
@@ -22,7 +23,7 @@ interface ModelRecord {
   caster_height_mm: number;
 }
 
-type TopFinish = 'body' | 'oak' | 'plywood';
+type TopFinish = 'body' | 'oak' | 'plywood' | 'mdf';
 const BUCKET = 'hub-modeling-models';
 const CLASSIC_SLUG = 'classic-bar-plywood';
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -60,6 +61,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly height = signal(900);
   readonly rounding = signal(1.5);
   readonly moulding = signal(true);
+  readonly frontStyle = signal<'shaker' | 'plain' | 'moulding'>('plain');
   private frontMoulding?: THREE.Mesh;
   readonly roundingSupported = signal(false);
   readonly roundingBusy = signal(false);
@@ -102,7 +104,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private loadVersion = 0;
   private alive = true;
   private rawTexture?: THREE.CanvasTexture;
-  private oakTexture?: THREE.CanvasTexture;
+  readonly finishLoading = signal(false);
+  readonly finishError = signal('');
+  private finishVersion = 0;
+  private readonly finishTextures = new Map<string, THREE.Texture>();
+  private readonly finishRequests = new Map<string, Promise<THREE.Texture>>();
   private plywoodTexture?: THREE.CanvasTexture;
   private modelPlywoodTexture?: THREE.Texture;
   private modelPlywoodEdgeTexture?: THREE.Texture;
@@ -209,6 +215,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (!record) return;
     const version = ++this.selectionVersion;
     ++this.loadVersion;
+    ++this.finishVersion;
+    this.finishLoading.set(false);
+    this.finishError.set('');
     this.disposeModel();
     this.activeSlug.set(slug);
     this.selectedFile.set(null);
@@ -218,6 +227,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.loading.set(true);
     this.rawBody.set(true);
     this.moulding.set(this.isClassic());
+    this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
     this.topFinish.set(this.isClassic() ? 'plywood' : 'body');
     this.paintFinish.set('matte');
     try { await this.loadRecord(record, version); }
@@ -261,6 +271,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.model = new THREE.Group();
     this.body = new THREE.Group();
     this.casters.clear();
+    if (!this.isClassic()) { fitFurnitureBolts(gltf.scene); shortenCastorBrakes(gltf.scene); }
     const nodes = [...gltf.scene.children];
     for (const node of nodes) {
       const key = casterGroupKey(node.name);
@@ -446,8 +457,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     try {
       // CAD profiles and positions share model coordinates. Read the original
       // positions so rotation, resized previews and assembly offsets do not
-      // alter which roof faces meet.
-      const roofJoints = roofPartJoints(this.sourceParts.map(part => {
+      // alter which roof and Shaker faces meet.
+      const joints = matingPartJoints(this.sourceParts.filter(part => !/^Front[ _]part[12]$/i.test(part.name)
+        || (!this.isClassic() && this.frontStyle() === 'shaker')).map(part => {
         const bounds = new THREE.Box3();
         part.traverse(node => {
           if (node instanceof THREE.Mesh) bounds.union(new THREE.Box3().setFromBufferAttribute(this.sourcePositions.get(node.geometry)!));
@@ -480,7 +492,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         if (!profile) throw new Error('The GLB is missing a part profile. Upload an updated model.');
         const geometry = createRoundedPart(profile, raw);
         if (/^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name)) keepTrimJointSquare(geometry, profile, raw);
-        keepPartJointsSquare(geometry, roofJoints.get(name) || [], raw);
+        keepPartJointsSquare(geometry, joints.get(name) || [], raw);
         geometries.push(geometry);
         const face = materials.find(material => !/plywood[ _]edge$/i.test(material.name)) || materials[0];
         const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
@@ -529,9 +541,42 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.applyFinishes();
   }
 
-  setTopFinish(finish: TopFinish): void {
-    this.topFinish.set(finish);
-    this.applyFinishes();
+  async setTopFinish(finish: TopFinish): Promise<void> {
+    const version = ++this.finishVersion;
+    this.finishError.set('');
+    this.finishLoading.set(true);
+    try {
+      if (finish === 'oak') await this.loadFinishTexture('tasmanian-oak.png');
+      else if (finish === 'plywood' && !this.isClassic()) await Promise.all([
+        this.loadFinishTexture('plywood-face.jpg'), this.loadFinishTexture('plywood-edge.jpg'),
+      ]);
+      if (!this.alive || version !== this.finishVersion) return;
+      this.topFinish.set(finish);
+      this.applyFinishes();
+    } catch (cause) {
+      if (this.alive && version === this.finishVersion) this.finishError.set(`Could not load the table top texture: ${this.message(cause)}. Check your connection and select the finish again.`);
+    } finally {
+      if (this.alive && version === this.finishVersion) this.finishLoading.set(false);
+    }
+  }
+
+  private loadFinishTexture(file: string): Promise<THREE.Texture> {
+    const cached = this.finishTextures.get(file);
+    if (cached) return Promise.resolve(cached);
+    const pending = this.finishRequests.get(file);
+    if (pending) return pending;
+    const request = new THREE.TextureLoader().loadAsync(new URL(`modeling-textures/${file}`, document.baseURI).href).then(texture => {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.channel = file === 'plywood-edge.jpg' ? 3 : 2;
+      texture.repeat.set(file === 'tasmanian-oak.png' ? 1 / 1.2 : file === 'plywood-face.jpg' ? 1 / 2.439 : 1,
+        file === 'tasmanian-oak.png' ? 1 / 1.2 : file === 'plywood-face.jpg' ? 1 / 2.439 : 1);
+      texture.anisotropy = Math.min(this.renderer?.capabilities.getMaxAnisotropy() || 1, 8);
+      if (this.alive) this.finishTextures.set(file, texture); else texture.dispose();
+      return texture;
+    }).finally(() => this.finishRequests.delete(file));
+    this.finishRequests.set(file, request);
+    return request;
   }
 
   setPaintFinish(finish: 'matte' | 'semi-gloss'): void {
@@ -581,6 +626,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   restoreAssembly(): void { this.assembly?.restore(); }
   private bindAssembly(): void {
     if (!this.model || !this.body) return;
+    if (!this.isClassic()) this.body.traverse(node => {
+      if (!/^Front[ _]part2$/i.test(node.userData['plywoodPart'] || node.name)) return;
+      node.userData['assemblyHidden'] = this.frontStyle() !== 'shaker';
+    });
     if (this.assembly) this.assembly.normals = this.isClassic() ? {} : { front: [0, 0, 1], left: [1, 0, 0], right: [-1, 0, 0] };
     this.assembly?.bind(this.model, [...this.body.children, ...(this.frontMoulding ? [this.frontMoulding] : []),
       ...[...this.casters.values()].flatMap(group => group.children)]);
@@ -591,8 +640,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     for (const [node, original] of this.originalPositions) {
       const positions = node.geometry.getAttribute('position');
       for (let i = 0; i < original.count; i++) {
-        const [x, y, z] = (this.isClassic() ? resizePlywoodPosition : resizeRoofCartPosition)(node.userData['plywoodPart'] || node.name,
-          original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height());
+        const name = node.userData['plywoodPart'] || node.name;
+        const [x, y, z] = this.isClassic()
+          ? resizePlywoodPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height())
+          : resizeRoofCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height(), this.frontStyle() !== 'shaker');
         positions.setXYZ(i, x, y, z);
       }
       positions.needsUpdate = true;
@@ -632,13 +683,20 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (!this.body) return;
     const reflection = this.paintReflection();
     this.rawTexture ||= this.woodTexture('#d5b88d', '#b99466', 0.35);
-    this.oakTexture ||= this.woodTexture('#b59b84', '#765c49', 0.32);
     this.plywoodTexture ||= this.woodTexture('#d9ba8e', '#b78c60', 0.22);
     const body = new THREE.Color(this.bodyColor());
     this.body.traverse(node => {
       if (!(node instanceof THREE.Mesh)) return;
       const partName = node.userData['plywoodPart'] || node.name;
       if (node.userData['fixedMaterial']) return;
+      if (!this.isClassic() && isTopPanelName(partName)) {
+        groupTopFacesAndEdges(node.geometry);
+        const source = Array.isArray(node.material) ? node.material[0] : node.material;
+        if (!Array.isArray(node.material) || node.material.length < 2) {
+          const edge = source.clone(); edge.name = 'plywood edge';
+          node.material = [source, edge];
+        }
+      }
       const materials = (Array.isArray(node.material) ? node.material : [node.material]).map(material => {
         if (!(material instanceof THREE.MeshStandardMaterial) || material instanceof THREE.MeshPhysicalMaterial) return material;
         const paint = new THREE.MeshPhysicalMaterial();
@@ -652,14 +710,17 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const finish = isTopPanelName(partName) ? this.topFinish() : 'body';
         const edge = /plywood[ _]edge$/i.test(material.name);
         const plywood = (pine ? this.modelPineTexture : edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
-        const map = finish === 'oak' ? this.oakTexture : !this.isClassic() ? null : finish === 'plywood' ? plywood || this.rawTexture : this.rawBody() ? plywood || this.rawTexture : null;
-        const rawMdf = !this.isClassic() && !map && (this.rawBody() || finish === 'plywood');
+        const map = finish === 'oak' ? this.finishTextures.get('tasmanian-oak.png') || null
+          : finish === 'mdf' ? null : !this.isClassic() ? finish === 'plywood' ? this.finishTextures.get(edge ? 'plywood-edge.jpg' : 'plywood-face.jpg') || null : null
+          : finish === 'plywood' ? plywood || this.rawTexture : this.rawBody() ? plywood || this.rawTexture : null;
+        const rawMdf = !this.isClassic() && !map && (this.rawBody() || finish === 'mdf');
         const source = rawMdf ? new THREE.Color('#b99b78') : map ? new THREE.Color('#ffffff') : body;
         if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry, partName, edge, pine);
+        if (map && (finish === 'oak' || (finish === 'plywood' && !this.isClassic()))) addTopFinishUvs(node.geometry);
         if (!map && this.modelPaintBumpTexture && !node.geometry.hasAttribute('uv1')) this.addPaintUvs(node.geometry);
         material.color.copy(source);
         if (map && finish !== 'oak' && !pine && !edge) material.color.multiplyScalar(1.05);
-        if (edge && map && finish !== 'oak') material.color.multiplyScalar(1.30);
+        if (edge && map && finish !== 'oak' && this.isClassic()) material.color.multiplyScalar(1.30);
         if (pine && map && finish !== 'oak') material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
         material.map = map;
         material.bumpMap = rawMdf || map || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
@@ -679,8 +740,17 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   setMoulding(enabled: boolean): void {
+    if (!this.isClassic()) { this.setFrontStyle(enabled ? 'moulding' : 'plain'); return; }
     this.moulding.set(enabled);
     this.updateMoulding();
+  }
+
+  async setFrontStyle(style: 'shaker' | 'plain' | 'moulding'): Promise<void> {
+    if (this.roundingBusy()) return;
+    this.frontStyle.set(style);
+    this.moulding.set(style === 'moulding');
+    if (this.body && this.roundingSupported()) await this.setRounding(this.rounding());
+    else { this.applyDimensions(); this.updateMoulding(); }
   }
 
   private updateMoulding(): void {
@@ -700,7 +770,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     });
     if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
     this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height(), this.isClassic() ? undefined
-      : { panelLeft: 0.016, panelBottom: 0.239, panelTopInset: 0.016, front: 0.584, direction: 1 }), material);
+      : { panelLeft: 0.016, panelBottom: 0.239, panelTopInset: 0.016, front: 0.5840004, direction: 1 }), material);
     material.bumpMap = this.rawBody() || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
     material.bumpScale = 0.00015;
     this.addPaintUvs(this.frontMoulding.geometry);
@@ -816,7 +886,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.assembly?.dispose();
     this.disposeModel();
     this.rawTexture?.dispose();
-    this.oakTexture?.dispose();
+    for (const texture of this.finishTextures.values()) texture.dispose();
     this.plywoodTexture?.dispose();
     this.paintEnvironment?.dispose();
     this.renderer?.dispose();

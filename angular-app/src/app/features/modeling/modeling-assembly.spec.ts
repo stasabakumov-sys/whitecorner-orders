@@ -56,3 +56,15 @@ describe('Assembly preview', () => {
     controller.dispose(); top.geometry.dispose(); (top.material as THREE.Material).dispose();
   });
 });
+
+
+it('keeps the removed Shaker layer hidden when showing or restoring the plain front', () => {
+  const scene = new THREE.Scene(), root = new THREE.Group(); scene.add(root);
+  const controller = new AssemblyController(scene, new THREE.PerspectiveCamera(), document.createElement('canvas'), { enabled: true }, () => {});
+  const back = new THREE.Mesh(new THREE.BoxGeometry()), frame = back.clone();
+  back.name = 'Front_part1'; frame.name = 'Front_part2'; frame.userData['assemblyHidden'] = true;
+  root.add(back, frame); controller.bind(root, [back, frame]);
+  controller.setVisible('front', false); controller.setVisible('front', true); controller.restore();
+  expect(back.visible).toBe(true); expect(frame.visible).toBe(false);
+  controller.dispose(); back.geometry.dispose();
+});

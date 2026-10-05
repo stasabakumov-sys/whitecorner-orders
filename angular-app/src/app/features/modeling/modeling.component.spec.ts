@@ -41,6 +41,64 @@ describe('Modeling GLB upload', () => {
   });
 });
 
+describe('Tabletop image textures', () => {
+  it('loads and reuses the supplied oak image', async () => {
+    const { component } = setup();
+    const texture = new THREE.Texture();
+    const load = vi.spyOn(THREE.TextureLoader.prototype, 'loadAsync').mockResolvedValue(texture);
+    try {
+      await component.setTopFinish('oak');
+      expect(load.mock.calls[0][0]).toMatch(/modeling-textures\/tasmanian-oak\.png$/);
+      expect(component.topFinish()).toBe('oak');
+      expect(texture.channel).toBe(2);
+      expect(texture.colorSpace).toBe(THREE.SRGBColorSpace);
+      await component.setTopFinish('oak');
+      expect(load).toHaveBeenCalledOnce();
+    } finally { load.mockRestore(); }
+  });
+  it('offers real plywood faces and edges independently of RAW MDF', async () => {
+    const { component } = setup();
+    component.activeSlug.set('decorative-wheel-roof-cart-mdf');
+    const load = vi.spyOn(THREE.TextureLoader.prototype, 'loadAsync').mockImplementation(async () => new THREE.Texture());
+    try {
+      await component.setTopFinish('plywood');
+      expect(load.mock.calls.map(call => call[0])).toEqual([
+        expect.stringMatching(/plywood-face\.jpg$/), expect.stringMatching(/plywood-edge\.jpg$/),
+      ]);
+      expect(component.topFinish()).toBe('plywood');
+      await component.setTopFinish('mdf');
+      expect(component.topFinish()).toBe('mdf');
+    } finally { load.mockRestore(); }
+  });
+  it('preserves the current finish on failure and allows retry', async () => {
+    const { component } = setup();
+    component.topFinish.set('body');
+    const load = vi.spyOn(THREE.TextureLoader.prototype, 'loadAsync').mockRejectedValueOnce(new Error('offline')).mockResolvedValue(new THREE.Texture());
+    try {
+      await component.setTopFinish('oak');
+      expect(component.topFinish()).toBe('body');
+      expect(component.finishLoading()).toBe(false);
+      expect(component.finishError()).toContain('offline');
+      await component.setTopFinish('oak');
+      expect(component.topFinish()).toBe('oak');
+      expect(component.finishError()).toBe('');
+    } finally { load.mockRestore(); }
+  });
+  it('does not replace a newer finish when an older image finishes loading', async () => {
+    const { component } = setup();
+    let resolve!: (texture: THREE.Texture) => void;
+    const load = vi.spyOn(THREE.TextureLoader.prototype, 'loadAsync').mockReturnValue(new Promise(r => { resolve = r; }));
+    try {
+      const oak = component.setTopFinish('oak');
+      expect(component.finishLoading()).toBe(true);
+      await component.setTopFinish('mdf');
+      resolve(new THREE.Texture()); await oak;
+      expect(component.topFinish()).toBe('mdf');
+      expect(component.finishLoading()).toBe(false);
+    } finally { load.mockRestore(); }
+  });
+});
+
 describe('STEP part names after GLTF loading', () => {
   it('keeps each caster separate from the scalable body', () => {
     expect(casterGroupKey('Caster_L_front_rubber_tire')).toBe('L-front');
@@ -179,7 +237,7 @@ describe('Plywood finishes', () => {
     }
     geometry.dispose();
   });
-  it('uses the embedded birch texture for RAW and varnished plywood and restores it after painting', () => {
+  it('uses the embedded birch texture for RAW and varnished plywood and restores it after painting', async () => {
     const { component } = setup();
     const editor = component as any;
     const birch = new THREE.Texture();
@@ -191,7 +249,8 @@ describe('Plywood finishes', () => {
     const paintBump = new THREE.Texture();
     editor.modelPaintBumpTexture = paintBump;
     editor.rawTexture = new THREE.Texture();
-    editor.oakTexture = new THREE.Texture();
+    const oak = new THREE.Texture();
+    editor.finishTextures.set('tasmanian-oak.png', oak);
     editor.plywoodTexture = new THREE.Texture();
     editor.body = new THREE.Group();
     const front = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
@@ -257,11 +316,27 @@ describe('Plywood finishes', () => {
     expect(edge.material.map).toBe(layers);
     expect(trim.material.map).toBe(pine);
     expect(front.material.bumpMap).toBeNull();
-    component.setTopFinish('oak');
-    expect(top.material.map).toBe(editor.oakTexture);
-    expect(topEdge.material.map).toBe(editor.oakTexture);
-    expect(trim.material.map).toBe(editor.oakTexture);
+    await component.setTopFinish('oak');
+    expect(top.material.map).toBe(oak);
+    expect(topEdge.material.map).toBe(oak);
+    expect(trim.material.map).toBe(oak);
     expect(trim.material.color.equals(top.material.color)).toBe(true);
     expect(front.material.map).toBe(birch);
+  });
+});
+
+
+describe('MDF front variants', () => {
+  it('keeps Shaker exclusive from flat moulding and rebinds visibility after changing styles', async () => {
+    const { component } = setup(); const editor = component as any;
+    vi.spyOn(component, 'isClassic').mockReturnValue(false);
+    const apply = vi.spyOn(editor, 'applyDimensions').mockImplementation(() => {});
+    const moulding = vi.spyOn(editor, 'updateMoulding').mockImplementation(() => {});
+    for (const style of ['shaker', 'plain', 'moulding'] as const) {
+      await component.setFrontStyle(style);
+      expect(component.frontStyle()).toBe(style);
+      expect(component.moulding()).toBe(style === 'moulding');
+    }
+    expect(apply).toHaveBeenCalledTimes(3); expect(moulding).toHaveBeenCalledTimes(3);
   });
 });

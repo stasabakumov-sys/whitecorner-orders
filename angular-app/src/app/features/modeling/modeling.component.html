@@ -69,12 +69,21 @@
       </section>
 
       <section class="setting-card">
-        <h2>Front panel moulding</h2>
+        <h2>{{isClassic() ? 'Front panel moulding' : 'Front panel'}}</h2>
         <p class="help">Pine · 31 × 15 mm profile · 90 mm inset.</p>
+        @if (!isClassic()) {
+        <p class="help">Shaker: 2 × 12 mm MDF · 12 mm recess. Plain / With moulding: 16 mm MDF.</p>
+        <div class="finish-options" role="group" aria-label="Front panel style">
+          <button type="button" [disabled]="roundingBusy()" [class.selected]="frontStyle()==='shaker'" [attr.aria-pressed]="frontStyle()==='shaker'" (click)="setFrontStyle('shaker')">Shaker</button>
+          <button type="button" [disabled]="roundingBusy()" [class.selected]="frontStyle()==='plain'" [attr.aria-pressed]="frontStyle()==='plain'" (click)="setFrontStyle('plain')">Plain</button>
+          <button type="button" [disabled]="roundingBusy()" [class.selected]="frontStyle()==='moulding'" [attr.aria-pressed]="frontStyle()==='moulding'" (click)="setFrontStyle('moulding')">With moulding</button>
+        </div>
+        } @else {
         <div class="length-options" role="group" aria-label="Moulding">
           <button type="button" [class.selected]="moulding()" [attr.aria-pressed]="moulding()" (click)="setMoulding(true)">On</button>
           <button type="button" [class.selected]="!moulding()" [attr.aria-pressed]="!moulding()" (click)="setMoulding(false)">Off</button>
         </div>
+        }
       </section>
 
       <section class="setting-card">
@@ -99,10 +108,13 @@
       <section class="setting-card">
         <h2>Table top finish</h2>
         <p class="help">Choose the table top finish.</p>
+        @if (finishLoading()) { <p class="help" role="status">Loading table top texture…</p> }
+        @if (finishError()) { <p class="error" role="alert">{{finishError()}}</p> }
         <div class="finish-options" role="group" aria-label="Table top finish">
           <button type="button" [class.selected]="topFinish()==='body'" (click)="setTopFinish('body')"><span class="finish-chip" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>In cart finish / colour</button>
           <button type="button" [class.selected]="topFinish()==='oak'" (click)="setTopFinish('oak')"><span class="finish-chip oak"></span>Tasmanian oak</button>
-          <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>{{isClassic() ? "Varnished plywood" : "RAW MDF"}}</button>
+          <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>{{isClassic() ? "Varnished plywood" : "Plywood"}}</button>
+          @if (!isClassic()) { <button type="button" [class.selected]="topFinish()==='mdf'" (click)="setTopFinish('mdf')"><span class="finish-chip" style="background:#b99b78"></span>RAW MDF</button> }
         </div>
       </section>
 

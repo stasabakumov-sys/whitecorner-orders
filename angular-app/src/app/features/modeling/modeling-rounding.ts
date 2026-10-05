@@ -13,12 +13,14 @@ export interface PartJoint { axis: 'x' | 'y' | 'z'; plane: number; bounds: THREE
 
 // STEP roof members meet on planar faces. Detect shared faces before rounding,
 // while excluding overlaps, edges and separate parts.
-export function roofPartJoints(parts: { name: string; bounds: THREE.Box3 }[]): Map<string, PartJoint[]> {
+export function matingPartJoints(parts: { name: string; bounds: THREE.Box3 }[]): Map<string, PartJoint[]> {
   const joints = new Map<string, PartJoint[]>();
   const axes = ['x', 'y', 'z'] as const;
   for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
     const a = parts[i], b = parts[j];
-    if (!/^Roof[ _]/i.test(a.name) || !/^Roof[ _]/i.test(b.name)) continue;
+    const roof = /^Roof[ _]/i.test(a.name) && /^Roof[ _]/i.test(b.name);
+    const shaker = /^Front[ _]part[12]$/i.test(a.name) && /^Front[ _]part[12]$/i.test(b.name);
+    if (!roof && !shaker) continue;
     for (const axis of axes) {
       const others = axes.filter(value => value !== axis);
       if (!others.every(value => Math.min(a.bounds.max[value], b.bounds.max[value]) - Math.max(a.bounds.min[value], b.bounds.min[value]) > 1e-5)) continue;
