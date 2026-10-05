@@ -4,8 +4,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { HubMembersService } from '../../core/services/hub-members.service';
+import { fitFurnitureBolts } from './modeling-hardware';
 import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
-import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, roofPartJoints, RoundingProfile } from './modeling-rounding';
+import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges } from './modeling-textures';
 import { ASSEMBLY_PARTS, AssemblyController, PartKey } from './modeling-assembly';
@@ -60,6 +61,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly height = signal(900);
   readonly rounding = signal(1.5);
   readonly moulding = signal(true);
+  readonly frontStyle = signal<'shaker' | 'plain' | 'moulding'>('plain');
   private frontMoulding?: THREE.Mesh;
   readonly roundingSupported = signal(false);
   readonly roundingBusy = signal(false);
@@ -225,6 +227,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.loading.set(true);
     this.rawBody.set(true);
     this.moulding.set(this.isClassic());
+    this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
     this.topFinish.set(this.isClassic() ? 'plywood' : 'body');
     this.paintFinish.set('matte');
     try { await this.loadRecord(record, version); }
@@ -268,6 +271,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.model = new THREE.Group();
     this.body = new THREE.Group();
     this.casters.clear();
+    if (!this.isClassic()) fitFurnitureBolts(gltf.scene);
     const nodes = [...gltf.scene.children];
     for (const node of nodes) {
       const key = casterGroupKey(node.name);
@@ -453,8 +457,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     try {
       // CAD profiles and positions share model coordinates. Read the original
       // positions so rotation, resized previews and assembly offsets do not
-      // alter which roof faces meet.
-      const roofJoints = roofPartJoints(this.sourceParts.map(part => {
+      // alter which roof and Shaker faces meet.
+      const joints = matingPartJoints(this.sourceParts.filter(part => !/^Front[ _]part[12]$/i.test(part.name)
+        || (!this.isClassic() && this.frontStyle() === 'shaker')).map(part => {
         const bounds = new THREE.Box3();
         part.traverse(node => {
           if (node instanceof THREE.Mesh) bounds.union(new THREE.Box3().setFromBufferAttribute(this.sourcePositions.get(node.geometry)!));
@@ -487,7 +492,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         if (!profile) throw new Error('The GLB is missing a part profile. Upload an updated model.');
         const geometry = createRoundedPart(profile, raw);
         if (/^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name)) keepTrimJointSquare(geometry, profile, raw);
-        keepPartJointsSquare(geometry, roofJoints.get(name) || [], raw);
+        keepPartJointsSquare(geometry, joints.get(name) || [], raw);
         geometries.push(geometry);
         const face = materials.find(material => !/plywood[ _]edge$/i.test(material.name)) || materials[0];
         const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
@@ -621,6 +626,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   restoreAssembly(): void { this.assembly?.restore(); }
   private bindAssembly(): void {
     if (!this.model || !this.body) return;
+    if (!this.isClassic()) this.body.traverse(node => {
+      if (!/^Front[ _]part2$/i.test(node.userData['plywoodPart'] || node.name)) return;
+      node.userData['assemblyHidden'] = this.frontStyle() !== 'shaker';
+    });
     if (this.assembly) this.assembly.normals = this.isClassic() ? {} : { front: [0, 0, 1], left: [1, 0, 0], right: [-1, 0, 0] };
     this.assembly?.bind(this.model, [...this.body.children, ...(this.frontMoulding ? [this.frontMoulding] : []),
       ...[...this.casters.values()].flatMap(group => group.children)]);
@@ -631,8 +640,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     for (const [node, original] of this.originalPositions) {
       const positions = node.geometry.getAttribute('position');
       for (let i = 0; i < original.count; i++) {
-        const [x, y, z] = (this.isClassic() ? resizePlywoodPosition : resizeRoofCartPosition)(node.userData['plywoodPart'] || node.name,
-          original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height());
+        const name = node.userData['plywoodPart'] || node.name;
+        const [x, y, z] = this.isClassic()
+          ? resizePlywoodPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height())
+          : resizeRoofCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height(), this.frontStyle() !== 'shaker');
         positions.setXYZ(i, x, y, z);
       }
       positions.needsUpdate = true;
@@ -729,8 +740,17 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   setMoulding(enabled: boolean): void {
+    if (!this.isClassic()) { this.setFrontStyle(enabled ? 'moulding' : 'plain'); return; }
     this.moulding.set(enabled);
     this.updateMoulding();
+  }
+
+  async setFrontStyle(style: 'shaker' | 'plain' | 'moulding'): Promise<void> {
+    if (this.roundingBusy()) return;
+    this.frontStyle.set(style);
+    this.moulding.set(style === 'moulding');
+    if (this.body && this.roundingSupported()) await this.setRounding(this.rounding());
+    else { this.applyDimensions(); this.updateMoulding(); }
   }
 
   private updateMoulding(): void {
@@ -750,7 +770,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     });
     if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
     this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height(), this.isClassic() ? undefined
-      : { panelLeft: 0.016, panelBottom: 0.239, panelTopInset: 0.016, front: 0.584, direction: 1 }), material);
+      : { panelLeft: 0.016, panelBottom: 0.239, panelTopInset: 0.016, front: 0.5840004, direction: 1 }), material);
     material.bumpMap = this.rawBody() || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
     material.bumpScale = 0.00015;
     this.addPaintUvs(this.frontMoulding.geometry);

@@ -69,12 +69,21 @@
       </section>
 
       <section class="setting-card">
-        <h2>Front panel moulding</h2>
+        <h2>{{isClassic() ? 'Front panel moulding' : 'Front panel'}}</h2>
         <p class="help">Pine · 31 × 15 mm profile · 90 mm inset.</p>
+        @if (!isClassic()) {
+        <p class="help">Shaker: 2 × 12 mm MDF · 12 mm recess. Plain / With moulding: 16 mm MDF.</p>
+        <div class="finish-options" role="group" aria-label="Front panel style">
+          <button type="button" [disabled]="roundingBusy()" [class.selected]="frontStyle()==='shaker'" [attr.aria-pressed]="frontStyle()==='shaker'" (click)="setFrontStyle('shaker')">Shaker</button>
+          <button type="button" [disabled]="roundingBusy()" [class.selected]="frontStyle()==='plain'" [attr.aria-pressed]="frontStyle()==='plain'" (click)="setFrontStyle('plain')">Plain</button>
+          <button type="button" [disabled]="roundingBusy()" [class.selected]="frontStyle()==='moulding'" [attr.aria-pressed]="frontStyle()==='moulding'" (click)="setFrontStyle('moulding')">With moulding</button>
+        </div>
+        } @else {
         <div class="length-options" role="group" aria-label="Moulding">
           <button type="button" [class.selected]="moulding()" [attr.aria-pressed]="moulding()" (click)="setMoulding(true)">On</button>
           <button type="button" [class.selected]="!moulding()" [attr.aria-pressed]="!moulding()" (click)="setMoulding(false)">Off</button>
         </div>
+        }
       </section>
 
       <section class="setting-card">

@@ -1,13 +1,37 @@
 import { describe, it, expect } from 'vitest';
-import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, roofPartJoints, RoundingProfile } from './modeling-rounding';
+import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import * as THREE from 'three';
 import { resizePlywoodPosition } from './modeling-geometry';
 
 describe('Wooden part rounding', () => {
+  it('keeps the two 12 mm Shaker sheets glued together and retains a 12 mm recess', () => {
+    const back: RoundingProfile = { axis: 'z', origin: .56, thickness: .012,
+      outline: [[.016, .239], [1.184, .239], [1.184, .884], [.016, .884]], holes: [] };
+    const frame: RoundingProfile = { ...back, origin: .572,
+      holes: [[[.086, .309], [.086, .814], [1.114, .814], [1.114, .309]]] };
+    const joints = matingPartJoints([
+      { name: 'Front_part1', bounds: new THREE.Box3(new THREE.Vector3(.016, .239, .56), new THREE.Vector3(1.184, .884, .572)) },
+      { name: 'Front_part2', bounds: new THREE.Box3(new THREE.Vector3(.016, .239, .572), new THREE.Vector3(1.184, .884, .584)) },
+    ]);
+    for (const radius of [1, 1.5, 2, 2.5, 3]) {
+      const geometries = [back, frame].map(profile => createRoundedPart(profile, radius));
+      geometries.forEach((geometry, index) => {
+        keepPartJointsSquare(geometry, joints.get(`Front_part${index + 1}`)!, radius);
+        const positions = geometry.getAttribute('position');
+        let seam = 0;
+        for (let i = 0; i < positions.count; i++) if (Math.abs(positions.getZ(i) - .572) < radius / 1000 * 2) {
+          expect(positions.getZ(i)).toBeCloseTo(.572, 6); seam++;
+        }
+        expect(seam).toBeGreaterThan(0); geometry.computeBoundingBox();
+      });
+      expect(geometries[1].boundingBox!.max.z - geometries[0].boundingBox!.max.z).toBeCloseTo(.012, 6);
+      geometries.forEach(geometry => geometry.dispose());
+    }
+  });
   it('keeps a shared roof seam square at every radius while retaining the free top bevel', () => {
     const lid: RoundingProfile = { axis: 'y', origin: 1.918, thickness: .012,
       outline: [[0, 0], [1.2, 0], [1.2, .6], [0, .6]], holes: [] };
-    const joints = roofPartJoints([
+    const joints = matingPartJoints([
       { name: 'Roof 1', bounds: new THREE.Box3(new THREE.Vector3(0, 1.918, 0), new THREE.Vector3(1.2, 1.93, .6)) },
       { name: 'Roof 2', bounds: new THREE.Box3(new THREE.Vector3(0, 1.81, .588), new THREE.Vector3(1.2, 1.9180002, .6)) },
       { name: 'Legs 1', bounds: new THREE.Box3(new THREE.Vector3(0, 1.81, 0), new THREE.Vector3(.1, 1.918, .1)) },

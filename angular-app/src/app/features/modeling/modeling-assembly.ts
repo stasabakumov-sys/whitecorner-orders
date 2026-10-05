@@ -140,7 +140,7 @@ export class AssemblyController {
   private apply(): void {
     for (const part of ASSEMBLY_PARTS) for (const node of this.bindings.get(part.key) || []) {
       node.position.copy(this.bases.get(node)!).addScaledVector(this.normal(part.key), this.state.offsets[part.key] / 1000);
-      node.visible = this.state.visible[part.key];
+      node.visible = this.state.visible[part.key] && !node.userData['assemblyHidden'];
     }
     this.root?.updateWorldMatrix(true, true);
   }
@@ -150,7 +150,7 @@ export class AssemblyController {
     if (!this.arrow.visible || !key || !this.root) return;
     this.root.updateWorldMatrix(true, true);
     const box = new THREE.Box3();
-    for (const node of this.bindings.get(key) || []) box.union(new THREE.Box3().setFromObject(node));
+    for (const node of this.bindings.get(key) || []) if (node.visible) box.union(new THREE.Box3().setFromObject(node));
     this.arrow.position.copy(box.getCenter(new THREE.Vector3()));
     const normal = this.normal(key).transformDirection(this.root.matrixWorld);
     this.arrow.setDirection(normal);
@@ -163,7 +163,7 @@ export class AssemblyController {
   private refreshHighlight(): void {
     this.clearHighlight();
     if (!this.enabled || !this.state.selected) return;
-    for (const node of this.bindings.get(this.state.selected) || []) node.traverse(child => {
+    for (const node of this.bindings.get(this.state.selected) || []) node.traverseVisible(child => {
       if (!(child instanceof THREE.Mesh)) return;
       const line = new THREE.LineSegments(new THREE.EdgesGeometry(child.geometry, 25), new THREE.LineBasicMaterial({ color: 0x1884e8, depthTest: false, depthWrite: false }));
       line.renderOrder = 99; child.add(line); this.highlights.push(line);
@@ -214,7 +214,7 @@ export class AssemblyController {
     this.down = undefined;
     if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5) return;
     this.cast(event);
-    const candidates = [...this.bindings.entries()].filter(([key]) => this.state.visible[key]).flatMap(([, nodes]) => nodes);
+    const candidates = [...this.bindings.entries()].filter(([key]) => this.state.visible[key]).flatMap(([, nodes]) => nodes.filter(node => node.visible));
     const hit = this.ray.intersectObjects(candidates, true).find(hit => hit.object instanceof THREE.Mesh);
     if (!hit) return;
     for (const [key, nodes] of this.bindings) if (nodes.some(node => {

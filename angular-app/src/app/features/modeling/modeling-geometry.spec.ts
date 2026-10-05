@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
 
 describe('MDF roof cart dimensions', () => {
+  it('uses 16 mm plain MDF with sides 8 mm deeper and preserves rounded ends', () => {
+    for (const length of [1200, 1300, 1400, 1500]) for (const height of [850, 900, 950, 1000]) {
+      const point = (name: string, z: number, plain = true) => resizeRoofCartPosition(name, .016, .239, z, length, height, plain)[2];
+      expect(point('Front_part1', .5720004)).toBeCloseTo(.5840004);
+      expect(point('Front_part1', .5600004)).toBeCloseTo(.5680004);
+      expect(point('Front_part1', .5720004) - point('Front_part1', .5600004)).toBeCloseTo(.016);
+      for (const name of ['Left_side_1', 'Right_side1']) {
+        expect(point(name, .0160004)).toBeCloseTo(.0160004);
+        expect(point(name, .5600004)).toBeCloseTo(.5680004);
+        expect(point(name, .5600004, false)).toBeCloseTo(.5600004);
+        expect(point(name, .5600004) - point(name, .5570004)).toBeCloseTo(.003);
+      }
+      expect(point('Left_side_2', .5480004) - point('Left_side_2', .4780004)).toBeCloseTo(.070);
+      expect(point('Front_part3', .5600004)).toBeCloseTo(.5680004);
+      expect(point('Front_part1', .5600004, false)).toBeCloseTo(.5600004);
+    }
+  });
   it('keeps the shelf and its supports rigid halfway between the decks', () => {
     for (const length of [1200, 1300, 1400, 1500]) for (const height of [850, 900, 950, 1000]) {
       const shelf = resizeRoofCartPosition('Shelf', .031, .554, .019, length, height);

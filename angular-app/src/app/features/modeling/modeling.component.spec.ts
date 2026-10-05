@@ -237,7 +237,7 @@ describe('Plywood finishes', () => {
     }
     geometry.dispose();
   });
-  it('uses the embedded birch texture for RAW and varnished plywood and restores it after painting', () => {
+  it('uses the embedded birch texture for RAW and varnished plywood and restores it after painting', async () => {
     const { component } = setup();
     const editor = component as any;
     const birch = new THREE.Texture();
@@ -249,7 +249,8 @@ describe('Plywood finishes', () => {
     const paintBump = new THREE.Texture();
     editor.modelPaintBumpTexture = paintBump;
     editor.rawTexture = new THREE.Texture();
-    editor.oakTexture = new THREE.Texture();
+    const oak = new THREE.Texture();
+    editor.finishTextures.set('tasmanian-oak.png', oak);
     editor.plywoodTexture = new THREE.Texture();
     editor.body = new THREE.Group();
     const front = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshStandardMaterial());
@@ -315,11 +316,27 @@ describe('Plywood finishes', () => {
     expect(edge.material.map).toBe(layers);
     expect(trim.material.map).toBe(pine);
     expect(front.material.bumpMap).toBeNull();
-    component.setTopFinish('oak');
-    expect(top.material.map).toBe(editor.oakTexture);
-    expect(topEdge.material.map).toBe(editor.oakTexture);
-    expect(trim.material.map).toBe(editor.oakTexture);
+    await component.setTopFinish('oak');
+    expect(top.material.map).toBe(oak);
+    expect(topEdge.material.map).toBe(oak);
+    expect(trim.material.map).toBe(oak);
     expect(trim.material.color.equals(top.material.color)).toBe(true);
     expect(front.material.map).toBe(birch);
+  });
+});
+
+
+describe('MDF front variants', () => {
+  it('keeps Shaker exclusive from flat moulding and rebinds visibility after changing styles', async () => {
+    const { component } = setup(); const editor = component as any;
+    vi.spyOn(component, 'isClassic').mockReturnValue(false);
+    const apply = vi.spyOn(editor, 'applyDimensions').mockImplementation(() => {});
+    const moulding = vi.spyOn(editor, 'updateMoulding').mockImplementation(() => {});
+    for (const style of ['shaker', 'plain', 'moulding'] as const) {
+      await component.setFrontStyle(style);
+      expect(component.frontStyle()).toBe(style);
+      expect(component.moulding()).toBe(style === 'moulding');
+    }
+    expect(apply).toHaveBeenCalledTimes(3); expect(moulding).toHaveBeenCalledTimes(3);
   });
 });
