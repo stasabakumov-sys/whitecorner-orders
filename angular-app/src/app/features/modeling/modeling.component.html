@@ -4,7 +4,7 @@
       <h1>Modeling</h1>
       <p>3D Models / {{modelLabel()}}</p>
     </div>
-    <div class="model-picker"><label for="model-choice">Model</label><select id="model-choice" [value]="activeSlug()" [disabled]="saving() || roundingBusy()" (change)="selectModel($any($event.target).value)">@for (model of models(); track model.slug) {<option [value]="model.slug">{{model.product_name}} / {{model.material_name}}</option>}</select></div>
+    <div class="model-picker"><label for="model-choice">Model</label><select id="model-choice" [value]="activeSlug()" [disabled]="saving() || roundingBusy()" (change)="selectModel($any($event.target).value)">@for (model of models(); track model.slug) {<option [value]="model.slug" [selected]="model.slug === activeSlug()">{{model.product_name}} / {{model.material_name}}</option>}</select></div>
   </header>
 
   <div class="workspace">
