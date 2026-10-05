@@ -17,32 +17,7 @@
       <div class="viewer-footer"><span>Drag to rotate · Scroll to zoom</span><span>{{width()}} × {{depth()}} × {{height()}} mm</span></div>
     </div>
     <div class="settings">
-      <app-modeling-section class="setting-card assembly-card" sectionId="parts" title="Parts & assembly" [summary]="sectionSummary('parts')" iconPath="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z">
-        <div class="setting-title">@if (assemblyMode()) { <button type="button" class="text-action" (click)="restoreAssembly()">Return all</button> }</div>
-        <div class="length-options paint-options" role="group" aria-label="Assembly view">
-          <button type="button" [class.selected]="!assemblyMode()" [attr.aria-pressed]="!assemblyMode()" (click)="setAssemblyMode(false)">Rotate</button>
-          <button type="button" [class.selected]="assemblyMode()" [attr.aria-pressed]="assemblyMode()" [attr.aria-expanded]="assemblyMode()" aria-controls="parts-assembly-controls" (click)="setAssemblyMode(true)">Select parts</button>
-        </div>
-        @if (assemblyMode()) {
-        <div id="parts-assembly-controls">
-        <p class="help">Select a part and drag its arrow. Clear Top and Bottom by 60 mm to release the panels. @if (isClassic()) { Shelf stays fixed. } @else { Shelf, roof, supports, legs and wheels stay fixed. }</p>
-        <div class="parts-list">
-          @for (part of parts; track part.key) {
-            <div class="part-row">
-              <input type="checkbox" [checked]="partVisible(part.key)" [disabled]="!partAvailable(part.key)" (change)="setPartVisible(part.key,$any($event.target).checked)" [attr.aria-label]="'Show '+part.label">
-              <button type="button" [class.selected]="selectedPart()===part.key" [disabled]="!partAvailable(part.key)||!partVisible(part.key)" (click)="selectPart(part.key)">{{part.label}}</button>
-              <span>{{partOffset(part.key)}} mm</span>
-            </div>
-          }
-        </div>
-        @if (selectedPart(); as key) {
-          <div class="setting-title"><label for="part-offset">Move out <output>{{partOffset(key)}} mm</output></label><button type="button" class="text-action" (click)="restorePart()">Return part</button></div>
-          <input id="part-offset" type="range" min="0" max="500" step="1" [value]="partOffset(key)" [disabled]="!partMovable(key)" (input)="movePart($any($event.target).value)" aria-label="Selected part distance in millimetres">
-          @if (!partMovable(key)) { <p class="help">{{["shelf","wheels","roof","posts","legs","decorative-wheels"].includes(key) ? "This part stays fixed." : "Move or hide Top and Bottom first."}}</p> }
-        }
-        </div>
-        }
-      </app-modeling-section>
+
       <app-modeling-section class="setting-card" sectionId="dimensions" title="Dimensions" [summary]="sectionSummary('dimensions')" iconPath="M4 4h16v16H4zM8 4v3m4-3v3m4-3v3M4 8h3m-3 4h3m-3 4h3">
         <div class="setting-title"><button type="button" class="text-action" (click)="resetDimensions()">Reset</button></div>
         <p class="help">Tabletop height includes {{isClassic() ? 95 : 73}} mm castors. @if (!isClassic()) { Roof height: {{overallHeight()}} mm. }</p>
@@ -73,10 +48,7 @@
           <button type="button" [disabled]="roundingBusy()" [class.selected]="frontStyle()==='moulding'" [attr.aria-pressed]="frontStyle()==='moulding'" (click)="setFrontStyle('moulding')">With moulding</button>
         </div>
         } @else {
-        <div class="length-options" role="group" aria-label="Moulding">
-          <button type="button" [class.selected]="moulding()" [attr.aria-pressed]="moulding()" (click)="setMoulding(true)">On</button>
-          <button type="button" [class.selected]="!moulding()" [attr.aria-pressed]="!moulding()" (click)="setMoulding(false)">Off</button>
-        </div>
+        <label class="shelf-option"><input type="checkbox" [checked]="moulding()" [disabled]="loading() || roundingBusy()" (change)="setMoulding($any($event.target).checked)"><span>Moulding</span><span class="shelf-option-price">Quote required</span></label>
         }
       </app-modeling-section>
       @if (!isClassic()) {
@@ -124,8 +96,8 @@
           <button type="button" class="swatch" style="background:#aa6553!important" [class.selected]="bodyColor()==='#aa6553'" (click)="setBodyColor('#aa6553')" title="Terracotta" aria-label="Terracotta"></button>
           <label class="custom-colour" title="Custom colour">Custom <input type="color" [value]="bodyColor()" (input)="setBodyColor($any($event.target).value)" aria-label="Choose body colour"></label>
         </div>
-          <div class="colour-value"><span class="colour-dot" [style.background]="bodyColor()"></span>{{bodyColor()}}</div>
-          <p class="help">Paint finish</p>
+          <div class="colour-value"><span class="colour-dot" [style.background]="bodyColor()"></span><span>Selected colour: {{bodyColourLabel()}}</span></div>
+          <h3 class="setting-subtitle">Paint finish</h3>
           <div class="length-options paint-options" role="group" aria-label="Paint finish">
             <button type="button" [class.selected]="paintFinish()==='matte'" [attr.aria-pressed]="paintFinish()==='matte'" (click)="setPaintFinish('matte')">Matte</button>
             <button type="button" [class.selected]="paintFinish()==='semi-gloss'" [attr.aria-pressed]="paintFinish()==='semi-gloss'" (click)="setPaintFinish('semi-gloss')">Semi-gloss</button>
@@ -182,6 +154,32 @@
         }
         @if (roundingBusy()) {<p class="progress" role="status">Rounding wooden parts…</p>}
         @if (!loading() && !roundingSupported()) {<p class="help">Edge rounding is unavailable for this model.</p>}
+      </app-modeling-section>
+      <app-modeling-section class="setting-card assembly-card" sectionId="parts" title="Parts & assembly" [summary]="sectionSummary('parts')" iconPath="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z">
+        <div class="setting-title">@if (assemblyMode()) { <button type="button" class="text-action" (click)="restoreAssembly()">Return all</button> }</div>
+        <div class="length-options paint-options" role="group" aria-label="Assembly view">
+          <button type="button" [class.selected]="!assemblyMode()" [attr.aria-pressed]="!assemblyMode()" (click)="setAssemblyMode(false)">Rotate</button>
+          <button type="button" [class.selected]="assemblyMode()" [attr.aria-pressed]="assemblyMode()" [attr.aria-expanded]="assemblyMode()" aria-controls="parts-assembly-controls" (click)="setAssemblyMode(true)">Select parts</button>
+        </div>
+        @if (assemblyMode()) {
+        <div id="parts-assembly-controls">
+        <p class="help">Select a part and drag its arrow. Clear Top and Bottom by 60 mm to release the panels. @if (isClassic()) { Shelf stays fixed. } @else { Shelf, roof, supports, legs and wheels stay fixed. }</p>
+        <div class="parts-list">
+          @for (part of parts; track part.key) {
+            <div class="part-row">
+              <input type="checkbox" [checked]="partVisible(part.key)" [disabled]="!partAvailable(part.key)" (change)="setPartVisible(part.key,$any($event.target).checked)" [attr.aria-label]="'Show '+part.label">
+              <button type="button" [class.selected]="selectedPart()===part.key" [disabled]="!partAvailable(part.key)||!partVisible(part.key)" (click)="selectPart(part.key)">{{part.label}}</button>
+              <span>{{partOffset(part.key)}} mm</span>
+            </div>
+          }
+        </div>
+        @if (selectedPart(); as key) {
+          <div class="setting-title"><label for="part-offset">Move out <output>{{partOffset(key)}} mm</output></label><button type="button" class="text-action" (click)="restorePart()">Return part</button></div>
+          <input id="part-offset" type="range" min="0" max="500" step="1" [value]="partOffset(key)" [disabled]="!partMovable(key)" (input)="movePart($any($event.target).value)" aria-label="Selected part distance in millimetres">
+          @if (!partMovable(key)) { <p class="help">{{["shelf","wheels","roof","posts","legs","decorative-wheels"].includes(key) ? "This part stays fixed." : "Move or hide Top and Bottom first."}}</p> }
+        }
+        </div>
+        }
       </app-modeling-section>
       <app-modeling-section class="setting-card building-card" sectionId="building" title="Building" [attention]="!!buildingError()" [summary]="sectionSummary('building')" iconPath="m4 20 6-6m4-4 6-6M14 4l6 6M3 3l6 1 3 5-3 3-5-3-1-6Z">
 

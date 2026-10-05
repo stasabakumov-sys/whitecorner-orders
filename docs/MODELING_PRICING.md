@@ -13,3 +13,5 @@ A failed catalogue read shows an error and Retry catalogue. Previous catalogue p
 All right-hand Modeling sections share a compact accordion heading showing the current selection. Optional Shelf and moulding use None when excluded; Shelf uses Middle when included. Required selections retain their actual value (for example Open roof or RAW finish). Collapsing a section keeps projected controls and their state. Sections with new upload, catalogue, drawing or texture errors open automatically to expose the message and retry action.
 
 The owner hid the Model file section, filename and upload/save controls from the customer-style editor. Private model storage and file handling remain internal; model-opening failures still appear as visible alerts.
+
+Owner clarification: headings use light white cards rather than dark bars. Keep 10 px control text and consistent Colour/Paint finish subheadings. Optional Classic moulding uses a checkbox with None/With moulding summary. Parts & assembly sits near the bottom, before Building.

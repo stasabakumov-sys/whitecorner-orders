@@ -88,6 +88,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     }catch(cause){if(this.alive){this.catalog.set(null);this.catalogError.set('Hub product names and prices could not be loaded. '+this.message(cause)+' Retry the catalogue.');}}
     finally {if(this.alive)this.catalogBusy.set(false);}
   }
+  bodyColourLabel():string {
+    const names:Record<string,string>={'#f6f6f3':'White','#aecde5':'Dulux Featherbed','#33383e':'Charcoal','#708471':'Sage','#aa6553':'Terracotta'};
+    return names[this.bodyColor()]||this.bodyColor().toUpperCase();
+  }
   sectionSummary(section:string):string {
     switch(section){
       case 'parts':return this.assemblyMode()?(this.parts.find(part=>part.key===this.selectedPart())?.label||'Select parts'):'Rotate';
@@ -160,6 +164,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const span=Math.max(this.width(),this.depth(),this.overallHeight())/1000;
       const target=new THREE.Vector3(this.width()/2000,this.overallHeight()/2000,this.depth()/2000);
       const camera=new THREE.PerspectiveCamera(42,4/3,.01,30);
+      camera.zoom=1.25;camera.updateProjectionMatrix();
       camera.position.copy(target).add(new THREE.Vector3(span*1.05,span*.4,span*1.65));camera.lookAt(target);
       this.scene.background=new THREE.Color('#eceae8');renderer.setSize(960,720,false);
       const capture=(angle:number)=>{turntable.rotation.y=angle;this.scene.updateMatrixWorld(true);renderer.render(this.scene,camera);return renderer.domElement.toDataURL('image/png');};
@@ -308,7 +313,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1;
       this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      this.renderer.shadowMap.type = THREE.PCFShadowMap;
       this.canvasHost.nativeElement.appendChild(this.renderer.domElement);
       this.scene.background = new THREE.Color('#eceae8');
       this.scene.add(new THREE.HemisphereLight('#ffffff', '#c7d0d9', 1.2));
@@ -320,8 +325,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       light.shadow.camera.right = light.shadow.camera.top = 2;
       light.shadow.camera.near = 0.1;
       light.shadow.camera.far = 12;
-      light.shadow.bias = -0.00002;
-      light.shadow.normalBias = 0.001;
+      light.shadow.radius = 4;
+      light.shadow.bias = -0.00001;
+      light.shadow.normalBias = 0.00035;
       this.scene.add(light);
       const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.ShadowMaterial({ opacity: 0.22 }));
       ground.rotation.x = -Math.PI / 2;
@@ -665,7 +671,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       // CAD profiles and positions share model coordinates. Read the original
       // positions so rotation, resized previews and assembly offsets do not
       // alter which roof and Shaker faces meet.
-      const joints = matingPartJoints(this.sourceParts.filter(part => !/^Front[ _]part[12]$/i.test(part.name)
+      const joints = matingPartJoints(this.sourceParts.filter(part => !/^Front[ _]part2$/i.test(part.name)
         || (!this.isClassic() && this.frontStyle() === 'shaker')).map(part => {
         const bounds = new THREE.Box3();
         part.traverse(node => {
