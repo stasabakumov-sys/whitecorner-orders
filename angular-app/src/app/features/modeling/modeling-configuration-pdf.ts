@@ -1,7 +1,7 @@
 import {jsPDF} from 'jspdf';
 export interface ConfigurationDocument {
   product:string; material:string; code:string; produced:string;
-  front:string; rear:string; fields:{label:string;value:string}[];
+  logo?:string; front:string; rear:string; fields:{label:string;value:string}[];
 }
 export function createConfigurationPdf(configuration:ConfigurationDocument):jsPDF {
   const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
@@ -9,7 +9,8 @@ export function createConfigurationPdf(configuration:ConfigurationDocument):jsPD
   pdf.setTextColor(38,50,65);pdf.setFont('helvetica','normal');pdf.setFontSize(16);
   pdf.text(configuration.product.toUpperCase(),14,20,{maxWidth:156});
   pdf.setFontSize(8);pdf.text(configuration.material.toUpperCase(),14,29);pdf.setFontSize(7);pdf.text(configuration.code,14,34);
-  pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.text('WHITE CORNER',196,20,{align:'right'});
+  if(configuration.logo)pdf.addImage(configuration.logo,'PNG',169,9,27,27,'white-corner-logo','FAST');
+  else {pdf.setFont('helvetica','bold');pdf.setFontSize(9);pdf.text('WHITE CORNER',196,20,{align:'right'});}
   pdf.setDrawColor(220,223,226);pdf.line(14,38,196,38);
   for(const [index,source] of [configuration.front,configuration.rear].entries()) {
     const x=14+index*94;pdf.setFillColor(236,234,232);pdf.rect(x,44,88,72,'F');

@@ -380,3 +380,23 @@ it('restores the neutral studio after selecting either photographic scene', () =
   for (const backdrop of ['event', 'office'] as const) { component.setPreviewScene(backdrop); expect(scene.background).toBeNull(); expect(component.previewScene()).toBe(backdrop); }
   component.setPreviewScene('studio'); expect((scene.background as THREE.Color).getHexString()).toBe('eceae8');
 });
+
+
+describe('Optional shelf',()=>{
+ it('keeps the shelf excluded when geometry is rebound, and restores it when enabled',()=>{
+  const {component}=setup();
+  const body=new THREE.Group(),shelf=new THREE.Group();shelf.name='Shelf';body.add(shelf);
+  const internal=component as unknown as {body:THREE.Group;model:THREE.Group;bindAssembly():void};
+  internal.body=body;internal.model=body;
+  component.setShelfIncluded(false);
+  expect(shelf.visible).toBe(false);expect(shelf.userData['assemblyHidden']).toBe(true);
+  const replacement=new THREE.Group();replacement.name='Shelf';body.remove(shelf);body.add(replacement);
+  internal.bindAssembly();expect(replacement.visible).toBe(false);
+  component.restoreAssembly();expect(component.shelfIncluded()).toBe(false);
+  component.setShelfIncluded(true);expect(replacement.visible).toBe(true);expect(replacement.userData['assemblyHidden']).toBe(false);
+ });
+ it('does not generate a support drawing while the shelf is excluded',()=>{
+  const {component}=setup();component.setShelfIncluded(false);component.generateShelfDrawing();
+  expect(component.buildingError()).toContain('Turn the shelf on');expect(component.shelfDrawing()).toBeNull();
+ });
+});

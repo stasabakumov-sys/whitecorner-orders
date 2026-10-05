@@ -53,3 +53,5 @@
 .configuration-dialog .drawing-download{font-family:inherit;font-size:10px;font-weight:500;line-height:1.5}
 
 .drawing-dialog{width:min(1100px,96vw);max-height:96dvh}.drawing-sheet{max-height:calc(96dvh - 125px);padding:6px}.drawing-sheet img{height:calc(96dvh - 145px)}
+
+.configuration-logo{float:right;width:80px;height:80px;object-fit:contain;margin:0 0 8px 12px}
