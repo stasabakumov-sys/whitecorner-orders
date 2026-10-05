@@ -75,12 +75,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const body=this.rawBody()?'RAW '+this.materialLabel():`2-pack painted - ${colourNames[this.bodyColor()]||this.bodyColor()} - ${this.paintFinish()==='matte'?'Matte':'Semi-gloss'}`;
       const top=this.topFinish()==='body'?'In cart finish / colour':this.topFinish()==='oak'?'Tasmanian oak':this.topFinish()==='mdf'?'RAW MDF':this.isClassic()?'Varnished plywood':'Plywood';
       const fields=[{label:'Dimensions',value:`${this.width()} x ${this.depth()} x ${this.height()} mm`},{label:'Cart body',value:body},{label:'Table top',value:top},
-        {label:'Edge rounding',value:this.rounding()+' mm'},{label:'Front panel',value:this.isClassic()?(this.moulding()?'With moulding':'Plain'):this.frontStyle()==='shaker'?'Shaker':this.frontStyle()==='moulding'?'With moulding':'Plain'},
+        {label:'Front panel',value:this.isClassic()?(this.moulding()?'With moulding':'Plain'):this.frontStyle()==='shaker'?'Shaker':this.frontStyle()==='moulding'?'With moulding':'Plain'},
         {label:'Castors',value:(this.isClassic()?'95':'73')+' mm'},
         {label:'Shelf position',value:'Middle'},{label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`}];
       if(!this.isClassic())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
-        {label:'Glass racks',value:String(this.roofClosed()?this.glassRackCount():0)},
-        {label:'Glasses',value:this.roofClosed()&&this.showGlasses()&&this.glassRackCount()?`${this.glassLayout().count*this.glassRackCount()} glasses - ${this.glassDiameter()} mm bowl`:'None'});
+        {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
       const snapshot:ConfigurationDocument={product:this.record?.product_name||this.modelLabel(),material:this.materialLabel(),code:this.activeSlug(),produced:new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric',timeZone:'Australia/Brisbane'}).format(new Date()),...views,fields};
       const blob=createConfigurationPdf(snapshot).output('blob');
       const previous=this.savedConfiguration();if(previous)URL.revokeObjectURL(previous.url);
