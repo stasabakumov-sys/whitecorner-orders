@@ -9,6 +9,8 @@ import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geomet
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
+import type { ConfigurationDocument } from './modeling-configuration-pdf';
+import { shelfDrawingSvg, ShelfSupport } from './modeling-shelf-drawing';
 import { createHangingGlass, hangingGlassLayout } from './modeling-glasses';
 import { createRoofBottom, createGlassRack, glassRackLayout } from './modeling-roof';
 import { ASSEMBLY_PARTS, AssemblyController, PartKey } from './modeling-assembly';
@@ -57,6 +59,86 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   isClassic(): boolean { return this.activeSlug() === CLASSIC_SLUG; }
   materialLabel(): string { return this.record?.material_name || 'Plywood'; }
   overallHeight(): number { return this.height() + (this.isClassic() ? 0 : 1030); }
+
+  @ViewChild('configurationDialog') configurationDialog?: ElementRef<HTMLDialogElement>;
+  readonly configurationBusy = signal(false);
+  readonly configurationError = signal('');
+  readonly savedConfiguration = signal<{url:string;filename:string;document:ConfigurationDocument}|null>(null);
+  async saveConfiguration(): Promise<void> {
+    if (this.configurationBusy()) return;
+    this.configurationBusy.set(true);this.configurationError.set('');
+    try {
+      if (!this.model || !this.renderer || this.loading()) throw new Error('Wait for the model to load, then retry.');
+      const {createConfigurationPdf}=await import('./modeling-configuration-pdf');
+      const views=this.configurationViews();
+      const colourNames:Record<string,string>={'#f6f6f3':'White','#aecde5':'Dulux Featherbed','#33383e':'Charcoal','#708471':'Sage','#aa6553':'Terracotta'};
+      const body=this.rawBody()?'RAW '+this.materialLabel():`2-pack painted - ${colourNames[this.bodyColor()]||this.bodyColor()} - ${this.paintFinish()==='matte'?'Matte':'Semi-gloss'}`;
+      const top=this.topFinish()==='body'?'In cart finish / colour':this.topFinish()==='oak'?'Tasmanian oak':this.topFinish()==='mdf'?'RAW MDF':this.isClassic()?'Varnished plywood':'Plywood';
+      const fields=[{label:'Dimensions',value:`${this.width()} x ${this.depth()} x ${this.height()} mm`},{label:'Cart body',value:body},{label:'Table top',value:top},
+        {label:'Edge rounding',value:this.rounding()+' mm'},{label:'Front panel',value:this.isClassic()?(this.moulding()?'With moulding':'Plain'):this.frontStyle()==='shaker'?'Shaker':this.frontStyle()==='moulding'?'With moulding':'Plain'},
+        {label:'Castors',value:(this.isClassic()?'95':'73')+' mm'},
+        {label:'Shelf position',value:'Middle'},{label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`}];
+      if(!this.isClassic())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
+        {label:'Glass racks',value:String(this.roofClosed()?this.glassRackCount():0)},
+        {label:'Glasses',value:this.roofClosed()&&this.showGlasses()&&this.glassRackCount()?`${this.glassLayout().count*this.glassRackCount()} glasses - ${this.glassDiameter()} mm bowl`:'None'});
+      const snapshot:ConfigurationDocument={product:this.record?.product_name||this.modelLabel(),material:this.materialLabel(),code:this.activeSlug(),produced:new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric',timeZone:'Australia/Brisbane'}).format(new Date()),...views,fields};
+      const blob=createConfigurationPdf(snapshot).output('blob');
+      const previous=this.savedConfiguration();if(previous)URL.revokeObjectURL(previous.url);
+      this.savedConfiguration.set({url:URL.createObjectURL(blob),filename:this.activeSlug()+'-configuration.pdf',document:snapshot});
+      this.configurationDialog?.nativeElement.showModal();
+    }catch(cause){this.configurationError.set('Could not save configuration: '+this.message(cause));}
+    finally{this.configurationBusy.set(false);}
+  }
+  private configurationViews():{front:string;rear:string} {
+    const renderer=this.renderer!,turntable=this.turntable!,rotation=turntable.rotation.y,size=renderer.getSize(new THREE.Vector2());
+    const original=this.scene.background,parts:{node:THREE.Object3D;position:THREE.Vector3;visible:boolean}[]=[];
+    this.assembly?.setEnabled(false);
+    this.model!.traverse(node=>{if(Array.isArray(node.userData['assemblyBasePosition'])){parts.push({node,position:node.position.clone(),visible:node.visible});node.position.fromArray(node.userData['assemblyBasePosition']);node.visible=!node.userData['assemblyHidden'];}});
+    try {
+      const span=Math.max(this.width(),this.depth(),this.overallHeight())/1000;
+      const target=new THREE.Vector3(this.width()/2000,this.overallHeight()/2000,this.depth()/2000);
+      const camera=new THREE.PerspectiveCamera(42,4/3,.01,30);
+      camera.position.copy(target).add(new THREE.Vector3(span*1.05,span*.4,span*1.65));camera.lookAt(target);
+      this.scene.background=new THREE.Color('#eceae8');renderer.setSize(960,720,false);
+      const capture=(angle:number)=>{turntable.rotation.y=angle;this.scene.updateMatrixWorld(true);renderer.render(this.scene,camera);return renderer.domElement.toDataURL('image/png');};
+      const front=this.isClassic()?Math.PI:0;return {front:capture(front),rear:capture(front+Math.PI)};
+    }finally{
+      for(const part of parts){part.node.position.copy(part.position);part.node.visible=part.visible;}
+      turntable.rotation.y=rotation;this.scene.background=original;renderer.setSize(size.x,size.y,false);
+      this.assembly?.setEnabled(this.assemblyMode());this.scene.updateMatrixWorld(true);renderer.render(this.scene,this.camera);
+    }
+  }
+  closeConfiguration():void{this.configurationDialog?.nativeElement.close();}
+  setPaintedBody():void{this.setBodyColor(this.bodyColor()==='#d4b894'?'#f6f6f3':this.bodyColor());}
+
+  @ViewChild('shelfDrawingDialog') shelfDrawingDialog?: ElementRef<HTMLDialogElement>;
+  readonly shelfPositionEditing = signal(false);
+  readonly shelfSupport = signal<ShelfSupport>('rail');
+  readonly buildingError = signal('');
+  readonly drawingZoomed = signal(false);
+  readonly shelfDrawing = signal<{url:string;filename:string} | null>(null);
+  generateShelfDrawing(): void {
+    this.buildingError.set('');
+    try {
+      if (!this.body || this.loading()) throw new Error('Wait for the complete model to load, then retry.');
+      const boundsFor = (pattern: RegExp): THREE.Box3[] => this.body!.children.filter(part => pattern.test(part.userData['plywoodPart'] || part.name)).map(part => {
+        const bounds = new THREE.Box3();
+        part.traverse(node => { if (node instanceof THREE.Mesh) bounds.union(new THREE.Box3().setFromBufferAttribute(node.geometry.getAttribute('position'))); });
+        return bounds;
+      }).filter(b => !b.isEmpty());
+      const sides = boundsFor(/^Left[ _]side/i).sort((a,b) => b.getSize(new THREE.Vector3()).y*b.getSize(new THREE.Vector3()).z - a.getSize(new THREE.Vector3()).y*a.getSize(new THREE.Vector3()).z);
+      const shelf = boundsFor(/^Shelf/i)[0];
+      if (!sides.length || !shelf) throw new Error('Side panel or shelf geometry is missing. Load the complete model and retry.');
+      const size = sides[0].getSize(new THREE.Vector3());
+      const dimension = (n:number) => Math.round(n*10000)/10;
+      const svg = shelfDrawingSvg({width:dimension(size.z),height:dimension(size.y),panelThickness:dimension(size.x),shelfThickness:this.isClassic()?15:16,support:this.shelfSupport(),material:this.isClassic()?'Plywood':'MDF',product:`${this.modelLabel()} - ${this.width()} x ${this.depth()} x ${this.height()} mm`});
+      const previous = this.shelfDrawing(); if (previous) URL.revokeObjectURL(previous.url);
+      this.shelfDrawing.set({url:URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})),filename:`${this.activeSlug()}-side-middle-${this.shelfSupport()}.svg`});
+      this.drawingZoomed.set(false);
+      this.shelfDrawingDialog?.nativeElement.showModal();
+    } catch(cause) { this.buildingError.set(this.message(cause)); }
+  }
+  closeShelfDrawing(): void { this.shelfDrawingDialog?.nativeElement.close(); }
 
   readonly width = signal(1200);
   readonly depth = signal(600);
@@ -1009,6 +1091,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.alive = false;
+    const configuration=this.savedConfiguration();if(configuration)URL.revokeObjectURL(configuration.url);
+    const drawing = this.shelfDrawing(); if (drawing) URL.revokeObjectURL(drawing.url);
     this.loadVersion++;
     cancelAnimationFrame(this.frame);
     this.resizeObserver?.disconnect();
