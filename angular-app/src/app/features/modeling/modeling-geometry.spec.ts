@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
 
 describe('MDF roof cart dimensions', () => {
+  it('keeps the shelf and its supports rigid halfway between the decks', () => {
+    for (const length of [1200, 1300, 1400, 1500]) for (const height of [850, 900, 950, 1000]) {
+      const shelf = resizeRoofCartPosition('Shelf', .031, .554, .019, length, height);
+      const shelfTop = resizeRoofCartPosition('Shelf', 1.169, .569, .565, length, height);
+      const support = resizeRoofCartPosition('Shelf support left', .016, .534, .019, length, height);
+      expect(shelfTop[1] - shelf[1]).toBeCloseTo(.015);
+      expect(shelf[1] - support[1]).toBeCloseTo(.020);
+      expect(shelf[1]).toBeCloseTo(.554 + (height - 900) / 2000);
+      expect(shelfTop[0] - shelf[0]).toBeCloseTo(1.138 + (length - 1200) / 1000);
+    }
+  });
   it('keeps wheel axes aligned with bottom holes at every length and height', () => {
     for (const length of [1200, 1300, 1400, 1500]) for (const height of [850, 900, 950, 1000]) {
       const hole = resizeRoofCartPosition('Buttom_part2', 1.047, 0.2530002, 0.6, length, height);

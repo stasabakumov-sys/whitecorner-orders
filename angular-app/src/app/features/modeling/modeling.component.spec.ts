@@ -86,6 +86,7 @@ describe('Independent editor models', () => {
     await component.selectModel(roof.slug);
     expect(component.height()).toBe(900);
     expect(component.materialLabel()).toBe('MDF');
+    expect(component.parts.map(part => part.key)).toContain('shelf');
     expect(component.modelLabel()).toBe('Cart with decorative wheels & roof / MDF');
     expect(component.selectedFile()).toBeNull();
     component.setDimension('height', '850');

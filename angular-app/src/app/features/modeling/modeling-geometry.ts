@@ -35,7 +35,7 @@ export function resizeRoofCartPosition(name: string, x: number, y: number, z: nu
     : x <= 0.2 ? x : x >= 1 ? x + dx : x + dx * (x - 0.2) / 0.8;
   const fixed = /^(Buttom|Bottom|Legs|Decorative[ _]wheel)/i.test(name);
   const elevated = /^(Top|Roof|Dar)/i.test(name);
-  const nextY = fixed ? y : elevated ? y + dy
+  const nextY = fixed ? y : elevated ? y + dy : /^Shelf/i.test(name) ? y + dy / 2
     : y <= 0.239 ? y : y >= 0.884 ? y + dy : y + dy * (y - 0.239) / 0.645;
   return [nextX, nextY, z];
 }
