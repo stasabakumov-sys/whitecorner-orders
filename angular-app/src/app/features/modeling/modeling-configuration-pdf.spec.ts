@@ -8,3 +8,10 @@ it('exports a one-page specification with two model views and no pricing',()=>{
  expect(commands).not.toMatch(/PRICING|GST|Total|\$/);
  expect(new TextDecoder().decode(pdf.output('arraybuffer').slice(0,8))).toMatch(/^%PDF-/);
 });
+
+it('exports indicative prices separately and marks missing prices for a quote',()=>{
+ const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAAE0lEQVR4nGN88+oFAwwwwVnoHABmFgLEuvJUXQAAAABJRU5ErkJggg==';
+ const pdf=createConfigurationPdf({product:'MDF Mobile Bar Cart with Roof & Decorative Wheels – Foldable Serving Cart',material:'MDF',code:'roof',produced:'5 October 2026',logo:image,front:image,rear:image,fields:[],pricing:{productId:'fixture',variantId:null,publishedAt:'2026-10-04T00:00:00Z',subtotal:170,lines:[{label:'Cart',amount:150},{label:'Shelf',amount:20},{label:'Front panel',amount:null}]}});
+ expect(pdf.getNumberOfPages()).toBe(2);
+ const commands=(pdf.internal as unknown as {pages:string[][]}).pages.flat().join(' ');expect(commands).toContain('INDICATIVE PRICING');expect(commands).toContain('$170');expect(commands).toContain('Quote required');expect(commands).toContain('Not a final quotation');expect(commands).toContain('2 / 2');
+});

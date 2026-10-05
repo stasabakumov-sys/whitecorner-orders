@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, computed, signal } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -9,6 +9,8 @@ import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geomet
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
+import { readModelingCatalog, linkedModelProduct, catalogPricing, formatModelingPrice, ModelingCatalog, ConfigurationPricing } from './modeling-pricing';
+import { ModelingSectionComponent } from './modeling-section.component';
 import type { ConfigurationDocument } from './modeling-configuration-pdf';
 import { shelfDrawingSvg, ShelfSupport } from './modeling-shelf-drawing';
 import { createHangingGlass, hangingGlassLayout } from './modeling-glasses';
@@ -45,7 +47,7 @@ export function isTopPanelName(name: string): boolean {
 @Component({
   selector: 'app-modeling',
   standalone: true,
-  imports: [],
+  imports: [ModelingSectionComponent],
   templateUrl: './modeling.component.html',
   styleUrl: './modeling.component.css',
 })
@@ -54,7 +56,59 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   readonly activeSlug = signal(CLASSIC_SLUG);
   readonly models = signal<ModelRecord[]>([]);
-  readonly modelLabel = signal('Classic Bar / Plywood');
+  private readonly legacyModelLabel = signal('Classic Bar / Plywood');
+  readonly catalog = signal<ModelingCatalog|null>(null);
+  readonly catalogBusy = signal(false);
+  readonly catalogError = signal('');
+  readonly pdfWithPrices = signal(false);
+  readonly modelLabel = computed(()=>linkedModelProduct(this.catalog(),this.activeSlug())?.name||this.legacyModelLabel());
+  productLabel(slug:string,fallback:string):string { return linkedModelProduct(this.catalog(),slug)?.name||fallback; }
+  readonly pricing = computed<ConfigurationPricing|null>(()=>{
+    const catalog=this.catalog();if(!catalog)return null;
+    const price=catalogPricing(catalog,{slug:this.activeSlug(),width:this.width(),depth:this.depth(),height:this.height(),raw:this.rawBody(),colour:this.bodyColor(),shelf:this.shelfIncluded()});
+    price.lines.push({label:'Front panel',amount:null},{label:'Table top finish',amount:null});
+    if(!this.isClassic()&&this.roofClosed())price.lines.push({label:'Closed roof',amount:null});
+    if(!this.isClassic()&&this.roofClosed()&&this.glassRackCount())price.lines.push({label:this.glassRackCount()+' × Wine Glass Rack Chrome 405mm',amount:null});
+    return price;
+  });
+  priceText = formatModelingPrice;
+  optionSurcharge(label:string):string {
+    const catalog=this.catalog();
+    const price=catalog?catalogPricing(catalog,{slug:this.activeSlug(),width:this.width(),depth:this.depth(),height:this.height(),raw:label==='Finish / colour'?false:this.rawBody(),colour:label==='Finish / colour'&&this.bodyColor()==='#d4b894'?'#f6f6f3':this.bodyColor(),shelf:label==='Internal shelf'?true:this.shelfIncluded()}):null;
+    const amount=price?.lines.find(line=>line.label===label)?.amount;
+    return amount===undefined||amount===null?'':amount===0?'Included':(amount>0?'+':'')+formatModelingPrice(amount);
+  }
+  async loadCatalog():Promise<void> {
+    if(this.catalogBusy())return;this.catalogBusy.set(true);this.catalogError.set('');
+    try {
+      const {data,error}=await this.db.client.from('wc_storefront_catalog').select('payload,published_at').eq('id','live').maybeSingle();
+      if(error)throw error;
+      const catalog=readModelingCatalog(data?.payload,data?.published_at);
+      if(this.alive)this.catalog.set(catalog);
+    }catch(cause){if(this.alive){this.catalog.set(null);this.catalogError.set('Hub product names and prices could not be loaded. '+this.message(cause)+' Retry the catalogue.');}}
+    finally {if(this.alive)this.catalogBusy.set(false);}
+  }
+  sectionSummary(section:string):string {
+    switch(section){
+      case 'parts':return this.assemblyMode()?(this.parts.find(part=>part.key===this.selectedPart())?.label||'Select parts'):'Rotate';
+      case 'dimensions':return `${this.width()} × ${this.depth()} × ${this.height()} mm`;
+      case 'shelf':return this.shelfIncluded()?'Middle':'None';
+      case 'front':return this.isClassic()?(this.moulding()?'With moulding':'None'):this.frontStyle()==='shaker'?'Shaker':this.frontStyle()==='moulding'?'With moulding':'Plain';
+      case 'roof':return this.roofClosed()?'Closed'+(this.glassRackCount()?` · ${this.glassRackCount()} racks`:''):'Open';
+      case 'finish': {
+        if(this.rawBody())return 'RAW '+this.materialLabel();
+        const colours:Record<string,string>={'#f6f6f3':'White','#aecde5':'Dulux Featherbed','#33383e':'Charcoal','#708471':'Sage','#aa6553':'Terracotta'};
+        return `2-pack painted · ${colours[this.bodyColor()]||this.bodyColor()} · ${this.paintFinish()==='matte'?'Matte':'Semi-gloss'}`;
+      }
+      case 'top':return this.topFinish()==='body'?'In cart finish / colour':this.topFinish()==='oak'?'Tasmanian oak':this.topFinish()==='mdf'?'RAW MDF':this.isClassic()?'Varnished plywood':'Plywood';
+      case 'scene':return {studio:'Studio',event:'Event',office:'Office'}[this.previewScene()];
+      case 'file':return this.saving()?'Saving…':this.error()?'Unavailable':this.selectedFile()?.name||this.fileName()||'None';
+      case 'pricing':return this.catalogBusy()?'Loading…':this.catalogError()?'Unavailable':this.pricing()?.subtotal==null?'Quote required':this.priceText(this.pricing()!.subtotal)+' · Catalog subtotal';
+      case 'settings':return this.rounding()?'Edge rounding · '+this.rounding()+' mm':'None';
+      case 'building':return this.shelfIncluded()?'Middle · '+(this.shelfSupport()==='plastic'?'Plastic support':'Support rail'):'None';
+      default:return 'None';
+    }
+  }
   private selectionVersion = 0;
   isClassic(): boolean { return this.activeSlug() === CLASSIC_SLUG; }
   materialLabel(): string { return this.record?.material_name || 'Plywood'; }
@@ -69,10 +123,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.configurationBusy.set(true);this.configurationError.set('');
     try {
       if (!this.model || !this.renderer || this.loading()) throw new Error('Wait for the model to load, then retry.');
+      const includePrices=this.pdfWithPrices();
+      if(includePrices&&!this.pricing())throw new Error('Load the Hub catalogue before exporting with prices. Retry the catalogue or choose Without prices.');
       const {createConfigurationPdf}=await import('./modeling-configuration-pdf');
       const response=await fetch(new URL('branding/white-corner-logo.png',document.baseURI));
       if(!response.ok)throw new Error('The White Corner logo could not be loaded. Retry the export.');
       const logo=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error('The White Corner logo could not be read. Retry the export.'));response.blob().then(blob=>reader.readAsDataURL(blob)).catch(reject);});
+      if (!this.model || !this.renderer || this.loading()) throw new Error('Wait for the model to load, then retry.');
+      const prices=includePrices?this.pricing():null;
+      if(includePrices&&!prices)throw new Error('Load the Hub catalogue before exporting with prices. Retry the catalogue or choose Without prices.');
       const views=this.configurationViews();
       const colourNames:Record<string,string>={'#f6f6f3':'White','#aecde5':'Dulux Featherbed','#33383e':'Charcoal','#708471':'Sage','#aa6553':'Terracotta'};
       const body=this.rawBody()?'RAW '+this.materialLabel():`2-pack painted - ${colourNames[this.bodyColor()]||this.bodyColor()} - ${this.paintFinish()==='matte'?'Matte':'Semi-gloss'}`;
@@ -84,7 +143,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
       if(!this.isClassic())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
-      const snapshot:ConfigurationDocument={product:this.record?.product_name||this.modelLabel(),material:this.materialLabel(),code:this.activeSlug(),produced:new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric',timeZone:'Australia/Brisbane'}).format(new Date()),logo,...views,fields};
+      const snapshot:ConfigurationDocument={product:linkedModelProduct(this.catalog(),this.activeSlug())?.name||this.record?.product_name||this.modelLabel(),material:this.materialLabel(),code:this.activeSlug(),produced:new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric',timeZone:'Australia/Brisbane'}).format(new Date()),logo,...views,fields,...(prices?{pricing:prices}:{})};
       const blob=createConfigurationPdf(snapshot).output('blob');
       const previous=this.savedConfiguration();if(previous)URL.revokeObjectURL(previous.url);
       this.savedConfiguration.set({url:URL.createObjectURL(blob),filename:this.activeSlug()+'-configuration.pdf',document:snapshot});
@@ -115,7 +174,6 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   setPaintedBody():void{this.setBodyColor(this.bodyColor()==='#d4b894'?'#f6f6f3':this.bodyColor());}
 
   @ViewChild('shelfDrawingDialog') shelfDrawingDialog?: ElementRef<HTMLDialogElement>;
-  readonly shelfPositionEditing = signal(false);
   readonly shelfIncluded = signal(true);
   setShelfIncluded(included:boolean):void {
     this.shelfIncluded.set(included);
@@ -242,6 +300,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   constructor(readonly members: HubMembersService, private readonly db: SupabaseService) {}
 
   ngAfterViewInit(): void {
+    void this.loadCatalog();
     try {
       this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -343,7 +402,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if (!record) throw new Error('The selected model is not available to your account');
       await this.loadRecord(record, requestVersion);
     } catch (cause) {
-      if (this.alive && requestVersion === this.selectionVersion) this.error.set(`Could not open the saved 3D model: ${this.message(cause)}. Reload the page or choose a local GLB file.`);
+      if (this.alive && requestVersion === this.selectionVersion) this.error.set(`Could not open the saved 3D model: ${this.message(cause)}. Reload the page.`);
     } finally {
       if (this.alive && requestVersion === this.selectionVersion) this.loading.set(false);
     }
@@ -386,10 +445,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   private async loadRecord(data: ModelRecord, version: number): Promise<void> {
       this.record = data;
-      this.modelLabel.set(`${data.product_name} / ${data.material_name}`);
+      this.legacyModelLabel.set(`${data.product_name} / ${data.material_name}`);
       this.resetDimensions();
       if (!data.model_path) {
-        this.notice.set('No model has been uploaded to Hub yet. Choose a GLB file to open it in the editor.');
+        this.notice.set('This model is not configured in Hub yet.');
         return;
       }
       const signed = await this.db.client.storage.from(BUCKET).createSignedUrl(data.model_path, 600);

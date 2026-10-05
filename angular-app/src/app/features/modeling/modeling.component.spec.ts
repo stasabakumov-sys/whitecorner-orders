@@ -400,3 +400,26 @@ describe('Optional shelf',()=>{
   expect(component.buildingError()).toContain('Turn the shelf on');expect(component.shelfDrawing()).toBeNull();
  });
 });
+
+describe('Hub catalogue names and export pricing',()=>{
+ it('shows an actionable catalogue error and clears previous prices after a failed refresh',async()=>{
+  const chain:any={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({error:new Error('Network unavailable'),data:null})};
+  const component=new ModelingComponent({} as HubMembersService,{client:{from:()=>chain}} as unknown as SupabaseService);
+  component.catalog.set({publishedAt:'2026-10-04',products:[]});await component.loadCatalog();
+  expect(component.catalog()).toBeNull();expect(component.catalogBusy()).toBe(false);expect(component.catalogError()).toContain('Retry');expect(component.pricing()).toBeNull();
+ });
+ it('defaults PDF exports to no prices and blocks with-prices export until Hub data is loaded',async()=>{
+  const {component}=setup();expect(component.pdfWithPrices()).toBe(false);
+  const internal=component as unknown as {model:THREE.Group;renderer:THREE.WebGLRenderer};internal.model=new THREE.Group();internal.renderer={} as THREE.WebGLRenderer;
+  component.loading.set(false);component.pdfWithPrices.set(true);await component.saveConfiguration();
+  expect(component.configurationError()).toContain('Load the Hub catalogue');expect(component.savedConfiguration()).toBeNull();expect(component.configurationBusy()).toBe(false);
+ });
+});
+
+it('shows the paint surcharge for the colour that selecting Painted will actually apply',()=>{
+ const {component}=setup();component.shelfIncluded.set(false);component.bodyColor.set('#d4b894');
+ const size='Size I (W1200mm x D600mm x H900mm)';
+ component.catalog.set({publishedAt:'2026-10-04',products:[{id:'750a0827-801d-4cb4-b630-1e07167ad400',path:'/product-page/collapsible-plywood-mobile-bar-classic-mobile-food-service-event-bar-cart',name:'Fixture',currency:'AUD',options:[{name:'Size',values:[size]}],variants:[{id:'raw',price:100,choices:{Size:size,Colour:'Raw','Internal Shelf':'No'}},{id:'white',price:150,choices:{Size:size,Colour:'White','Internal Shelf':'No'}}]}]});
+ expect(component.optionSurcharge('Finish / colour')).toBe('+$50');
+ component.setPaintedBody();expect(component.pricing()?.subtotal).toBe(150);
+});
