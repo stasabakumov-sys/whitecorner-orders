@@ -9,6 +9,56 @@ export interface RoundingProfile {
   holes: number[][][];
 }
 
+export interface PartJoint { axis: 'x' | 'y' | 'z'; plane: number; bounds: THREE.Box3; }
+
+// STEP roof members meet on planar faces. Detect shared faces before rounding,
+// while excluding overlaps, edges and separate parts.
+export function roofPartJoints(parts: { name: string; bounds: THREE.Box3 }[]): Map<string, PartJoint[]> {
+  const joints = new Map<string, PartJoint[]>();
+  const axes = ['x', 'y', 'z'] as const;
+  for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+    const a = parts[i], b = parts[j];
+    if (!/^Roof[ _]/i.test(a.name) || !/^Roof[ _]/i.test(b.name)) continue;
+    for (const axis of axes) {
+      const others = axes.filter(value => value !== axis);
+      if (!others.every(value => Math.min(a.bounds.max[value], b.bounds.max[value]) - Math.max(a.bounds.min[value], b.bounds.min[value]) > 1e-5)) continue;
+      let plane: number | undefined;
+      if (Math.abs(a.bounds.max[axis] - b.bounds.min[axis]) < 1e-5) plane = a.bounds.max[axis];
+      else if (Math.abs(b.bounds.max[axis] - a.bounds.min[axis]) < 1e-5) plane = b.bounds.max[axis];
+      if (plane === undefined) continue;
+      const bounds = new THREE.Box3(a.bounds.min.clone().max(b.bounds.min), a.bounds.max.clone().min(b.bounds.max));
+      bounds.min[axis] = bounds.max[axis] = plane;
+      for (const part of [a, b]) joints.set(part.name, [...(joints.get(part.name) || []), { axis, plane, bounds }]);
+    }
+  }
+  return joints;
+}
+
+export function keepPartJointsSquare(geometry: THREE.BufferGeometry, joints: PartJoint[], radiusMm: number): void {
+  if (!joints.length) return;
+  const positions = geometry.getAttribute('position');
+  const tolerance = radiusMm / 1000 * 2 + 1e-6;
+  const changed = new Set<number>();
+  for (let i = 0; i < positions.count; i++) {
+    const point = new THREE.Vector3().fromBufferAttribute(positions, i);
+    for (const joint of joints) {
+      if (Math.abs(point[joint.axis] - joint.plane) > tolerance) continue;
+      if (!(['x', 'y', 'z'] as const).filter(axis => axis !== joint.axis).every(axis =>
+        point[axis] >= joint.bounds.min[axis] - tolerance && point[axis] <= joint.bounds.max[axis] + tolerance)) continue;
+      point[joint.axis] = joint.plane;
+      positions.setXYZ(i, point.x, point.y, point.z);
+      changed.add(Math.floor(i / 3));
+    }
+  }
+  if (!changed.size) return;
+  const originalNormals = geometry.getAttribute('normal').clone();
+  geometry.computeVertexNormals();
+  const normals = geometry.getAttribute('normal');
+  for (let i = 0; i < normals.count; i++) if (!changed.has(Math.floor(i / 3))) {
+    normals.setXYZ(i, originalNormals.getX(i), originalNormals.getY(i), originalNormals.getZ(i));
+  }
+}
+
 // Round the planar corners before beveling the extrusion, retaining the STEP
 // outline, cut-outs and the original outside dimensions.
 function roundedPath(points: THREE.Vector2[], radius: number, path: THREE.Path): void {
