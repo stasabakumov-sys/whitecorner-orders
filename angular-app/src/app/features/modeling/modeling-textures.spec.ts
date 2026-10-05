@@ -15,6 +15,23 @@ describe('Image finishes on horizontal tops', () => {
     expect(uv.getX(2)).toBeCloseTo(.6);
     geometry.dispose();
   });
+  it('turns socket grain vertically without altering the tabletop or plywood edge UVs', () => {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute([.05, .772, .06, .05, .884, .06, .05, .884, .126], 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute([1, 0, 0, 1, 0, 0, 1, 0, 0], 3));
+    addTopFinishUvs(geometry);
+    const oldUv = geometry.getAttribute('uv2').clone(), edges = Array.from(geometry.getAttribute('uv3').array);
+    addTopFinishUvs(geometry, true);
+    const uv = geometry.getAttribute('uv2');
+    for (let i = 0; i < uv.count; i++) {
+      expect(uv.getX(i)).toBeCloseTo(oldUv.getY(i));
+      expect(uv.getY(i)).toBeCloseTo(-oldUv.getX(i));
+    }
+    expect(uv.getX(1)).toBeCloseTo(uv.getX(0));
+    expect(uv.getY(1) - uv.getY(0)).toBeCloseTo(-.112);
+    expect(Array.from(geometry.getAttribute('uv3').array)).toEqual(edges);
+    geometry.dispose();
+  });
   it('uses the layered texture only across panel edges without changing geometry', () => {
     const geometry = new THREE.BoxGeometry(1.2, .015, .6);
     const before = Array.from(geometry.getAttribute('position').array);

@@ -51,6 +51,7 @@ describe('Tabletop image textures', () => {
       expect(load.mock.calls[0][0]).toMatch(/modeling-textures\/tasmanian-oak\.png$/);
       expect(component.topFinish()).toBe('oak');
       expect(texture.channel).toBe(2);
+      expect(texture.repeat.toArray()).toEqual([2.5, 2.5]);
       expect(texture.colorSpace).toBe(THREE.SRGBColorSpace);
       await component.setTopFinish('oak');
       expect(load).toHaveBeenCalledOnce();

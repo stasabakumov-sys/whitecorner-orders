@@ -8,14 +8,15 @@ export function pineWoodUv(cross: number, along: number): [number, number] {
 }
 // The oak photograph has vertical grain. On horizontal panels V follows X;
 // preserve the physical grain scale as the tabletop gets longer.
-export function addTopFinishUvs(geometry: THREE.BufferGeometry): void {
+export function addTopFinishUvs(geometry: THREE.BufferGeometry, turnGrain = false): void {
   const position = geometry.getAttribute('position'), normal = geometry.getAttribute('normal');
   const uv = new Float32Array(position.count * 2), edge = new Float32Array(position.count * 2);
   for (let i = 0; i < position.count; i++) {
     const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
     const across = Math.abs(normal.getY(i)) > .5 ? z : y;
     const along = Math.abs(normal.getX(i)) > .5 ? z : x;
-    uv[i * 2] = across; uv[i * 2 + 1] = along;
+    // Turn oak grain vertically on the roof-post sockets below the tabletop.
+    uv[i * 2] = turnGrain ? along : across; uv[i * 2 + 1] = turnGrain ? -across : along;
     edge[i * 2] = along / .12; edge[i * 2 + 1] = y / .12;
   }
   geometry.setAttribute('uv2', new THREE.BufferAttribute(uv, 2));

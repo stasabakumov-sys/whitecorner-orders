@@ -569,8 +569,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
       texture.channel = file === 'plywood-edge.jpg' ? 3 : 2;
-      texture.repeat.set(file === 'tasmanian-oak.png' ? 1 / 1.2 : file === 'plywood-face.jpg' ? 1 / 2.439 : 1,
-        file === 'tasmanian-oak.png' ? 1 / 1.2 : file === 'plywood-face.jpg' ? 1 / 2.439 : 1);
+      texture.repeat.set(file === 'tasmanian-oak.png' ? 3 / 1.2 : file === 'plywood-face.jpg' ? 1 / 2.439 : 1,
+        file === 'tasmanian-oak.png' ? 3 / 1.2 : file === 'plywood-face.jpg' ? 1 / 2.439 : 1);
       texture.anisotropy = Math.min(this.renderer?.capabilities.getMaxAnisotropy() || 1, 8);
       if (this.alive) this.finishTextures.set(file, texture); else texture.dispose();
       return texture;
@@ -716,7 +716,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const rawMdf = !this.isClassic() && !map && (this.rawBody() || finish === 'mdf');
         const source = rawMdf ? new THREE.Color('#b99b78') : map ? new THREE.Color('#ffffff') : body;
         if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry, partName, edge, pine);
-        if (map && (finish === 'oak' || (finish === 'plywood' && !this.isClassic()))) addTopFinishUvs(node.geometry);
+        if (map && (finish === 'oak' || (finish === 'plywood' && !this.isClassic()))) addTopFinishUvs(node.geometry, finish === 'oak' && !this.isClassic() && /^Top[ _][3-6]$/i.test(partName));
         if (!map && this.modelPaintBumpTexture && !node.geometry.hasAttribute('uv1')) this.addPaintUvs(node.geometry);
         material.color.copy(source);
         if (map && finish !== 'oak' && !pine && !edge) material.color.multiplyScalar(1.05);
