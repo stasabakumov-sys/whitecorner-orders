@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { addTopFinishUvs, groupTopFacesAndEdges } from './modeling-textures';
+import { addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
 
 describe('Image finishes on horizontal tops', () => {
   it('runs oak grain along the tabletop length without stretching its scale', () => {
@@ -45,4 +45,13 @@ describe('Image finishes on horizontal tops', () => {
     expect(geometry.getAttribute('uv3').count).toBe(normal.count);
     geometry.dispose();
   });
+});
+
+it('Shaker contrast selects only the outward plane without changing geometry', () => {
+ const g = new THREE.BoxGeometry(1.168, .645, .012), positions = Array.from(g.attributes['position'].array);
+ groupShakerRecess(g);
+ for (const group of g.groups) for (let i=group.start;i<group.start+group.count;i++) expect(group.materialIndex===2).toBe(g.attributes['normal'].getZ(g.index!.getX(i))>.99);
+ expect(Array.from(g.attributes['position'].array)).toEqual(positions);
+ expect(g.groups.reduce((sum,group)=>sum+group.count,0)).toBe(g.index!.count);
+ const groups=JSON.stringify(g.groups);groupShakerRecess(g);expect(JSON.stringify(g.groups)).toBe(groups);
 });

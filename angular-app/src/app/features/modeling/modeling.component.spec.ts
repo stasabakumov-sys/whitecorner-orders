@@ -360,3 +360,23 @@ it('uses Classic plywood layers and a pine border on the MDF cart tabletop', asy
   expect(trimMaterials[0].color.b).toBeCloseTo(2.4 * 1.05);
   expect(trim.geometry.hasAttribute('uv')).toBe(true);
 });
+
+it.each(['classic-bar-plywood','decorative-wheel-roof-cart-mdf'])('shows the parts menu only in Select parts for %s',slug=>{
+ TestBed.resetTestingModule();TestBed.configureTestingModule({imports:[ModelingComponent],providers:[{provide:HubMembersService,useValue:{manager:()=>true}},{provide:SupabaseService,useValue:{client:{}}}]});
+ const fixture=TestBed.createComponent(ModelingComponent);fixture.componentInstance.ngAfterViewInit=()=>{};fixture.componentInstance.activeSlug.set(slug);
+ try{fixture.detectChanges();const root:HTMLElement=fixture.nativeElement;const mode=(name:string)=>Array.from(root.querySelectorAll('button')).find(b=>b.textContent?.trim()===name)!;
+ expect(root.querySelector('.parts-list')).toBeNull();mode('Select parts').click();fixture.detectChanges();expect(root.querySelector('.parts-list')).not.toBeNull();expect(mode('Return all')).toBeDefined();mode('Rotate').click();fixture.detectChanges();expect(root.querySelector('.parts-list')).toBeNull();expect(mode('Return all')).toBeUndefined();expect(mode('Select parts').getAttribute('aria-expanded')).toBe('false');
+ }finally{fixture.destroy();TestBed.resetTestingModule();}
+});
+it('Shaker recess contrast stays subtle across paint changes and returns to base for Plain',()=>{
+ const {component}=setup();const editor=component as any;component.activeSlug.set('decorative-wheel-roof-cart-mdf');component.frontStyle.set('shaker');editor.body=new THREE.Group();editor.rawTexture=new THREE.Texture();editor.plywoodTexture=new THREE.Texture();
+ const panel=new THREE.Mesh(new THREE.BoxGeometry(1.168,.645,.012),new THREE.MeshStandardMaterial());panel.name='Front_part1';editor.body.add(panel);component.setBodyColor('#f6f6f3');
+ const materials=panel.material as unknown as THREE.MeshStandardMaterial[],source=new THREE.Color('#f6f6f3');expect(materials[0].color.r).toBeCloseTo(source.r);expect(materials[2].color.r).toBeCloseTo(source.r*.92);
+ component.setPaintFinish('semi-gloss');expect(materials[2].color.r).toBeCloseTo(source.r*.92);component.frontStyle.set('plain');editor.applyFinishes();expect(materials[2].color.r).toBeCloseTo(source.r);
+});
+
+it('restores the neutral studio after selecting either photographic scene', () => {
+  const { component } = setup(); const scene = (component as any).scene as THREE.Scene;
+  for (const backdrop of ['event', 'office'] as const) { component.setPreviewScene(backdrop); expect(scene.background).toBeNull(); expect(component.previewScene()).toBe(backdrop); }
+  component.setPreviewScene('studio'); expect((scene.background as THREE.Color).getHexString()).toBe('eceae8');
+});

@@ -37,3 +37,24 @@ export function groupTopFacesAndEdges(geometry: THREE.BufferGeometry): void {
   }
   geometry.userData['topFinishGroups'] = true;
 }
+
+
+// Only the exposed plane of the Shaker backing sheet receives the contrast.
+// Preserve existing groups on its rear and thin edges.
+export function groupShakerRecess(geometry: THREE.BufferGeometry): void {
+  if (geometry.userData['shakerRecessGroups']) return;
+  const normal = geometry.getAttribute('normal'), index = geometry.getIndex();
+  const groups = geometry.groups.map(group => ({ ...group }));
+  geometry.clearGroups();
+  let sourceGroup = 0;
+  const count = index?.count || normal.count;
+  for (let i = 0; i < count; i += 3) {
+    while (sourceGroup < groups.length - 1 && i >= groups[sourceGroup].start + groups[sourceGroup].count) sourceGroup++;
+    const vertex = index ? index.getX(i) : i;
+    const material = normal.getZ(vertex) > .99 ? 2 : groups[sourceGroup]?.materialIndex === 1 ? 1 : 0;
+    const last = geometry.groups[geometry.groups.length - 1];
+    if (last && last.materialIndex === material) last.count += 3;
+    else geometry.addGroup(i, 3, material);
+  }
+  geometry.userData['shakerRecessGroups'] = true;
+}
