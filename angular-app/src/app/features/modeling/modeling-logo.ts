@@ -2,7 +2,7 @@ export interface LogoPanel { width:number; height:number; inset:number; }
 export interface LogoPlacement { png:string; name:string; ratio:number; x:number; y:number; width:number; }
 export const logoHeight=(logo:LogoPlacement)=>logo.width/logo.ratio;
 export function fitLogo(panel:LogoPanel,logo:LogoPlacement):LogoPlacement {
- const width=Math.max(1,Math.min(logo.width,panel.width-2*panel.inset,(panel.height-2*panel.inset)*logo.ratio));
+ const width=Math.max(Number.EPSILON,Math.min(logo.width,panel.width-2*panel.inset,(panel.height-2*panel.inset)*logo.ratio));
  return {...logo,width,x:Math.max(panel.inset,Math.min(logo.x,panel.width-panel.inset-width)),y:Math.max(panel.inset,Math.min(logo.y,panel.height-panel.inset-width/logo.ratio))};
 }
 export function centreLogo(panel:LogoPanel,logo:LogoPlacement):LogoPlacement {

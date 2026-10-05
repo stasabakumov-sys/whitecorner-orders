@@ -12,6 +12,7 @@ describe('front logo production placement',()=>{
   const p={width:1168,height:645,inset:73};const l=centreLogo(p,{...logo,ratio:.5,width:800});
   expect(l.width).toBe(249.5);expect(l.y).toBe(73);expect(l.x).toBeCloseTo(459.25);
  });
+ it('keeps even very tall PNGs inside the available height',()=>{const p={width:1168,height:645,inset:121};const l=fitLogo(p,{...logo,ratio:1/8192});expect(logoHeight(l)).toBeLessThanOrEqual(403);});
  it('refits placement after changing dimensions and retains PNG in a standalone metric drawing',()=>{
   const p={width:1168,height:595,inset:121};const l=fitLogo(p,{...logo,x:600,y:500,width:400});
   expect(l.x+l.width).toBeLessThanOrEqual(p.width-p.inset);expect(l.y+logoHeight(l)).toBeLessThanOrEqual(p.height-p.inset);
