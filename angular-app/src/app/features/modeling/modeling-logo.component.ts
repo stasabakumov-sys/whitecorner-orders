@@ -26,7 +26,7 @@ export class ModelingLogoComponent implements OnDestroy {
  const png=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error('The file could not be read.'));reader.readAsDataURL(file);});
  const image=new Image();image.src=png;await image.decode();if(!image.width||!image.height||image.width>8192||image.height>8192||image.width*image.height>32000000)throw new Error('Maximum image size is 8192 px per side and 32 megapixels.');
  if(version!==this.version)return;
- const p=this.panel();this.draft.set(centreLogo(p,{png,name:file.name,ratio:image.width/image.height,width:(p.width-2*p.inset)*.45,x:0,y:0}));this.notice.set('PNG ready. Choose Place logo to position it.');
+ const p=this.panel();this.draft.set(centreLogo(p,{png,name:file.name,ratio:image.width/image.height,width:(p.width-2*p.inset)*.45,x:0,y:0}));this.notice.set('PNG ready. Open the placement editor.');
  }catch(cause){if(version===this.version)this.error.set(`${file.name}: ${cause instanceof Error?cause.message:String(cause)} Choose another PNG and retry.`);}
  finally{if(version===this.version)this.busy.set(false);}
  }
