@@ -6,27 +6,27 @@
     </div>
     <div class="model-picker"><label for="model-choice">Model</label><select id="model-choice" [value]="activeSlug()" [disabled]="saving() || roundingBusy()" (change)="selectModel($any($event.target).value)">@for (model of models(); track model.slug) {<option [value]="model.slug" [selected]="model.slug === activeSlug()">{{model.product_name}} / {{model.material_name}}</option>}</select></div>
   </header>
-
   <div class="workspace">
     <div class="viewer-card">
       <div class="viewer-toolbar">
         <strong>3D preview</strong>
         <span>{{width()}} × {{depth()}} × {{height()}} mm</span>
       </div>
-      <div #canvasHost class="canvas-host" role="img" [attr.aria-label]="'Interactive 3D model '+modelLabel()"></div>
+      <div #canvasHost class="canvas-host" [class.scene-event]="previewScene()==='event'" [class.scene-office]="previewScene()==='office'" role="img" [attr.aria-label]="'Interactive 3D model '+modelLabel()"></div>
       @if (loading()) { <div class="viewer-status">Loading model…</div> }
       @if (!loading() && !fileName()) { <div class="viewer-status">Choose a GLB model to start previewing</div> }
       <div class="viewer-footer"><span>Drag to rotate · Scroll to zoom</span><span>{{fileName()}}</span></div>
     </div>
-
     <div class="settings">
       <section class="setting-card assembly-card">
-        <div class="setting-title"><h2>Parts & assembly</h2><button type="button" class="text-action" (click)="restoreAssembly()">Return all</button></div>
-        <p class="help">Select a part and drag its arrow. Clear Top and Bottom by 60 mm to release the panels. @if (isClassic()) { Shelf stays fixed. } @else { Shelf, roof, supports, legs and wheels stay fixed. }</p>
+        <div class="setting-title"><h2>Parts & assembly</h2>@if (assemblyMode()) { <button type="button" class="text-action" (click)="restoreAssembly()">Return all</button> }</div>
         <div class="length-options paint-options" role="group" aria-label="Assembly view">
           <button type="button" [class.selected]="!assemblyMode()" [attr.aria-pressed]="!assemblyMode()" (click)="setAssemblyMode(false)">Rotate</button>
-          <button type="button" [class.selected]="assemblyMode()" [attr.aria-pressed]="assemblyMode()" (click)="setAssemblyMode(true)">Select parts</button>
+          <button type="button" [class.selected]="assemblyMode()" [attr.aria-pressed]="assemblyMode()" [attr.aria-expanded]="assemblyMode()" aria-controls="parts-assembly-controls" (click)="setAssemblyMode(true)">Select parts</button>
         </div>
+        @if (assemblyMode()) {
+        <div id="parts-assembly-controls">
+        <p class="help">Select a part and drag its arrow. Clear Top and Bottom by 60 mm to release the panels. @if (isClassic()) { Shelf stays fixed. } @else { Shelf, roof, supports, legs and wheels stay fixed. }</p>
         <div class="parts-list">
           @for (part of parts; track part.key) {
             <div class="part-row">
@@ -40,6 +40,8 @@
           <div class="setting-title"><label for="part-offset">Move out <output>{{partOffset(key)}} mm</output></label><button type="button" class="text-action" (click)="restorePart()">Return part</button></div>
           <input id="part-offset" type="range" min="0" max="500" step="1" [value]="partOffset(key)" [disabled]="!partMovable(key)" (input)="movePart($any($event.target).value)" aria-label="Selected part distance in millimetres">
           @if (!partMovable(key)) { <p class="help">{{["shelf","wheels","roof","posts","legs","decorative-wheels"].includes(key) ? "This part stays fixed." : "Move or hide Top and Bottom first."}}</p> }
+        }
+        </div>
         }
       </section>
       <section class="setting-card">
@@ -65,9 +67,7 @@
         </div>
         @if (roundingBusy()) {<p class="progress" role="status">Rounding wooden parts…</p>}
         @if (!loading() && !roundingSupported()) {<p class="help">Upload an updated GLB with part profiles to enable rounding.</p>}
-
       </section>
-
       <section class="setting-card">
         <h2>{{isClassic() ? 'Front panel moulding' : 'Front panel'}}</h2>
         <p class="help">Pine · 31 × 15 mm profile · 90 mm inset.</p>
@@ -85,13 +85,32 @@
         </div>
         }
       </section>
-
+      @if (!isClassic()) {
+      <section class="setting-card">
+        <h2>Roof</h2>
+        <p class="help">Closed roof adds a 12 mm MDF bottom panel with cutouts for the supports. Roof height stays unchanged.</p>
+        <div class="length-options" role="group" aria-label="Roof structure">
+          <button type="button" [disabled]="loading() || roundingBusy()" [class.selected]="!roofClosed()" [attr.aria-pressed]="!roofClosed()" (click)="setRoofClosed(false)">Open</button>
+          <button type="button" [disabled]="loading() || roundingBusy()" [class.selected]="roofClosed()" [attr.aria-pressed]="roofClosed()" (click)="setRoofClosed(true)">Closed</button>
+        </div>
+        @if (roofClosed()) {
+          <label for="glass-rack-count">Glass racks <output>{{glassRackCount()}}</output></label>
+          <input id="glass-rack-count" type="range" min="0" [max]="rackLayout().maximum" step="1" [value]="glassRackCount()" [disabled]="loading() || roundingBusy()" (input)="setGlassRackCount($any($event.target).value)" aria-label="Number of glass racks">
+          <p class="help">70 × 105 × 406 mm · centred along roof depth. Outer racks stay 120 mm from the left and right edges.</p>
+          @if (glassRackCount() > 1) {
+            <p class="help" aria-live="polite">Clear gap between racks: <strong>{{rackLayout().gap!.toFixed(1)}} mm</strong><br>Maximum bowl diameter: <strong>{{rackLayout().bowlDiameter!.toFixed(1)}} mm</strong> (4 mm clearance).</p>
+          } @else if (glassRackCount() === 1) { <p class="help">One centred rack — no adjacent rack limits the bowl diameter.</p> }
+          <p class="help">Bowl diameter is based on rack spacing. Check the actual stem and base fit before manufacture.</p>
+        }
+      </section>
+      }
       <section class="setting-card">
         <h2>Cart body colour</h2>
         <p class="help">{{isClassic() ? "RAW shows plywood grain." : "RAW shows unpainted MDF."}} Choose a colour to paint the body.</p>
         <div class="swatches" role="group" aria-label="Body colour">
           <button type="button" class="raw-choice" [style.background]="isClassic() ? 'repeating-linear-gradient(92deg,#d6b98e 0 7px,#cda97b 7px 9px,#dec399 9px 13px)' : '#b99b78'" [class.selected]="rawBody()" (click)="setRawBody()">RAW {{materialLabel()}}</button>
           <button type="button" class="swatch" style="background:#f6f6f3!important" [class.selected]="bodyColor()==='#f6f6f3'" (click)="setBodyColor('#f6f6f3')" title="White · RGB 246, 246, 243" aria-label="White"></button>
+          <button type="button" class="swatch" style="background:#aecde5!important" [class.selected]="bodyColor()==='#aecde5'" (click)="setBodyColor('#aecde5')" title="Dulux Featherbed · RGB 174, 205, 229" aria-label="Dulux Featherbed"></button>
           <button type="button" class="swatch" style="background:#33383e!important" [class.selected]="bodyColor()==='#33383e'" (click)="setBodyColor('#33383e')" title="Charcoal" aria-label="Charcoal"></button>
           <button type="button" class="swatch" style="background:#708471!important" [class.selected]="bodyColor()==='#708471'" (click)="setBodyColor('#708471')" title="Sage" aria-label="Sage"></button>
           <button type="button" class="swatch" style="background:#aa6553!important" [class.selected]="bodyColor()==='#aa6553'" (click)="setBodyColor('#aa6553')" title="Terracotta" aria-label="Terracotta"></button>
@@ -104,7 +123,6 @@
           <button type="button" [class.selected]="paintFinish()==='semi-gloss'" [attr.aria-pressed]="paintFinish()==='semi-gloss'" (click)="setPaintFinish('semi-gloss')">Semi-gloss</button>
         </div>
       </section>
-
       <section class="setting-card">
         <h2>Table top finish</h2>
         <p class="help">Choose the table top finish.</p>
@@ -117,7 +135,14 @@
           @if (!isClassic()) { <button type="button" [class.selected]="topFinish()==='mdf'" (click)="setTopFinish('mdf')"><span class="finish-chip" style="background:#b99b78"></span>RAW MDF</button> }
         </div>
       </section>
-
+      <section class="setting-card">
+        <h2>Scene</h2>
+        <div class="length-options scene-options" role="group" aria-label="Preview scene">
+          <button type="button" [class.selected]="previewScene()==='studio'" [attr.aria-pressed]="previewScene()==='studio'" (click)="setPreviewScene('studio')">Studio</button>
+          <button type="button" [class.selected]="previewScene()==='event'" [attr.aria-pressed]="previewScene()==='event'" (click)="setPreviewScene('event')">Event</button>
+          <button type="button" [class.selected]="previewScene()==='office'" [attr.aria-pressed]="previewScene()==='office'" (click)="setPreviewScene('office')">Office</button>
+        </div>
+      </section>
       <section class="setting-card model-file">
         <h2>Model file</h2>
         <p class="help">GLB files are private to Hub. Dimensions and colours are preview settings.</p>

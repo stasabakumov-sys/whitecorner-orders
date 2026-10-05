@@ -8,7 +8,8 @@ import { fitFurnitureBolts, shortenCastorBrakes } from './modeling-hardware';
 import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
-import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges } from './modeling-textures';
+import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
+import { createRoofBottom, createGlassRack, glassRackLayout } from './modeling-roof';
 import { ASSEMBLY_PARTS, AssemblyController, PartKey } from './modeling-assembly';
 
 interface ModelRecord {
@@ -63,6 +64,23 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly moulding = signal(true);
   readonly frontStyle = signal<'shaker' | 'plain' | 'moulding'>('plain');
   private frontMoulding?: THREE.Mesh;
+  readonly roofClosed = signal(false);
+  private roofBottom?: THREE.Mesh;
+  readonly previewScene = signal<'studio' | 'event' | 'office'>('studio');
+  setPreviewScene(scene: 'studio' | 'event' | 'office'): void {
+    this.previewScene.set(scene);
+    // The stationary photographic floor remains visible through the renderer.
+    this.scene.background = scene === 'studio' ? new THREE.Color('#eceae8') : null;
+  }
+  readonly glassRackCount = signal(0);
+  private glassRacks?: THREE.Group;
+  rackLayout() { return glassRackLayout(this.width(), this.glassRackCount()); }
+  setGlassRackCount(raw: string): void {
+    const count = Number(raw);
+    if (!Number.isFinite(count)) return;
+    this.glassRackCount.set(Math.max(0, Math.min(this.rackLayout().maximum, Math.floor(count))));
+    this.updateRoofBottom(); this.applyFinishes();
+  }
   readonly roundingSupported = signal(false);
   readonly roundingBusy = signal(false);
   private sourceParts: THREE.Object3D[] = [];
@@ -228,6 +246,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.rawBody.set(true);
     this.moulding.set(this.isClassic());
     this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
+    this.roofClosed.set(false);
+    this.glassRackCount.set(0);
     this.topFinish.set(this.isClassic() ? 'plywood' : 'body');
     this.paintFinish.set('matte');
     try { await this.loadRecord(record, version); }
@@ -342,6 +362,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.sourcePositions.clear();
     this.generatedGeometries = [];
     this.frontMoulding = undefined;
+    this.roofBottom = undefined;
+    this.glassRacks = undefined;
     this.model = undefined;
     this.body = undefined;
     this.originalPositions.clear();
@@ -677,7 +699,68 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.controls.update();
     }
     this.cameraSpan = span;
-    this.updateMoulding();
+    this.updateRoofBottom();
+    if (this.roofClosed()) this.applyFinishes();
+    else this.updateMoulding();
+  }
+
+  setRoofClosed(closed: boolean): void {
+    this.roofClosed.set(closed);
+    this.updateRoofBottom();
+    this.applyFinishes();
+  }
+
+  private updateRoofBottom(): void {
+    if (this.glassRacks) {
+      this.glassRacks.removeFromParent();
+      const materials = new Set<THREE.Material>();
+      this.glassRacks.traverse(node => { if (node instanceof THREE.Mesh) { node.geometry.dispose(); materials.add(node.material as THREE.Material); } });
+      materials.forEach(material => material.dispose()); this.glassRacks = undefined;
+    }
+    if (this.roofBottom) {
+      this.roofBottom.removeFromParent();
+      this.roofBottom.geometry.dispose();
+      const materials = Array.isArray(this.roofBottom.material) ? this.roofBottom.material : [this.roofBottom.material];
+      materials.forEach(material => material.dispose());
+      this.roofBottom = undefined;
+    }
+    if (!this.body || this.isClassic() || !this.roofClosed()) return;
+    const skirts: THREE.Box3[] = [], posts: THREE.Box3[] = [];
+    for (const part of this.body.children) {
+      const name = part.userData['plywoodPart'] || part.name;
+      const bounds = new THREE.Box3();
+      part.traverse(node => {
+        if (node instanceof THREE.Mesh) bounds.union(new THREE.Box3().setFromBufferAttribute(node.geometry.getAttribute('position')));
+      });
+      if (/^Roof[ _][2-5][ _]*$/i.test(name)) skirts.push(bounds);
+      if (/^Dar[ _]?[1-4]$/i.test(name)) posts.push(bounds);
+    }
+    if (skirts.length !== 4 || posts.length !== 4) {
+      this.error.set('Could not close the roof: the model needs four roof skirt panels and four supports. Upload the complete roof model and retry.');
+      this.roofClosed.set(false);
+      return;
+    }
+    const envelope = skirts.reduce((box, skirt) => box.union(skirt), new THREE.Box3());
+    // Side panels bound X; front and rear panels bound Z. Use their inside faces.
+    const byX = [...skirts].sort((a, b) => a.getSize(new THREE.Vector3()).x - b.getSize(new THREE.Vector3()).x).slice(0, 2);
+    const byZ = [...skirts].sort((a, b) => a.getSize(new THREE.Vector3()).z - b.getSize(new THREE.Vector3()).z).slice(0, 2);
+    byX.sort((a, b) => a.min.x - b.min.x); byZ.sort((a, b) => a.min.z - b.min.z);
+    envelope.min.x = byX[0].max.x; envelope.max.x = byX[1].min.x;
+    envelope.min.z = byZ[0].max.z; envelope.max.z = byZ[1].min.z;
+    this.roofBottom = new THREE.Mesh(createRoofBottom(envelope, posts), new THREE.MeshPhysicalMaterial());
+    this.roofBottom.name = 'Roof bottom panel';
+    this.roofBottom.castShadow = true; this.roofBottom.receiveShadow = true;
+    this.body.add(this.roofBottom);
+    const layout = this.rackLayout(); this.glassRackCount.set(layout.centres.length);
+    if (layout.centres.length) {
+      this.glassRacks = new THREE.Group(); this.glassRacks.name = 'Roof glass racks';
+      for (const x of layout.centres) {
+        const rack = createGlassRack();
+        rack.position.set(x / 1000, envelope.min.y, (envelope.min.z + envelope.max.z) / 2);
+        this.glassRacks.add(rack);
+      }
+      this.body.add(this.glassRacks);
+    }
   }
 
   private applyFinishes(): void {
@@ -697,6 +780,13 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
           const edge = source.clone(); edge.name = 'plywood edge';
           node.material = [source, edge];
         }
+      }
+      if (!this.isClassic() && this.frontStyle() === 'shaker' && /^Front[ _]part1$/i.test(partName)) {
+        groupShakerRecess(node.geometry);
+        const materials = Array.isArray(node.material) ? [...node.material] : [node.material];
+        if (!materials[1]) materials[1] = materials[0];
+        if (!materials[2]) { materials[2] = materials[0].clone(); materials[2].name = 'Shaker recessed face'; }
+        node.material = materials;
       }
       const materials = (Array.isArray(node.material) ? node.material : [node.material]).map(material => {
         if (!(material instanceof THREE.MeshStandardMaterial) || material instanceof THREE.MeshPhysicalMaterial) return material;
@@ -721,6 +811,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         if (map && (finish === 'oak' || (finish === 'plywood' && !this.isClassic() && !pine))) addTopFinishUvs(node.geometry, finish === 'oak' && !this.isClassic() && /^Top[ _][3-6]$/i.test(partName));
         if (!map && this.modelPaintBumpTexture && !node.geometry.hasAttribute('uv1')) this.addPaintUvs(node.geometry);
         material.color.copy(source);
+        if (!this.isClassic() && this.frontStyle() === 'shaker' && material.name === 'Shaker recessed face') material.color.multiplyScalar(.92);
         if (map && finish !== 'oak' && !pine && !edge) material.color.multiplyScalar(1.05);
         if (edge && map && finish !== 'oak' && !pine) material.color.multiplyScalar(1.30);
         if (pine && map && finish !== 'oak') material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
