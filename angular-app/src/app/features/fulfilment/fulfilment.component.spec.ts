@@ -31,6 +31,13 @@ describe('FulfilmentComponent', () => {
     bookShipment: vi.fn(async (_row:any,_details:any) => true),
     completeManualFastCourier: vi.fn(async (_row:any) => true),
     error: signal(''),
+    recalculatingShipmentId: signal<string|null>(null),
+    recalculateFromProducts: vi.fn(async (_shipment:ShipmentRow)=>true),
+    quotingShipmentId: signal<string|null>(null),
+    hasSavedProfile: vi.fn(()=>true),
+    profileTargetName: vi.fn(()=> 'Cart'),
+    shipmentComplete: vi.fn(()=>true),
+    quotesFor: vi.fn(()=>[]),
     bookingShipmentId: signal<string | null>(null),
     load: vi.fn(async () => undefined),
     orderFor: vi.fn((row: FulfilmentRow) => row.order_id === order.id ? order : undefined),
@@ -79,6 +86,23 @@ describe('FulfilmentComponent', () => {
     expect(row?.textContent).toContain('Delivery Customer');
     expect(row?.textContent).toContain('Standard Delivery');
     expect(service.load).toHaveBeenCalledOnce();
+  });
+
+  it('offers recalculation only for an open delivery and renders the compact Add-on badge beside its name',async()=>{
+    const shipment:any={id:'shipment-1',fulfilment_id:delivery.id,order_id:order.id,status:'Packaging Review'};
+    service.shipmentFor.mockReturnValue(shipment);
+    fixture=TestBed.createComponent(FulfilmentComponent);
+    const c=fixture.componentInstance;
+    vi.spyOn(c,'compositionGroups').mockReturnValue([{item:{id:'main',product_name:'Cart'} as any,components:[{id:'main',product_name:'Cart'},{id:'addon',product_name:'Umbrella hole'}] as any}]);
+    c.selected.set(delivery);fixture.detectChanges();await fixture.whenStable();
+    const badge=fixture.nativeElement.querySelectorAll('.item-name-row')[1] as HTMLElement;
+    expect(badge.textContent).toContain('Umbrella hole');expect(badge.textContent).toContain('Add-on');
+    expect(badge.textContent).not.toContain('Component of');
+    const button=[...fixture.nativeElement.querySelectorAll('button')].find((b:any)=>b.textContent.includes('Recalculate from Products')) as HTMLButtonElement;
+    expect(button).toBeTruthy();button.click();await fixture.whenStable();
+    expect(service.recalculateFromProducts).toHaveBeenCalledWith(shipment);
+    expect(c.canRecalculatePackages(delivery,{...shipment,status:'Shipping Booked'})).toBe(false);
+    expect(c.canRecalculatePackages({...delivery,status:'Fulfilled'},shipment)).toBe(false);
   });
 
   it('counts fulfilled orders in their Pickup and Delivery tabs, below active orders', () => {

@@ -44,6 +44,43 @@ function setup() {
 }
 
 describe('FulfilmentService shipping completion', () => {
+  function packagingSetup(){
+    const s=setup();
+    s.service.shipments.update(rows=>rows.map(row=>({...row,updated_at:'2026-10-06T00:00:00Z'})));
+    s.orders.orders.update(rows=>rows.map(row=>row.id==='order'?{...row,wc_order_items:[{id:'item',wix_line_item_id:'line',product_name:'Cart',quantity:1}]}:row));
+    const oldBox:any={id:'old',shipment_id:'shipment',package_no:1,package_name:'Old box',source_type:'Manual',contents:[]};
+    s.service.shipmentPackages.set([oldBox]);
+    const tables:Record<string,any[]>={wc_shipping_products:[{id:'product',product_name:'Cart',active:true}],wc_shipping_rules:[],wc_delivery_packaging_profiles:[],wc_shipping_packages:[{shipping_product_id:'product',active:true,source_type:'Base',package_no:1,package_name:'Product box',length_mm:500,width_mm:400,height_mm:100,weight_kg:10}]};
+    s.supabase.client.from.mockImplementation((table:string)=>{
+      const q:any={select:()=>q,eq:()=>q,order:()=>q,maybeSingle:async()=>({data:null,error:null}),range:async()=>({data:[],error:null}),then:(resolve:any)=>resolve({data:tables[table]||[],error:null})};return q;
+    });
+    return {...s,oldBox};
+  }
+  it('replaces shipment packages from Products and uses the transaction response to reset approval and quotes',async()=>{
+    const s=packagingSetup();
+    const updated={...s.service.shipments()[0],status:'Packaging Review',packages_approved_at:null,courier_order_id:null,selected_quote:null};
+    s.supabase.client.rpc.mockResolvedValueOnce({data:{shipment:updated,packages:[{...s.oldBox,id:'new',package_name:'Product box'}]},error:null} as any);
+    expect(await s.service.recalculateFromProducts(s.service.shipments()[0])).toBe(true);
+    expect(s.supabase.client.rpc).toHaveBeenCalledWith('wc_replace_shipment_packages',expect.objectContaining({p_shipment_id:'shipment',p_expected_version:'2026-10-06T00:00:00Z',p_packages:[expect.objectContaining({package_name:'Product box',contents:[expect.objectContaining({order_item_id:'item'})]})]}));
+    expect(s.service.shipmentPackages()[0].id).toBe('new');
+    expect(s.service.shipments()[0]).toMatchObject({status:'Packaging Review',courier_order_id:null});
+    expect(s.service.recalculatingShipmentId()).toBeNull();
+    expect(s.courier.bookOrder).not.toHaveBeenCalled();
+    expect(s.supabase.client.functions.invoke).not.toHaveBeenCalled();
+  });
+  it('preserves saved packages on a failed replacement and blocks booked shipments or duplicate clicks',async()=>{
+    const s=packagingSetup(),shipment=s.service.shipments()[0];
+    s.supabase.client.rpc.mockResolvedValueOnce({error:{message:'Shipment changed. Reload the card before recalculating'}} as any);
+    expect(await s.service.recalculateFromProducts(shipment)).toBe(false);
+    expect(s.service.shipmentPackages()).toEqual([s.oldBox]);
+    expect(s.service.error()).toContain('Shipment changed');
+    s.service.recalculatingShipmentId.set(shipment.id);
+    expect(await s.service.recalculateFromProducts(shipment)).toBe(false);
+    s.service.recalculatingShipmentId.set(null);
+    s.service.shipments.set([{...shipment,status:'Shipping Booked'}]);
+    expect(await s.service.recalculateFromProducts(shipment)).toBe(false);
+    expect(s.supabase.client.rpc).toHaveBeenCalledOnce();
+  });
   it('completes a website-booked delivery only through the local RPC', async () => {
     const s=setup();
     const completed={...s.row,status:'Fulfilled' as const,completion_source:'manual_fast_courier' as const};
