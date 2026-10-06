@@ -57,5 +57,27 @@ try{
  assert.deepEqual(snapshot.parts.map(part=>part.id),['body']);
  assert.equal(snapshot.estimates.CNC,10);
  await assert.rejects(db.query('update wc_shop_templates set parts=$2 where id=$1',[template,[{...parts[0],option_name:'Internal Shelf'}]]),/Enter both option name and value/);
+ await db.exec(await readFile('supabase/migrations/20261006000400_whole_composition_cnc.sql','utf8'));
+ const totals={...estimates,[`CNC@component:${addon}`]:30,'CNC@option:internal shelf=yes':25,[`CNC@component:${addon}|option:internal shelf=yes`]:40};
+ await db.query('update wc_shop_templates set estimates=$2 where id=$1',[template,totals]);
+ await db.query('update wc_shop_units set parts=$2 where unit_id=$1',[unit,parts]);
+ snapshot=(await db.query('select parts,estimates from wc_shop_units where unit_id=$1',[unit])).rows[0];
+ assert.equal(snapshot.estimates.CNC,40,'combined configuration replaces Main CNC');
+ assert.equal(snapshot.estimates['CNC:shelf'],undefined,'snapshot contains no part CNC');
+ const shelfOrder=randomUUID(),shelfItem=randomUUID(),shelfUnit=randomUUID();
+ await db.query('insert into wc_orders values($1)',[shelfOrder]);
+ await db.query('insert into wc_order_items values($1,$2,null,$3,$4)',[shelfItem,shelfOrder,main,{'Internal Shelf':'Yes'}]);
+ await db.query('insert into wc_production_units values($1,$2)',[shelfUnit,shelfItem]);
+ await db.query('insert into wc_shop_units values($1,$2,$3,$4)',[shelfUnit,template,parts,totals]);
+ snapshot=(await db.query('select parts,estimates from wc_shop_units where unit_id=$1',[shelfUnit])).rows[0];
+ assert.equal(snapshot.estimates.CNC,25,'Main plus shelf uses its full CNC total');
+ assert.equal(snapshot.estimates['CNC:shelf'],undefined);
+ await db.query('update wc_shop_units set parts=$2 where unit_id=$1',[secondUnit,parts]);
+ snapshot=(await db.query('select parts,estimates from wc_shop_units where unit_id=$1',[secondUnit])).rows[0];
+ assert.equal(snapshot.estimates.CNC,10,'Main retains legacy base CNC');
+ await db.query('update wc_shop_templates set estimates=$2 where id=$1',[template,{CNC:10,'CNC@option:internal shelf=yes':25,[`CNC@component:${addon}`]:30}]);
+ await db.query('update wc_shop_units set parts=$2 where unit_id=$1',[unit,parts]);
+ snapshot=(await db.query('select parts,estimates from wc_shop_units where unit_id=$1',[unit])).rows[0];
+ assert.equal(snapshot.estimates.CNC,undefined,'unknown combination stays unestimated');
  console.log('Estimated composition migration: templates preserved, RLS preserved, selected parts and CNC snapshots verified.');
 }finally{await db.close();}
