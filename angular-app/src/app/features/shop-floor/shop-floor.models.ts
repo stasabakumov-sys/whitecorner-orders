@@ -8,7 +8,7 @@ export function parsePaintVolume(value:string|number):number|null {
  const amount=Number(input);return Number.isFinite(amount)&&amount>0&&amount<=100000?amount:null;
 }
 export const OTHER_OPERATIONS = ['Cleaning', 'Design', 'Administration', 'Development', 'Rest'];
-export interface ShopPart { id: string; name: string; component_product_id?: string }
+export interface ShopPart { id: string; name: string; component_product_id?: string; option_name?: string; option_value?: string }
 export interface ShopProductChoice { unit:{id:string}; order:{id:string}; mainItem:{product_name:string}; code:string; status:string }
 export function productChoice(view:ShopProductChoice):ShopProductChoice {
  return {unit:{id:view.unit.id},order:{id:view.order.id},mainItem:{product_name:view.mainItem.product_name||''},code:view.code,status:view.status};
