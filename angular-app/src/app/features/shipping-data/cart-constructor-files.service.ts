@@ -14,6 +14,11 @@ export function cartConstructorDimensions(box:any,type:CartBoxType='card') {
 }
 export interface CartConstructorState {drawing:any; files:BoxRdFile[]}
 export interface CartConstructorSave {p_request:string;p_package:string;p_box:any;p_constructor:any;p_svg:any;p_rd_files:any[]}
+export interface ProfileConstructorSave extends CartConstructorSave {p_signature:string;p_index:number}
+
+function stableJson(value:any):string {
+ return JSON.stringify(value,(_,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))):item);
+}
 
 @Injectable({providedIn:'root'})
 export class CartConstructorFilesService {
@@ -22,6 +27,14 @@ export class CartConstructorFilesService {
   const results=await Promise.all([
    this.db.client.from('wc_cart_box_svg_drawings').select('*').eq('cart_base_package_id',id).maybeSingle(),
    this.db.client.from('wc_box_rd_files').select('*').eq('cart_base_package_id',id).order('filename'),
+  ]);
+  for(const result of results)if(result.error)throw result.error;
+  return {drawing:results[0].data,files:results[1].data||[]};
+ }
+ async loadProfile(signature:string,index:number):Promise<CartConstructorState>{
+  const results=await Promise.all([
+   this.db.client.from('wc_box_drawings').select('*').eq('profile_signature',signature).eq('box_index',index).maybeSingle(),
+   this.db.client.from('wc_box_rd_files').select('*').eq('profile_signature',signature).eq('box_index',index).order('created_at'),
   ]);
   for(const result of results)if(result.error)throw result.error;
   return {drawing:results[0].data,files:results[1].data||[]};
@@ -57,11 +70,42 @@ export class CartConstructorFilesService {
    p_svg:{path:paths[0],filename,bytes:svgBlob.size,expected:previous.drawing?.revision??null},
    p_rd_files:files.map((file,index)=>{const prior=resize?undefined:previous.files.find(row=>row.id===replacements[index]);return {id:prior?.id??null,expected:prior?.revision??null,path:paths[index+1],filename:file.filename,bytes:file.bytes.length};})};
  }
+ async prepareProfile(signature:string,index:number,box:any,svg:string,files:RdFile[],settings:any,previous:CartConstructorState,replacements:string[],progress:(text:string)=>void,type:CartBoxType='card',tuck=40):Promise<ProfileConstructorSave>{
+  if(!signature||!Number.isSafeInteger(index)||index<0)throw Error('Save this packaging variant before opening Constructor.');
+  if(previous.files.length&&previous.files.length!==files.length)throw Error('Remove the old RD files in the RD editor before changing box type.');
+  const request=await this.prepare(box,svg,files,settings,previous,replacements,progress,type,tuck);
+  return {...request,p_signature:signature,p_index:index,p_box:box};
+ }
  async save(request:CartConstructorSave):Promise<CartConstructorState>{
   const result=await this.db.client.rpc('wc_save_cart_constructor_files',request);if(result.error)throw result.error;
   const data=result.data;
   if(data?.drawing?.object_path!==request.p_svg.path||data?.rd_files?.length!==request.p_rd_files.length||data.rd_files.some((file:any,index:number)=>file.object_path!==request.p_rd_files[index].path||file.copies!==(request.p_constructor.box_type==='small'?1:2)))throw Error('Server confirmation is incomplete. Retry the same save to check the result.');
   return {drawing:data.drawing,files:data.rd_files};
+ }
+ async saveProfile(request:ProfileConstructorSave):Promise<CartConstructorState>{
+  const {p_signature:signature,p_index:index}=request;
+  if(!signature||!Number.isSafeInteger(index)||index<0)throw Error('Packaging variant is missing. Reopen Constructor.');
+  const profile=await this.db.client.from('wc_delivery_packaging_profiles').select('packages').eq('signature',signature).maybeSingle();
+  if(profile.error)throw profile.error;
+  if(stableJson(profile.data?.packages?.[index])!==stableJson(request.p_box))throw Error('Packaging dimensions or contents changed. Reopen Constructor.');
+  const current=await this.loadProfile(signature,index);
+  const wanted=request.p_rd_files;
+  if(current.files.some(file=>!wanted.some(entry=>entry.id===file.id||!entry.id&&entry.path===file.object_path)))throw Error('RD files changed. Reopen Constructor before saving.');
+  if(current.drawing?.object_path!==request.p_svg.path){
+   const result=await this.db.client.rpc('wc_attach_box_drawing',{p_signature:signature,p_index:index,p_box:request.p_box,p_path:request.p_svg.path,p_filename:request.p_svg.filename,p_size:request.p_svg.bytes,p_expected:request.p_svg.expected});
+   if(result.error)throw result.error;
+   if(result.data?.object_path!==request.p_svg.path)throw Error('Server did not confirm the SVG drawing. Reload and retry.');
+  }
+  for(const entry of wanted){
+   const saved=current.files.find(file=>entry.id?file.id===entry.id:file.object_path===entry.path);
+   if(saved?.object_path===entry.path)continue;
+   const result=await this.db.client.rpc('wc_save_box_rd_file',{p_id:entry.id,p_signature:signature,p_index:index,p_path:entry.path,p_filename:entry.filename,p_bytes:entry.bytes,p_copies:request.p_constructor.box_type==='small'?1:2,p_expected:entry.expected});
+   if(result.error)throw result.error;
+   if(result.data?.object_path!==entry.path)throw Error(`${entry.filename}: server did not confirm the RD file. Reload and retry.`);
+  }
+  const confirmed=await this.loadProfile(signature,index);
+  if(confirmed.drawing?.object_path!==request.p_svg.path||confirmed.files.length!==wanted.length||wanted.some(entry=>!confirmed.files.some(file=>file.object_path===entry.path&&file.copies===(request.p_constructor.box_type==='small'?1:2))))throw Error('Server confirmation is incomplete. Retry the same save to check the result.');
+  return confirmed;
  }
  async downloadSvg(path:string,filename:string){
   const result=await this.db.client.storage.from('box-drawings').createSignedUrl(path,60,{download:filename});
