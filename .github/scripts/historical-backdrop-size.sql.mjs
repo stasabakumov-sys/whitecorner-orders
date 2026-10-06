@@ -3,6 +3,15 @@ const productJoin = `join public.wc_shipping_products p on
  ((p.wix_product_id is not null and p.wix_product_id=coalesce(nullif(i.catalog_reference->>'catalogItemId',''),nullif(i.catalog_reference->>'productId','')))
   or (p.wix_product_id is null and lower(btrim(p.product_name))=lower(btrim(i.product_name))))`;
 
+export const auditSql = `select
+ (select count(*)::int from public.wc_orders where order_number='10846') as exact_orders,
+ (select count(*)::int from public.wc_orders where regexp_replace(coalesce(order_number,''),'[^0-9]','','g')='10846') as numeric_orders,
+ (select count(*)::int from public.wc_orders o join public.wc_order_items i on i.order_id=o.id
+  where regexp_replace(coalesce(o.order_number,''),'[^0-9]','','g')='10846') as items,
+ (select count(*)::int from public.wc_orders o join public.wc_order_items i on i.order_id=o.id
+  where regexp_replace(coalesce(o.order_number,''),'[^0-9]','','g')='10846'
+   and i.product_name ilike 'Plywood Hollow Event Backdrop%') as title_matches;`;
+
 export const candidateSql = `select i.size,
  lower(btrim(coalesce(p.product_type,'')))='backdrop' as is_backdrop,
  exists(select 1 from jsonb_object_keys(coalesce(i.wix_options,'{}'::jsonb)) key
@@ -45,7 +54,7 @@ commit;`;
 
 export function validateCandidate(rows, expectSaved = false) {
   if (rows.length !== 1 || rows[0].is_backdrop !== true || rows[0].has_wix_size !== false) {
-    throw Error('Order 10846 does not have exactly one linked Backdrop item without a Wix size');
+    throw Error(`Order 10846 match guard stopped: matches=${rows.length}, backdrop=${rows.map(row => row.is_backdrop).join(',')}, wixSize=${rows.map(row => row.has_wix_size).join(',')}`);
   }
   const size = rows[0].size?.trim() || '';
   if (size && size !== targetSize) throw Error('Order 10846 already has a different Hub size');
