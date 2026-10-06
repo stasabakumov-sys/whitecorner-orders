@@ -58,7 +58,8 @@ export function shortenCastorBrakes(root: THREE.Object3D): void {
     if (center === undefined) return;
     const geometry = node.geometry.clone(), positions = geometry.getAttribute('position');
     const anchor = center + .006;
-    for (let i = 0; i < positions.count; i++) positions.setZ(i, anchor + (positions.getZ(i) - anchor) * .65);
+    const lengthScale = .65 * .8; // A further 20% reduction from the existing shortened brake.
+    for (let i = 0; i < positions.count; i++) positions.setZ(i, anchor + (positions.getZ(i) - anchor) * lengthScale);
     positions.needsUpdate = true;
     geometry.computeVertexNormals(); geometry.computeBoundingBox(); geometry.computeBoundingSphere();
     node.geometry.dispose(); node.geometry = geometry;
