@@ -66,25 +66,29 @@ export function shortenCastorBrakes(root: THREE.Object3D): void {
 }
 
 
-// Swivel the running assembly around each fixed mounting plate, retaining the
-// plate, circular bearing, mounting height and wheel contact with the floor.
+// Centre the wheel itself beneath the fixed mounting plate and turn the running
+// assembly with it. The protruding brake must not determine the centre.
 export function turnCastorWheels(root: THREE.Object3D): void {
   const plates = new Map<string, THREE.Vector3>();
+  const wheels = new Map<string, THREE.Vector3>();
   root.updateWorldMatrix(true, true);
   root.traverse(node => {
     if (!(node instanceof THREE.Mesh)) return;
     const match = /^(Caster[ _][LR][ _](?:front|rear))[ _]plate$/i.exec(node.name);
     if (match) plates.set(match[1].replaceAll(' ', '_').toLowerCase(), new THREE.Box3().setFromObject(node).getCenter(new THREE.Vector3()));
+    const wheel = /^(Caster[ _][LR][ _](?:front|rear))[ _](?:nylon[ _]wheel|rubber[ _]tire)$/i.exec(node.name);
+    if (wheel) wheels.set(wheel[1].replaceAll(' ', '_').toLowerCase(), new THREE.Box3().setFromObject(node).getCenter(new THREE.Vector3()));
   });
   root.traverse(node => {
     if (!(node instanceof THREE.Mesh)) return;
     const match = /^(Caster[ _][LR][ _](?:front|rear))[ _](.+)$/i.exec(node.name);
     if (!match || !/(?:wheel|tire|hub|fork|brake)/i.test(match[2])) return;
-    const pivot = plates.get(match[1].replaceAll(' ', '_').toLowerCase());
-    if (!pivot) return;
-    const worldTurn = new THREE.Matrix4().makeTranslation(pivot.x, pivot.y, pivot.z)
+    const key = match[1].replaceAll(' ', '_').toLowerCase();
+    const pivot = plates.get(key), wheel = wheels.get(key);
+    if (!pivot || !wheel) return;
+    const worldTurn = new THREE.Matrix4().makeTranslation(pivot.x, wheel.y, pivot.z)
       .multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2))
-      .multiply(new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z));
+      .multiply(new THREE.Matrix4().makeTranslation(-wheel.x, -wheel.y, -wheel.z));
     const localTurn = node.matrixWorld.clone().invert().multiply(worldTurn).multiply(node.matrixWorld);
     const geometry = node.geometry.clone(); geometry.userData = { ...node.geometry.userData };
     geometry.applyMatrix4(localTurn); geometry.computeBoundingBox(); geometry.computeBoundingSphere();

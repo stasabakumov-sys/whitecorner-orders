@@ -44,9 +44,9 @@ it('shortens all castor stops 35 percent while preserving the fork attachment', 
 });
 
 
-it('turns each small wheel assembly 90 degrees around its own fixed mounting plate', () => {
+it('centres each wheel beneath its mounting plate independently of the brake and turns the assembly 90 degrees', () => {
   const root = new THREE.Group(); root.position.set(.2, .1, -.3); root.rotation.y = .25;
-  const tests: { plate: THREE.Mesh; bearing: THREE.Mesh; wheel: THREE.Mesh; fork: THREE.Mesh; brake: THREE.Mesh; pivot: THREE.Vector3; before: THREE.Vector3; plateBefore: THREE.Box3; bearingBefore: THREE.Box3 }[] = [];
+  const tests: { plate: THREE.Mesh; bearing: THREE.Mesh; wheel: THREE.Mesh; fork: THREE.Mesh; brake: THREE.Mesh; pivot: THREE.Vector3; before: THREE.Vector3; plateBefore: THREE.Box3; bearingBefore: THREE.Box3; forkBefore: THREE.Vector3; brakeBefore: THREE.Vector3 }[] = [];
   for (const [i, tag] of ['L_front', 'R_front', 'L_rear', 'R_rear'].entries()) {
     const x = i % 2 ? 1.1 : .1, z = i < 2 ? .55 : .05;
     const make = (suffix: string, size: number[], at: number[]) => {
@@ -60,7 +60,7 @@ it('turns each small wheel assembly 90 degrees around its own fixed mounting pla
     const brake = make('brake_pedal', [.022, .003, .025], [x, .056, z - .018]);
     root.updateWorldMatrix(true, true);
     const plateBefore = new THREE.Box3().setFromObject(plate), bearingBefore = new THREE.Box3().setFromObject(bearing);
-    tests.push({ plate, bearing, wheel, fork, brake, pivot: plateBefore.getCenter(new THREE.Vector3()), before: new THREE.Box3().setFromObject(wheel).getCenter(new THREE.Vector3()), plateBefore, bearingBefore });
+    tests.push({ plate, bearing, wheel, fork, brake, pivot: plateBefore.getCenter(new THREE.Vector3()), before: new THREE.Box3().setFromObject(wheel).getCenter(new THREE.Vector3()), plateBefore, bearingBefore, forkBefore: new THREE.Box3().setFromObject(fork).getCenter(new THREE.Vector3()), brakeBefore: new THREE.Box3().setFromObject(brake).getCenter(new THREE.Vector3()) });
   }
   const decorative = new THREE.Mesh(new THREE.BoxGeometry(.35, .35, .03)); decorative.name = 'Decorative_wheel_front'; root.add(decorative);
   const decorativePosition = decorative.geometry.getAttribute('position').clone();
@@ -69,10 +69,13 @@ it('turns each small wheel assembly 90 degrees around its own fixed mounting pla
     expect(new THREE.Box3().setFromObject(test.plate).equals(test.plateBefore)).toBe(true);
     expect(new THREE.Box3().setFromObject(test.bearing).equals(test.bearingBefore)).toBe(true);
     const center = new THREE.Box3().setFromObject(test.wheel).getCenter(new THREE.Vector3());
-    const expected = test.before.clone().sub(test.pivot).applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2).add(test.pivot);
+    const expected = new THREE.Vector3(test.pivot.x, test.before.y, test.pivot.z);
     expect(center.distanceTo(expected)).toBeLessThan(1e-6);
     expect(new THREE.Box3().setFromObject(test.wheel).min.y).toBeCloseTo(.1);
-    expect(test.fork.geometry.boundingBox).not.toBeNull(); expect(test.brake.geometry.boundingBox).not.toBeNull();
+    for (const [part, before] of [[test.fork, test.forkBefore], [test.brake, test.brakeBefore]] as const) {
+      const relative = before.clone().sub(test.before).applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2).add(expected);
+      expect(new THREE.Box3().setFromObject(part).getCenter(new THREE.Vector3()).distanceTo(relative)).toBeLessThan(1e-6);
+    }
   }
   expect(Array.from(decorative.geometry.getAttribute('position').array)).toEqual(Array.from(decorativePosition.array));
 });
