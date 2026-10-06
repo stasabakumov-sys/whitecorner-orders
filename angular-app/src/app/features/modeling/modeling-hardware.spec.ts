@@ -25,7 +25,7 @@ describe('Furniture wheel bolts', () => {
 });
 
 
-it('shortens all castor stops 35 percent while preserving the fork attachment', () => {
+it('reduces the existing castor brake length a further 20 percent while preserving the fork attachment', () => {
   const root = new THREE.Group();
   for (const tag of ['L_front', 'R_front', 'L_rear', 'R_rear']) {
     const center = tag.endsWith('front') ? .5 : .1;
@@ -36,7 +36,7 @@ it('shortens all castor stops 35 percent while preserving the fork attachment', 
     shortenCastorBrakes(root);
     const box = brake.geometry.boundingBox!;
     expect(box.max.z).toBeCloseTo(center + .006);
-    expect(box.max.z - box.min.z).toBeCloseTo(.048 * .65);
+    expect(box.max.z - box.min.z).toBeCloseTo(.048 * .65 * .8);
     expect(box.max.x - box.min.x).toBeCloseTo(.022);
     // Avoid repeatedly transforming nodes while adding the next test castor.
     root.clear();
