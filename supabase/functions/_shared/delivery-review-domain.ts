@@ -408,11 +408,12 @@ const profileAddonKeys=(profile:CartMainPackagingVariant)=>{
  return Object.entries(profile.template_item?.wix_options||{}).filter(([name,value])=>!['size','dimension','dimensions'].includes(componentNormal(name))&&['yes','true','included','selected'].includes(componentNormal(String(value)))).map(([name,value])=>addonDescriptorKey({rule_type:'Option',match_name:name,match_value:String(value)})).sort();
 };
 const sameKeys=(left:string[],right:string[])=>left.length===right.length&&left.every((value,index)=>value===right[index]);
-function expandCombination(packages:any[],target:PackageComponent[],quantity:number):ReviewPackage[]{
+function expandCombination(packages:any[],target:PackageComponent[],quantity:number,owners:Map<string,string>):ReviewPackage[]{
  const counts=new Map<string,number>();
  for(const box of packages||[])for(const content of box.contents||[]){const key=`${canonicalPackagingItemKey(content.profile_item_key||'')}|${content.component_key||'main'}`;counts.set(key,Math.max(counts.get(key)||0,Number(content.unit_index)||1));}
- const result=Array.from({length:quantity},(_,copy)=>(packages||[]).map(box=>({...box,contents:(box.contents||[]).flatMap((content:any)=>{const key=`${canonicalPackagingItemKey(content.profile_item_key||'')}|${content.component_key||'main'}`,unit=copy*(counts.get(key)||1)+(Number(content.unit_index)||1);const matches=target.filter(component=>component.profile_item_key===canonicalPackagingItemKey(content.profile_item_key||'')&&component.component_key===(content.component_key||'main')&&component.unit_index===unit);return matches.length===1?matches:[];})}))).flat();
- return packagingError(result,target)?[]:result;
+ let invalid=false;
+ const result=Array.from({length:quantity},(_,copy)=>(packages||[]).map(box=>({...box,contents:(box.contents||[]).flatMap((content:any)=>{const savedKey=canonicalPackagingItemKey(content.profile_item_key||''),key=`${savedKey}|${content.component_key||'main'}`,unit=copy*(counts.get(key)||1)+(Number(content.unit_index)||1);const matches=target.filter(component=>component.order_item_id===owners.get(savedKey)&&component.component_key===(content.component_key||'main')&&component.unit_index===unit);if(matches.length!==1)invalid=true;return matches.length===1?matches:[];})}))).flat();
+ return invalid||packagingError(result,target)?[]:result;
 }
 /** Compose reusable Cart Main and separate Add-ons, or an exact manually saved Main + Add-ons combination. */
 export function composeModularPackages(order:any,products:ModularShippingProduct[],templates:ModularShippingPackage[],rules:ModularShippingRule[],ignoredRules:any[]=[],mainVariants?:CartMainPackagingVariant[]):ReviewPackage[]{
@@ -450,7 +451,23 @@ export function composeModularPackages(order:any,products:ModularShippingProduct
   const variant=(mainVariants||[]).find(profile=>profile.shipping_product_id===product.id&&profile.template_item?.profile_scope==='cart-main'&&cartSize(profile.template_item)===size&&sameKeys(profileAddonKeys(profile),selectedKeys));
   const addonItems=addonRules.flatMap(rule=>items.filter(candidate=>componentNormal(candidate.product_name||'')===componentNormal(rule.match_name||'')));
   const target=components.filter(component=>component.order_item_id===item.id||addonItems.some(candidate=>candidate.id===component.order_item_id));
-  const combined=variant?.packages?.length&&selectedKeys.length?expandCombination(variant.packages,target,Math.max(1,Math.floor(Number(item.quantity)||1))):[];
+  // Size and the complete rule selection above establish the Main identity.
+  // Its saved template omits unselected Wix options. Separate Add-ons are saved
+  // as rule-owned synthetic lines, without the real order's catalogue IDs.
+  // Rebind those known roles to order lines, retaining the actual components.
+  const owners=new Map<string,string>();
+  if(variant){
+   const mainKey=reviewComponents({wc_order_items:[variant.template_item]},ignoredRules)[0]?.profile_item_key;
+   if(mainKey)owners.set(canonicalPackagingItemKey(mainKey),item.id);
+   for(const rule of addonRules){
+    const candidates=addonItems.filter(candidate=>componentNormal(candidate.product_name||'')===componentNormal(rule.match_name||''));
+    // Add-on variants with their own size/options need an exact profile.
+    if(candidates.length!==1||packagingOptionLabels(candidates[0]).length)continue;
+    const key=reviewComponents({wc_order_items:[{id:'addon',product_name:rule.match_name||'',quantity:1}]},ignoredRules)[0]?.profile_item_key;
+    if(key)owners.set(key,candidates[0].id);
+   }
+  }
+  const combined=variant?.packages?.length&&selectedKeys.length?expandCombination(variant.packages,target,Math.max(1,Math.floor(Number(item.quantity)||1)),owners):[];
   if(combined.length)out.push(...combined);
   else{
    const main=components.filter(c=>c.order_item_id===item.id&&c.component_key==='main');
