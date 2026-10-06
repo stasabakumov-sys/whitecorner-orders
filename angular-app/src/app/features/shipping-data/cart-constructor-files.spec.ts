@@ -78,4 +78,44 @@ describe('Cart Constructor files',()=>{
   const fixture=TestBed.createComponent(CartBoxConstructorComponent);fixture.componentRef.setInput('box',box);fixture.detectChanges();
   expect(fixture.nativeElement.querySelector('button')).toBeNull();await fixture.componentInstance.show();expect(fixture.componentInstance.open).toBe(false);
  });
+ it('opens Constructor for a saved Main + Add-ons box without a shared package ID',async()=>{
+  const files={loadProfile:vi.fn().mockResolvedValue({drawing:null,files:[]})};
+  TestBed.configureTestingModule({providers:[{provide:CartConstructorFilesService,useValue:files},{provide:HubMembersService,useValue:{manager:signal(true)}}]});
+  const component=TestBed.createComponent(CartBoxConstructorComponent).componentInstance;
+  component.box={...box,id:undefined,contents:[]};component.profileSignature='variant';component.profileIndex=2;
+  await component.show();
+  expect(component.open).toBe(true);expect(files.loadProfile).toHaveBeenCalledWith('variant',2);
+  expect(component.seed).toEqual({length:1215,width:615,depth:80});
+ });
+ it('saves generated files to the exact variant and resumes after a partial response failure',async()=>{
+  const upload=vi.fn().mockResolvedValue({error:null});
+  let drawing:any=null;const saved:any[]=[];let failLid=true;
+  const rpc=vi.fn(async(name:string,args:any)=>{
+   if(name==='wc_attach_box_drawing'){drawing={object_path:args.p_path,filename:args.p_filename,revision:'new-svg'};return {data:drawing,error:null};}
+   if(name==='wc_save_box_rd_file'){
+    if(args.p_filename==='lid.rd'&&failLid){failLid=false;return {data:null,error:Error('Connection lost')};}
+    const file={id:args.p_id||args.p_filename,object_path:args.p_path,filename:args.p_filename,copies:args.p_copies,revision:'new-rd'};
+    saved.push(file);return {data:file,error:null};
+   }
+   throw Error('Unexpected RPC '+name);
+  });
+  const profileBox={...box,id:undefined,contents:[{component_key:'main'}]};
+  const profileQuery:any={select:()=>profileQuery,eq:()=>profileQuery,maybeSingle:async()=>({data:{packages:[{}, {}, profileBox]},error:null})};
+  const service=new CartConstructorFilesService({client:{from:()=>profileQuery,storage:{from:()=>({upload})},auth:{getUser:async()=>({data:{user:{id:'user'}},error:null})},rpc}} as any);
+  vi.spyOn(service,'loadProfile').mockImplementation(async()=>({drawing,files:[...saved]}));
+  const request=await service.prepareProfile('variant',2,profileBox,'<svg/>',rd,{}, {drawing:null,files:[]},[],()=>{});
+  expect(request.p_box).toEqual(profileBox);expect(upload).toHaveBeenCalledTimes(3);
+  await expect(service.saveProfile(request)).rejects.toThrow('Connection lost');
+  expect(saved).toHaveLength(1);
+  const state=await service.saveProfile(request);
+  expect(state.files).toHaveLength(2);
+  expect(rpc.mock.calls.filter(call=>call[0]==='wc_attach_box_drawing')).toHaveLength(1);
+  expect(rpc.mock.calls.filter(call=>call[0]==='wc_save_box_rd_file'&&call[1].p_filename==='bottom.rd')).toHaveLength(1);
+  expect(rpc.mock.calls.filter(call=>call[0]==='wc_save_box_rd_file'&&call[1].p_filename==='lid.rd')).toHaveLength(2);
+ });
+ it('rejects a box type change before uploading when profile RD files already exist',async()=>{
+  const upload=vi.fn();const service=new CartConstructorFilesService({client:{storage:{from:()=>({upload})}}} as any);
+  await expect(service.prepareProfile('variant',0,box,'<svg/>',[rd[0]],{}, {drawing:null,files:[{id:'a'},{id:'b'}] as any},[],()=>{},'small')).rejects.toThrow('Remove the old RD files');
+  expect(upload).not.toHaveBeenCalled();
+ });
 });

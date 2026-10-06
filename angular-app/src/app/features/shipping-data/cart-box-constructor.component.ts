@@ -4,11 +4,11 @@ import {DialogModule} from 'primeng/dialog';
 import {HubMembersService} from '../../core/services/hub-members.service';
 import {BoxConstructorComponent} from '../packing/box-constructor.component';
 import {exportBoxSvg} from '../packing/box-constructor-geometry';
-import {CartConstructorFilesService,CartConstructorSave,CartConstructorState,CartBoxType,cartConstructorDimensions} from './cart-constructor-files.service';
+import {CartConstructorFilesService,CartConstructorSave,ProfileConstructorSave,CartConstructorState,CartBoxType,cartConstructorDimensions} from './cart-constructor-files.service';
 
 @Component({selector:'app-cart-box-constructor',standalone:true,imports:[FormsModule,DialogModule,BoxConstructorComponent],template:`
  @if(members.manager()){
- <button class="icon" type="button" aria-label="Open box Constructor" [title]="locked?'Save packaging dimensions before opening Constructor':'Create SVG and RD for this Cart box'" [disabled]="locked||!box.id" (click)="show()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4M12 11v10M7 5l10 4"/></svg></button>
+ <button class="icon" type="button" [attr.aria-label]="'Create SVG and RD for '+(box.package_name||'Cart box')" [title]="locked?'Save packaging dimensions before opening Constructor':'Create SVG and RD for this Cart box'" [disabled]="locked||(!box.id&&!profileSignature)" (click)="show()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4M12 11v10M7 5l10 4"/></svg></button>
  }
  <p-dialog [(visible)]="open" [modal]="true" appendTo="body" [draggable]="false" [closable]="!busy&&!pending" [closeOnEscape]="!busy&&!pending" [header]="'Constructor · '+(snapshot?.package_name||'Cart box')" [style]="{width:'1100px',maxWidth:'calc(100vw - 24px)'}">
  @if(open){
@@ -25,7 +25,7 @@ import {CartConstructorFilesService,CartConstructorSave,CartConstructorState,Car
  <p>Saving replaces the selected RD files and updates unfinished packing tasks. Each file will have {{copies}} {{copies===1?'copy':'copies'}}.</p>
  <div class="replacements">@for(label of fileLabels;track label;let i=$index){<label>{{label}} RD to replace<select [(ngModel)]="replacementIds[i]" [disabled]="busy||!!pending"><option value="">Choose existing file</option>@for(file of state.files;track file.id){<option [value]="file.id">{{file.filename}}</option>}</select></label>}</div>
  }@else if(state.files.length>2){<p class="error" role="alert">This box has {{state.files.length}} RD files. Review its RD set first; Constructor supports one or two saved files.</p>}
- @else if(state.files.length>0){<p>Saving changes the RD set from {{state.files.length}} to {{fileCount}} files. Any active cutting task using the old files must be completed or cancelled first.</p>}
+ @else if(state.files.length>0){<p>Saving changes the RD set from {{state.files.length}} to {{fileCount}} files. Any active cutting task using the old files must be completed or cancelled first. @if(profileSignature){Remove the existing files in the RD editor before saving this box type.}</p>}
  <div class="save"><button type="button" class="icon" [attr.aria-label]="saveLabel" [title]="saveLabel" [disabled]="busy||!canSave" (click)="save()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button><span>{{pending?'Retry saving the same files to packaging':saveLabel+' · '+copies+' '+(copies===1?'copy':'copies')+' each'}}</span></div>
  @if(pending&&!busy){<button type="button" (click)="leavePending()">Close and check saved files later</button>}
  }
@@ -40,17 +40,17 @@ import {CartConstructorFilesService,CartConstructorSave,CartConstructorState,Car
  :host{display:inline-block}.box-type{display:flex;flex-direction:column;gap:5px;width:180px}.box-type select{height:38px;border:1px solid var(--wc-border);border-radius:8px;background:#fff;padding:6px 10px;font:inherit}.icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:1px solid var(--wc-border,#dce4ee);border-radius:6px;background:var(--wc-surface,#fff);cursor:pointer}.icon svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linejoin:round}fieldset{border:0;padding:0;margin:14px 0;min-width:0}.error{color:#991b1b;background:#fff1f1;padding:10px;border:1px solid #fecaca;border-radius:6px}.save,.replacements{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}.replacements label{display:flex;flex-direction:column;gap:6px}.replacements select{max-width:100%;padding:8px;border:1px solid #dce4ee;border-radius:6px}[disabled]{opacity:.6;cursor:default}
  `]})
 export class CartBoxConstructorComponent {
- @Input()box:any={};@Input()locked=false;@Output()filesSaved=new EventEmitter<void>();
+ @Input()box:any={};@Input()locked=false;@Input()profileSignature='';@Input()profileIndex=0;@Output()filesSaved=new EventEmitter<void>();
  @ViewChild(BoxConstructorComponent)editor?:BoxConstructorComponent;
  boxType:CartBoxType='card';tuckSeed=40;confirmOpen=false;
  open=false;busy=false;loading=false;loadFailed=false;error='';progress='';success='';snapshot:any;private loadVersion=0;
- seed:{length:number;width:number;depth:number}|null=null;state:CartConstructorState={drawing:null,files:[]};replacementIds=['',''];pending:CartConstructorSave|null=null;private savedFiles:unknown=null;
+ seed:{length:number;width:number;depth:number}|null=null;state:CartConstructorState={drawing:null,files:[]};replacementIds=['',''];pending:CartConstructorSave|ProfileConstructorSave|null=null;private savedFiles:unknown=null;
  constructor(private files:CartConstructorFilesService,readonly members:HubMembersService,private cdr:ChangeDetectorRef){}
- async show(){if(this.locked||!this.box.id||!this.members.manager())return;this.snapshot={...this.box};this.open=true;this.seed=null;this.error='';this.success='';this.pending=null;
+ async show(){if(this.locked||(!this.box.id&&!this.profileSignature)||!this.members.manager())return;this.snapshot=structuredClone(this.box);this.open=true;this.seed=null;this.error='';this.success='';this.pending=null;
   await this.load();
  }
  async load(){const version=++this.loadVersion;this.loading=true;this.loadFailed=false;this.error='';this.progress='Loading saved packaging files…';
-  try{const state=await this.files.load(this.snapshot.id);if(version!==this.loadVersion)return;this.state=state;const ids=this.state.drawing?.constructor_data?.rd_ids||[];this.boxType=state.drawing?.constructor_data?.box_type==='small'?'small':'card';this.changeType();this.tuckSeed=state.drawing?.constructor_data?.tuck??this.tuckSeed;this.replacementIds=this.fileLabels.map((_,i)=>this.state.files.some(file=>file.id===ids[i])?ids[i]:'');}
+  try{const state=this.profileSignature?await this.files.loadProfile(this.profileSignature,this.profileIndex):await this.files.load(this.snapshot.id);if(version!==this.loadVersion)return;this.state=state;const ids=this.state.drawing?.constructor_data?.rd_ids||[];this.boxType=state.drawing?.constructor_data?.box_type==='small'||this.profileSignature&&state.files.length===1?'small':'card';this.changeType();this.tuckSeed=state.drawing?.constructor_data?.tuck??this.tuckSeed;this.replacementIds=this.fileLabels.map((_,i)=>this.state.files.some(file=>file.id===ids[i])?ids[i]:this.profileSignature&&this.state.files.length===this.fileCount?this.state.files[i]?.id||'':'');}
   catch(error){if(version===this.loadVersion){this.loadFailed=true;this.error=`Could not load packaging files. ${this.message(error)} Retry load.`;}}
   finally{if(version===this.loadVersion){this.loading=false;this.progress='';this.cdr.markForCheck();}}
  }
@@ -62,13 +62,13 @@ export class CartBoxConstructorComponent {
   try{this.seed=cartConstructorDimensions(this.snapshot,this.boxType);this.tuckSeed=Math.min(40,this.seed.depth,(this.seed.length-1)/2);}
   catch(error){this.seed=null;this.error=this.message(error);}this.cdr.markForCheck();
  }
- get canSave(){return !!this.pending||!!this.editor?.drawing&&this.editor.rdFiles!==this.savedFiles&&this.editor.rdFiles.length===this.fileCount&&!this.editor.rdBusy&&this.state.files.length<=2&&(this.state.files.length!==this.fileCount||new Set(this.replacementIds).size===this.fileCount&&this.replacementIds.every(Boolean));}
+ get canSave(){return !!this.pending||!!this.editor?.drawing&&this.editor.rdFiles!==this.savedFiles&&this.editor.rdFiles.length===this.fileCount&&!this.editor.rdBusy&&this.state.files.length<=2&&(!this.profileSignature||!this.state.files.length||this.state.files.length===this.fileCount)&&(this.state.files.length!==this.fileCount||new Set(this.replacementIds).size===this.fileCount&&this.replacementIds.every(Boolean));}
  save(){if(!this.busy&&this.canSave)this.confirmOpen=true;}
  async confirmSave(){if(this.busy||!this.canSave)return;this.busy=true;this.confirmOpen=false;this.error='';this.success='';
   try{
-   if(!this.pending){const editor=this.editor!;this.pending=await this.files.prepare(this.snapshot,exportBoxSvg(editor.drawing!),editor.rdFiles,structuredClone(editor.rdSettings),this.state,this.replacementIds,text=>{this.progress=text;this.cdr.markForCheck();},this.boxType,Number(editor.tuck));}
+   if(!this.pending){const editor=this.editor!;const progress=(text:string)=>{this.progress=text;this.cdr.markForCheck();};this.pending=this.profileSignature?await this.files.prepareProfile(this.profileSignature,this.profileIndex,this.snapshot,exportBoxSvg(editor.drawing!),editor.rdFiles,structuredClone(editor.rdSettings),this.state,this.replacementIds,progress,this.boxType,Number(editor.tuck)):await this.files.prepare(this.snapshot,exportBoxSvg(editor.drawing!),editor.rdFiles,structuredClone(editor.rdSettings),this.state,this.replacementIds,progress,this.boxType,Number(editor.tuck));}
    this.confirmOpen=false;this.progress=`Saving SVG and ${this.fileCount} RD file${this.fileCount===1?'':'s'} to packaging…`;
-   this.state=await this.files.save(this.pending);this.pending=null;this.savedFiles=this.editor?.rdFiles;this.replacementIds=this.state.files.map(file=>file.id);this.success=`SVG and ${this.fileCount} RD file${this.fileCount===1?'':'s'} saved to this packaging box. Each RD has ${this.copies} ${this.copies===1?'copy':'copies'}.`;this.filesSaved.emit();
+   this.state=this.profileSignature?await this.files.saveProfile(this.pending as ProfileConstructorSave):await this.files.save(this.pending);this.pending=null;this.savedFiles=this.editor?.rdFiles;this.replacementIds=this.state.files.map(file=>file.id);this.success=`SVG and ${this.fileCount} RD file${this.fileCount===1?'':'s'} saved to this packaging box. Each RD has ${this.copies} ${this.copies===1?'copy':'copies'}.`;this.filesSaved.emit();
   }catch(error){this.error=`Could not save packaging files. ${this.message(error)} ${this.pending?'Retry Save to check and finish the same operation.':'Generated files and settings are kept; retry Save.'}`;}
   finally{this.busy=false;this.progress='';this.cdr.markForCheck();}
  }
