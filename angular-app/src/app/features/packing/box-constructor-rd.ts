@@ -1,4 +1,4 @@
-import {BoxNet, Point, boxNet, drawingNumber} from './box-constructor-geometry';
+import {BoxNet, Point, boxNet} from './box-constructor-geometry';
 
 export interface RdLayerSettings {speed: number | null; minPower: number | null; maxPower: number | null}
 export interface RdSettings {
@@ -32,14 +32,23 @@ export function rdSettingsError(settings: RdSettings): string {
 }
 
 export function prepareRdRequest(bottom: BoxNet, settings: RdSettings): RdRequest {
-  return prepareNetJobs([bottom, boxNet(bottom.length + 10, bottom.width + 10, bottom.depth)], settings, ['box-bottom', 'box-lid'], '-half');
+  return prepareNetJobs([bottom, boxNet(bottom.length + 10, bottom.width + 10, bottom.depth)], settings, ['B', 'L']);
 }
 
 export function prepareSmallRdRequest(net: BoxNet, settings: RdSettings, tuck = 40): RdRequest {
-  return prepareNetJobs([net], settings, ['small-box'], `-T${drawingNumber(tuck)}`);
+  return prepareNetJobs([net], settings, ['S'], tuck);
 }
 
-function prepareNetJobs(nets: BoxNet[], settings: RdSettings, names: string[], suffix: string): RdRequest {
+function shortRdFilename(kind: string, net: BoxNet, settings: RdSettings, tuck?: number): string {
+  const source = JSON.stringify([kind, net.length, net.width, net.depth, tuck, settings]);
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index++) {
+    hash = Math.imul(hash ^ source.charCodeAt(index), 16777619);
+  }
+  return `${kind}${((hash >>> 0) % 60466176).toString(36).padStart(5, '0')}.rd`;
+}
+
+function prepareNetJobs(nets: BoxNet[], settings: RdSettings, names: string[], tuck?: number): RdRequest {
   const error = rdSettingsError(settings);
   if (error) throw Error(error);
   const jobs = nets.map((net, index) => {
@@ -70,7 +79,7 @@ function prepareNetJobs(nets: BoxNet[], settings: RdSettings, names: string[], s
       else cuts.push([line.from,line.to]);
     }
     return {
-      filename: `${names[index]}-L${drawingNumber(net.length)}-W${drawingNumber(net.width)}-D${drawingNumber(net.depth)}${suffix}.rd`,
+      filename: shortRdFilename(names[index], net, settings, tuck),
       // Fold first, while the outline is still attached to the sheet.
       layers: [layer(paths, settings.fold, [69, 214, 255]), layer(cuts, settings.cut, [255, 0, 0])],
     };

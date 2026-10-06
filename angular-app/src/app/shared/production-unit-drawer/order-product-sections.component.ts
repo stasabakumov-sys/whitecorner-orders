@@ -1,5 +1,6 @@
 import {Component, Input, OnChanges, signal} from '@angular/core';
 import {CommonModule} from '@angular/common';
+import {FormsModule} from '@angular/forms';
 import {ProductionUnitView} from '../../core/models/production.models';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {HubMembersService} from '../../core/services/hub-members.service';
@@ -11,7 +12,7 @@ import {ProductCncComponent} from '../../features/shipping-data/product-cnc.comp
 import {WixProductSnapshotComponent} from '../../features/shipping-data/wix-product-snapshot.component';
 import {SavedPackingComponent} from '../../features/shipping-data/saved-packing.component';
 import {BoxRdFilesComponent} from '../../features/shipping-data/box-rd-files.component';
-import {backdropSizeKey, optionSizes} from '../../features/shipping-data/product-sizes';
+import {backdropSizeKey, catalogSizes, manualBackdropSizeKey, optionSizes} from '../../features/shipping-data/product-sizes';
 import {cartSizeFromOptions, isCartProduct} from '../../features/shipping-data/cart-size';
 import {backdropFinishModes, foldingOption, optionFinish, Folding} from '../../features/costing/production-cost';
 import {backdropCostProfiles, currentProductCostProfiles} from '../../features/shipping-data/shipping-data.component';
@@ -30,17 +31,23 @@ function optionText(value:unknown):string {
 }
 function orderChoices(view:ProductionUnitView):Record<string,string> {
  const options=Object.fromEntries(Object.entries(view.mainItem.wix_options||{}).map(([name,value])=>[name,optionText(value)]));
- if(Object.keys(options).length)return options;
- return Object.fromEntries(orderItemOptionLabels(view.mainItem,Number.MAX_SAFE_INTEGER).map(label=>{const split=label.indexOf(':');return split<0?['', '']:[label.slice(0,split).trim(),label.slice(split+1).trim()]}).filter(([name])=>name));
+ const choices=Object.keys(options).length?options:Object.fromEntries(orderItemOptionLabels(view.mainItem,Number.MAX_SAFE_INTEGER).map(label=>{const split=label.indexOf(':');return split<0?['', '']:[label.slice(0,split).trim(),label.slice(split+1).trim()]}).filter(([name])=>name));
+ if(!optionSizes(choices).length&&view.mainItem.size?.trim())choices['Size']=view.mainItem.size.trim();
+ return choices;
 }
 @Component({selector:'app-order-product-sections',standalone:true,
- imports:[CommonModule,CatalogCostEditorComponent,ProductWorkCostComponent,ProductPartsComponent,ProductCncComponent,WixProductSnapshotComponent,SavedPackingComponent,BoxRdFilesComponent],
+ imports:[CommonModule,FormsModule,CatalogCostEditorComponent,ProductWorkCostComponent,ProductPartsComponent,ProductCncComponent,WixProductSnapshotComponent,SavedPackingComponent,BoxRdFilesComponent],
  template:`
  <section class="order-product-sections" aria-label="Product details for this order variant">
   @if(loading()){<p role="status">Loading this product configuration…</p>}
   @if(error()){<p class="error" role="alert">{{error()}} <button type="button" (click)="load()">Retry</button></p>}
   @if(!loading()&&product();as p){
    <p class="variant">Selected configuration: {{variantLabel()}}</p>
+   @if(backdrop()&&!optionSizes(view.mainItem.wix_options)[0]&&members.manager()){
+    <div class="order-size"><label>Size for this order<input [(ngModel)]="sizeDraft" placeholder="190cm x 100cm" aria-label="Size for this order" list="order-product-sizes" [disabled]="sizeBusy()"></label><datalist id="order-product-sizes">@for(size of availableSizes();track size){<option [value]="size"></option>}</datalist><button type="button" class="size-save" title="Save order size" aria-label="Save order size" (click)="saveSize()" [disabled]="sizeBusy()||!manualBackdropSizeKey(sizeDraft)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button></div>
+    <small class="size-help">This Hub size applies only to this historical order and matches the parent product's saved size data.</small>
+    @if(sizeBusy()){<p role="status">Saving order size…</p>}@if(sizeMessage()){<p role="status">{{sizeMessage()}}</p>}@if(sizeCatalogError()){<p class="error" role="alert">{{sizeCatalogError()}}</p>}@if(sizeError()){<p class="error" role="alert">{{sizeError()}}</p>}
+   }
    <nav aria-label="Product card sections">
     <button type="button" [class.active]="section()==='cost'" (click)="section.set('cost')">Product cost</button>
     <button type="button" [class.active]="section()==='packing'" (click)="section.set('packing')">Packing</button>
@@ -83,15 +90,15 @@ function orderChoices(view:ProductionUnitView):Record<string,string> {
    @if(section()==='cnc'){<app-product-cnc [productId]="p.id" [backdrop]="backdrop()" [orderFolding]="folding()" [requireOrderFolding]="backdrop()" [readonly]="!members.manager()" />}
   }@else if(!loading()&&!error()){<p>This order item is not linked to a unique product record. Its catalogue ID must be matched before product details can be shown.</p>}
  </section>`,styles:[`
- :host{display:block}.order-product-sections{border:1px solid var(--wc-border);border-radius:12px;padding:14px;margin:14px 0;background:#fff;min-width:0}.variant{color:var(--wc-muted);font-size:.875rem;margin:0 0 12px}nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}nav button{border:1px solid var(--wc-border);border-radius:9px;background:#fff;padding:9px 12px;font:inherit;cursor:pointer}nav button.active{border-color:#34c995;background:#effdf7;color:#168565;font-weight:600}.profile{padding:12px 0;border-top:1px solid var(--wc-border)}.profile h3{margin:0 0 8px}.box-files{border-top:1px solid var(--wc-border);padding:8px 0}.error{color:#991b1b}details{margin:10px 0}summary{cursor:pointer}
+ :host{display:block}.order-product-sections{border:1px solid var(--wc-border);border-radius:12px;padding:14px;margin:14px 0;background:#fff;min-width:0}.variant{color:var(--wc-muted);font-size:.875rem;margin:0 0 12px}.order-size{display:flex;align-items:end;gap:8px;margin:0 0 4px}.order-size label{display:flex;flex-direction:column;gap:4px;font-size:.875rem}.order-size input{width:150px;max-width:100%}.size-save{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0}.size-save svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.size-help{display:block;color:var(--wc-muted);margin-bottom:12px}nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}nav button{border:1px solid var(--wc-border);border-radius:9px;background:#fff;padding:9px 12px;font:inherit;cursor:pointer}nav button.active{border-color:#34c995;background:#effdf7;color:#168565;font-weight:600}.profile{padding:12px 0;border-top:1px solid var(--wc-border)}.profile h3{margin:0 0 8px}.box-files{border-top:1px solid var(--wc-border);padding:8px 0}.error{color:#991b1b}details{margin:10px 0}summary{cursor:pointer}
  `]})
 export class OrderProductSectionsComponent implements OnChanges {
  @Input({required:true})view!:ProductionUnitView;
  readonly section=signal<Section>('cost');readonly product=signal<Product|null>(null);readonly profiles=signal<PackingProfile[]>([]);
- readonly costParts=signal<any[]>([]);readonly sharedCostProfiles=signal<any[]>([]);readonly templates=signal<any[]>([]);readonly rules=signal<any[]>([]);readonly dimensions=signal<any>(null);readonly componentIds=signal<string[]>([]);readonly unresolvedAddons=signal(false);readonly loading=signal(false);readonly detailsLoading=signal(false);readonly costLoading=signal(false);readonly partsLoading=signal(false);readonly error=signal('');readonly costError=signal('');
+ readonly costParts=signal<any[]>([]);readonly sharedCostProfiles=signal<any[]>([]);readonly templates=signal<any[]>([]);readonly rules=signal<any[]>([]);readonly dimensions=signal<any>(null);readonly componentIds=signal<string[]>([]);readonly unresolvedAddons=signal(false);readonly loading=signal(false);readonly detailsLoading=signal(false);readonly costLoading=signal(false);readonly partsLoading=signal(false);readonly error=signal('');readonly costError=signal('');readonly sizeBusy=signal(false);readonly sizeMessage=signal('');readonly sizeError=signal('');readonly sizeCatalogError=signal('');readonly availableSizes=signal<string[]>([]);sizeDraft='';manualBackdropSizeKey=manualBackdropSizeKey;optionSizes=optionSizes;
  private generation=0;
  constructor(private db:SupabaseService,readonly members:HubMembersService,readonly costing:CostingService){}
- ngOnChanges(){this.section.set('cost');void this.load();}
+ ngOnChanges(){this.section.set('cost');this.sizeDraft=this.view.mainItem.size||'';this.sizeMessage.set('');this.sizeError.set('');void this.load();}
  choices(){return orderChoices(this.view);}
  variantLabel(){return Object.entries(this.choices()).map(([key,value])=>`${key}: ${value}`).join(' · ')||'No variant options supplied';}
  size(){return optionSizes(this.choices())[0]||this.view.mainItem.size||'';}
@@ -101,6 +108,12 @@ export class OrderProductSectionsComponent implements OnChanges {
  orderFinishes():boolean[]{const finish=optionFinish(this.choices());if(finish==='raw')return[false];if(finish==='painted')return[true];return backdropFinishModes(this.product());}
  backdrop(){return isBackdropProduct(this.product());}
  backdropKey(){const size=backdropSizeKey(this.size()),fold=this.folding();return size&&fold?`${size}:${fold}`:'';}
+ async saveSize(){if(this.sizeBusy()||!this.members.manager())return;const key=manualBackdropSizeKey(this.sizeDraft);if(!key){this.sizeError.set('Enter a two-dimensional size such as 190cm x 100cm.');return;}
+  const [wide,high]=key.split('x').map(value=>Number(value)/10),canonical=`${wide}cm x ${high}cm`,size=this.availableSizes().find(label=>backdropSizeKey(label)===key)||canonical;this.sizeBusy.set(true);this.sizeError.set('');this.sizeMessage.set('');
+  try{const {data,error}=await this.db.client.rpc('wc_set_order_item_size',{p_item:this.view.mainItem.id,p_size:size});if(error)throw error;if(data!==size)throw Error('The server did not confirm the order size.');this.view.mainItem.size=size;this.sizeDraft=size;await this.load();if(this.error())this.sizeError.set('Order size was saved, but product details could not refresh. Retry loading.');else this.sizeMessage.set('Order size saved. Product profiles have been refreshed.');}
+  catch(e:any){this.sizeError.set((e?.message||'Could not save order size.')+' Your entry is retained. Check the connection and retry.');}
+  finally{this.sizeBusy.set(false);}
+ }
  packingProfiles(){let signature='';try{signature=variantSignature(this.view.mainItem);}catch{return[];}
   return this.profiles().filter(profile=>canonicalPackagingSignature(profile.signature)===signature);}
  costProfiles(){
@@ -109,8 +122,8 @@ export class OrderProductSectionsComponent implements OnChanges {
   const rows=currentProductCostProfiles([...new Map([...parts,...saved].map(part=>[part.variant_key,part])).values()]);
   return backdropCostProfiles(product.id,product.product_name,[],rows).filter(part=>part.kind!=='main'||!this.folding()||foldingOption(part.options)===this.folding());
  }
- visibleParts(template:any){return estimatedComposition(template,this.componentIds(),this.choices(),this.product()?.id||'').parts;}
- cncMinutes(template:any){return estimatedCncMinutes(estimatedComposition(template,this.componentIds(),this.choices(),this.product()?.id||''));}
+ visibleParts(template:any){return estimatedComposition(template,this.componentIds(),this.choices(),this.product()?.id||'',isCartProduct(this.product())).parts;}
+ cncMinutes(template:any){return estimatedCncMinutes(estimatedComposition(template,this.componentIds(),this.choices(),this.product()?.id||'',isCartProduct(this.product())));}
  timeTemplates(){const size=this.cartSize(),fold=this.folding();return this.templates().filter(t=>this.backdrop()?t.folding===fold&&(!t.size_key||t.size_key===this.backdropKey().split(':')[0]):isCartProduct(this.product())?!!size&&t.size_key===size:!t.size_key||!!this.size()&&t.size_key===this.size());}
  async load(){const generation=++this.generation,id=productId(this.view.mainItem);this.loading.set(true);this.detailsLoading.set(true);this.costLoading.set(true);this.partsLoading.set(true);this.error.set('');this.costError.set('');this.product.set(null);this.profiles.set([]);this.costParts.set([]);this.sharedCostProfiles.set([]);this.templates.set([]);this.rules.set([]);this.dimensions.set(null);this.componentIds.set([]);this.unresolvedAddons.set(false);
   try{if(!this.members.members().length&&!this.members.loading())void this.members.load();if(!id)return;
@@ -121,11 +134,12 @@ export class OrderProductSectionsComponent implements OnChanges {
    const addonIds=[...new Set(this.view.addons.map(addon=>productId(addon.item)).filter(Boolean))];
    if(addonIds.length){const addonResult=await this.db.client.from('wc_shipping_products').select('id,wix_product_id').in('wix_product_id',addonIds).eq('active',true);if(addonResult.error)throw addonResult.error;if(generation!==this.generation)return;this.componentIds.set([product.id,...(addonResult.data||[]).map(row=>row.id)]);this.unresolvedAddons.set(addonIds.length!==this.view.addons.length||(addonResult.data||[]).length!==addonIds.length);}
    else this.componentIds.set([product.id]);
-   const [packing,templates,rules,dimensions]=await Promise.all([
+   const [packing,templates,rules,dimensions,catalog]=await Promise.all([
     this.db.client.from('wc_delivery_packaging_profiles').select('signature,shipping_product_id,packages,template_item').eq('shipping_product_id',product.id),
     this.db.client.from('wc_shop_templates').select('id,name,size_key,folding,parts,estimates').eq('product_id',product.id),
     this.db.client.from('wc_shipping_rules').select('*').order('created_at'),
     this.backdropKey()?this.db.client.from('wc_backdrop_packaging_dimensions').select('*').eq('size_key',this.backdropKey()).maybeSingle():Promise.resolve({data:null,error:null}),
+    this.db.client.from('wc_wix_catalog_products').select('source_product').eq('shipping_product_id',product.id).maybeSingle(),
    ]);
    if(packing.error||templates.error||rules.error||dimensions.error)throw packing.error||templates.error||rules.error||dimensions.error;
    if(generation!==this.generation)return;
@@ -133,6 +147,7 @@ export class OrderProductSectionsComponent implements OnChanges {
    this.templates.set(templates.data||[]);
    this.rules.set(rules.data||[]);
    this.dimensions.set(dimensions.data);
+   this.availableSizes.set(catalog.error?[]:catalogSizes(catalog.data?.source_product));this.sizeCatalogError.set(catalog.error?'Could not load Wix size suggestions. Enter the size manually, or reopen the order to retry.':'');
    this.detailsLoading.set(false);
    const loadParts=async()=>{const parts:any[]=[];for(let start=0;;start+=250){const page=await this.db.client.rpc('wc_catalog_cost_parts').range(start,start+249);if(page.error)throw page.error;parts.push(...(page.data||[]));if((page.data||[]).length<250)break;}if(generation===this.generation)this.costParts.set(parts.filter(part=>part.shipping_product_id===product.id&&part.order_id===this.view.order.id&&part.main_item_id===this.view.mainItem.id));};
    const partsTask=loadParts().catch(e=>{if(generation===this.generation)this.costError.set(`Could not load material details. ${(e as Error)?.message||'Check the connection and retry.'}`);}).finally(()=>{if(generation===this.generation)this.partsLoading.set(false);});

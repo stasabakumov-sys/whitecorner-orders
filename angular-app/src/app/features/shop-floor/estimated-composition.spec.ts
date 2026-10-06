@@ -9,11 +9,11 @@ describe('estimated minutes by product configuration',()=>{
    {id:'side',component_product_id:'main',option_name:'Side Shelves',option_value:'Yes'},
    {id:'addon',component_product_id:'addon'},
   ],estimates:{CNC:15,'CNC+option:internal shelf=yes':7,'CNC+option:side shelves=yes':5,'CNC+component:addon':3}};
-  expect(estimatedCncMinutes(estimatedComposition(template,['main'],{},'main'))).toBe(15);
-  expect(estimatedCncMinutes(estimatedComposition(template,['main'],{'Internal Shelf':'Yes'},'main'))).toBe(22);
-  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes','Side Shelves':'Yes'},'main'))).toBe(30);
+  expect(estimatedCncMinutes(estimatedComposition(template,['main'],{},'main',true))).toBe(15);
+  expect(estimatedCncMinutes(estimatedComposition(template,['main'],{'Internal Shelf':'Yes'},'main',true))).toBe(22);
+  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes','Side Shelves':'Yes'},'main',true))).toBe(30);
   delete template.estimates['CNC+option:side shelves=yes'];
-  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes','Side Shelves':'Yes'},'main'))).toBeNull();
+  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes','Side Shelves':'Yes'},'main',true))).toBeNull();
  });
  it('uses one whole-product CNC total for an exact composition',()=>{
   const template:any={parts:[
@@ -21,12 +21,12 @@ describe('estimated minutes by product configuration',()=>{
    {id:'shelf',component_product_id:'main',option_name:'Internal Shelf',option_value:'Yes'},
    {id:'addon',component_product_id:'addon'},
   ],estimates:{CNC:15,'CNC@option:internal shelf=yes':25,'CNC@component:addon':30,'CNC@component:addon|option:internal shelf=yes':38}};
-  expect(estimatedCncMinutes(estimatedComposition(template,['main'],{},'main'))).toBe(15);
-  expect(estimatedCncMinutes(estimatedComposition(template,['main'],{'Internal Shelf':'Yes'},'main'))).toBe(25);
-  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{},'main'))).toBe(30);
-  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes'},'main'))).toBe(38);
+  expect(estimatedCncMinutes(estimatedComposition(template,['main'],{},'main',true))).toBe(15);
+  expect(estimatedCncMinutes(estimatedComposition(template,['main'],{'Internal Shelf':'Yes'},'main',true))).toBe(25);
+  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{},'main',true))).toBe(30);
+  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes'},'main',true))).toBe(38);
   delete template.estimates['CNC@component:addon|option:internal shelf=yes'];
-  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes'},'main'))).toBeNull();
+  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes'},'main',true))).toBeNull();
  });
  it('reuses base minutes and includes only ordered options and add-ons',()=>{
   const template:any={id:'shared',name:'Cart',parts:[
@@ -45,5 +45,11 @@ describe('estimated minutes by product configuration',()=>{
   expect(full.parts.map(part=>part.id)).toEqual(['body','shelf','side','addon']);
   expect(estimatedCncMinutes(full)).toBe(27);
   expect(template.parts).toHaveLength(4);
+ });
+ it('keeps Shared CNC and per-part Extra CNC for a non-Cart product',()=>{
+  const template:any={parts:[{id:'body',component_product_id:'main'},{id:'shelf',component_product_id:'main',option_name:'Shelf',option_value:'Yes'}],estimates:{CNC:10,'CNC:shelf':4,'CNC+option:shelf=yes':9,'CNC@option:shelf=yes':30}};
+  const composed=estimatedComposition(template,['main'],{Shelf:'Yes'},'main');
+  expect(composed.estimates).toEqual({CNC:10,'CNC:shelf':4});
+  expect(estimatedCncMinutes(composed)).toBe(14);
  });
 });

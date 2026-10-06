@@ -30,7 +30,9 @@ describe('Small box reference geometry',()=>{
     const net=smallBoxNet(270,140,140,40),request=prepareSmallRdRequest(net,settings);
     expect(request.jobs).toHaveLength(1);
     const job=request.jobs[0];
-    expect(job.filename).toBe('small-box-L270-W140-D140-T40.rd');
+    expect(job.filename).toMatch(/^S[A-Z0-9]{5}\.rd$/i);
+    expect(prepareSmallRdRequest(net,settings).jobs[0].filename).toBe(job.filename);
+    expect(prepareSmallRdRequest(net,settings,45).jobs[0].filename).not.toBe(job.filename);
     expect(job.layers[0].paths).toHaveLength(12);
     expect(job.layers[1].paths).toHaveLength(3);
     expect(job.layers[1].paths[1][0]).toEqual([286,41]);

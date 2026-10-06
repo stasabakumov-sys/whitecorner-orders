@@ -1,4 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
+import {TestBed} from '@angular/core/testing';
+import {SupabaseService} from '../../core/services/supabase.service';
 import {ProductPartsComponent} from './product-parts.component';
 import {estimatedComposition} from '../shop-floor/estimated-composition';
 
@@ -9,6 +11,30 @@ function setup(){
  return {component:new ProductPartsComponent({client:{from:()=>query,rpc}} as any),rpc,templates};
 }
 describe('Product-owned Shop Floor parts',()=>{
+ it('shows a Save all action beside Main and saves the entered parts from there',async()=>{
+  const {component,rpc}=setup();
+  TestBed.configureTestingModule({imports:[ProductPartsComponent],providers:[{provide:SupabaseService,useValue:(component as any).db}]});
+  const fixture=TestBed.createComponent(ProductPartsComponent);
+  fixture.componentInstance.product={id:'main',product_name:'Cart'};
+  await fixture.componentInstance.load();
+  fixture.componentInstance.addPart();fixture.componentInstance.parts[0].name='Front';
+  fixture.detectChanges();
+  const main=fixture.nativeElement.querySelector('.part-scope') as HTMLElement;
+  const save=main.querySelector('[aria-label="Save all estimated minutes"]') as HTMLButtonElement;
+  expect(save).toBeTruthy();expect(save.disabled).toBe(false);
+  save.click();await new Promise(resolve=>setTimeout(resolve,0));fixture.detectChanges();
+  expect(rpc).toHaveBeenCalledWith('wc_shop_save_product_template',expect.objectContaining({p_parts:[expect.objectContaining({name:'Front'})]}));
+  expect(main.textContent).toContain('Parts template saved.');
+ });
+ it('keeps the former shared template editor for Backdrops and Others',async()=>{
+  const {component}=setup();TestBed.configureTestingModule({imports:[ProductPartsComponent],providers:[{provide:SupabaseService,useValue:(component as any).db}]});
+  for(const product of [{id:'main',product_name:'Ripple Arch Backdrop',product_type:'Backdrop'},{id:'main',product_name:'Portable Display',product_type:'Other'}]){
+   const fixture=TestBed.createComponent(ProductPartsComponent);fixture.componentInstance.product=product;await fixture.componentInstance.load();fixture.detectChanges();
+   const content=fixture.nativeElement.textContent as string;
+   expect(content).toContain('Belongs to');expect(content).toContain('Extra CNC (min)');expect(content).toContain('Shared CNC (min)');
+   expect(content).not.toContain('Main CNC (min)');
+  }
+ });
  it('defaults new Backdrop estimates to Foldable and persists without clicking the option',async()=>{
   const {component,rpc,templates}=setup();component.product={id:'main',product_name:'Hollow Arch Backdrop'};await component.load();
   expect(component.folding).toBe('foldable');component.addPart();component.parts[0].name='Body';component.estimates={CNC:12};
