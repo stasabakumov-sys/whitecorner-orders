@@ -172,8 +172,8 @@ test('delivery handler authenticates approval, validates reason and never calls 
 });
 
 test('variant save is authenticated, canonical, and never quotes or changes orders',async()=>{
- let handler,authorized=true,saved=null,baseSize=null;const product={id:'cart',product_name:'Cart',product_type:'Cart',wix_product_id:'catalog'},shelfRule={id:'shelf-rule',shipping_product_id:'cart',size_key:'size ii',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Add package',active:true};
- const db={auth:{getUser:async()=>({data:{user:authorized?{id:'actor'}:null}})},from(table){assert.ok(['wc_shipping_products','wc_shipping_rules','wc_shipping_packages','wc_delivery_packaging_profiles'].includes(table));let selected=false;const q={select(){return q},eq(){return q},in(){selected=true;return q},single:async()=>({data:product}),then:resolve=>resolve({data:table==='wc_shipping_packages'?[{size_key:baseSize}]:table==='wc_shipping_rules'&&selected?[shelfRule]:[]}),upsert:async value=>{saved=value;return {error:null}}};return q;}};
+ let handler,authorized=true,saved=null,baseSize=null;const product={id:'cart',product_name:'Cart',product_type:'Cart',wix_product_id:'catalog'},shelfRule={id:'shelf-rule',shipping_product_id:'cart',size_key:'size ii',rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes',effect_type:'Add package',active:true},doorsRule={id:'doors-rule',shipping_product_id:'cart',size_key:'size ii',rule_type:'Add-on',match_name:'Back panel with doors',match_value:'',effect_type:'Add package',active:true};
+ const db={auth:{getUser:async()=>({data:{user:authorized?{id:'actor'}:null}})},from(table){assert.ok(['wc_shipping_products','wc_shipping_rules','wc_shipping_packages','wc_delivery_packaging_profiles'].includes(table));let selectedIds=[];const q={select(){return q},eq(){return q},in(_column,ids){selectedIds=ids;return q},single:async()=>({data:product}),then:resolve=>resolve({data:table==='wc_shipping_packages'?[{size_key:baseSize}]:table==='wc_shipping_rules'?[shelfRule,doorsRule].filter(rule=>selectedIds.includes(rule.id)):[]}),upsert:async value=>{saved=value;return {error:null}}};return q;}};
  const file=path.resolve('supabase/functions/delivery-cost-review/index.ts');vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,{exports:{},require:p=>p.includes('esm.sh')?{createClient:()=>withMember(db)}:moduleAt(path.resolve(path.dirname(file),p)),Deno:{serve:f=>handler=f,env:{get:()=> 'fixture'}},Request,Response,console,fetch:async()=>{throw Error('No upstream calls')}});
  const item={id:'cart',product_name:'Cart',quantity:1,catalog_reference:{catalogItemId:'catalog'},wix_options:{Size:'Size II'}};
  const body={action:'save-packaging-variant',productId:'cart',options:[{name:'Size',value:'Size II'}],packages:[{package_name:'Box',length_mm:1300,width_mm:600,height_mm:100,weight_kg:15,contents:domain.reviewComponents({wc_order_items:[item]})}]};
@@ -183,8 +183,16 @@ test('variant save is authenticated, canonical, and never quotes or changes orde
  const mainItem={...item,wix_options:{Size:'Size II','Internal Shelf':'Yes'}},mainBody={...body,profileScope:'cart-main',options:[{name:'Size',value:'Size II'}],addOnRuleIds:['shelf-rule'],packages:[{...body.packages[0],contents:domain.reviewComponents({wc_order_items:[mainItem]})}]};
  assert.equal((await call({...mainBody,addOnRuleIds:[]})).status,422);
  assert.equal((await call(mainBody)).status,200);assert.equal(saved.template_item.profile_scope,'cart-main');assert.equal(JSON.stringify(saved.template_item.wix_options),JSON.stringify({Size:'Size II','Internal Shelf':'Yes'}));assert.equal(saved.template_item.merged_add_ons[0].match_name,'Internal Shelf');
- shelfRule.size_key='';const unsizedItem={...item,wix_options:{'Internal Shelf':'Yes'}},unsizedBody={...mainBody,options:[],packages:[{...body.packages[0],contents:domain.reviewComponents({wc_order_items:[unsizedItem]})}]};
+ const unsizedItem={...item,wix_options:{'Internal Shelf':'Yes'}},unsizedBody={...mainBody,options:[],packages:[{...body.packages[0],contents:domain.reviewComponents({wc_order_items:[unsizedItem]})}]};
  assert.equal((await call(unsizedBody)).status,200);assert.deepEqual(JSON.parse(JSON.stringify(saved.template_item.wix_options)),{'Internal Shelf':'Yes'});
+ const productWideBase={shipping_product_id:'cart',size_key:null,source_type:'Base',package_name:'Reusable Main',length_mm:1300,width_mm:600,height_mm:100,weight_kg:15,active:true};
+ const quoted=domain.composeModularPackages({wc_order_items:[unsizedItem]},[product],[productWideBase],[shelfRule],[],[saved]);
+ assert.equal(quoted.length,1);assert.equal(quoted[0].package_name,'Box','the saved replacement must be selected for a live order');
+ const addonItem={id:'rule:doors-rule',product_name:'Back panel with doors',quantity:1,wix_options:{},catalog_reference:{}};
+ const combinedBody={...unsizedBody,addOnRuleIds:['shelf-rule','doors-rule'],packages:[{...body.packages[0],contents:domain.reviewComponents({wc_order_items:[unsizedItem,addonItem]})}]};
+ const combinedResponse=await call(combinedBody);assert.equal(combinedResponse.status,200,await combinedResponse.text());
+ const combinedQuote=domain.composeModularPackages({wc_order_items:[unsizedItem,addonItem]},[product],[productWideBase],[shelfRule,doorsRule],[],[saved]);
+ assert.equal(combinedQuote.length,1);assert.equal(combinedQuote[0].package_name,'Box');
  baseSize='size ii';assert.equal((await call(unsizedBody)).status,422,'a sized Cart must not acquire an unquotable unsized variant');
 });
 

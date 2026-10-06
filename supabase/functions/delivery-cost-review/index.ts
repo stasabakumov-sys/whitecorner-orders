@@ -51,7 +51,7 @@ Deno.serve(async(req)=>{
     }
     const {data:available,error:availableError}=await db.from('wc_shipping_rules').select('id,shipping_product_id,size_key,rule_type,match_name,match_value,effect_type,active').eq('shipping_product_id',product.id).eq('active',true).in('id',ids);
     if(availableError)return json({error:'Add-on rules unavailable'},503);
-    selectedAddOns=(available||[]).filter((rule:any)=>['option','add-on'].includes(componentNormal(rule.rule_type||''))&&['add package','replace profile'].includes(componentNormal(rule.effect_type||''))&&(!rule.size_key||!!size.length&&componentNormal(rule.size_key)===size[0].value));
+    selectedAddOns=(available||[]).filter((rule:any)=>['option','add on'].includes(componentNormal(rule.rule_type||''))&&['add package','replace profile'].includes(componentNormal(rule.effect_type||''))&&(!size.length||!rule.size_key||componentNormal(rule.size_key)===size[0].value));
     if(selectedAddOns.length!==ids.length)return json({error:'One or more selected Add-ons do not belong to this Cart size.'},422);
    }
    let catalogId=product.wix_product_id||'';
@@ -64,7 +64,7 @@ Deno.serve(async(req)=>{
    if(cartMain)for(const rule of selectedAddOns.filter((rule:any)=>componentNormal(rule.rule_type||'')==='option'))wixOptions[String(rule.match_name)]=String(rule.match_value||'Yes');
    const mergedAddOns=selectedAddOns.map((rule:any)=>({rule_type:rule.rule_type,match_name:rule.match_name,match_value:rule.match_value||''})).sort((a:any,b:any)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
    const item={id:product.id,source_item_id:body.sourceItemId||null,profile_scope:cartMain?'cart-main':undefined,merged_add_ons:cartMain?mergedAddOns:undefined,product_name:product.product_name,quantity:1,catalog_reference:catalogId?{catalogItemId:catalogId}:{},wix_options:wixOptions};
-   const profileItems=cartMain?[item,...selectedAddOns.filter((rule:any)=>componentNormal(rule.rule_type||'')==='add-on').map((rule:any)=>({id:`rule:${rule.id}`,product_name:String(rule.match_name),quantity:1,wix_options:{},catalog_reference:{}}))]:[item];
+   const profileItems=cartMain?[item,...selectedAddOns.filter((rule:any)=>componentNormal(rule.rule_type||'')==='add on').map((rule:any)=>({id:`rule:${rule.id}`,product_name:String(rule.match_name),quantity:1,wix_options:{},catalog_reference:{}}))]:[item];
    const {data:rules,error:rulesError}=await db.from('wc_shipping_rules').select('match_name,match_value,effect_type,active').eq('active',true).eq('effect_type','No effect');
    if(rulesError)return json({error:'Packaging rules unavailable'},503);
    const components=reviewComponents({wc_order_items:profileItems},rules||[]);
