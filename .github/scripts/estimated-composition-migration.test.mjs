@@ -79,5 +79,25 @@ try{
  await db.query('update wc_shop_units set parts=$2 where unit_id=$1',[unit,parts]);
  snapshot=(await db.query('select parts,estimates from wc_shop_units where unit_id=$1',[unit])).rows[0];
  assert.equal(snapshot.estimates.CNC,undefined,'unknown combination stays unestimated');
+ const savedBefore=(await db.query('select parts,estimates from wc_shop_templates where id=$1',[template])).rows[0];
+ await db.exec(await readFile('supabase/migrations/20261006000600_additive_addon_cnc.sql','utf8'));
+ assert.deepEqual((await db.query('select parts,estimates from wc_shop_templates where id=$1',[template])).rows[0],savedBefore,'additive migration preserves templates');
+ const additive={CNC:10,'CNC+option:internal shelf=yes':7,'CNC+option:side shelves=yes':5,[`CNC+component:${addon}`]:3,[`CNC@component:${addon}|option:internal shelf=yes`]:40};
+ await db.query('update wc_shop_templates set estimates=$2 where id=$1',[template,additive]);
+ await db.query('update wc_shop_units set parts=$2 where unit_id=$1',[unit,parts]);
+ snapshot=(await db.query('select parts,estimates from wc_shop_units where unit_id=$1',[unit])).rows[0];
+ assert.equal(snapshot.estimates.CNC,20,'configuration adds Main, shelf and product Add-on CNC instead of the old total');
+ assert.equal(snapshot.estimates['CNC+option:internal shelf=yes'],undefined,'unit snapshot contains only the sum');
+ await db.query("update wc_order_items set wix_options=$2 where id=$1",[item,{'Internal Shelf':'Yes','Side Shelves':'Yes'}]);
+ await db.query('update wc_shop_units set parts=$2 where unit_id=$1',[unit,parts]);
+ snapshot=(await db.query('select parts,estimates from wc_shop_units where unit_id=$1',[unit])).rows[0];
+ assert.deepEqual(snapshot.parts.map(part=>part.id),['body','shelf','side','addon']);
+ assert.equal(snapshot.estimates.CNC,25,'configuration adds both selected options without requiring a combined total');
+ await db.query('update wc_shop_units set parts=$2 where unit_id=$1',[unit,parts]);
+ assert.equal((await db.query('select estimates from wc_shop_units where unit_id=$1',[unit])).rows[0].estimates.CNC,25,'reapplying the trigger does not double count');
+ delete additive['CNC+option:side shelves=yes'];
+ await db.query('update wc_shop_templates set estimates=$2 where id=$1',[template,additive]);
+ await db.query('update wc_shop_units set parts=$2 where unit_id=$1',[unit,parts]);
+ assert.equal((await db.query('select estimates from wc_shop_units where unit_id=$1',[unit])).rows[0].estimates.CNC,undefined,'incomplete additive configuration stays unestimated');
  console.log('Estimated composition migration: templates preserved, RLS preserved, selected parts and CNC snapshots verified.');
 }finally{await db.close();}
