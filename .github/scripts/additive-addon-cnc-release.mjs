@@ -17,13 +17,14 @@ async function query(sql,read_only=true){
 }
 const [before]=await query(`select
  exists(select 1 from supabase_migrations.schema_migrations where version='20261006000400') composition_prerequisite,
+ exists(select 1 from supabase_migrations.schema_migrations where version='20261006000500') preceding_migration_present,
  to_regprocedure('public.wc_shop_cnc_composition_key(jsonb,jsonb,uuid,jsonb,uuid[])') is not null option_match_available,
  exists(select 1 from pg_trigger where tgname='wc_shop_unit_product_parts' and not tgisinternal) parts_trigger_installed,
  (select relrowsecurity from pg_class where oid='public.wc_shop_templates'::regclass) template_rls,
  (select relrowsecurity from pg_class where oid='public.wc_shop_units'::regclass) unit_rls,
  (select count(*)::int from public.wc_shop_templates) template_count,
  (select count(*)::int from public.wc_shop_units) unit_count;`);
-if(!before||['composition_prerequisite','option_match_available','parts_trigger_installed','template_rls','unit_rls'].some(key=>before[key]!==true))
+if(!before||['composition_prerequisite','preceding_migration_present','option_match_available','parts_trigger_installed','template_rls','unit_rls'].some(key=>before[key]!==true))
  throw Error('CNC composition prerequisites differ; release stopped');
 const [registered]=await query(`select replace(statements[1],E'\\r','')=${quote(source)} source_matches from supabase_migrations.schema_migrations where version='${version}'`);
 if(registered&&!registered.source_matches)throw Error(`Registered migration ${version} differs from reviewed source`);
