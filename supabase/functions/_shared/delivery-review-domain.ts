@@ -408,6 +408,15 @@ const profileAddonKeys=(profile:CartMainPackagingVariant)=>{
  return Object.entries(profile.template_item?.wix_options||{}).filter(([name,value])=>!['size','dimension','dimensions'].includes(componentNormal(name))&&['yes','true','included','selected'].includes(componentNormal(String(value)))).map(([name,value])=>addonDescriptorKey({rule_type:'Option',match_name:name,match_value:String(value)})).sort();
 };
 const sameKeys=(left:string[],right:string[])=>left.length===right.length&&left.every((value,index)=>value===right[index]);
+// Notes are order metadata. Size/finish/folding and active physical options still
+// distinguish an Add-on variant, even when they do not create a component.
+const addonVariantOptions=(item:OrderItemRow,ignoredRules:any[])=>packagingOptionLabels(item).filter(label=>{
+ const split=label.indexOf(':');if(split<0)return true;
+ const name=label.slice(0,split).trim(),value=label.slice(split+1).trim();
+ if(/^(notes?|message)$/i.test(name))return false;
+ if(ignoredRules.some(rule=>rule.active!==false&&rule.effect_type==='No effect'&&componentNormal(rule.match_name||'')===componentNormal(name)&&(!rule.match_value||componentNormal(rule.match_value)===componentNormal(value))))return false;
+ return attribute.test(name)||! /^(no|none|false|not selected|not required|without|0)(\b|$)/i.test(value);
+});
 function expandCombination(packages:any[],target:PackageComponent[],quantity:number,owners:Map<string,string>):ReviewPackage[]{
  const counts=new Map<string,number>();
  for(const box of packages||[])for(const content of box.contents||[]){const key=`${canonicalPackagingItemKey(content.profile_item_key||'')}|${content.component_key||'main'}`;counts.set(key,Math.max(counts.get(key)||0,Number(content.unit_index)||1));}
@@ -462,7 +471,7 @@ export function composeModularPackages(order:any,products:ModularShippingProduct
    for(const rule of addonRules){
     const candidates=addonItems.filter(candidate=>componentNormal(candidate.product_name||'')===componentNormal(rule.match_name||''));
     // Add-on variants with their own size/options need an exact profile.
-    if(candidates.length!==1||packagingOptionLabels(candidates[0]).length)continue;
+    if(candidates.length!==1||addonVariantOptions(candidates[0],ignoredRules).length)continue;
     const key=reviewComponents({wc_order_items:[{id:'addon',product_name:rule.match_name||'',quantity:1}]},ignoredRules)[0]?.profile_item_key;
     if(key)owners.set(key,candidates[0].id);
    }
