@@ -171,7 +171,7 @@ files (2 copies each), or one Small RD file (1 copy). SVG remains in the
 private drawing column. Generated files and settings survive a failed save;
 Retry uses the same request receipt after a lost server response.
 
-Migration `20261006000100_cart_constructor_box_type.sql` extends the existing
+Migration `20261006000200_cart_constructor_box_type.sql` extends the existing
 manager-only atomic save contract. Switching between one and two RD files
 requires revisions for the complete previous set and uses the existing guarded
 delete operation. An unfinished cutting task referencing the old files blocks

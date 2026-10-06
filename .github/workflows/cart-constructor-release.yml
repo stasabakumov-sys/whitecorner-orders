@@ -13,7 +13,7 @@ on:
       - 'supabase/migrations/20261003000500_cart_file_mapping_access.sql'
       - 'supabase/migrations/20261003000600_packaging_svg_sources.sql'
       - 'supabase/migrations/20261004000100_constructor_custom_jobs.sql'
-      - 'supabase/migrations/20261006000100_cart_constructor_box_type.sql'
+      - 'supabase/migrations/20261006000200_cart_constructor_box_type.sql'
       - '.github/scripts/packing.test.mjs'
       - '.github/scripts/cart-constructor-release.mjs'
       - '.github/workflows/cart-constructor-release.yml'

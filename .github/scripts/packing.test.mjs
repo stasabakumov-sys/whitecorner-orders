@@ -475,7 +475,7 @@ try{
  await assert.rejects(db.query('select * from wc_constructor_custom_saves'),/permission denied/);
  // Packing type selection: one Small file, both-way conversion and old snapshot safety.
  await db.exec('reset role');
- await db.exec(await readFile('supabase/migrations/20261006000100_cart_constructor_box_type.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261006000200_cart_constructor_box_type.sql','utf8'));
  const smallPackage=randomUUID(),smallBox={package_name:'Wheels',length_mm:220,width_mm:140,height_mm:110};
  await db.query("insert into wc_shipping_packages(id,shipping_product_id,source_type,active,size_key,package_name,length_mm,width_mm,height_mm,package_no) values($1,$2,'Base',true,'small','Wheels',220,140,110,1)",[smallPackage,cart]);
  const smallPaths=[0,1].map(()=>`${managerA}/${randomUUID()}`);
