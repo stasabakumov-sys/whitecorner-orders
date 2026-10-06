@@ -1,4 +1,4 @@
-import {applySql, candidateSql, targetSize, validateCandidate} from './historical-backdrop-size.sql.mjs';
+import {applySql, auditSql, candidateSql, targetSize, validateCandidate} from './historical-backdrop-size.sql.mjs';
 
 const mode = process.argv[2];
 if (!['--verify', '--apply'].includes(mode)) throw Error('Use --verify or --apply');
@@ -19,6 +19,9 @@ async function query(sql, read_only = true) {
 }
 
 const before = await query(candidateSql);
+if (before.length !== 1 || before[0].is_backdrop !== true || before[0].has_wix_size !== false) {
+  console.log(JSON.stringify({matchAudit: (await query(auditSql))[0]}));
+}
 const alreadySaved = validateCandidate(before);
 console.log(JSON.stringify({preflight: 'passed', order: '10846', targetSize, alreadySaved}));
 if (mode === '--verify') process.exit(0);

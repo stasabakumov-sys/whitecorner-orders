@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {pathToFileURL} from 'node:url';
-import {applySql, candidateSql, validateCandidate} from './historical-backdrop-size.sql.mjs';
+import {applySql, auditSql, candidateSql, validateCandidate} from './historical-backdrop-size.sql.mjs';
 
 const modulePath = process.argv[2];
 if (!modulePath) throw Error('Pass the PGlite module path');
@@ -13,6 +13,7 @@ await db.exec(`create table wc_orders(id uuid primary key,order_number text);
  insert into wc_shipping_products values('00000000-0000-0000-0000-000000000003','Backdrop','wix-backdrop','Plywood Hollow Event Backdrop with Rectangular Top');
  insert into wc_order_items values('00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','Plywood Hollow Event Backdrop with Rectangular Top',null,'{"Foldable":"YES"}','{"productId":"wix-backdrop"}');`);
 assert.equal(validateCandidate((await db.query(candidateSql)).rows), false);
+assert.deepEqual((await db.query(auditSql)).rows[0], {exact_orders:1,numeric_orders:1,items:1,title_matches:1});
 await db.exec(applySql);
 assert.equal(validateCandidate((await db.query(candidateSql)).rows, true), true);
 await db.exec(applySql);
