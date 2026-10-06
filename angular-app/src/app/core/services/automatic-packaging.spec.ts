@@ -50,12 +50,29 @@ describe('Automatic modular packaging',()=>{
   expect(boxes[7].contents.map(c=>c.unit_index)).toEqual([2,2]);
   expect(packagingError(boxes,reviewComponents(actual))).toBe('');
  });
+ it('ignores informational addon notes across Wix containers while preserving the real order contents',async()=>{
+  const s=setup();saveMainCombination(s);
+  const metadata=[
+   {custom_text_fields:{note:'Workshop reference'}},
+   {description_lines:[{name:{original:'Notes'},plainTextValue:{original:'Assembly reference'}}]},
+   {raw_item:{customTextFields:{Message:'Workshop reference'}}},
+   {wix_options:{'Optional bracket':'No'}},
+  ];
+  for(const fields of metadata){
+   const actual={wc_order_items:[cart,{...panel,...fields}]},boxes=await s.service.previewCartPackaging(actual,true);
+   expect(boxes.map(box=>box.package_name)).toEqual(['Front/Sides/MDF wheels','Top/Buttom','Custors','Shelf/back panel']);
+   expect(boxes[3].contents[1].profile_item_key).toBe(reviewComponents(actual).find(c=>c.order_item_id===panel.id)!.profile_item_key);
+   expect(packagingError(boxes,reviewComponents(actual))).toBe('');
+  }
+ });
  it('keeps separate packaging when selected addons, quantities or addon size differ from the saved combination',async()=>{
   const s=setup();saveMainCombination(s);
   const cases=[
    {wc_order_items:[{...cart,wix_options:{...cart.wix_options,'Side shelves':'Yes'}},panel]},
    {wc_order_items:[cart,{...panel,quantity:2}]},
    {wc_order_items:[cart,{...panel,wix_options:{Size:'Large'}}]},
+   {wc_order_items:[cart,{...panel,wix_options:{Foldable:'No'}}]},
+   {wc_order_items:[cart,{...panel,custom_text_fields:{note:'Workshop reference'},wix_options:{Height:'1000 mm'}}]},
    {wc_order_items:[{...cart,wix_options:{...cart.wix_options,'Internal Shelf':'No'}},panel]},
   ];
   for(const actual of cases){
