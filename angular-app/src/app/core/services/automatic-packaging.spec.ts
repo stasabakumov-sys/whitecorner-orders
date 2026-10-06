@@ -22,7 +22,55 @@ function setup(){
  });
  return {tables,invoke,from,fail:(table:string)=>fail=table,service:new DeliveryReviewService({client:{from,functions:{invoke}}} as any)};
 }
+function saveMainCombination(s:ReturnType<typeof setup>){
+ const main={...cart,id:'product',wix_options:{'Internal Shelf':'Yes'}};
+ const addon={id:'rule:panel',product_name:panel.product_name,quantity:1};
+ const contents=reviewComponents({wc_order_items:[main,addon]});
+ const packages=[...s.tables['wc_shipping_packages'].map(box=>({...box,contents:[contents[0]]})),{...dimensions('Shelf/back panel',1185,670,40,19),contents:contents.slice(1)}];
+ s.tables['wc_delivery_packaging_profiles']=[{signature:reviewSignature({wc_order_items:[main,addon]}),shipping_product_id:'product',template_item:{...main,profile_scope:'cart-main',merged_add_ons:[{rule_type:'Option',match_name:'Internal Shelf',match_value:'Yes'},{rule_type:'Add-on',match_name:panel.product_name,match_value:''}]},packages}];
+ return packages;
+}
 describe('Automatic modular packaging',()=>{
+ it('uses four saved Main + Shelf + Back panel boxes despite unselected Wix options and the real addon catalogue ID',async()=>{
+  const s=setup(),saved=saveMainCombination(s),actual={wc_order_items:[cart,{...panel,catalog_reference:{catalogItemId:'panel-catalog'}}]};
+  const boxes=await s.service.previewCartPackaging(actual,true);
+  expect(boxes.map(box=>box.package_name)).toEqual(['Front/Sides/MDF wheels','Top/Buttom','Custors','Shelf/back panel']);
+  expect(boxes[3]).toMatchObject({length_mm:1185,width_mm:670,height_mm:40,weight_kg:19});
+  expect(boxes[3].contents.map(c=>[c.order_item_id,c.component_key])).toEqual([['main','option:internal shelf'],['panel','main']]);
+  expect(boxes[3].contents[1].wix_product_id).toBe('panel-catalog');
+  expect(packagingError(boxes,reviewComponents(actual))).toBe('');
+  expect(saved[3].contents[1].order_item_id).toBe('rule:panel');
+  expect(s.invoke).not.toHaveBeenCalled();
+ });
+ it('duplicates the four-box combination for each physical cart and addon',async()=>{
+  const s=setup();saveMainCombination(s);
+  const actual={wc_order_items:[{...cart,quantity:2},{...panel,quantity:2}]},boxes=await s.service.previewCartPackaging(actual,true);
+  expect(boxes).toHaveLength(8);
+  expect(boxes[3].contents.map(c=>c.unit_index)).toEqual([1,1]);
+  expect(boxes[7].contents.map(c=>c.unit_index)).toEqual([2,2]);
+  expect(packagingError(boxes,reviewComponents(actual))).toBe('');
+ });
+ it('keeps separate packaging when selected addons, quantities or addon size differ from the saved combination',async()=>{
+  const s=setup();saveMainCombination(s);
+  const cases=[
+   {wc_order_items:[{...cart,wix_options:{...cart.wix_options,'Side shelves':'Yes'}},panel]},
+   {wc_order_items:[cart,{...panel,quantity:2}]},
+   {wc_order_items:[cart,{...panel,wix_options:{Size:'Large'}}]},
+   {wc_order_items:[{...cart,wix_options:{...cart.wix_options,'Internal Shelf':'No'}},panel]},
+  ];
+  for(const actual of cases){
+   const boxes=await s.service.previewCartPackaging(actual,true);
+   expect(boxes.some(box=>box.package_name==='Shelf/back panel')).toBe(false);
+   expect(packagingError(boxes,reviewComponents(actual))).toBe('');
+  }
+ });
+ it('does not silently drop unknown saved contents or unconfigured physical options',async()=>{
+  const s=setup(),saved=saveMainCombination(s);
+  const actual={wc_order_items:[{...cart,wix_options:{...cart.wix_options,'Glass rack':'Yes'}},panel]};
+  expect((await s.service.previewCartPackaging(actual,true)).some(box=>box.package_name==='Shelf/back panel')).toBe(false);
+  saved[3].contents.push({...saved[3].contents[1],profile_item_key:'unknown'});
+  expect((await s.service.previewCartPackaging(order,true)).some(box=>box.package_name==='Shelf/back panel')).toBe(false);
+ });
  it('uses the current product-owned profile while ignoring an old order-only snapshot',async()=>{
   const s=setup(),single={wc_order_items:[cart]},contents=reviewComponents(single);
   s.tables['wc_delivery_packaging_profiles']=[{signature:variantSignature(cart),packages:[{...dimensions('Old order snapshot',999,999,999,99),contents}]}];
