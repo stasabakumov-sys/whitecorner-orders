@@ -73,7 +73,7 @@ function orderChoices(view:ProductionUnitView):Record<string,string> {
     @if(detailsLoading()){<p role="status">Loading estimated minutes…</p>}@else{
     @if(unresolvedAddons()){<p class="error" role="alert">An ordered add-on could not be matched to a product ID. Its minutes need review in Products.</p>}
     @if(backdrop()&&!folding()){<p class="error" role="alert">This order has no clear Foldable option. Review its product choices before editing estimated minutes.</p>}
-    @else if(members.manager()&&!unresolvedAddons()){<app-product-parts [product]="p" [selectedSize]="timeSize()" [selectedFolding]="folding()" [orderVariant]="true" [orderComponentIds]="componentIds()" [orderOptions]="choices()" />}
+    @else if(members.manager()&&!unresolvedAddons()){<app-product-parts [product]="p" [selectedSize]="timeSize()" [selectedFolding]="folding()" [orderVariant]="true" [orderComponentIds]="componentIds()" [orderOptions]="choices()" [packingRules]="rules().filter(r=>r.shipping_product_id===p.id&&r.active!==false&&(!r.size_key||r.size_key===timeSize()))" />}
     @else{@for(template of timeTemplates();track template.id){<section class="profile"><h3>{{template.name}}</h3><p>CNC: {{cncMinutes(template)??'—'}} min</p>@for(part of visibleParts(template);track part.id){<p>{{part.name}} · Assembly: {{template.estimates?.['Assembly:'+part.id]??'—'}} min · Sanding: {{template.estimates?.['Sanding:'+part.id]??'—'}} min</p>}</section>}
     @empty{<p>No estimated minutes match this configuration.</p>}}
     }
