@@ -1,4 +1,5 @@
 import {ShopPart,ShopTemplate,paintOperations,paintLabel} from '../shop-floor/shop-floor.models';
+import {estimatedCncMinutes} from '../shop-floor/estimated-composition';
 
 export type WorkType='cnc'|'assembly'|'sanding'|'painting';
 export interface WorkRate{work_type:WorkType;label:string;rate_gst_hour:number|null;sort_order:number;updated_at:string}
@@ -13,7 +14,7 @@ export function plannedWorkRows(template:ShopTemplate,rates:WorkRate[],productNa
  const rate=(type:WorkType)=>number(rates.find(row=>row.work_type===type)?.rate_gst_hour);
  const row=(key:string,label:string,workType:WorkType,minutes:number|null):PlannedWorkRow=>{const hourly=rate(workType);return{key,label,workType,minutes,rate:hourly,cost:minutes===null||hourly===null?null:Math.round(minutes*hourly/60*100)/100};};
  return [
-  row('CNC','CNC','cnc',number(template.estimates?.['CNC'])),
+  row('CNC','CNC','cnc',estimatedCncMinutes(template)),
   row('Assembly','Assembly','assembly',partMinutes(template,'Assembly')),
   row('Sanding','Sanding','sanding',partMinutes(template,'Sanding')),
   ...paintOperations(productName).map(op=>row(op,paintLabel(op,paintOperations(productName)),/sanding/i.test(op)?'sanding':'painting',number(template.estimates?.['Painting:'+op]))),

@@ -16,6 +16,7 @@ import {cartSizeFromOptions, isCartProduct} from '../../features/shipping-data/c
 import {backdropFinishModes, foldingOption, optionFinish, Folding} from '../../features/costing/production-cost';
 import {backdropCostProfiles, currentProductCostProfiles} from '../../features/shipping-data/shipping-data.component';
 import {orderItemOptionLabels} from '../../core/utils/order-item-display';
+import {estimatedComposition,estimatedCncMinutes} from '../../features/shop-floor/estimated-composition';
 import {productId, variantSignature, canonicalPackagingSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 type Section='cost'|'packing'|'minutes'|'wix'|'cnc';
@@ -48,7 +49,7 @@ function orderChoices(view:ProductionUnitView):Record<string,string> {
    </nav>
    @if(section()==='cost'){
    @if(detailsLoading()||costLoading()){<p role="status">Loading product cost…</p>}@else{
-   <app-product-work-cost [product]="p" [selectedSize]="timeSize()" [selectedFolding]="folding()" [orderVariant]="true" [orderComponentIds]="componentIds()" [availableFinishes]="orderFinishes()" [materialProfiles]="costProfiles()" [materials]="costing.materials()" />
+   <app-product-work-cost [product]="p" [selectedSize]="timeSize()" [selectedFolding]="folding()" [orderVariant]="true" [orderComponentIds]="componentIds()" [orderOptions]="choices()" [availableFinishes]="orderFinishes()" [materialProfiles]="costProfiles()" [materials]="costing.materials()" />
    }
     @if(costError()){<p class="error" role="alert">{{costError()}} <button type="button" (click)="load()">Retry</button></p>}
     @if(costing.error()){<p class="error" role="alert">{{costing.error()}}</p>}
@@ -72,8 +73,8 @@ function orderChoices(view:ProductionUnitView):Record<string,string> {
     @if(detailsLoading()){<p role="status">Loading estimated minutes…</p>}@else{
     @if(unresolvedAddons()){<p class="error" role="alert">An ordered add-on could not be matched to a product ID. Its minutes need review in Products.</p>}
     @if(backdrop()&&!folding()){<p class="error" role="alert">This order has no clear Foldable option. Review its product choices before editing estimated minutes.</p>}
-    @else if(members.manager()&&!unresolvedAddons()){<app-product-parts [product]="p" [selectedSize]="timeSize()" [selectedFolding]="folding()" [orderVariant]="true" [orderComponentIds]="componentIds()" />}
-    @else{@for(template of timeTemplates();track template.id){<section class="profile"><h3>{{template.name}}</h3><p>CNC: {{template.estimates?.CNC??'—'}} min</p>@for(part of visibleParts(template);track part.id){<p>{{part.name}} · Assembly: {{template.estimates?.['Assembly:'+part.id]??'—'}} min · Sanding: {{template.estimates?.['Sanding:'+part.id]??'—'}} min</p>}</section>}
+    @else if(members.manager()&&!unresolvedAddons()){<app-product-parts [product]="p" [selectedSize]="timeSize()" [selectedFolding]="folding()" [orderVariant]="true" [orderComponentIds]="componentIds()" [orderOptions]="choices()" />}
+    @else{@for(template of timeTemplates();track template.id){<section class="profile"><h3>{{template.name}}</h3><p>CNC: {{cncMinutes(template)??'—'}} min</p>@for(part of visibleParts(template);track part.id){<p>{{part.name}} · Assembly: {{template.estimates?.['Assembly:'+part.id]??'—'}} min · Sanding: {{template.estimates?.['Sanding:'+part.id]??'—'}} min</p>}</section>}
     @empty{<p>No estimated minutes match this configuration.</p>}}
     }
    }
@@ -107,7 +108,8 @@ export class OrderProductSectionsComponent implements OnChanges {
   const rows=currentProductCostProfiles([...new Map([...parts,...saved].map(part=>[part.variant_key,part])).values()]);
   return backdropCostProfiles(product.id,product.product_name,[],rows).filter(part=>part.kind!=='main'||!this.folding()||foldingOption(part.options)===this.folding());
  }
- visibleParts(template:any){const allowed=new Set(this.componentIds());return (template.parts||[]).filter((part:any)=>allowed.has(part.component_product_id||this.product()?.id));}
+ visibleParts(template:any){return estimatedComposition(template,this.componentIds(),this.choices(),this.product()?.id||'').parts;}
+ cncMinutes(template:any){return estimatedCncMinutes(estimatedComposition(template,this.componentIds(),this.choices(),this.product()?.id||''));}
  timeTemplates(){const size=this.cartSize(),fold=this.folding();return this.templates().filter(t=>this.backdrop()?t.folding===fold&&(!t.size_key||t.size_key===this.backdropKey().split(':')[0]):isCartProduct(this.product())?!!size&&t.size_key===size:!t.size_key||!!this.size()&&t.size_key===this.size());}
  async load(){const generation=++this.generation,id=productId(this.view.mainItem);this.loading.set(true);this.detailsLoading.set(true);this.costLoading.set(true);this.partsLoading.set(true);this.error.set('');this.costError.set('');this.product.set(null);this.profiles.set([]);this.costParts.set([]);this.sharedCostProfiles.set([]);this.templates.set([]);this.rules.set([]);this.dimensions.set(null);this.componentIds.set([]);this.unresolvedAddons.set(false);
   try{if(!this.members.members().length&&!this.members.loading())void this.members.load();if(!id)return;

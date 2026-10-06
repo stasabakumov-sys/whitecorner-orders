@@ -1,0 +1,23 @@
+import {describe,expect,it} from 'vitest';
+import {estimatedComposition,estimatedCncMinutes} from './estimated-composition';
+
+describe('estimated minutes by order composition',()=>{
+ it('reuses base minutes and includes only ordered options and add-ons',()=>{
+  const template:any={id:'shared',name:'Cart',parts:[
+   {id:'body',name:'Body',component_product_id:'main'},
+   {id:'shelf',name:'Shelf',component_product_id:'main',option_name:'Internal Shelf',option_value:'Yes'},
+   {id:'side',name:'Side shelf',component_product_id:'main',option_name:'Side Shelves',option_value:'Yes'},
+   {id:'addon',name:'Extra panel',component_product_id:'addon'},
+  ],estimates:{CNC:15,'CNC:shelf':7,'CNC:side':5,'Assembly:body':30,'Assembly:shelf':12,'Assembly:side':18,'Assembly:addon':20}};
+  const without=estimatedComposition(template,['main'],{'Internal Shelf':'No','Side Shelves':'No'},'main');
+  const withShelf=estimatedComposition(template,['main'],{'Internal Shelf':{original:'Yes'},'Side Shelves':'No'},'main');
+  const full=estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes','Side Shelves':'Yes'},'main');
+  expect(without.parts.map(part=>part.id)).toEqual(['body']);
+  expect(without.estimates).toEqual({CNC:15,'Assembly:body':30});
+  expect(withShelf.parts.map(part=>part.id)).toEqual(['body','shelf']);
+  expect(estimatedCncMinutes(withShelf)).toBe(22);
+  expect(full.parts.map(part=>part.id)).toEqual(['body','shelf','side','addon']);
+  expect(estimatedCncMinutes(full)).toBe(27);
+  expect(template.parts).toHaveLength(4);
+ });
+});
