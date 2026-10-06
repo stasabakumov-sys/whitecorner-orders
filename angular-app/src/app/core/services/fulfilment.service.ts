@@ -90,6 +90,7 @@ export class FulfilmentService {
   readonly shippingSync = signal<ShippingFulfillmentSync[]>([]);
   readonly checkingBookingShipmentId = signal<string|null>(null);
   readonly savingProfileShipmentId = signal<string|null>(null);
+  readonly recalculatingShipmentId = signal<string|null>(null);
   readonly shippingProducts = signal<ShippingProduct[]>([]);
   readonly noPackageRules = signal<ShippingRule[]>([]);
   private shippingProfiles:ShippingPackage[]=[];
@@ -364,6 +365,33 @@ export class FulfilmentService {
     return this.packageComponents(order).filter(i=>!assigned.has(i.id));
   }
   shipmentComplete(shipmentId:string){const ps=this.packagesFor(shipmentId);return ps.length>0&&ps.every(p=>this.packageComplete(p))&&this.unassignedOrderItems(shipmentId).length===0;}
+
+  async recalculateFromProducts(shipment:ShipmentRow){
+    if(this.recalculatingShipmentId())return false;
+    const current=this.shipments().find(s=>s.id===shipment.id);
+    const row=current&&this.rows().find(r=>r.id===current.fulfilment_id);
+    const order=current&&this.orders.orders().find(o=>o.id===current.order_id);
+    if(!current||!order||row?.status!=='Shipping Preparation'||['Shipping Booked','In Transit','Delivered'].includes(current.status)){
+      this.error.set('Only an open delivery can recalculate packages.');return false;
+    }
+    this.error.set('');this.recalculatingShipmentId.set(current.id);
+    try{
+      if(!await this.loadShippingProfiles())throw Error('Could not load product packaging. Please retry.');
+      const packages=await resolveOrderPackaging(this.supabase.client,order,this.noPackageRules(),true);
+      const issue=packagingError(packages,this.packageComponents(order));
+      if(issue)throw Error(`${issue} Update packaging in Products and retry.`);
+      const {data,error}=await this.supabase.client.rpc('wc_replace_shipment_packages',{
+        p_shipment_id:current.id,p_expected_version:current.updated_at,p_packages:packages,
+      });
+      if(error)throw error;
+      if(!data?.shipment||!Array.isArray(data.packages))throw Error('Could not confirm the saved packaging. Reload and retry.');
+      this.shipmentPackages.update(xs=>[...xs.filter(p=>p.shipment_id!==current.id),...data.packages]);
+      this.shipments.update(xs=>xs.map(s=>s.id===current.id?data.shipment:s));
+      return true;
+    }catch(error:any){
+      this.error.set(error?.message||'Could not recalculate packages. Please retry.');return false;
+    }finally{this.recalculatingShipmentId.set(null);}
+  }
 
   async addPackage(shipment:ShipmentRow){
     const next=Math.max(0,...this.packagesFor(shipment.id).map(p=>p.package_no))+1;

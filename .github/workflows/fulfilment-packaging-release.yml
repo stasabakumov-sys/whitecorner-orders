@@ -1,0 +1,33 @@
+name: Fulfilment packaging release
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Rehearse or apply the reviewed packaging transaction
+        type: choice
+        options: [verify, apply]
+        default: verify
+permissions:
+  contents: read
+concurrency:
+  group: fulfilment-packaging-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rehearse atomic replacement with synthetic data
+        run: |
+          npm install --prefix "$RUNNER_TEMP/fulfilment-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/fulfilment-packaging-migration.test.mjs "$RUNNER_TEMP/fulfilment-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Apply reviewed migration
+        if: ${{ inputs.mode == 'apply' && github.ref == 'refs/heads/main' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/fulfilment-packaging-release.mjs
