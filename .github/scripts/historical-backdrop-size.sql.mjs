@@ -1,13 +1,16 @@
 export const targetSize = '190cm x 100cm';
+const productJoin = `join public.wc_shipping_products p on
+ ((p.wix_product_id is not null and p.wix_product_id=coalesce(nullif(i.catalog_reference->>'catalogItemId',''),nullif(i.catalog_reference->>'productId','')))
+  or (p.wix_product_id is null and lower(btrim(p.product_name))=lower(btrim(i.product_name))))`;
 
 export const candidateSql = `select i.size,
  lower(btrim(coalesce(p.product_type,'')))='backdrop' as is_backdrop,
  exists(select 1 from jsonb_object_keys(coalesce(i.wix_options,'{}'::jsonb)) key
         where lower(btrim(key)) in ('size','dimension','dimensions')) as has_wix_size,
- public.wc_shop_effective_options(i)->>'Size' as effective_size
+ nullif(btrim(i.size),'') as effective_size
 from public.wc_orders o
 join public.wc_order_items i on i.order_id=o.id
-join public.wc_shipping_products p on p.id=public.wc_shop_item_product(i.id)
+${productJoin}
 where o.order_number='10846'
   and i.product_name ilike 'Plywood Hollow Event Backdrop%';`;
 
@@ -20,12 +23,14 @@ declare matches integer; selected public.wc_order_items; kind text;
 begin
  select count(*) into matches
  from public.wc_orders o join public.wc_order_items i on i.order_id=o.id
- join public.wc_shipping_products p on p.id=public.wc_shop_item_product(i.id)
+ ${productJoin}
  where o.order_number='10846' and i.product_name ilike 'Plywood Hollow Event Backdrop%';
  if matches<>1 then raise exception 'Expected exactly one matching Backdrop order item'; end if;
  select i.* into selected from public.wc_orders o join public.wc_order_items i on i.order_id=o.id
  where o.order_number='10846' and i.product_name ilike 'Plywood Hollow Event Backdrop%' for update of i;
- select p.product_type into kind from public.wc_shipping_products p where p.id=public.wc_shop_item_product(selected.id);
+ select p.product_type into kind from public.wc_shipping_products p where
+  ((p.wix_product_id is not null and p.wix_product_id=coalesce(nullif(selected.catalog_reference->>'catalogItemId',''),nullif(selected.catalog_reference->>'productId','')))
+   or (p.wix_product_id is null and lower(btrim(p.product_name))=lower(btrim(selected.product_name))));
  if lower(btrim(coalesce(kind,'')))<>'backdrop' then raise exception 'Matching product is not a Backdrop'; end if;
  if exists(select 1 from jsonb_object_keys(coalesce(selected.wix_options,'{}'::jsonb)) key
            where lower(btrim(key)) in ('size','dimension','dimensions')) then
