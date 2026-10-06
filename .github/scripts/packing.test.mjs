@@ -473,5 +473,54 @@ try{
  assert.equal((await db.query('select count(*)::int n from wc_packing_tasks')).rows[0].n,tasksBefore);
  await assert.rejects(db.query(customSql,[customArgs[0],'Changed',...customArgs.slice(2)]),/Save request changed/);
  await assert.rejects(db.query('select * from wc_constructor_custom_saves'),/permission denied/);
+ // Packing type selection: one Small file, both-way conversion and old snapshot safety.
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20261006000100_cart_constructor_box_type.sql','utf8'));
+ const smallPackage=randomUUID(),smallBox={package_name:'Wheels',length_mm:220,width_mm:140,height_mm:110};
+ await db.query("insert into wc_shipping_packages(id,shipping_product_id,source_type,active,size_key,package_name,length_mm,width_mm,height_mm,package_no) values($1,$2,'Base',true,'small','Wheels',220,140,110,1)",[smallPackage,cart]);
+ const smallPaths=[0,1].map(()=>`${managerA}/${randomUUID()}`);
+ for(let i=0;i<2;i++)await db.query('insert into storage.objects(bucket_id,name,metadata) values($1,$2,$3)',[i?'box-rd-files':'box-drawings',smallPaths[i],{size:222}]);
+ const smallDimensions={box_type:'small',box:{length:215,width:135,depth:110},tuck:40};
+ const smallArgs=[randomUUID(),smallPackage,smallBox,smallDimensions,{path:smallPaths[0],filename:'small.svg',bytes:222,expected:null},[{id:null,expected:null,path:smallPaths[1],filename:'small.rd',bytes:222}]];
+ await db.exec('set role authenticated');
+ await db.query("select set_config('test.actor',$1,false)",[worker]);
+ await assert.rejects(db.query(constructorSql,smallArgs),/Manager access/);
+ await db.query("select set_config('test.actor',$1,false)",[managerA]);
+ await assert.rejects(db.query(constructorSql,[...smallArgs.slice(0,3),{...smallDimensions,box:{length:205,width:135,depth:110}},...smallArgs.slice(4)]),/Small box dimensions/);
+ await assert.rejects(db.query(constructorSql,[...smallArgs.slice(0,3),{...smallDimensions,box_type:'other'},...smallArgs.slice(4)]),/Choose Card/);
+ const smallSaved=(await db.query(constructorSql,smallArgs)).rows[0].result;
+ assert.equal(smallSaved.rd_files.length,1);assert.equal(smallSaved.rd_files[0].copies,1);
+ assert.equal(smallSaved.drawing.constructor_data.box_type,'small');
+ assert.deepEqual((await db.query(constructorSql,smallArgs)).rows[0].result,smallSaved);
+ // Convert to Card. A bad second upload rolls back deletion of the old Small file.
+ await db.exec('reset role');
+ const conversionPaths=[0,1,2].map(()=>`${managerA}/${randomUUID()}`);
+ for(let i=0;i<3;i++)await db.query('insert into storage.objects(bucket_id,name,metadata) values($1,$2,$3)',[i?'box-rd-files':'box-drawings',conversionPaths[i],{size:222}]);
+ const cardDimensions={box_type:'card',bottom:{length:205,width:125,depth:110},lid:{length:215,width:135,depth:110},replace_files:[{id:smallSaved.rd_files[0].id,expected:smallSaved.rd_files[0].revision}]};
+ const conversionArgs=[randomUUID(),smallPackage,smallBox,cardDimensions,{path:conversionPaths[0],filename:'card.svg',bytes:222,expected:smallSaved.drawing.revision},[0,1].map(i=>({id:null,expected:null,path:conversionPaths[i+1],filename:i?'lid.rd':'bottom.rd',bytes:222}))];
+ await db.exec('set role authenticated');
+ const badConversion=structuredClone(conversionArgs);badConversion[5][1].bytes=999;
+ await assert.rejects(db.query(constructorSql,badConversion),/upload|Upload/);
+ assert.equal((await db.query('select id from wc_box_rd_files where cart_base_package_id=$1',[smallPackage])).rows[0].id,smallSaved.rd_files[0].id);
+ assert.equal((await db.query('select revision from wc_cart_box_svg_drawings where cart_base_package_id=$1',[smallPackage])).rows[0].revision,smallSaved.drawing.revision);
+ await db.exec('reset role');
+ const conversionTask=randomUUID(),historyFile={file_id:smallSaved.rd_files[0].id,object_path:smallPaths[1],filename:'small.rd',copies:1};
+ await db.query("insert into wc_packing_tasks(id,custom_job_id,order_number,product_name,assigned_by,files,packages) values($1,$2,'Custom','Type conversion fixture',$3,$4,'[{}]'::jsonb)",[conversionTask,customSaved.job.id,managerA,[historyFile]]);
+ await db.exec('set role authenticated');
+ await assert.rejects(db.query(constructorSql,conversionArgs),/active Packing task/);
+ await db.exec('reset role');await db.query("update wc_packing_tasks set state='completed' where id=$1",[conversionTask]);await db.exec('set role authenticated');
+ const cardConverted=(await db.query(constructorSql,conversionArgs)).rows[0].result;
+ assert.deepEqual(cardConverted.rd_files.map(f=>f.copies),[2,2]);
+ assert.deepEqual((await db.query('select files from wc_packing_tasks where id=$1',[conversionTask])).rows[0].files,[historyFile]);
+ // Convert Card -> Small, requiring every current revision and preserving rollback.
+ const returnArgs=[randomUUID(),smallPackage,smallBox,{...smallDimensions,replace_files:cardConverted.rd_files.map(f=>({id:f.id,expected:f.revision}))},{path:smallPaths[0],filename:'small.svg',bytes:222,expected:cardConverted.drawing.revision},smallArgs[5]];
+ const staleReturn=structuredClone(returnArgs);staleReturn[3].replace_files[1].expected=randomUUID();
+ await assert.rejects(db.query(constructorSql,staleReturn),/RD file changed/);
+ assert.equal((await db.query('select count(*)::int n from wc_box_rd_files where cart_base_package_id=$1',[smallPackage])).rows[0].n,2);
+ const returned=(await db.query(constructorSql,returnArgs)).rows[0].result;
+ assert.equal(returned.rd_files.length,1);assert.equal(returned.rd_files[0].copies,1);
+ assert.deepEqual((await db.query(constructorSql,returnArgs)).rows[0].result,returned);
+ // Old two-file requests still replay under the replaced contract.
+ assert.deepEqual((await db.query(constructorSql,constructorArgs)).rows[0].result,constructorSaved);
  console.log('Packing checks passed, including atomic Custom creation, rollback and idempotent retry.');
 }finally{await db.close();}

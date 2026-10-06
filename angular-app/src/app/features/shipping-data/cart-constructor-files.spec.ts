@@ -42,8 +42,36 @@ describe('Cart Constructor files',()=>{
   const component=TestBed.createComponent(CartBoxConstructorComponent).componentInstance;
   component.snapshot=box;component.seed=cartConstructorDimensions(box);
   component.editor={drawing:{width:1,height:1,cuts:[],folds:[],pieces:4},rdFiles:rd,rdSettings:{}} as any;
-  await component.save();expect(component.error).toContain('Retry Save');expect(component.pending).toBe(pending);expect(component.editor?.rdFiles).toBe(rd);
-  await component.save();expect(files.prepare).toHaveBeenCalledTimes(1);expect(files.save).toHaveBeenNthCalledWith(2,pending);expect(component.success).toContain('saved');expect(component.canSave).toBe(false);
+  await component.confirmSave();expect(component.error).toContain('Retry Save');expect(component.pending).toBe(pending);expect(component.editor?.rdFiles).toBe(rd);
+  await component.confirmSave();expect(files.prepare).toHaveBeenCalledTimes(1);expect(files.save).toHaveBeenNthCalledWith(2,pending);expect(component.success).toContain('saved');expect(component.canSave).toBe(false);
+ });
+ it('uses one Small box RD, one copy and private uploads with a recoverable conversion request',async()=>{
+  const upload=vi.fn().mockResolvedValue({error:null}),rpc=vi.fn();
+  const service=new CartConstructorFilesService({client:{storage:{from:()=>({upload})},auth:{getUser:async()=>({data:{user:{id:'user'}}})},rpc}} as any);
+  const smallBox={...box,length_mm:220,width_mm:140,height_mm:110};
+  expect(cartConstructorDimensions(smallBox,'small')).toEqual({length:215,width:135,depth:110});
+  const previous={drawing:{revision:'svg'},files:[{id:'bottom',revision:'a'},{id:'lid',revision:'b'}]} as any;
+  const prepared=await service.prepare(smallBox,'<svg/>',[rd[0]],{},previous,[],()=>{},'small',40);
+  expect(upload).toHaveBeenCalledTimes(2);
+  expect(prepared.p_constructor.box_type).toBe('small');
+  expect(prepared.p_constructor.box).toEqual({length:215,width:135,depth:110});
+  expect(prepared.p_constructor.replace_files).toEqual([{id:'bottom',expected:'a'},{id:'lid',expected:'b'}]);
+  expect(prepared.p_rd_files[0].id).toBeNull();
+  rpc.mockResolvedValue({data:{drawing:{object_path:prepared.p_svg.path},rd_files:[{object_path:prepared.p_rd_files[0].path,copies:2}]}});
+  await expect(service.save(prepared)).rejects.toThrow('confirmation');
+  rpc.mockResolvedValue({data:{drawing:{object_path:prepared.p_svg.path},rd_files:[{object_path:prepared.p_rd_files[0].path,copies:1}]}});
+  await service.save(prepared);
+ });
+ it('requires confirmation and keeps generated files when cancelled; restores a saved Small type',async()=>{
+  const files={prepare:vi.fn(),load:vi.fn().mockResolvedValue({drawing:{constructor_data:{box_type:'small',tuck:35,rd_ids:['single']}},files:[{id:'single'}]})};
+  TestBed.configureTestingModule({providers:[{provide:CartConstructorFilesService,useValue:files},{provide:HubMembersService,useValue:{manager:signal(true)}}]});
+  const component=TestBed.createComponent(CartBoxConstructorComponent).componentInstance;
+  component.box={...box,length_mm:220,width_mm:140,height_mm:110};await component.show();
+  expect(component.boxType).toBe('small');expect(component.tuckSeed).toBe(35);expect(component.replacementIds).toEqual(['single']);
+  component.editor={drawing:{},rdFiles:[rd[0]],rdBusy:false} as any;
+  component.save();expect(component.confirmOpen).toBe(true);expect(files.prepare).not.toHaveBeenCalled();
+  component.confirmOpen=false;expect(component.editor?.rdFiles).toEqual([rd[0]]);
+  component.boxType='card';component.changeType();expect(component.seed).toEqual({length:205,width:125,depth:110});
  });
  it('does not open unsaved packaging or non-manager controls',async()=>{
   TestBed.configureTestingModule({providers:[{provide:CartConstructorFilesService,useValue:{load:vi.fn()}},{provide:HubMembersService,useValue:{manager:signal(false)}}]});

@@ -5,9 +5,11 @@ import {drawingNumber} from '../packing/box-constructor-geometry';
 import {baseDrawingBox} from './box-drawing.component';
 import {BoxRdFile} from './box-rd-files.component';
 
-export function cartConstructorDimensions(box:any) {
- const length=Number(drawingNumber(Number(box.length_mm)-15)),width=Number(drawingNumber(Number(box.width_mm)-15)),depth=Number(box.height_mm);
- if(![length,width,depth].every(n=>Number.isFinite(n)&&n>0))throw Error('Save valid packaging dimensions: L and W greater than 15 mm, H greater than zero.');
+export type CartBoxType = 'card' | 'small';
+export function cartConstructorDimensions(box:any,type:CartBoxType='card') {
+ const allowance=type==='small'?5:15;
+ const length=Number(drawingNumber(Number(box.length_mm)-allowance)),width=Number(drawingNumber(Number(box.width_mm)-allowance)),depth=Number(box.height_mm);
+ if(![length,width,depth].every(n=>Number.isFinite(n)&&n>0))throw Error(`Save valid packaging dimensions: L and W greater than ${allowance} mm, H greater than zero.`);
  return {length,width,depth};
 }
 export interface CartConstructorState {drawing:any; files:BoxRdFile[]}
@@ -24,12 +26,14 @@ export class CartConstructorFilesService {
   for(const result of results)if(result.error)throw result.error;
   return {drawing:results[0].data,files:results[1].data||[]};
  }
- async prepare(box:any,svg:string,files:RdFile[],settings:any,previous:CartConstructorState,replacements:string[],progress:(text:string)=>void):Promise<CartConstructorSave>{
-  const bottom=cartConstructorDimensions(box);
-  if(files.length!==2)throw Error('Generate both RD files first.');
-  if(previous.files.length!==0&&(previous.files.length!==2||replacements.length!==2||new Set(replacements).size!==2||replacements.some(id=>!previous.files.some(file=>file.id===id))))throw Error('Select the existing bottom and lid RD files to replace.');
+ async prepare(box:any,svg:string,files:RdFile[],settings:any,previous:CartConstructorState,replacements:string[],progress:(text:string)=>void,type:CartBoxType='card',tuck=40):Promise<CartConstructorSave>{
+  const bottom=cartConstructorDimensions(box,type),count=type==='small'?1:2;
+  if(files.length!==count)throw Error(`Generate ${count} RD file${count===1?'':'s'} first.`);
+  if(previous.files.length>2)throw Error('Review this RD set first; Constructor supports one or two saved files.');
+  const resize=previous.files.length>0&&previous.files.length!==count;
+  if(!resize&&previous.files.length!==0&&(replacements.length!==count||new Set(replacements).size!==count||replacements.some(id=>!previous.files.some(file=>file.id===id))))throw Error('Select the existing RD files to replace.');
   const svgBlob=new Blob([svg],{type:'image/svg+xml'}),blobs=[svgBlob,...files.map(file=>new Blob([file.bytes],{type:'application/octet-stream'}))];
-  const filename=`cart-box-L${bottom.length}-W${bottom.width}-D${bottom.depth}.svg`;
+  const filename=`cart-${type}-box-L${bottom.length}-W${bottom.width}-D${bottom.depth}${type==='small'?'-T'+drawingNumber(tuck):''}.svg`;
   const names=[filename,...files.map(file=>file.filename)];
   blobs.forEach((blob,index)=>{if(!blob.size||blob.size>20971520)throw Error(`${names[index]}: ${blob.size} bytes; allowed size is 1–20971520 bytes.`);});
   const auth=await this.db.client.auth.getUser();if(auth.error)throw auth.error;if(!auth.data.user)throw Error('Sign in and retry.');
@@ -37,7 +41,7 @@ export class CartConstructorFilesService {
   const uploaded:{bucket:string;path:string}[]=[];
   try {
    for(let index=0;index<blobs.length;index++){
-    progress(`Uploading ${index+1} of 3: ${names[index]}…`);
+    progress(`Uploading ${index+1} of ${blobs.length}: ${names[index]}…`);
     const bucket=index?'box-rd-files':'box-drawings';
     const upload=await this.db.client.storage.from(bucket).upload(paths[index],blobs[index],{upsert:false});
     if(upload.error)throw upload.error;
@@ -49,14 +53,14 @@ export class CartConstructorFilesService {
    throw error;
   }
   return {p_request:request,p_package:box.id,p_box:baseDrawingBox(box),
-   p_constructor:{bottom,lid:{length:Number(drawingNumber(bottom.length+10)),width:Number(drawingNumber(bottom.width+10)),depth:bottom.depth},settings},
+   p_constructor:{box_type:type,...(type==='small'?{box:bottom,tuck}:{bottom,lid:{length:Number(drawingNumber(bottom.length+10)),width:Number(drawingNumber(bottom.width+10)),depth:bottom.depth}}),settings,...(resize?{replace_files:previous.files.map(file=>({id:file.id,expected:file.revision}))}:{})},
    p_svg:{path:paths[0],filename,bytes:svgBlob.size,expected:previous.drawing?.revision??null},
-   p_rd_files:files.map((file,index)=>{const prior=previous.files.find(row=>row.id===replacements[index]);return {id:prior?.id??null,expected:prior?.revision??null,path:paths[index+1],filename:file.filename,bytes:file.bytes.length};})};
+   p_rd_files:files.map((file,index)=>{const prior=resize?undefined:previous.files.find(row=>row.id===replacements[index]);return {id:prior?.id??null,expected:prior?.revision??null,path:paths[index+1],filename:file.filename,bytes:file.bytes.length};})};
  }
  async save(request:CartConstructorSave):Promise<CartConstructorState>{
   const result=await this.db.client.rpc('wc_save_cart_constructor_files',request);if(result.error)throw result.error;
   const data=result.data;
-  if(data?.drawing?.object_path!==request.p_svg.path||data?.rd_files?.length!==2||data.rd_files.some((file:any,index:number)=>file.object_path!==request.p_rd_files[index].path||file.copies!==2))throw Error('Server confirmation is incomplete. Retry the same save to check the result.');
+  if(data?.drawing?.object_path!==request.p_svg.path||data?.rd_files?.length!==request.p_rd_files.length||data.rd_files.some((file:any,index:number)=>file.object_path!==request.p_rd_files[index].path||file.copies!==(request.p_constructor.box_type==='small'?1:2)))throw Error('Server confirmation is incomplete. Retry the same save to check the result.');
   return {drawing:data.drawing,files:data.rd_files};
  }
  async downloadSvg(path:string,filename:string){
