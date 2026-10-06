@@ -64,3 +64,30 @@ export function shortenCastorBrakes(root: THREE.Object3D): void {
     node.geometry.dispose(); node.geometry = geometry;
   });
 }
+
+
+// Swivel the running assembly around each fixed mounting plate, retaining the
+// plate, circular bearing, mounting height and wheel contact with the floor.
+export function turnCastorWheels(root: THREE.Object3D): void {
+  const plates = new Map<string, THREE.Vector3>();
+  root.updateWorldMatrix(true, true);
+  root.traverse(node => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const match = /^(Caster[ _][LR][ _](?:front|rear))[ _]plate$/i.exec(node.name);
+    if (match) plates.set(match[1].replaceAll(' ', '_').toLowerCase(), new THREE.Box3().setFromObject(node).getCenter(new THREE.Vector3()));
+  });
+  root.traverse(node => {
+    if (!(node instanceof THREE.Mesh)) return;
+    const match = /^(Caster[ _][LR][ _](?:front|rear))[ _](.+)$/i.exec(node.name);
+    if (!match || !/(?:wheel|tire|hub|fork|brake)/i.test(match[2])) return;
+    const pivot = plates.get(match[1].replaceAll(' ', '_').toLowerCase());
+    if (!pivot) return;
+    const worldTurn = new THREE.Matrix4().makeTranslation(pivot.x, pivot.y, pivot.z)
+      .multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2))
+      .multiply(new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z));
+    const localTurn = node.matrixWorld.clone().invert().multiply(worldTurn).multiply(node.matrixWorld);
+    const geometry = node.geometry.clone(); geometry.userData = { ...node.geometry.userData };
+    geometry.applyMatrix4(localTurn); geometry.computeBoundingBox(); geometry.computeBoundingSphere();
+    node.geometry.dispose(); node.geometry = geometry;
+  });
+}

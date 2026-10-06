@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { fitFurnitureBolts, shortenCastorBrakes } from './modeling-hardware';
+import { fitFurnitureBolts, shortenCastorBrakes, turnCastorWheels } from './modeling-hardware';
 
 describe('Furniture wheel bolts', () => {
   it('places smooth heads outside both wheels and nuts inside the rails', () => {
@@ -41,4 +41,38 @@ it('shortens all castor stops 35 percent while preserving the fork attachment', 
     // Avoid repeatedly transforming nodes while adding the next test castor.
     root.clear();
   }
+});
+
+
+it('turns each small wheel assembly 90 degrees around its own fixed mounting plate', () => {
+  const root = new THREE.Group(); root.position.set(.2, .1, -.3); root.rotation.y = .25;
+  const tests: { plate: THREE.Mesh; bearing: THREE.Mesh; wheel: THREE.Mesh; fork: THREE.Mesh; brake: THREE.Mesh; pivot: THREE.Vector3; before: THREE.Vector3; plateBefore: THREE.Box3; bearingBefore: THREE.Box3 }[] = [];
+  for (const [i, tag] of ['L_front', 'R_front', 'L_rear', 'R_rear'].entries()) {
+    const x = i % 2 ? 1.1 : .1, z = i < 2 ? .55 : .05;
+    const make = (suffix: string, size: number[], at: number[]) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]));
+      mesh.geometry.translate(at[0], at[1], at[2]); mesh.name = `Caster_${tag}_${suffix}`; root.add(mesh); return mesh;
+    };
+    const plate = make('plate', [.065, .003, .065], [x, .0715, z]);
+    const bearing = make('swivel', [.025, .008, .025], [x, .066, z]);
+    const wheel = make('nylon_wheel', [.018, .05, .05], [x, .025, z + .012]);
+    const fork = make('left_fork', [.003, .03, .03], [x - .012, .045, z + .012]);
+    const brake = make('brake_pedal', [.022, .003, .025], [x, .056, z - .018]);
+    root.updateWorldMatrix(true, true);
+    const plateBefore = new THREE.Box3().setFromObject(plate), bearingBefore = new THREE.Box3().setFromObject(bearing);
+    tests.push({ plate, bearing, wheel, fork, brake, pivot: plateBefore.getCenter(new THREE.Vector3()), before: new THREE.Box3().setFromObject(wheel).getCenter(new THREE.Vector3()), plateBefore, bearingBefore });
+  }
+  const decorative = new THREE.Mesh(new THREE.BoxGeometry(.35, .35, .03)); decorative.name = 'Decorative_wheel_front'; root.add(decorative);
+  const decorativePosition = decorative.geometry.getAttribute('position').clone();
+  turnCastorWheels(root);
+  for (const test of tests) {
+    expect(new THREE.Box3().setFromObject(test.plate).equals(test.plateBefore)).toBe(true);
+    expect(new THREE.Box3().setFromObject(test.bearing).equals(test.bearingBefore)).toBe(true);
+    const center = new THREE.Box3().setFromObject(test.wheel).getCenter(new THREE.Vector3());
+    const expected = test.before.clone().sub(test.pivot).applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2).add(test.pivot);
+    expect(center.distanceTo(expected)).toBeLessThan(1e-6);
+    expect(new THREE.Box3().setFromObject(test.wheel).min.y).toBeCloseTo(.1);
+    expect(test.fork.geometry.boundingBox).not.toBeNull(); expect(test.brake.geometry.boundingBox).not.toBeNull();
+  }
+  expect(Array.from(decorative.geometry.getAttribute('position').array)).toEqual(Array.from(decorativePosition.array));
 });
