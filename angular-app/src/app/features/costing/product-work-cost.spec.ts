@@ -8,6 +8,13 @@ describe('Product card Backdrop production cost',()=>{
   component.sizes=['190x100','180cm x 90cm'];
   expect(component.comparison()).toHaveLength(2);expect(component.comparison().every(row=>!row.painted)).toBe(true);
  });
+ it('uses the Backdrop cost comparison and paint operations for Display Arch with Shelves',()=>{
+  const component=new ProductWorkCostComponent({} as any);
+  component.product={id:'product',product_name:'Half Arch Shelf Wall – Plywood Display Arch with Shelves',product_type:'Other'};
+  expect(component.hasFolding).toBe(true);
+  expect(component.comparison().map(row=>row.folding)).toEqual(['foldable','nonfoldable']);
+  expect(component.rows({parts:[],estimates:{}} as any,true).map(row=>row.key)).toEqual(['CNC','Assembly','Sanding','First primer','First sanding','Finish coat']);
+ });
  it('shows only the selected construction in the product card',()=>{
   const component=new ProductWorkCostComponent({} as any);component.product={id:'product',product_name:'Plane Backdrop'};component.selectedFolding='nonfoldable';
   expect(component.visibleComparison().map(row=>row.folding)).toEqual(['nonfoldable']);

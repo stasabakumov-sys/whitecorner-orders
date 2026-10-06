@@ -34,7 +34,7 @@ function materialTotal(profile:any,materials:any[]):number|null{
  for(const line of profile.lines||[]){const material=materials.find(m=>m.id===line.material_id),quantity=Number(line.quantity);if(!material?.active||material.price_gst==null||!Number.isFinite(Number(material.price_gst))||!Number.isFinite(quantity)||quantity<=0)return null;cents+=Math.round(Number(material.price_gst)*quantity*100);}
  return cents/100;
 }
-export function productionCostRows(templates:ShopTemplate[],profiles:any[],paintProfile:any,materials:any[],rates:WorkRate[],productName:string,productId:string,finishModes:boolean[],includeAddons=false):ProductionCostRow[]{
+export function productionCostRows(templates:ShopTemplate[],profiles:any[],paintProfile:any,materials:any[],rates:WorkRate[],productName:string,productId:string,finishModes:boolean[],includeAddons=false,productType?:string|null):ProductionCostRow[]{
  return (['foldable','nonfoldable'] as Folding[]).flatMap(folding=>{
   const shared=templates.filter(t=>t.product_id===productId&&!t.size_key&&t.folding===folding),legacy=templates.filter(t=>t.product_id===productId&&!!t.size_key&&t.folding===folding);
   const matching=shared.length?shared:legacy.length===1?legacy:[];
@@ -45,7 +45,7 @@ export function productionCostRows(templates:ShopTemplate[],profiles:any[],paint
   if(matching.length!==1)issues.push(matching.length?'Multiple time templates: review Estimated min':'Estimated time not configured');
   return finishModes.map(painted=>{const rowIssues=[...issues];let work:number|null=null,materialsCost=materialCost;
    if(painted){const paintMaterials=materialTotal(paintProfile,materials);if(paintMaterials===null)rowIssues.push(paintProfile?.materials_confirmed?'Paint price or quantity missing':'Painting materials not confirmed');else if(materialsCost!==null)materialsCost=Math.round((materialsCost+paintMaterials)*100)/100;}
-   if(matching.length===1){const estimates={...matching[0].estimates,...(painted?paintProfile?.estimates||{}:{})},mainOnly={...matching[0],estimates,parts:matching[0].parts.filter(part=>includeAddons||!part.component_product_id||part.component_product_id===productId)};if(!mainOnly.parts.length)rowIssues.push('Main product parts not configured');else{work=plannedTotal(plannedWorkRows(mainOnly,rates,productName),painted);if(work===null)rowIssues.push('Minutes or hourly rates missing');}}
+   if(matching.length===1){const estimates={...matching[0].estimates,...(painted?paintProfile?.estimates||{}:{})},mainOnly={...matching[0],estimates,parts:matching[0].parts.filter(part=>includeAddons||!part.component_product_id||part.component_product_id===productId)};if(!mainOnly.parts.length)rowIssues.push('Main product parts not configured');else{work=plannedTotal(plannedWorkRows(mainOnly,rates,productName,productType),painted);if(work===null)rowIssues.push('Minutes or hourly rates missing');}}
    return{folding,painted,materials:materialsCost,work,total:materialsCost===null||work===null?null:Math.round((materialsCost+work)*100)/100,issues:rowIssues};
   });
  });

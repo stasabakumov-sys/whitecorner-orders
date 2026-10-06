@@ -18,6 +18,7 @@ import {ProductDetailsComponent} from './product-details.component';
 import {ProductPartsComponent} from './product-parts.component';
 import {ProductCncComponent} from './product-cnc.component';
 import {PackagingVariantsComponent,BackdropPackagingDimensions} from './packaging-variants.component';
+import {isBackdropProduct} from '../../core/utils/backdrop-product';
 import {backdropReferenceProfiles} from './backdrop-packing-reference';
 import {CatalogCostEditorComponent} from '../costing/catalog-cost-editor.component';
 import {ProductWorkCostComponent} from '../costing/product-work-cost.component';
@@ -346,7 +347,7 @@ export class ShippingDataComponent implements OnInit {
       this.cdr?.markForCheck();
     }
   }
-  isBackdrop(p?:ShippingProduct){return componentNormal(p?.product_type||'')==='backdrop'||/backdrop/i.test(p?.product_name||'');}
+  isBackdrop(p?:ShippingProduct){return isBackdropProduct(p);}
   isCart(p?:ShippingProduct){return isCartProduct(p);}
   packagingScope(p?:ShippingProduct){return this.isBackdrop(p)?'shared-backdrop' as const:'product' as const;}
   contentLabel(c:any){return [...new Set([c.product_name,c.component_name].filter(Boolean).map((s:string)=>s.trim()))].join(' · ');}

@@ -34,10 +34,11 @@ function selectedCncScopes(template:ShopTemplate,componentIds:string[],options:R
  }).sort();
 }
 
-export function estimatedComposition(template:ShopTemplate,componentIds:string[],options:Record<string,unknown>,productId:string):ShopTemplate {
+export function estimatedComposition(template:ShopTemplate,componentIds:string[],options:Record<string,unknown>,productId:string,additiveCartCnc=false):ShopTemplate {
  const parts=template.parts.filter(part=>partMatchesOrder(part,componentIds,options,productId));
  const ids=new Set(parts.map(part=>part.id));
- const source=template.estimates||{},estimates=Object.fromEntries(Object.entries(source).filter(([key])=>!['Assembly','Sanding','CNC'].some(stage=>key.startsWith(stage+':'))||ids.has(key.split(':')[1])));
+ const source=template.estimates||{},estimates=Object.fromEntries(Object.entries(source).filter(([key])=>(!['Assembly','Sanding','CNC'].some(stage=>key.startsWith(stage+':'))||ids.has(key.split(':')[1]))&&!key.startsWith('CNC@')&&!key.startsWith('CNC+')));
+ if(!additiveCartCnc)return {...template,parts,estimates};
  const scopes=selectedCncScopes(template,componentIds,options,productId),key=cncEstimateKey(scopes);
  const base=source['CNC'],mainLegacy=parts.filter(part=>!cncScopeKey({componentId:part.component_product_id||productId,optionName:part.option_name,optionValue:part.option_value},productId)).reduce((sum,part)=>sum+Number(source['CNC:'+part.id]||0),0);
  const addonValues=scopes.map(scope=>source[addonCncEstimateKey(scope)]),hasNew=addonValues.some(value=>value!=null);

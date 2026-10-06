@@ -1,6 +1,7 @@
 import {signal} from '@angular/core';
 import {describe,expect,it,vi} from 'vitest';
 import {OrderProductSectionsComponent} from './order-product-sections.component';
+import {variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 function section(options:Record<string,string>){
  const component=new OrderProductSectionsComponent({} as any,{} as any,{materials:()=>[]} as any);
@@ -10,6 +11,20 @@ function section(options:Record<string,string>){
 }
 
 describe('Order product cost source',()=>{
+ it('uses a confirmed Hub size for an older order without a Wix Size choice',async()=>{
+  const rpc=vi.fn().mockResolvedValue({data:'190cm x 100cm',error:null});
+  const component=new OrderProductSectionsComponent({client:{rpc}} as any,{manager:()=>true} as any,{materials:()=>[]} as any);
+  component.view={mainItem:{id:'item',size:null,wix_options:{Foldable:'YES',Colour:'Raw'}},addons:[],order:{id:'order'}} as any;
+  component.product.set({id:'product',product_name:'Plywood Hollow Event Backdrop',product_type:'Backdrop'});
+  component.sizeDraft='190x100';component.load=vi.fn().mockResolvedValue(undefined);
+  await component.saveSize();
+  expect(rpc).toHaveBeenCalledWith('wc_set_order_item_size',{p_item:'item',p_size:'190cm x 100cm'});
+  expect(component.choices()).toEqual({Foldable:'YES',Colour:'Raw',Size:'190cm x 100cm'});
+  expect(component.backdropKey()).toBe('1900x1000:foldable');
+  expect(component.sizeMessage()).toContain('saved');
+  const main={id:'item',product_name:'Plywood Hollow Event Backdrop',quantity:1,wix_options:{Foldable:'YES',Colour:'Raw'},size:'190cm x 100cm'};
+  expect(variantSignature(main)).toBe(variantSignature({...main,wix_options:{...main.wix_options,Size:'190cm x 100cm'},size:null}));
+ });
  it('uses Raw when the order has no finish option',()=>{
   expect(section({Size:'190cm x 95cm',Foldable:'NO'}).orderFinishes()).toEqual([false]);
  });

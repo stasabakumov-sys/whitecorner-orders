@@ -1,6 +1,8 @@
+import {isBackdropProduct} from '../../core/utils/backdrop-product';
+
 export const PAINT_OPERATIONS = ['First primer', 'First sanding', 'Second primer', 'Second sanding', 'Finish coat'];
 export const BACKDROP_PAINT_OPERATIONS = ['First primer', 'First sanding', 'Finish coat'];
-export function paintOperations(productName:string){return /backdrop/i.test(productName||'')?BACKDROP_PAINT_OPERATIONS:PAINT_OPERATIONS;}
+export function paintOperations(productName:string,productType?:string|null){return isBackdropProduct({product_name:productName,product_type:productType})?BACKDROP_PAINT_OPERATIONS:PAINT_OPERATIONS;}
 export function paintLabel(operation:string,operations:string[]){return operations.length===3?({'First primer':'Primer','First sanding':'Sanding'} as Record<string,string>)[operation]||operation:operation;}
 export function needsPaintVolume(operation:string){return ['First primer','Second primer','Finish coat','Repaint'].includes(operation);}
 export function parsePaintVolume(value:string|number):number|null {
