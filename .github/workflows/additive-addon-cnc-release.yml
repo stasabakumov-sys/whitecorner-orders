@@ -1,0 +1,44 @@
+name: Additive Add-on CNC production release
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect production or apply only the additive Add-on CNC migration
+        type: choice
+        options: [verify, apply]
+        default: verify
+  pull_request:
+    paths:
+      - 'supabase/migrations/20261006000600_additive_addon_cnc.sql'
+      - '.github/scripts/estimated-composition-migration.test.mjs'
+      - '.github/scripts/additive-addon-cnc-release.mjs'
+      - '.github/workflows/additive-addon-cnc-release.yml'
+permissions:
+  contents: read
+concurrency:
+  group: additive-addon-cnc-production-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rehearse migrations in isolated PostgreSQL
+        run: |
+          npm install --prefix "$RUNNER_TEMP/estimated-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/estimated-composition-migration.test.mjs "$RUNNER_TEMP/estimated-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Inspect production prerequisites
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/additive-addon-cnc-release.mjs --verify
+      - name: Apply and verify additive Add-on CNC migration
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/additive-addon-cnc-release.mjs --apply
