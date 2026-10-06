@@ -17,6 +17,12 @@ describe('Product-owned Shop Floor parts',()=>{
   await component.save();expect(component.done).toBe(true);expect(rpc).toHaveBeenLastCalledWith('wc_shop_save_backdrop_template',expect.objectContaining({p_folding:'foldable',p_estimates:{CNC:12}}));
   const reopened=new ProductPartsComponent((component as any).db);reopened.product=component.product;await reopened.load();expect(reopened.folding).toBe('foldable');expect(reopened.estimates).toEqual({CNC:12});expect(reopened.parts[0].name).toBe('Body');
  });
+ it('uses the Backdrop folding templates for Display Arch with Shelves',async()=>{
+  const {component,templates}=setup();component.product={id:'main',product_name:'Half Arch Shelf Wall – Plywood Display Arch with Shelves',product_type:'Other'};
+  templates.push({id:'flat',name:'Non-foldable',folding:'nonfoldable',size_key:null,parts:[],estimates:{CNC:20},version:1},{id:'folded',name:'Foldable',folding:'foldable',size_key:null,parts:[],estimates:{CNC:10},version:1});
+  await component.load();expect(component.hasFolding).toBe(true);expect(component.editingId).toBe('folded');
+  component.chooseVariant('nonfoldable');expect(component.editingId).toBe('flat');
+ });
  it('opens Foldable first regardless of saved template ordering and preserves Non-foldable',async()=>{
   const {component,templates}=setup();component.product={id:'main',product_name:'Arch Backdrop'};
   templates.push({id:'flat',name:'A flat',folding:'nonfoldable',size_key:null,parts:[],estimates:{CNC:20},version:1},{id:'folded',name:'Z folded',folding:'foldable',size_key:null,parts:[],estimates:{CNC:10},version:1});

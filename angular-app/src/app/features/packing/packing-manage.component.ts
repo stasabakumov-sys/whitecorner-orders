@@ -12,6 +12,7 @@ import {canonicalPackagingSignature,variantSignature} from '../../../../../supab
 import {PackingCustomComponent} from './packing-custom.component';
 import {backdropDrawingKey,qualifiedDrawingKey} from '../shipping-data/product-sizes';
 import {cartSizeFromOptions} from '../shipping-data/cart-size';
+import {isBackdropProduct} from '../../core/utils/backdrop-product';
 
 interface Candidate {unit_id:string;order_number:string;product_name:string;production_status:string;product_id:string|null;item_id:string;item:OrderItemRow}
 interface Profile {signature:string;shipping_product_id:string;packages:{package_name:string;length_mm?:number;width_mm?:number;height_mm?:number;contents?:{component_key?:string}[];backdrop_size_key?:string}[];template_item:any}
@@ -103,7 +104,7 @@ export class PackingManageComponent implements OnInit,OnDestroy {
  selectedProfile(){return this.profiles().find(profile=>profile.signature===this.profileSignature);}
  filesFor(signature:string,index:number){const profile=this.profiles().find(row=>row.signature===signature);
   if(index===0&&profile?.packages.length===1){
-   const key=profile.packages[0].backdrop_size_key||(/backdrop/i.test(profile.template_item?.product_name||'')?backdropDrawingKey(profile,profile.template_item.product_name):'');
+   const key=profile.packages[0].backdrop_size_key||(isBackdropProduct({product_name:profile.template_item?.product_name})?backdropDrawingKey(profile,profile.template_item.product_name):'');
    if(qualifiedDrawingKey(key)){const shared=this.rdFiles().filter(file=>file.backdrop_size_key===key);if(shared.length)return shared;}
   }
   if(profile){const key=JSON.stringify([signature,index]),mapping=this.cartFileBoxes(),baseId=Object.hasOwn(mapping,key)?mapping[key]:this.cartBaseId(profile,index);if(baseId){const shared=this.rdFiles().filter(file=>file.cart_base_package_id===baseId);if(shared.length)return shared;}}

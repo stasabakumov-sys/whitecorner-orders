@@ -5,6 +5,7 @@ import {ShopPart,ShopTemplate} from '../shop-floor/shop-floor.models';
 import {manualBackdropSizeKey,sizeKeyLabel} from './product-sizes';
 import {Folding,foldingLabel} from '../costing/production-cost';
 import {isCartProduct} from './cart-size';
+import {isBackdropProduct} from '../../core/utils/backdrop-product';
 import {addonCncEstimateKey,cncScopeKey,estimatedCncMinutes,estimatedComposition,partMatchesOrder} from '../shop-floor/estimated-composition';
 
 type ProductComponent={id:string;product_name:string;component_role:string};
@@ -46,7 +47,7 @@ export class ProductPartsComponent implements OnChanges{
  @Input() product:any;@Input() sizes:string[]=[];@Input() selectedSize='';@Input() selectedFolding:Folding|''='';@Input() orderVariant=false;@Input() orderComponentIds:string[]|null=null;@Input() orderOptions:Record<string,unknown>={};@Input() packingRules:PackingRule[]=[];
  folding:Folding|''='';sizeKey='';folds:Folding[]=['foldable','nonfoldable'];foldingLabel=foldingLabel;sizeLabel=sizeKeyLabel;
  private drafts=new Map<string,any>();
- get hasFolding(){return String(this.product?.product_type||'').toLowerCase()==='backdrop'||/backdrop/i.test(this.product?.product_name||'');}
+ get hasFolding(){return isBackdropProduct(this.product);}
  get isSizedCart(){return isCartProduct(this.product)&&!!this.selectedSize;}
  isAssignedEditing=(t:ShopTemplate)=>t.id===this.editingId&&!!t.folding;
  unassigned(){return this.templates.filter(t=>!t.folding||(!this.hasFolding&&!t.size_key));}

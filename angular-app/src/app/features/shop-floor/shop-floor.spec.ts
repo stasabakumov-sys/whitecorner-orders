@@ -71,6 +71,7 @@ describe('Backdrop painting route',()=>{
  });
  it('uses Primer, Sanding and Finish coat for backdrops and retains the standard route elsewhere',()=>{
   expect(paintOperations('Arch Backdrop')).toEqual(BACKDROP_PAINT_OPERATIONS);
+  expect(paintOperations('Half Arch Shelf Wall – Plywood Display Arch with Shelves')).toEqual(BACKDROP_PAINT_OPERATIONS);
   expect(BACKDROP_PAINT_OPERATIONS.map(op=>paintLabel(op,BACKDROP_PAINT_OPERATIONS))).toEqual(['Primer','Sanding','Finish coat']);
   expect(paintOperations('Cart')).toEqual(PAINT_OPERATIONS);
   expect(availablePaint('Finish coat',['Painting:First primer','Painting:First sanding'],BACKDROP_PAINT_OPERATIONS)).toBe(true);

@@ -3,6 +3,7 @@ import {foldingOption,optionFinish,productionSize} from '../costing/production-c
 import {manualBackdropSizeKey,optionSizes} from '../shipping-data/product-sizes';
 import {cartSizeFromOptions} from '../shipping-data/cart-size';
 import {orderItemOptionLabels} from '../../core/utils/order-item-display';
+import {isBackdropProduct} from '../../core/utils/backdrop-product';
 
 export type ShopCatalogProduct={id:string;wix_product_id?:string|null;product_name:string;product_type?:string|null;manual_sizes?:string|null};
 
@@ -36,7 +37,7 @@ export function orderedFolding(item:any){
 export function matchingProductTemplates(templates:ShopTemplate[],product:ShopCatalogProduct|undefined,item:any){
  if(!product)return [];
  const size=resolvedProductionSize(item,product),folding=orderedFolding(item);
- const backdrop=String(product.product_type||'').toLowerCase()==='backdrop'||/backdrop/i.test(product.product_name);
+ const backdrop=isBackdropProduct(product);
  const owned=templates.filter(template=>template.product_id===product.id);
  if(backdrop){
   if(!folding)return [];

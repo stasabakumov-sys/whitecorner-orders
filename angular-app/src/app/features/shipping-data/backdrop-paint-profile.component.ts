@@ -25,7 +25,7 @@ import {paintOperations,paintLabel} from '../shop-floor/shop-floor.models';
 </details>`,styles:[`:host{display:block}.paint{border-top:1px solid var(--wc-border);margin-top:14px;padding-top:10px}.fields,.minutes{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;margin:10px 0}label{display:flex;flex-direction:column;gap:5px}.check{flex-direction:row;margin:12px 0}.primary{background:var(--p-primary-color);color:white}.error{color:var(--p-red-600)}`]})
 export class BackdropPaintProfileComponent implements OnChanges{
  @Input({required:true})product:any;@Input()materials:any[]=[];@Input()mode:'materials'|'minutes'='materials';@Output()saved=new EventEmitter<any>();
- get operations(){return paintOperations(this.product?.product_name||'');}paintLabel=paintLabel;lines:any[]=[];estimates:Record<string,number>={};confirmed=false;version=0;busy=false;message='';error='';
+ get operations(){return paintOperations(this.product?.product_name||'',this.product?.product_type);}paintLabel=paintLabel;lines:any[]=[];estimates:Record<string,number>={};confirmed=false;version=0;busy=false;message='';error='';
  constructor(private db:SupabaseService){}
  ngOnChanges(){const profile=this.product?.backdrop_paint_profile||{};this.lines=structuredClone(profile.lines||[]);this.estimates={...profile.estimates};this.confirmed=!!profile.materials_confirmed;this.version=Number(profile.version)||0;this.message='';this.error='';}
  setMinute(operation:string,value:string|number|null){const key='Painting:'+operation;if(value===''||value===null)delete this.estimates[key];else this.estimates[key]=Number(value);}

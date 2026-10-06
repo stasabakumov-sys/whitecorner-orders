@@ -16,6 +16,7 @@ import {cartSizeFromOptions, isCartProduct} from '../../features/shipping-data/c
 import {backdropFinishModes, foldingOption, optionFinish, Folding} from '../../features/costing/production-cost';
 import {backdropCostProfiles, currentProductCostProfiles} from '../../features/shipping-data/shipping-data.component';
 import {orderItemOptionLabels} from '../../core/utils/order-item-display';
+import {isBackdropProduct} from '../../core/utils/backdrop-product';
 import {estimatedComposition,estimatedCncMinutes} from '../../features/shop-floor/estimated-composition';
 import {productId, variantSignature, canonicalPackagingSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
@@ -98,7 +99,7 @@ export class OrderProductSectionsComponent implements OnChanges {
  timeSize(){return isCartProduct(this.product())?this.cartSize():this.backdrop()?backdropSizeKey(this.size()):this.size();}
  folding():Folding|''{return foldingOption(this.choices());}
  orderFinishes():boolean[]{const finish=optionFinish(this.choices());if(finish==='raw')return[false];if(finish==='painted')return[true];return backdropFinishModes(this.product());}
- backdrop(){const p=this.product();return !!p&&(String(p.product_type||'').toLowerCase()==='backdrop'||/backdrop/i.test(p.product_name));}
+ backdrop(){return isBackdropProduct(this.product());}
  backdropKey(){const size=backdropSizeKey(this.size()),fold=this.folding();return size&&fold?`${size}:${fold}`:'';}
  packingProfiles(){let signature='';try{signature=variantSignature(this.view.mainItem);}catch{return[];}
   return this.profiles().filter(profile=>canonicalPackagingSignature(profile.signature)===signature);}

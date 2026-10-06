@@ -7,6 +7,7 @@ import {packingStateLabel} from './packing-state';
 import {DialogModule} from 'primeng/dialog';
 import {orderItemImageUrl} from '../../core/utils/order-item-image';
 import {OrderItemRow} from '../../core/models/order.models';
+import {isBackdropProduct} from '../../core/utils/backdrop-product';
 
 interface WorkFile {file_id:string;box_index:number;box_name:string;filename:string;copies:number;object_path:string}
 interface WorkTask {id:string;unit_id:string|null;custom_job_id?:string|null;custom_instructions?:string|null;order_number:string;product_name:string;profile_signature:string|null;state:string;files:WorkFile[];cut_file_ids:string[];packages:any[];assigned_at:string;unit?:{item:OrderItemRow|null}|null}
@@ -89,7 +90,7 @@ export class PackingWorkComponent implements OnInit,OnDestroy {
  }
  profileFor(task:WorkTask){return this.profiles().find(profile=>profile.signature===task.profile_signature);}
  filesFor(task:WorkTask,index:number){return task.files.filter(file=>file.box_index===index);}
- drawingKey(task:WorkTask){const profile=this.profileFor(task);return profile&&/backdrop/i.test(task.product_name)?backdropDrawingKey({...profile,packages:task.packages},task.product_name):'';}
+ drawingKey(task:WorkTask){const profile=this.profileFor(task);return profile&&isBackdropProduct({product_name:task.product_name})?backdropDrawingKey({...profile,packages:task.packages},task.product_name):'';}
  stationOnline(){return this.stations().some(station=>Date.now()-Date.parse(station.last_seen)<35000);}
  lastTransfer(task:WorkTask){return this.transfers().find(transfer=>transfer.task_id===task.id);}
  staleClaim(task:WorkTask){const transfer=this.lastTransfer(task);return !this.stationOnline()&&transfer?.state==='claimed'&&!!transfer.claimed_at&&Date.now()-Date.parse(transfer.claimed_at)>120000;}
