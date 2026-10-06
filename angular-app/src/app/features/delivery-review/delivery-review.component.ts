@@ -64,8 +64,6 @@ import {orderProducts} from '../../core/utils/order-products';
  }@else{<b>Unassigned packaging — review in Products</b>}
  </div>
  <div class="product-packages"><h4>{{group.boxes.length}} package(s)</h4>
- @if(group.sources.length>1){<b>Included items:</b>
- @for(source of group.sources;track source.id){<p><app-product-link [item]="source" /> · qty: {{source.quantity||1}}@if(source.id!==group.item?.id){<span class="badge">Add-on</span>}</p>}}
  @for(p of group.boxes;track p){
  <fieldset class="package-card" [disabled]="s.busy()"><legend>Package {{packageNumber(row,p)}}</legend>
  <p><b>{{p.package_name}}</b> · {{p.length_mm}} × {{p.width_mm}} × {{p.height_mm}} mm · {{p.weight_kg}} kg</p>
