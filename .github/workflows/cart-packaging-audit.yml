@@ -1,0 +1,28 @@
+name: Read-only Cart packaging audit
+on:
+  push:
+    branches: [codex/cart-packaging-followup]
+    paths: ['.github/scripts/cart-packaging-audit.mjs', '.github/workflows/cart-packaging-audit.yml']
+  workflow_dispatch:
+    inputs:
+      order_number:
+        description: Order number to inspect (packaging metadata only)
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Inspect packaging without changing data or requesting quotes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PACKAGING_ORDER_NUMBER: ${{ inputs.order_number || '10825' }}
+        run: node --experimental-strip-types .github/scripts/cart-packaging-audit.mjs
