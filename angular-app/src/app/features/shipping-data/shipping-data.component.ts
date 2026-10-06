@@ -296,7 +296,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             }
             }
             @if(detailTab==='minutes'){
-             <section class="shipsection"><app-product-parts [product]="p" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" [selectedFolding]="isBackdrop(p)?selectedBackdropFolding:''" /></section>
+             <section class="shipsection"><app-product-parts [product]="p" [sizes]="productSizes(p)" [selectedSize]="isCart(p)?activeCartSize(p):''" [selectedFolding]="isBackdrop(p)?selectedBackdropFolding:''" [packingRules]="productRules(p.id,isCart(p)?activeCartSize(p):'')" /></section>
              @if(!p.saved_only&&hasPainting(p)){<section class="shipsection"><app-backdrop-paint-profile mode="minutes" [product]="p" [materials]="costing.materials()" (saved)="updateDetails($event)" /></section>}
             }
             @if(detailTab==='wix'){
