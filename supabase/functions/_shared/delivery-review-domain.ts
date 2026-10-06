@@ -440,9 +440,12 @@ export function composeModularPackages(order:any,products:ModularShippingProduct
   // Manual catalogue labels are never consulted. Empty/null means product-wide.
   if(!size&&!(configuredSizes.length===1&&configuredSizes[0]===''))continue;
   const matchesSize=(key:string|null|undefined)=>componentNormal(key||'')===size;
+  // Older Add-on rules can retain a size key even when Main is now product-wide.
+  // A Cart with only product-wide Base boxes has no size to distinguish them by.
+  const matchesRuleSize=(key:string|null|undefined)=>(size===''&&configuredSizes.length===1&&configuredSizes[0]==='')||matchesSize(key);
   const options=optionEntries(item);
-  const optionRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&matchesSize(r.size_key)&&r.rule_type==='Option'&&['Add package','Replace profile'].includes(r.effect_type||'')&&options.some(option=>option.name===componentNormal(r.match_name||'')&&(!r.match_value||option.value===componentNormal(r.match_value))));
-  const addonRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&matchesSize(r.size_key)&&r.rule_type==='Add-on'&&['Add package','Replace profile'].includes(r.effect_type||'')&&items.some(candidate=>componentNormal(candidate.product_name||'')===componentNormal(r.match_name||'')));
+  const optionRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&matchesRuleSize(r.size_key)&&r.rule_type==='Option'&&['Add package','Replace profile'].includes(r.effect_type||'')&&options.some(option=>option.name===componentNormal(r.match_name||'')&&(!r.match_value||option.value===componentNormal(r.match_value))));
+  const addonRules=rules.filter(r=>r.active!==false&&r.shipping_product_id===product.id&&matchesRuleSize(r.size_key)&&r.rule_type==='Add-on'&&['Add package','Replace profile'].includes(r.effect_type||'')&&items.some(candidate=>componentNormal(candidate.product_name||'')===componentNormal(r.match_name||'')));
   const selectedKeys=[...optionRules,...addonRules].map(addonDescriptorKey).sort();
   const variant=(mainVariants||[]).find(profile=>profile.shipping_product_id===product.id&&profile.template_item?.profile_scope==='cart-main'&&cartSize(profile.template_item)===size&&sameKeys(profileAddonKeys(profile),selectedKeys));
   const addonItems=addonRules.flatMap(rule=>items.filter(candidate=>componentNormal(candidate.product_name||'')===componentNormal(rule.match_name||'')));
