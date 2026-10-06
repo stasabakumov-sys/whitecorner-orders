@@ -27,7 +27,7 @@ const db={from(table){const filters=[];let start=0,end=Infinity;const result=sin
 const composed=composeModularPackages(snapshot.order,snapshot.products,snapshot.templates.filter(p=>!p.contents?.some(c=>c.profile_signature)),snapshot.rules,ignored,variantProfiles);
 const resolved=await resolveOrderPackaging(db,snapshot.order,ignored,true);
 console.log(JSON.stringify({
- order_number:orderNumber,box_count:resolved.length,validation_error:packagingError(resolved,reviewComponents(snapshot.order,ignored)),
+ order_number:orderNumber,box_count:resolved.length,complete:!packagingError(resolved,reviewComponents(snapshot.order,ignored)),
  items:snapshot.order.wc_order_items.map(i=>({product_name:i.product_name,quantity:i.quantity,catalogue_id_present:!!productId(i),packaging_options:safeOptions(i),other_option_names:packagingOptionLabels(i).filter(label=>!safeOptions(i).includes(label)).map(label=>label.split(':')[0])})),
  rules:rules.map(r=>({id:r.id,shipping_product_id:r.shipping_product_id,size_key:r.size_key,rule_type:r.rule_type,match_name:r.match_name,match_value:r.match_value,effect_type:r.effect_type})),
  combinations:variantProfiles.filter(p=>productIds.has(p.shipping_product_id)).map(p=>{const mainKey=reviewComponents({wc_order_items:[p.template_item]},ignored)[0]?.profile_item_key;return {shipping_product_id:p.shipping_product_id,packaging_options:safeOptions(p.template_item),merged_add_ons:p.template_item.merged_add_ons,boxes:p.packages.map(b=>({name:b.package_name,contents:b.contents.map(c=>({product_name:c.product_name,component_key:c.component_key,unit_index:c.unit_index,main_template_key_matches:canonicalPackagingItemKey(c.profile_item_key||'')===mainKey}))}))};}),
