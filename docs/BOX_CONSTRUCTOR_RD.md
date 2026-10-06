@@ -155,3 +155,26 @@ Card's bottom/lid geometry and copy instructions remain unchanged. Small's
 RD filename includes the tuck length to distinguish different geometries.
 Small exports are downloaded locally; the existing Custom job editor accepts
 their SVG and RD files. Send to Custom cut remains the Card two-file flow.
+
+
+## Box type from Cart Packing
+
+The Cart Packing Constructor dialog offers Card box and Small box. Card uses
+Packing L/W minus 15 mm for the bottom and minus 5 mm for the lid. Small uses
+Packing L/W minus 5 mm; height stays unchanged for both types. For example,
+220 x 140 x 110 mm packaging creates a 215 x 135 x 110 mm Small box.
+The Small tuck flap remains editable. The saved type and tuck are restored
+when the dialog is opened again.
+
+Saving requires a separate confirmation and stores one SVG plus two Card RD
+files (2 copies each), or one Small RD file (1 copy). SVG remains in the
+private drawing column. Generated files and settings survive a failed save;
+Retry uses the same request receipt after a lost server response.
+
+Migration `20261006000100_cart_constructor_box_type.sql` extends the existing
+manager-only atomic save contract. Switching between one and two RD files
+requires revisions for the complete previous set and uses the existing guarded
+delete operation. An unfinished cutting task referencing the old files blocks
+that switch. Same-count replacement retains existing IDs and task updates;
+completed task snapshots retain their historical files. Neither saving nor
+switching type uploads to the laser or starts cutting.

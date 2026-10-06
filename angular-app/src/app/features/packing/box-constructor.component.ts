@@ -16,6 +16,7 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
   @Output() customCutRequested = new EventEmitter<void>();
   @Input() initialDimensions: {length: number; width: number; depth: number} | null = null;
   @Input() fixedDimensions = false;
+  @Input() initialTuck: number | null = null;
   private readonly changeDetector = inject(ChangeDetectorRef);
   private rdCancel?: () => void;
   private rdRevision = 0;
@@ -43,6 +44,7 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
   constructor() { this.update(); }
 
   ngOnChanges(): void {
+    if(this.initialTuck !== null) this.tuck=this.initialTuck;
     if (this.initialDimensions) {
       this.length = this.initialDimensions.length;
       this.width = this.initialDimensions.width;
