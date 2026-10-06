@@ -13,7 +13,7 @@ export const auditSql = `select
    and i.product_name ilike 'Plywood Hollow Event Backdrop%') as title_matches;`;
 
 export const candidateSql = `select i.size,
- lower(btrim(coalesce(p.product_type,'')))='backdrop' as is_backdrop,
+ (lower(btrim(coalesce(p.product_type,'')))='backdrop' or p.product_name ~* 'backdrop|display[[:space:]]+arch[[:space:]]+with[[:space:]]+shelves') as is_backdrop,
  exists(select 1 from jsonb_object_keys(coalesce(i.wix_options,'{}'::jsonb)) key
         where lower(btrim(key)) in ('size','dimension','dimensions')) as has_wix_size,
  nullif(btrim(i.size),'') as effective_size
@@ -40,7 +40,12 @@ begin
  select p.product_type into kind from public.wc_shipping_products p where
   ((p.wix_product_id is not null and p.wix_product_id=coalesce(nullif(selected.catalog_reference->>'catalogItemId',''),nullif(selected.catalog_reference->>'productId','')))
    or (p.wix_product_id is null and lower(btrim(p.product_name))=lower(btrim(selected.product_name))));
- if lower(btrim(coalesce(kind,'')))<>'backdrop' then raise exception 'Matching product is not a Backdrop'; end if;
+ if lower(btrim(coalesce(kind,'')))<>'backdrop' and not exists(
+  select 1 from public.wc_shipping_products p where
+   ((p.wix_product_id is not null and p.wix_product_id=coalesce(nullif(selected.catalog_reference->>'catalogItemId',''),nullif(selected.catalog_reference->>'productId','')))
+    or (p.wix_product_id is null and lower(btrim(p.product_name))=lower(btrim(selected.product_name))))
+   and p.product_name ~* 'backdrop|display[[:space:]]+arch[[:space:]]+with[[:space:]]+shelves'
+ ) then raise exception 'Matching product is not a Backdrop'; end if;
  if exists(select 1 from jsonb_object_keys(coalesce(selected.wix_options,'{}'::jsonb)) key
            where lower(btrim(key)) in ('size','dimension','dimensions')) then
   raise exception 'Wix already supplies a size';

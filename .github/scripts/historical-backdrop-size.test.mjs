@@ -10,7 +10,7 @@ await db.exec(`create table wc_orders(id uuid primary key,order_number text);
  create table wc_order_items(id uuid primary key,order_id uuid,product_name text,size text,wix_options jsonb default '{}',catalog_reference jsonb default '{}');
  create table wc_shipping_products(id uuid primary key,product_type text,wix_product_id text,product_name text);
  insert into wc_orders values('00000000-0000-0000-0000-000000000001','10846');
- insert into wc_shipping_products values('00000000-0000-0000-0000-000000000003','Backdrop','wix-backdrop','Plywood Hollow Event Backdrop with Rectangular Top');
+ insert into wc_shipping_products values('00000000-0000-0000-0000-000000000003','Other','wix-backdrop','Plywood Hollow Event Backdrop with Rectangular Top');
  insert into wc_order_items values('00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','Plywood Hollow Event Backdrop with Rectangular Top',null,'{"Foldable":"YES"}','{"productId":"wix-backdrop"}');`);
 assert.equal(validateCandidate((await db.query(candidateSql)).rows), false);
 assert.deepEqual((await db.query(auditSql)).rows[0], {exact_orders:1,numeric_orders:1,items:1,title_matches:1});
