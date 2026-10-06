@@ -44,6 +44,25 @@ function setup() {
 }
 
 describe('FulfilmentService shipping completion', () => {
+  it('completes a website-booked delivery only through the local RPC', async () => {
+    const s=setup();
+    const completed={...s.row,status:'Fulfilled' as const,completion_source:'manual_fast_courier' as const};
+    s.supabase.client.rpc.mockResolvedValueOnce({data:completed,error:null} as any);
+    expect(await s.service.completeManualFastCourier(s.row)).toBe(true);
+    expect(s.supabase.client.rpc).toHaveBeenCalledWith('wc_complete_manual_fast_courier',{p_order_id:'order'});
+    expect(s.service.rows()[0].completion_source).toBe('manual_fast_courier');
+    expect(s.orders.orders()[0].fulfillment_status).toBe('FULFILLED');
+    expect(s.supabase.client.functions.invoke).not.toHaveBeenCalled();
+    expect(s.courier.bookOrder).not.toHaveBeenCalled();
+  });
+  it('keeps the delivery open when local manual completion fails', async () => {
+    const s=setup();
+    s.supabase.client.rpc.mockResolvedValueOnce({data:null,error:{message:'Database unavailable'}} as any);
+    expect(await s.service.completeManualFastCourier(s.row)).toBe(false);
+    expect(s.service.rows()[0].status).toBe('Shipping Preparation');
+    expect(s.service.error()).toContain('Database unavailable');
+    expect(s.supabase.client.functions.invoke).not.toHaveBeenCalled();
+  });
   it('does not create fulfilment or shipping records for completed orders', async () => {
     const s=setup();
     s.service.rows.set([]);

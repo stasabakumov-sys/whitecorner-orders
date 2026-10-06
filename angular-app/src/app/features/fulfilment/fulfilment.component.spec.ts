@@ -29,6 +29,7 @@ describe('FulfilmentComponent', () => {
     rows,
     getGeneralContents: vi.fn(async()=> 'other'),
     bookShipment: vi.fn(async (_row:any,_details:any) => true),
+    completeManualFastCourier: vi.fn(async (_row:any) => true),
     error: signal(''),
     bookingShipmentId: signal<string | null>(null),
     load: vi.fn(async () => undefined),
@@ -51,6 +52,7 @@ describe('FulfilmentComponent', () => {
     rows.set([delivery]);
     service.load.mockClear();
     service.bookShipment.mockReset().mockResolvedValue(true);
+    service.completeManualFastCourier.mockReset().mockResolvedValue(true);
     service.error.set('');
     service.bookingShipmentId.set(null);
     service.shipmentFor.mockReset().mockReturnValue(undefined);
@@ -97,6 +99,23 @@ describe('FulfilmentComponent', () => {
     fixture.componentInstance.selected.set(delivery);
     rows.set([{ ...delivery, status: 'Fulfilled' }]);
     expect(fixture.componentInstance.currentSelected()?.status).toBe('Fulfilled');
+  });
+
+  it('requires a separate confirmation for a delivery booked on the courier website', async () => {
+    fixture=TestBed.createComponent(FulfilmentComponent);
+    fixture.componentInstance.selected.set(delivery);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const button=(label:string)=>[...document.querySelectorAll('button')].find(b=>b.textContent?.includes(label)) as HTMLButtonElement|undefined;
+    expect(button('Mark manually booked delivery as fulfilled')).toBeTruthy();
+    button('Mark manually booked delivery as fulfilled')!.click();
+    fixture.detectChanges();
+    expect(service.completeManualFastCourier).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('without booking again or updating Wix');
+    button('Confirm Hub fulfilment')!.click();
+    await fixture.whenStable();
+    expect(service.completeManualFastCourier).toHaveBeenCalledWith(delivery);
+    expect(service.bookShipment).not.toHaveBeenCalled();
   });
 
   function bookedShipment():ShipmentRow {

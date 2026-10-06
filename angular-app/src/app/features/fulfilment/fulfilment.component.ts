@@ -110,10 +110,16 @@ type BookingDraft = {
               <section class="section">
                 <div class="section-title">Packages</div>
                 @if (row.status === 'Fulfilled') {
-                  <div class="done">Fulfilled ✓</div><div class="wix-sync-ok">Wix: FULFILLED ✓</div>
+                  <div class="done">Fulfilled ✓</div>
+                  @if (row.completion_source === 'manual_fast_courier') {
+                    <div class="muted hint">Booked on the Fast Courier website. Completed in Hub only; Wix was not updated.</div>
+                  } @else { <div class="wix-sync-ok">Wix: FULFILLED ✓</div> }
+                } @else if (row.status === 'Shipping Preparation' && !f.shipmentFor(row)?.courier_order_id) {
+                  <div class="callout safety">Already booked through the Fast Courier website?</div>
+                  <p-button label="Mark manually booked delivery as fulfilled" severity="secondary" outlined (onClick)="manualDialogRow.set(row)" />
                 }
                 @if (f.shipmentFor(row); as shipment) {
-                  <div class="package-head"><div><b>{{ f.packagesFor(shipment.id).length }} package(s)</b><div class="muted">Only an exact saved product profile can attach packages automatically.</div></div><p-tag [value]="shipment.status" [severity]="shipmentSeverity(shipment.status)" /></div>
+                  <div class="package-head"><div><b>{{ f.packagesFor(shipment.id).length }} package(s)</b><div class="muted">Only an exact saved product profile can attach packages automatically.</div></div><p-tag [value]="row.completion_source === 'manual_fast_courier' ? 'Booked externally' : shipment.status" [severity]="row.completion_source === 'manual_fast_courier' ? 'success' : shipmentSeverity(shipment.status)" /></div>
                   @if (canEditPackages(row, shipment)) {
                   @if (!f.hasSavedProfile(o)) {
                     <div class="callout profile-missing">
@@ -282,6 +288,18 @@ type BookingDraft = {
       }
     </p-drawer>
 
+    <p-dialog [visible]="manualDialogRow() !== null" (visibleChange)="onManualDialogVisible($event)" [modal]="true" [draggable]="false" [closable]="!manualSubmitting()" [style]="{ width: 'min(480px, 96vw)' }" header="Complete manually booked delivery">
+      @if (manualDialogRow(); as row) {
+        <p>Mark order #{{ f.orderFor(row)?.order_number || row.order_id }} as fulfilled in Hub?</p>
+        <p>Confirm that its delivery was booked on the Fast Courier website. This records completion in Hub without booking again or updating Wix.</p>
+        @if (f.error()) { <div class="error" role="alert">{{ f.error() }}</div> }
+        <div class="booking-dialog-actions">
+          <p-button label="Cancel" severity="secondary" text [disabled]="manualSubmitting()" (onClick)="manualDialogRow.set(null)" />
+          <p-button label="Confirm Hub fulfilment" [loading]="manualSubmitting()" [disabled]="manualSubmitting()" (onClick)="confirmManualCompletion()" />
+        </div>
+      }
+    </p-dialog>
+
     <p-dialog [visible]="contentsPackage() !== null" (visibleChange)="onContentsVisible($event)" [modal]="true" [draggable]="false" [style]="{ width: 'min(720px, 96vw)' }" header="Components in this package">
       @if (contentsPackage(); as pkg) {
         <div class="contents-intro"><b>{{ pkg.package_name || 'Package '+pkg.package_no }}</b><span>Select each product or addon packed here. Each unit can be selected in several packages when split across boxes.</span></div>
@@ -369,6 +387,8 @@ export class FulfilmentComponent implements OnInit {
   bookingContext = signal<{row:FulfilmentRow;shipment:ShipmentRow;order:OrderRow}|null>(null);
   bookingDraft = signal<BookingDraft>(this.emptyBookingDraft());
   collectingRowId = signal<string|null>(null);
+  manualDialogRow = signal<FulfilmentRow|null>(null);
+  manualSubmitting = signal(false);
   private addressTypeRequest = 0;
   pickup = computed(() => this.sortFulfilment(this.f.rows().filter((r) => r.route === 'Pickup')));
   delivery = computed(() => this.sortFulfilment(this.f.rows().filter((r) => r.route === 'Shipping')));
@@ -527,6 +547,14 @@ export class FulfilmentComponent implements OnInit {
     try{
       if(await this.f.markCollected(row))this.selected.set(this.f.rows().find(item=>item.id===row.id)??null);
     }finally{this.collectingRowId.set(null);}
+  }
+  onManualDialogVisible(visible:boolean){if(!visible&&!this.manualSubmitting())this.manualDialogRow.set(null);}
+  async confirmManualCompletion(){
+    const row=this.manualDialogRow();
+    if(!row||this.manualSubmitting())return;
+    this.manualSubmitting.set(true);
+    try{if(await this.f.completeManualFastCourier(row))this.manualDialogRow.set(null);}
+    finally{this.manualSubmitting.set(false);}
   }
   onDrawerVisible(visible:boolean){if(!visible){this.selected.set(null);this.contentsPackage.set(null);if(this.f.bookingShipmentId()===null){this.bookingDialogOpen.set(false);this.bookingContext.set(null);}}}
 }

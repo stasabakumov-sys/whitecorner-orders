@@ -19,6 +19,7 @@ export interface FulfilmentRow {
   pickup_email_sent_at?: string|null;
   shipping_booked_at?: string|null;
   fulfilled_at?: string|null;
+  completion_source?: 'manual_fast_courier'|null;
   updated_at?: string|null;
 }
 
@@ -456,6 +457,21 @@ export class FulfilmentService {
     this.error.set('');
     this.rows.update(xs=>xs.map(x=>x.id===row.id?{...x,...payload}:x));
     try{await this.activity.addFulfilledNote(row.order_id,now);}catch(error){console.error('Could not add fulfilled order note',error);}
+    return true;
+  }
+
+  async completeManualFastCourier(row:FulfilmentRow){
+    if(row.route!=='Shipping'||row.status!=='Shipping Preparation'){
+      this.error.set('Only an open delivery can be completed manually.');return false;
+    }
+    this.error.set('');
+    const {data,error}=await this.supabase.client.rpc('wc_complete_manual_fast_courier',{p_order_id:row.order_id});
+    if(error||!data){
+      this.error.set(error?.message||'The delivery could not be completed. Refresh and try again.');return false;
+    }
+    this.rows.update(rows=>rows.map(item=>item.id===row.id?data as FulfilmentRow:item));
+    this.orders.orders.update(orders=>orders.map(order=>order.id===row.order_id?{...order,fulfillment_status:'FULFILLED'}:order));
+    await this.activity.load(true);
     return true;
   }
 
