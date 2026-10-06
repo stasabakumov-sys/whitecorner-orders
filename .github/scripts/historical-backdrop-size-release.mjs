@@ -10,7 +10,11 @@ async function query(sql, read_only = true) {
     method: 'POST', headers: {Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
     body: JSON.stringify({query: sql, read_only}),
   });
-  if (!response.ok) throw Error(`Production database query failed (HTTP ${response.status})`);
+  if (!response.ok) {
+    const failure = await response.json().catch(() => ({}));
+    const detail = String(failure?.message || failure?.error || 'No database error detail').slice(0, 400);
+    throw Error(`Production database query failed (HTTP ${response.status}): ${detail}`);
+  }
   return response.json();
 }
 
