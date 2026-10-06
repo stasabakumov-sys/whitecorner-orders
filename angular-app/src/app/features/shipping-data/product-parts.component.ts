@@ -5,7 +5,7 @@ import {ShopPart,ShopTemplate} from '../shop-floor/shop-floor.models';
 import {manualBackdropSizeKey,sizeKeyLabel} from './product-sizes';
 import {Folding,foldingLabel} from '../costing/production-cost';
 import {isCartProduct} from './cart-size';
-import {cncEstimateKey,cncScopeKey,estimatedCncMinutes,estimatedComposition,partMatchesOrder} from '../shop-floor/estimated-composition';
+import {addonCncEstimateKey,cncScopeKey,estimatedCncMinutes,estimatedComposition,partMatchesOrder} from '../shop-floor/estimated-composition';
 
 type ProductComponent={id:string;product_name:string;component_role:string};
 type AssignedPart=ShopPart&{component_product_id:string};
@@ -14,7 +14,7 @@ type PartScope={key:string;label:string;componentId:string;optionName?:string;op
 
 @Component({selector:'app-product-parts',standalone:true,imports:[FormsModule],template:`
  <h3>Parts & estimated minutes</h3>
-  <p class="mut">@if(hasFolding){Save one structural template for Foldable and one for Non-foldable. Every size reuses it.}@else if(isSizedCart){Save Main work once for this Cart size, then save each option in its own block. Options come from Packing.}@else{Save Main work and each option in separate blocks.} The order combines Main with its selected options. Assembly and Sanding belong to each part; CNC is one total for the complete configuration. Painting is added only to Painted orders.</p>
+  <p class="mut">@if(hasFolding){Save one structural template for Foldable and one for Non-foldable. Every size reuses it.}@else if(isSizedCart){Save Main work once for this Cart size, then save each option in its own block. Options come from Packing.}@else{Save Main work and each option in separate blocks.} Enter CNC separately for Main and each Add-on. The CNC estimate for a product configuration is their sum. Assembly and Sanding belong to each part. Painting is added only to Painted configurations.</p>
  @if(product?.saved_only){<p class="error" role="alert">Link this imported profile to a catalogue product before adding production parts.</p>}
  @else if(loading){<p>Loading parts…</p>}
  @else if(loadFailed){<button type="button" (click)="load()">Retry loading parts</button>}
@@ -28,15 +28,14 @@ type PartScope={key:string;label:string;componentId:string;optionName?:string;op
    @if(!isSizedCart){<div class="template-tabs"><button class="icon-action" type="button" title="New template" aria-label="New template" (click)="newTemplate()" [disabled]="busy||orderVariant&&!!selectedSize">+</button>@for(t of templates;track t.id){<button type="button" [class.active]="editingId===t.id" [attr.aria-pressed]="editingId===t.id" [disabled]="busy" (click)="editTemplate(t)">{{t.name}}</button>}</div>}
   }
   <label>Template name<input [(ngModel)]="templateName" maxlength="150" placeholder="Product / size / version" [disabled]="busy"></label>
-  @if(orderVariant&&orderComponentIds){<section class="part-scope composition-preview"><h4>Estimated work for this order</h4><p class="mut">Main and selected options combined</p><div class="table-wrap"><table><thead><tr><th>Part</th><th>Assembly (min)</th><th>Sanding (min)</th></tr></thead><tbody>@for(part of composedParts();track part.id){<tr><td>{{part.name}}</td><td>{{composedEstimate('Assembly',part.id)??'—'}}</td><td>{{composedEstimate('Sanding',part.id)??'—'}}</td></tr>}@empty{<tr><td colspan="3">Add Main parts to build this estimate.</td></tr>}</tbody></table></div><p>CNC · whole configuration: {{composedCnc()??'—'}} min</p></section>}
-  @for(scope of partScopes();track scope.key){<section class="part-scope"><div class="scope-heading"><div><h4>{{scope.label}}</h4>@if(scope.key!=='main'){<small>Main parts are saved once above. These parts are added when this option is ordered.</small>}</div><button class="icon-action" type="button" [title]="'Add part to '+scope.label" [attr.aria-label]="'Add part to '+scope.label" (click)="addPart(scope)" [disabled]="busy">+</button></div>
+  @if(orderVariant&&orderComponentIds){<section class="part-scope composition-preview"><h4>Estimated work for this configuration</h4><p class="mut">Main and selected Add-ons combined</p><div class="table-wrap"><table><thead><tr><th>Part</th><th>Assembly (min)</th><th>Sanding (min)</th></tr></thead><tbody>@for(part of composedParts();track part.id){<tr><td>{{part.name}}</td><td>{{composedEstimate('Assembly',part.id)??'—'}}</td><td>{{composedEstimate('Sanding',part.id)??'—'}}</td></tr>}@empty{<tr><td colspan="3">Add Main parts to build this estimate.</td></tr>}</tbody></table></div><p>CNC · Main + selected Add-ons: {{composedCnc()??'—'}} min</p></section>}
+  @for(scope of partScopes();track scope.key){<section class="part-scope"><div class="scope-heading"><div><h4>{{scope.label}}</h4>@if(scope.key!=='main'){<small>Main parts are saved once above. These parts are added when this option is selected.</small>}</div><button class="icon-action" type="button" [title]="'Add part to '+scope.label" [attr.aria-label]="'Add part to '+scope.label" (click)="addPart(scope)" [disabled]="busy">+</button></div>
    <div class="table-wrap"><table><thead><tr><th>Part</th><th>Assembly (min)</th><th>Sanding (min)</th><th></th></tr></thead><tbody>
     @for(part of partsFor(scope);track part.id){<tr><td><input [(ngModel)]="part.name" [attr.aria-label]="'Part name for '+scope.label" [disabled]="busy"></td><td><input type="number" min="0" [ngModel]="estimates['Assembly:'+part.id]" (ngModelChange)="setEstimate('Assembly:'+part.id,$event)" [attr.aria-label]="'Assembly minutes for '+part.name" [disabled]="busy"></td><td><input type="number" min="0" [ngModel]="estimates['Sanding:'+part.id]" (ngModelChange)="setEstimate('Sanding:'+part.id,$event)" [attr.aria-label]="'Sanding minutes for '+part.name" [disabled]="busy"></td><td><button type="button" (click)="removePart(part.id)" [disabled]="busy">Remove</button></td></tr>}
     @empty{<tr><td colspan="4">{{scope.key==='main'?'Add the first Main part.':'No parts for this Add-on yet.'}}</td></tr>}
    </tbody></table></div>
-   <div class="estimate-grid"><label>{{scope.key==='main'?'Main':'Main + '+scope.label}} CNC (min) · whole configuration<input type="number" min="0" [ngModel]="cncValue(scope)" (ngModelChange)="setCncEstimate(scope,$event)" [disabled]="busy"></label></div>
+   <div class="estimate-grid"><label>{{scope.label}} CNC (min)<input type="number" min="0" [ngModel]="cncValue(scope)" (ngModelChange)="setCncEstimate(scope,$event)" [disabled]="busy"></label></div>
   </section>}
-  @if(combinedCncKey()){<div class="part-scope"><label>{{combinedCncLabel()}} CNC (min) · whole configuration<input type="number" min="0" [ngModel]="combinedCncValue()" (ngModelChange)="setEstimate(combinedCncKey(),$event)" [disabled]="busy"></label></div>}
   <button class="primary icon-action" type="button" title="Save parts template" aria-label="Save parts template" (click)="save()" [disabled]="busy||product.saved_only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>@if(busy){<span role="status">Saving parts template…</span>}
  }
  @if(error){<p class="error" role="alert">{{error}}</p>}@if(done){<p class="success" role="status">Parts template saved.</p>}
@@ -82,11 +81,8 @@ export class ProductPartsComponent implements OnChanges{
  composedEstimate(stage:'Assembly'|'Sanding',partId:string){return this.composedTemplate().estimates[stage+':'+partId];}
  composedCnc(){return estimatedCncMinutes(this.composedTemplate());}
  partsFor(scope:PartScope){return this.parts.filter(part=>this.scopeKey(part)===scope.key);}
- cncKey(scope:PartScope){return cncEstimateKey(scope.key==='main'?[]:[cncScopeKey({componentId:scope.componentId,optionName:scope.optionName,optionValue:scope.optionValue},this.product.id)]);}
- cncValue(scope:PartScope){const key=this.cncKey(scope);if(this.estimates[key]!=null)return this.estimates[key];const base=this.estimates['CNC'];if(base==null)return null;const main=this.partsFor(this.partScopes()[0]).reduce((sum,part)=>sum+(this.estimates['CNC:'+part.id]||0),0);if(scope.key==='main')return Number(base)+main;const scoped=this.partsFor(scope).map(part=>this.estimates['CNC:'+part.id]).filter(value=>value!=null);return scoped.length?Number(base)+main+scoped.reduce((sum,value)=>sum+Number(value),0):null;}
- combinedCncKey(){const scopes=this.partScopes().filter(scope=>scope.key!=='main');return this.orderVariant&&scopes.length>1?cncEstimateKey(scopes.map(scope=>cncScopeKey({componentId:scope.componentId,optionName:scope.optionName,optionValue:scope.optionValue},this.product.id))):'';}
- combinedCncLabel(){return 'Main + '+this.partScopes().filter(scope=>scope.key!=='main').map(scope=>scope.label).join(' + ');}
- combinedCncValue(){const key=this.combinedCncKey();if(!key)return null;if(this.estimates[key]!=null)return this.estimates[key];const base=this.estimates['CNC'];const extras=this.parts.map(part=>this.estimates['CNC:'+part.id]).filter(value=>value!=null);return base!=null&&extras.length?Number(base)+extras.reduce((sum,value)=>sum+Number(value),0):null;}
+ cncKey(scope:PartScope){return scope.key==='main'?'CNC':addonCncEstimateKey(cncScopeKey({componentId:scope.componentId,optionName:scope.optionName,optionValue:scope.optionValue},this.product.id));}
+ cncValue(scope:PartScope){const key=this.cncKey(scope),scoped=this.partsFor(scope).map(part=>this.estimates['CNC:'+part.id]).filter(value=>value!=null);if(scope.key==='main')return this.estimates['CNC']==null?null:Number(this.estimates['CNC'])+scoped.reduce((sum,value)=>sum+Number(value),0);if(this.estimates[key]!=null)return this.estimates[key];return scoped.length?scoped.reduce((sum,value)=>sum+Number(value),0):null;}
  templateName='';editingId='';version=0;loading=false;busy=false;error='';done=false;private loadToken=0;
  loadFailed=false;private loadedProductId='';
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
@@ -113,7 +109,7 @@ export class ProductPartsComponent implements OnChanges{
  addPart(scope:PartScope={key:'main',label:'Main',componentId:this.product.id}){this.parts=[...this.parts,{id:crypto.randomUUID(),name:'',component_product_id:scope.componentId,...(scope.optionName&&scope.optionValue?{option_name:scope.optionName,option_value:scope.optionValue}:{})}];}
  removePart(id:string){this.parts=this.parts.filter(p=>p.id!==id);for(const stage of ['CNC','Assembly','Sanding'])delete this.estimates[stage+':'+id];}
  setEstimate(key:string,value:string|number|null){if(value===''||value===null)delete this.estimates[key];else this.estimates[key]=Number(value);}
- setCncEstimate(scope:PartScope,value:string|number|null){this.setEstimate(this.cncKey(scope),value);if(scope.key==='main')for(const part of this.partsFor(scope))delete this.estimates['CNC:'+part.id];}
+ setCncEstimate(scope:PartScope,value:string|number|null){this.setEstimate(this.cncKey(scope),value);for(const part of this.partsFor(scope))delete this.estimates['CNC:'+part.id];}
  async save(){if(this.busy||this.loading||this.loadFailed||!this.product?.id||this.product.saved_only)return;this.error='';this.done=false;
   if(!this.templateName.trim()||!(this.parts.length+this.hiddenParts.length)||this.parts.some(p=>!p.name.trim()||!p.component_product_id)){this.error='Enter a template name, at least one part, and choose its product component.';return;}
   if(this.parts.some(p=>!!p.option_name?.trim()!==!!p.option_value?.trim())){this.error='Enter both the option name and value, or leave both blank for a base part.';return;}

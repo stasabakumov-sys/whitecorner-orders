@@ -1,7 +1,20 @@
 import {describe,expect,it} from 'vitest';
 import {estimatedComposition,estimatedCncMinutes} from './estimated-composition';
 
-describe('estimated minutes by order composition',()=>{
+describe('estimated minutes by product configuration',()=>{
+ it('adds Main CNC and each selected Add-on for a product configuration',()=>{
+  const template:any={parts:[
+   {id:'body',component_product_id:'main'},
+   {id:'shelf',component_product_id:'main',option_name:'Internal Shelf',option_value:'Yes'},
+   {id:'side',component_product_id:'main',option_name:'Side Shelves',option_value:'Yes'},
+   {id:'addon',component_product_id:'addon'},
+  ],estimates:{CNC:15,'CNC+option:internal shelf=yes':7,'CNC+option:side shelves=yes':5,'CNC+component:addon':3}};
+  expect(estimatedCncMinutes(estimatedComposition(template,['main'],{},'main'))).toBe(15);
+  expect(estimatedCncMinutes(estimatedComposition(template,['main'],{'Internal Shelf':'Yes'},'main'))).toBe(22);
+  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes','Side Shelves':'Yes'},'main'))).toBe(30);
+  delete template.estimates['CNC+option:side shelves=yes'];
+  expect(estimatedCncMinutes(estimatedComposition(template,['main','addon'],{'Internal Shelf':'Yes','Side Shelves':'Yes'},'main'))).toBeNull();
+ });
  it('uses one whole-product CNC total for an exact composition',()=>{
   const template:any={parts:[
    {id:'body',component_product_id:'main'},
