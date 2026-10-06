@@ -12,6 +12,7 @@ import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess }
 import { readModelingCatalog, linkedModelProduct, catalogPricing, formatModelingPrice, ModelingCatalog, ConfigurationPricing } from './modeling-pricing';
 import { ModelingSectionComponent } from './modeling-section.component';
 import { ModelingLogoComponent } from './modeling-logo.component';
+import { ModelingCacheService } from './modeling-cache.service';
 import { LogoPlacement,fitLogo,logoHeight } from './modeling-logo';
 import type { ConfigurationDocument } from './modeling-configuration-pdf';
 import { shelfDrawingSvg, ShelfSupport } from './modeling-shelf-drawing';
@@ -335,7 +336,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private modelPaintBumpTexture?: THREE.Texture;
   private paintEnvironment?: THREE.WebGLRenderTarget;
 
-  constructor(readonly members: HubMembersService, private readonly db: SupabaseService) {}
+  constructor(readonly members: HubMembersService, private readonly db: SupabaseService, private readonly modelCache: ModelingCacheService) {}
 
   ngAfterViewInit(): void {
     void this.loadCatalog();
@@ -425,7 +426,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if (this.turntable) this.turntable.rotation.y = this.viewAzimuth - spherical.theta;
     }
     this.assembly?.update();
-    this.renderer.render(this.scene, this.camera);
+    if (!this.loading()) this.renderer.render(this.scene, this.camera);
   };
 
   private async loadSavedModel(): Promise<void> {
@@ -493,13 +494,16 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const signed = await this.db.client.storage.from(BUCKET).createSignedUrl(data.model_path, 600);
       if (signed.error || !signed.data?.signedUrl) throw signed.error || new Error('Could not retrieve the model link.');
       if (!this.alive || version !== this.selectionVersion) return;
-      await this.openModel(signed.data.signedUrl);
+      const bytes = await this.modelCache.readFile(data.model_path, signed.data.signedUrl);
+      if (!this.alive || version !== this.selectionVersion) return;
+      try { await this.openModel(signed.data.signedUrl, bytes); }
+      catch (cause) { this.modelCache.invalidateFile(data.model_path); throw cause; }
       if (this.alive && version === this.selectionVersion) this.fileName.set(data.model_filename || this.modelLabel());
   }
 
-  private async openModel(url: string): Promise<void> {
+  private async openModel(url: string, bytes?: ArrayBuffer): Promise<void> {
     const version = ++this.loadVersion;
-    const gltf = await this.loader.loadAsync(url);
+    const gltf = bytes ? await this.loader.parseAsync(bytes, new URL('.', url).href) : await this.loader.loadAsync(url);
     if (!this.alive || version !== this.loadVersion) return;
     const bumpIndex = gltf.userData['paintBumpTexture'];
     const paintBump = Number.isInteger(bumpIndex) && bumpIndex >= 0
@@ -560,11 +564,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.rounding.set(0);
     this.turntable = new THREE.Group();
     this.turntable.add(this.model);
+    // Render only the finished geometry: the temporary source scene otherwise
+    // uploads textures and compiles materials that are immediately replaced.
+    this.turntable.visible = false;
     this.scene.add(this.turntable);
-    this.applyDimensions();
-    this.applyFinishes();
     if (this.roundingSupported()) await this.setRounding(1.5);
+    if (!this.rounding()) { this.applyDimensions(); this.applyFinishes(); }
+    if (!this.alive || version !== this.loadVersion || !this.turntable) return;
     this.focusCamera();
+    this.turntable.visible = true;
   }
 
   private disposeModel(): void {
@@ -699,7 +707,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (!this.body || !this.roundingSupported() || this.roundingBusy() || ![0, 1, 1.5, 2, 2.5, 3].includes(raw)) return;
     this.roundingBusy.set(true);
     this.error.set('');
+    const body = this.body, version = this.loadVersion;
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    if (!this.alive || this.body !== body || version !== this.loadVersion) { this.roundingBusy.set(false); return; }
     const geometries: THREE.BufferGeometry[] = [];
     try {
       // CAD profiles and positions share model coordinates. Read the original
@@ -722,6 +732,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
             if (!(node instanceof THREE.Mesh)) return;
             const original = this.sourcePositions.get(node.geometry)!;
             node.geometry = node.geometry.clone();
+            node.geometry.userData = { ...node.geometry.userData };
             node.geometry.setAttribute('position', original.clone());
             geometries.push(node.geometry);
           });
@@ -737,9 +748,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
           materials.push(...(Array.isArray(node.material) ? node.material : [node.material]));
         });
         if (!profile) throw new Error('The GLB is missing a part profile. Upload an updated model.');
-        const geometry = createRoundedPart(profile, raw);
-        if (/^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name)) keepTrimJointSquare(geometry, profile, raw);
-        keepPartJointsSquare(geometry, joints.get(name) || [], raw);
+        const partJoints = joints.get(name) || [];
+        const key = JSON.stringify([profile, raw, /^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name), partJoints]);
+        const geometry = this.modelCache.roundedPart(key, () => {
+          const rounded = createRoundedPart(profile!, raw);
+          if (/^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name)) keepTrimJointSquare(rounded, profile!, raw);
+          keepPartJointsSquare(rounded, partJoints, raw);
+          return rounded;
+        });
         geometries.push(geometry);
         const face = materials.find(material => !/plywood[ _]edge$/i.test(material.name)) || materials[0];
         const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;

@@ -4,6 +4,11 @@ import { ModelingComponent, casterGroupKey, isTopPanelName } from './modeling.co
 import { HubMembersService } from '../../core/services/hub-members.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { TestBed } from '@angular/core/testing';
+import { ModelingCacheService } from './modeling-cache.service';
+
+function testCache() {
+  return new ModelingCacheService({ client: { auth: { onAuthStateChange: vi.fn() } } } as unknown as SupabaseService);
+}
 
 function setup(uploadError: Error | null = null) {
   const upload = vi.fn().mockResolvedValue({ error: uploadError });
@@ -16,6 +21,7 @@ function setup(uploadError: Error | null = null) {
   const component = new ModelingComponent(
     { manager: () => true } as unknown as HubMembersService,
     { client } as SupabaseService,
+    testCache(),
   );
   const original = new File(['test'], 'classic.glb', { type: 'application/octet-stream' });
   component.selectedFile.set(original);
@@ -125,6 +131,7 @@ describe('Independent editor models', () => {
     TestBed.configureTestingModule({ imports: [ModelingComponent], providers: [
       { provide: HubMembersService, useValue: { manager: () => true } },
       { provide: SupabaseService, useValue: { client: {} } },
+      { provide: ModelingCacheService, useValue: testCache() },
     ] });
     const fixture = TestBed.createComponent(ModelingComponent);
     fixture.componentInstance.ngAfterViewInit = () => {};
@@ -362,7 +369,7 @@ it('uses Classic plywood layers and a pine border on the MDF cart tabletop', asy
 });
 
 it.each(['classic-bar-plywood','decorative-wheel-roof-cart-mdf'])('shows the parts menu only in Select parts for %s',slug=>{
- TestBed.resetTestingModule();TestBed.configureTestingModule({imports:[ModelingComponent],providers:[{provide:HubMembersService,useValue:{manager:()=>true}},{provide:SupabaseService,useValue:{client:{}}}]});
+ TestBed.resetTestingModule();TestBed.configureTestingModule({imports:[ModelingComponent],providers:[{provide:HubMembersService,useValue:{manager:()=>true}},{provide:SupabaseService,useValue:{client:{}}},{provide:ModelingCacheService,useValue:testCache()}]});
  const fixture=TestBed.createComponent(ModelingComponent);fixture.componentInstance.ngAfterViewInit=()=>{};fixture.componentInstance.activeSlug.set(slug);
  try{fixture.detectChanges();const root:HTMLElement=fixture.nativeElement;const mode=(name:string)=>Array.from(root.querySelectorAll('button')).find(b=>b.textContent?.trim()===name)!;
  expect(root.querySelector('.parts-list')).toBeNull();mode('Select parts').click();fixture.detectChanges();expect(root.querySelector('.parts-list')).not.toBeNull();expect(mode('Return all')).toBeDefined();mode('Rotate').click();fixture.detectChanges();expect(root.querySelector('.parts-list')).toBeNull();expect(mode('Return all')).toBeUndefined();expect(mode('Select parts').getAttribute('aria-expanded')).toBe('false');
@@ -404,7 +411,7 @@ describe('Optional shelf',()=>{
 describe('Hub catalogue names and export pricing',()=>{
  it('shows an actionable catalogue error and clears previous prices after a failed refresh',async()=>{
   const chain:any={select:()=>chain,eq:()=>chain,maybeSingle:async()=>({error:new Error('Network unavailable'),data:null})};
-  const component=new ModelingComponent({} as HubMembersService,{client:{from:()=>chain}} as unknown as SupabaseService);
+  const component=new ModelingComponent({} as HubMembersService,{client:{from:()=>chain}} as unknown as SupabaseService,testCache());
   component.catalog.set({publishedAt:'2026-10-04',products:[]});await component.loadCatalog();
   expect(component.catalog()).toBeNull();expect(component.catalogBusy()).toBe(false);expect(component.catalogError()).toContain('Retry');expect(component.pricing()).toBeNull();
  });
@@ -422,4 +429,50 @@ it('shows the paint surcharge for the colour that selecting Painted will actuall
  component.catalog.set({publishedAt:'2026-10-04',products:[{id:'750a0827-801d-4cb4-b630-1e07167ad400',path:'/product-page/collapsible-plywood-mobile-bar-classic-mobile-food-service-event-bar-cart',name:'Fixture',currency:'AUD',options:[{name:'Size',values:[size]}],variants:[{id:'raw',price:100,choices:{Size:size,Colour:'Raw','Internal Shelf':'No'}},{id:'white',price:150,choices:{Size:size,Colour:'White','Internal Shelf':'No'}}]}]});
  expect(component.optionSurcharge('Finish / colour')).toBe('+$50');
  component.setPaintedBody();expect(component.pricing()?.subtotal).toBe(150);
+});
+
+
+describe('Modeling cached file access', () => {
+  const roof = { slug: 'decorative-wheel-roof-cart-mdf', product_name: 'Roof cart', material_name: 'MDF', model_path: null, model_filename: null, base_width_mm: 1200, base_depth_mm: 600, base_body_height_mm: 827, caster_height_mm: 73 };
+  it('obtains a fresh private Storage grant before reading a cached model', async () => {
+    const { component } = setup(); const editor = component as any;
+    component.models.set([{ ...roof, model_path: 'roof/version.glb' }]);
+    editor.db.client.storage.from = () => ({ createSignedUrl: vi.fn().mockResolvedValue({ error: new Error('Access denied'), data: null }) });
+    const read = vi.spyOn(editor.modelCache, 'readFile');
+    await component.selectModel(roof.slug);
+    expect(read).not.toHaveBeenCalled(); expect(component.error()).toContain('Access denied'); expect(component.loading()).toBe(false);
+  });
+  it('evicts downloaded bytes after a GLB parse failure so a retry can download again', async () => {
+    const { component } = setup(); const editor = component as any;
+    component.models.set([{ ...roof, model_path: 'roof/version.glb' }]);
+    editor.db.client.storage.from = () => ({ createSignedUrl: vi.fn().mockResolvedValue({ data: { signedUrl: 'https://example.test/model' }, error: null }) });
+    const bytes = new ArrayBuffer(16); vi.spyOn(editor.modelCache, 'readFile').mockResolvedValue(bytes);
+    const invalidate = vi.spyOn(editor.modelCache, 'invalidateFile');
+    const open = vi.spyOn(editor, 'openModel').mockRejectedValue(new Error('Could not decode GLB'));
+    await component.selectModel(roof.slug);
+    expect(open).toHaveBeenCalledWith('https://example.test/model', bytes);
+    expect(invalidate).toHaveBeenCalledWith('roof/version.glb');
+    expect(component.error()).toContain('Could not decode GLB'); expect(component.loading()).toBe(false);
+  });
+});
+
+
+it('keeps source tabletop grouping flags independent across repeated geometry rebuilds', async () => {
+  const { component } = setup(); const editor = component as any;
+  component.activeSlug.set('decorative-wheel-roof-cart-mdf'); component.roundingSupported.set(true);
+  const geometry = new THREE.BoxGeometry(.3, .016, .2);
+  const top = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial()); top.name = 'Top_1';
+  editor.body = new THREE.Group(); editor.body.add(top); editor.sourceParts = [top];
+  editor.sourcePositions.set(geometry, geometry.getAttribute('position').clone());
+  const frame = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => { callback(0); return 0; });
+  vi.spyOn(editor, 'woodTexture').mockReturnValue(new THREE.CanvasTexture(document.createElement('canvas')));
+  try {
+    for (const radius of [1.5, 2, 1.5]) {
+      await component.setRounding(radius);
+      expect(geometry.userData['topFinishGroups']).toBeUndefined();
+      const copy = editor.body.children[0] as THREE.Mesh;
+      expect(copy.geometry.userData['topFinishGroups']).toBe(true);
+      expect(copy.geometry.groups.every(group => group.materialIndex! < (copy.material as THREE.Material[]).length)).toBe(true);
+    }
+  } finally { frame.mockRestore(); editor.model = editor.body; component.ngOnDestroy(); }
 });
