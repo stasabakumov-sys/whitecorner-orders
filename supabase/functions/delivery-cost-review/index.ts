@@ -42,10 +42,16 @@ Deno.serve(async(req)=>{
     const normalized=body.options.map((o:any)=>({name:componentNormal(o.name),value:componentNormal(o.value)}));
     const size=normalized.filter((o:any)=>['size','dimension','dimensions'].includes(o.name));
     const ids=Array.isArray(body.addOnRuleIds)?[...new Set(body.addOnRuleIds.filter((id:any)=>typeof id==='string'&&id.length<=100))]:[];
-    if(componentNormal(product.product_type||'')!=='cart'||body.options.length!==1||size.length!==1||!ids.length||ids.length>20||ids.length!==(body.addOnRuleIds||[]).length)return json({error:'Choose one Cart size and at least one Add-on.'},422);
+    if(componentNormal(product.product_type||'')!=='cart'||body.options.length>1||size.length!==body.options.length||!ids.length||ids.length>20||ids.length!==(body.addOnRuleIds||[]).length)return json({error:'Choose the Cart size, if available, and at least one Add-on.'},422);
+    if(!size.length){
+     const {data:base,error:baseError}=await db.from('wc_shipping_packages').select('size_key').eq('shipping_product_id',product.id).eq('source_type','Base').eq('active',true);
+     if(baseError)return json({error:'Reusable Main packages could not be checked. Retry saving.'},503);
+     const configuredSizes=[...new Set((base||[]).map((box:any)=>componentNormal(box.size_key||'')))];
+     if(configuredSizes.length!==1||configuredSizes[0]!=='')return json({error:'This Cart needs an exact Size. Refresh Products and select it before saving.'},422);
+    }
     const {data:available,error:availableError}=await db.from('wc_shipping_rules').select('id,shipping_product_id,size_key,rule_type,match_name,match_value,effect_type,active').eq('shipping_product_id',product.id).eq('active',true).in('id',ids);
     if(availableError)return json({error:'Add-on rules unavailable'},503);
-    selectedAddOns=(available||[]).filter((rule:any)=>['option','add-on'].includes(componentNormal(rule.rule_type||''))&&['add package','replace profile'].includes(componentNormal(rule.effect_type||''))&&(!rule.size_key||componentNormal(rule.size_key)===size[0].value));
+    selectedAddOns=(available||[]).filter((rule:any)=>['option','add-on'].includes(componentNormal(rule.rule_type||''))&&['add package','replace profile'].includes(componentNormal(rule.effect_type||''))&&(!rule.size_key||!!size.length&&componentNormal(rule.size_key)===size[0].value));
     if(selectedAddOns.length!==ids.length)return json({error:'One or more selected Add-ons do not belong to this Cart size.'},422);
    }
    let catalogId=product.wix_product_id||'';

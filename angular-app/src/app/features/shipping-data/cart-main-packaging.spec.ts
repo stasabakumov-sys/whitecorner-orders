@@ -19,6 +19,13 @@ describe('Cart Main packaging variants',()=>{
   expect(invoke).toHaveBeenCalledWith('delivery-cost-review',{body:expect.objectContaining({profileScope:'cart-main',options:[{name:'Size',value:'Size I'}],addOnRuleIds:['shelf'],packages:[expect.objectContaining({height_mm:110,weight_kg:22.5})]})});
   expect(component.saved()).toBe(true);
  });
+ it('saves a product-wide Main variant without inventing a Size option',async()=>{
+  const{component,invoke}=setup();component.sizeKey='';component.sizeLabel='';component.boxes=[{package_name:'Cart with shelf',length_mm:1230,width_mm:630,height_mm:80,weight_kg:20,contents:component.components()}];component.confirmed=true;
+  expect(component.item().wix_options).toEqual({'Internal Shelf':'Yes'});
+  await component.save();
+  expect(invoke).toHaveBeenCalledWith('delivery-cost-review',{body:expect.objectContaining({profileScope:'cart-main',options:[],addOnRuleIds:['shelf']})});
+  expect(component.saved()).toBe(true);
+ });
  it('keeps Main and a separate Add-on product distinct when reopening saved contents',()=>{
   const{component}=setup();component.addOns=[{id:'doors',rule_type:'Add-on',match_name:'Back panel with doors',match_value:''}];
   const [main,doors]=component.components();component.boxes=[{contents:[doors]}];component.remap();

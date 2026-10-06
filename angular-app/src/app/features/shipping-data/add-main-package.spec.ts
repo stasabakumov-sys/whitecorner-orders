@@ -3,7 +3,7 @@ import {AddMainPackageComponent} from './add-main-package.component';
 
 function setup(fail=false){
  const insert=vi.fn();
- const query:any={select:()=>query,eq:vi.fn(()=>query),order:()=>query,limit:async()=>({data:[{package_no:3}],error:null})};
+ const query:any={select:()=>query,eq:vi.fn(()=>query),then:(resolve:any)=>resolve({data:[{package_no:3,size_key:'size ii'}],error:null})};
  insert.mockImplementation((payload:any)=>({select:()=>({single:async()=>fail?{error:{message:'Network unavailable'}}:{data:{...payload,id:'saved-box'},error:null}})}));
  query.insert=insert;
  const c=new AddMainPackageComponent({client:{from:()=>query}} as any);
@@ -14,7 +14,6 @@ function setup(fail=false){
 describe('Adding reusable Main packaging',()=>{
  it('inserts the first or next box for the selected product and size and emits confirmed data',async()=>{
   const{c,insert,query}=setup();const emit=vi.spyOn(c.packageSaved,'emit');await c.save();
-  expect(query.eq).toHaveBeenCalledWith('size_key','size ii');
   expect(insert).toHaveBeenCalledWith(expect.objectContaining({shipping_product_id:'cart',size_key:'size ii',source_type:'Base',package_no:4,weight_kg:20}));
   expect(emit).toHaveBeenCalledWith(expect.objectContaining({id:'saved-box'}));expect(c.saved()).toBe(true);expect(c.editing).toBe(false);
  });
@@ -26,4 +25,8 @@ describe('Adding reusable Main packaging',()=>{
   expect(c.error()).toContain('Network unavailable');expect(c.draft.weight_kg).toBe(20);expect(c.editing).toBe(true);expect(c.saving()).toBe(false);expect(c.saved()).toBe(false);expect(emit).not.toHaveBeenCalled();
  });
  it('does not write on cancel',()=>{const{c,insert}=setup();c.cancel();expect(insert).not.toHaveBeenCalled();expect(c.editing).toBe(false);});
+ it('adds a product-wide Main box when the Cart has no sizes',async()=>{
+  const{c,insert}=setup();c.sizeKey='';c.sizeLabel='';c.allowUnsized=true;await c.save();
+  expect(insert).toHaveBeenCalledWith(expect.objectContaining({size_key:null,package_no:1}));expect(c.saved()).toBe(true);
+ });
 });

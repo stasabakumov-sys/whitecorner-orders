@@ -234,7 +234,7 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
             <div class="shipsection">
               <h3>{{isCart(p)?'Reusable Main packages':'Packages'}}</h3>
               @for(editorKey of [p.id+':'+activeCartSize(p)];track editorKey){
-               <app-add-main-package [productId]="p.id" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" (packageSaved)="addSavedPackage($event)" />
+               <app-add-main-package [productId]="p.id" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" [allowUnsized]="!cartSizes(p).length" (packageSaved)="addSavedPackage($event)" />
               }
               <div class="tablewrap">
                 <table class="shiptable cart-box-table">
