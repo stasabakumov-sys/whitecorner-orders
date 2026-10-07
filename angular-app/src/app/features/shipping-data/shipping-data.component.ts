@@ -223,7 +223,8 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               <h3>Saved Main + Add-ons variants</h3>
               <p class="small">Saved combinations remain available after the page is reloaded. Open one to review or rewrite its complete packaging.</p>
               <div class="saved-combination-list">@for(profile of cartMainProfiles(p);track profile.signature){
-               <button type="button" [class.on]="cartMainProfileSelected(profile)" (click)="openCartMainProfile(p,profile)"><b>Main + {{cartMainProfileLabel(profile)}}</b><span>{{profile.packages?.length||0}} box(es) · Open</span></button>
+               <div class="saved-combination"><button type="button" [class.on]="cartMainProfileSelected(profile)" [attr.aria-expanded]="cartMainProfileSelected(profile)" (click)="openCartMainProfile(p,profile)"><b>Main + {{cartMainProfileLabel(profile)}}</b><span>{{profile.packages?.length||0}} box(es) · Open</span></button>
+                @if(cartMainProfileSelected(profile)){<app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" [addOns]="mainAddOns()" (profileSaved)="storeCartMainProfile(p,$event)" />}</div>
               }</div>
              </section>}
             }@else if(!visiblePackingProfiles(p).length){
@@ -250,15 +251,15 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                         <td><input type="number" [disabled]="!editing(pkg.id)" [value]="pkg.width_mm??''" (input)="setDraft(pkg.id,'width_mm',$any($event.target).value)"></td>
                         <td><input type="number" [disabled]="!editing(pkg.id)" [value]="pkg.height_mm??''" (input)="setDraft(pkg.id,'height_mm',$any($event.target).value)"></td>
                         <td><input type="number" step="0.1" [disabled]="!editing(pkg.id)" [value]="pkg.weight_kg??''" (input)="setDraft(pkg.id,'weight_kg',$any($event.target).value)"></td>
-                        <td><app-packing-files-cell [box]="pkg" [refreshVersion]="constructorRefresh[pkg.id]||0" [locked]="editing(pkg.id)" kind="cdr" /></td><td><app-packing-files-cell [box]="pkg" [refreshVersion]="constructorRefresh[pkg.id]||0" kind="rd" /></td>
-                        <td>
+                        <td><app-packing-files-cell [box]="pkg" [refreshVersion]="constructorRefresh[pkg.id]||0" [locked]="editing(pkg.id)" kind="cdr" /></td><td><app-packing-files-cell [box]="pkg" [refreshVersion]="constructorRefresh[pkg.id]||0" [locked]="editing(pkg.id)" kind="rd" /></td>
+                        <td><span class="packing-row-actions">
                           @if(isCart(p)){<app-cart-box-constructor [box]="pkg" [locked]="editing(pkg.id)" (filesSaved)="constructorRefresh[pkg.id]=(constructorRefresh[pkg.id]||0)+1" />}
                           @if (editing(pkg.id)) {
                             <button class="square" aria-label="Save Base packaging" title="Save Base packaging" (click)="savePackage(pkg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>
                           } @else {
                             <button class="square" aria-label="Edit Base packaging" title="Edit Base packaging" (click)="startEdit(pkg)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4"/></svg></button>
                           }
-                        </td>
+                        </span></td>
                       </tr>
                     }
                   </tbody>
@@ -273,22 +274,29 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
                 @for(r of productRules(p.id,activeCartSize(p));track r.id){
                  @for(box of addonRows(r);track box.id||box.package_no){
                   <tr>
-                   <td><b>{{r.match_name}}</b><div class="small">{{r.match_value||'Any value'}} · Box {{box.package_no}}</div></td>
-                   <td><input type="number" min="1" [value]="ruleValue(r,'package_count_delta')" (input)="setRuleDraft(r.id,'package_count_delta',$any($event.target).value)"></td>
-                   <td><input class="name" [value]="ruleValue(r,'package_name')" (input)="setRuleDraft(r.id,'package_name',$any($event.target).value)"></td>
-                   <td><input type="number" min="1" [value]="ruleValue(r,'length_mm')" (input)="setRuleDraft(r.id,'length_mm',$any($event.target).value)"></td>
-                   <td><input type="number" min="1" [value]="ruleValue(r,'width_mm')" (input)="setRuleDraft(r.id,'width_mm',$any($event.target).value)"></td>
-                   <td><input type="number" min="1" [value]="ruleValue(r,'height_mm')" (input)="setRuleDraft(r.id,'height_mm',$any($event.target).value)"></td>
-                   <td><input type="number" min="0.01" step="0.01" [value]="ruleValue(r,'weight_kg')" (input)="setRuleDraft(r.id,'weight_kg',$any($event.target).value)"></td>
-                   <td><app-packing-files-cell [box]="box" [refreshVersion]="constructorRefresh[box.id]||0" [locked]="ruleDrafts.has(r.id)" kind="cdr" /></td><td><app-packing-files-cell [box]="box" [refreshVersion]="constructorRefresh[box.id]||0" kind="rd" /></td>
-                   <td>@if(isCart(p)){<app-cart-box-constructor [box]="box" [locked]="ruleDrafts.has(r.id)||ruleSaving(r.id)" (filesSaved)="constructorRefresh[box.id]=(constructorRefresh[box.id]||0)+1" />}<button class="square" aria-label="Save Add-on packaging" title="Save Add-on packaging" [disabled]="ruleSaving(r.id)" (click)="saveRule(r)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button></td>
+                   <td><b class="addon-name" [title]="r.match_name||''">{{r.match_name}}</b></td>
+                   <td><input type="number" min="1" [disabled]="!ruleDrafts.has(r.id)||ruleSaving(r.id)" [value]="ruleValue(r,'package_count_delta')" (input)="setRuleDraft(r.id,'package_count_delta',$any($event.target).value)"></td>
+                   <td><input class="name" [disabled]="!ruleDrafts.has(r.id)||ruleSaving(r.id)" [value]="ruleValue(r,'package_name')" (input)="setRuleDraft(r.id,'package_name',$any($event.target).value)"></td>
+                   <td><input type="number" min="1" [disabled]="!ruleDrafts.has(r.id)||ruleSaving(r.id)" [value]="ruleValue(r,'length_mm')" (input)="setRuleDraft(r.id,'length_mm',$any($event.target).value)"></td>
+                   <td><input type="number" min="1" [disabled]="!ruleDrafts.has(r.id)||ruleSaving(r.id)" [value]="ruleValue(r,'width_mm')" (input)="setRuleDraft(r.id,'width_mm',$any($event.target).value)"></td>
+                   <td><input type="number" min="1" [disabled]="!ruleDrafts.has(r.id)||ruleSaving(r.id)" [value]="ruleValue(r,'height_mm')" (input)="setRuleDraft(r.id,'height_mm',$any($event.target).value)"></td>
+                   <td><input type="number" min="0.01" step="0.01" [disabled]="!ruleDrafts.has(r.id)||ruleSaving(r.id)" [value]="ruleValue(r,'weight_kg')" (input)="setRuleDraft(r.id,'weight_kg',$any($event.target).value)"></td>
+                   <td><app-packing-files-cell [box]="box" [refreshVersion]="constructorRefresh[box.id]||0" [locked]="ruleDrafts.has(r.id)" kind="cdr" /></td><td><app-packing-files-cell [box]="box" [refreshVersion]="constructorRefresh[box.id]||0" [locked]="ruleDrafts.has(r.id)" kind="rd" /></td>
+                   <td><span class="packing-row-actions">
+                    @if(isCart(p)){<app-cart-box-constructor [box]="box" [locked]="ruleDrafts.has(r.id)||ruleSaving(r.id)" (filesSaved)="constructorRefresh[box.id]=(constructorRefresh[box.id]||0)+1" />}
+                    @if(ruleDrafts.has(r.id)){
+                     <button class="square" aria-label="Save Add-on packaging" title="Save Add-on packaging" [disabled]="ruleSaving(r.id)" (click)="saveRule(r)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>
+                    }@else{
+                     <button class="square" aria-label="Edit Add-on packaging" title="Edit Add-on packaging" (click)="startRuleEdit(r)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4"/></svg></button>
+                    }
+                   </span></td>
                    <td><input type="checkbox" [checked]="mainAddOnSelected(r)" (change)="toggleMainAddOn(r,$any($event.target).checked)" [attr.aria-label]="'Combine '+r.match_name+' with Main'" title="Combine with Main"></td>
                   </tr>
                  }
                  @if(ruleFeedback()[r.id];as feedback){<tr><td colspan="11" [class.ok-text]="feedback.ok" [class.error-text]="!feedback.ok" [attr.role]="feedback.ok?'status':'alert'">{{feedback.text}}</td></tr>}
                 }
                 </tbody></table></div>
-                @if(isCart(p)&&mainAddOns().length){<app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" [addOns]="mainAddOns()" (profileSaved)="storeCartMainProfile(p,$event)" />}
+                @if(isCart(p)&&mainAddOns().length&&!selectedSavedCartMainProfile(p)){<app-cart-main-packaging [product]="p" [sizeKey]="activeCartSize(p)" [sizeLabel]="cartSizeLabel(p)" [addOns]="mainAddOns()" (profileSaved)="storeCartMainProfile(p,$event)" />}
               } @else {
                 <div class="mut">No rules for this product.</div>
               }
@@ -517,6 +525,7 @@ export class ShippingDataComponent implements OnInit {
   cartMainProfiles(product:ShippingProduct){return (product.saved_profiles||[]).filter(profile=>profile.template_item?.profile_scope==='cart-main'&&cartSizeFromOptions(profile.template_item?.wix_options)===this.activeCartSize(product)&&this.cartMainProfileDescriptors(profile).length).sort((a,b)=>this.cartMainProfileLabel(a).localeCompare(this.cartMainProfileLabel(b)));}
   cartMainProfileLabel(profile:any){return this.cartMainProfileDescriptors(profile).map((item:any)=>item.match_name).join(' + ');}
   cartMainProfileSelected(profile:any){return this.cartMainProfileDescriptors(profile).map((item:any)=>this.addOnDescriptorKey(item)).sort().join('|')===this.mainAddOns().map(item=>this.addOnDescriptorKey(item)).sort().join('|');}
+  selectedSavedCartMainProfile(product:ShippingProduct){return this.cartMainProfiles(product).some(profile=>this.cartMainProfileSelected(profile));}
   openCartMainProfile(product:ShippingProduct,profile:any){
     const available=this.productRules(product.id,this.activeCartSize(product)),selected=this.cartMainProfileDescriptors(profile).map((descriptor:any)=>available.find(rule=>this.addOnDescriptorKey(rule)===this.addOnDescriptorKey(descriptor))).filter(Boolean) as ShippingRule[];
     if(selected.length!==this.cartMainProfileDescriptors(profile).length){this.error.set('This saved Main combination refers to an Add-on rule that is no longer active. Restore the rule before editing the combination.');return;}
@@ -561,7 +570,11 @@ export class ShippingDataComponent implements OnInit {
     this.packageDrafts.delete(pkg.id);
   }
 
-  ruleValue(rule:ShippingRule,key:keyof ShippingRule){return (this.ruleDrafts.get(rule.id) as any)?.[key]??rule[key]??'';}
+  startRuleEdit(rule:ShippingRule){
+    this.ruleDrafts.set(rule.id,{...rule});
+    this.ruleFeedback.update(rows=>{const next={...rows};delete next[rule.id];return next;});
+  }
+  ruleValue(rule:ShippingRule,key:keyof ShippingRule){const draft=this.ruleDrafts.get(rule.id);return (draft&&Object.prototype.hasOwnProperty.call(draft,key)?draft[key]:rule[key])??'';}
   setRuleDraft(id:string,key:keyof ShippingRule,value:string){
     const draft=this.ruleDrafts.get(id)||{};
     (draft as any)[key]=['package_name','effect_type'].includes(String(key))?(value||null):(value===''?null:Number(value));

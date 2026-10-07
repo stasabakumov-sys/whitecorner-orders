@@ -12,7 +12,11 @@ describe('Shipping rule save feedback',()=>{
   const eq=vi.fn().mockResolvedValue({error:null});
   const query:any={eq:()=>query,order:vi.fn().mockResolvedValue({data:[{id:'addon-box',shipping_rule_id:rule.id,package_no:1}],error:null})};
   const component=new ShippingDataComponent({client:{from:()=>({update:()=>({eq}),select:()=>query})}} as any,undefined,{} as any);
+  expect(component.ruleDrafts.has(rule.id)).toBe(false);
+  component.startRuleEdit(rule);
+  expect(component.ruleDrafts.has(rule.id)).toBe(true);
   await component.saveRule(rule);
+  expect(component.ruleDrafts.has(rule.id)).toBe(false);
   expect(component.ruleFeedback()[rule.id]).toEqual({ok:true,text:'Saved ✓'});
   expect(component.ruleSaving(rule.id)).toBe(false);
   expect(component.addonBoxes(rule.id).map(box=>box.id)).toEqual(['addon-box']);
@@ -50,13 +54,18 @@ describe('Shipping rule save feedback',()=>{
   await component.saveRule(rule);
   expect(component.ruleFeedback()[rule.id]).toEqual({ok:false,text:'Complete the box name, L, W, H and kg before saving.'});
   expect(component.ruleDrafts.get(rule.id)?.length_mm).toBeNull();
+  expect(component.ruleValue(rule,'length_mm')).toBe('');
   expect(from).not.toHaveBeenCalled();
  });
  it('shows the database error beside the same rule and allows retry',async()=>{
   const component=new ShippingDataComponent({client:{from:()=>({update:()=>({eq:async()=>({error:{message:'offline'}})})})}} as any,undefined,{} as any);
+  component.startRuleEdit(rule);
+  component.setRuleDraft(rule.id,'length_mm','650');
   await component.saveRule(rule);
   expect(component.ruleFeedback()[rule.id]).toEqual({ok:false,text:'Could not save: offline. Please retry.'});
   expect(component.ruleSaving(rule.id)).toBe(false);
+  expect(component.ruleDrafts.has(rule.id)).toBe(true);
+  expect(component.ruleValue(rule,'length_mm')).toBe(650);
  });
  it('keeps shared Backdrop dimension edits beside a failed save',async()=>{
   const component=new ShippingDataComponent({client:{rpc:vi.fn().mockResolvedValue({data:null,error:{message:'offline'}})}} as any,undefined,{} as any),key='1800x900:foldable';
