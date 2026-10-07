@@ -34,13 +34,14 @@ export function gastronormTrayGeometry(widthMm:number,depthMm:number):THREE.Buff
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setIndex(indices);const surface=geometry.toNonIndexed();geometry.dispose();surface.computeVertexNormals();surface.computeBoundingBox();surface.computeBoundingSphere();return surface;
 }
 
-export function createGastronormTrays(heightMm:number,environment:THREE.Texture|null,selected:readonly number[]=CHARCUTERIE_CUTOUTS.map((_,i)=>i)):THREE.Group {
+export function createGastronormTrays(heightMm:number,environment:THREE.Texture|null,selected:readonly number[]=CHARCUTERIE_CUTOUTS.map((_,i)=>i),reverse=false,widthMm=1500,depthMm=600):THREE.Group {
   const group=new THREE.Group();group.name='Top trays';
   const material=new THREE.MeshPhysicalMaterial({color:'#bbc1c7',metalness:.92,roughness:.28,envMap:environment,envMapIntensity:.65,side:THREE.DoubleSide});
   for(const index of selected){
     const cutout=CHARCUTERIE_CUTOUTS[index];if(!cutout)continue;
     const tray=new THREE.Mesh(gastronormTrayGeometry(cutout.type==='GN 1/1'?325:176,cutout.type==='GN 1/1'?530:162),material);
-    tray.name=cutout.type;tray.position.set((cutout.x+cutout.width/2)/1000,heightMm/1000,(cutout.z+cutout.depth/2)/1000);tray.castShadow=true;tray.receiveShadow=true;group.add(tray);
+    const x=cutout.x+cutout.width/2,z=cutout.z+cutout.depth/2;
+    tray.name=cutout.type;tray.position.set((reverse?widthMm-x:x)/1000,heightMm/1000,(reverse?depthMm-z:z)/1000);tray.castShadow=true;tray.receiveShadow=true;group.add(tray);
   }
   return group;
 }

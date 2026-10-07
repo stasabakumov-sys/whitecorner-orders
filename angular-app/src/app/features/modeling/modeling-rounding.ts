@@ -9,20 +9,32 @@ export interface RoundingProfile {
   holes: number[][][];
 }
 
-export interface PartJoint { axis: 'x' | 'y' | 'z'; plane: number; bounds: THREE.Box3; }
+export interface PartJoint { axis: 'x' | 'y' | 'z'; plane: number; bounds: THREE.Box3; normal?: [number,number,number]; }
 
 // STEP roof members meet on planar faces. Detect shared faces before rounding,
 // while excluding overlaps, edges and separate parts.
-export function matingPartJoints(parts: { name: string; bounds: THREE.Box3 }[]): Map<string, PartJoint[]> {
+export function matingPartJoints(parts: { name: string; bounds: THREE.Box3; profile?: RoundingProfile }[]): Map<string, PartJoint[]> {
   const joints = new Map<string, PartJoint[]>();
   const axes = ['x', 'y', 'z'] as const;
   for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
     const a = parts[i], b = parts[j];
+    // Front frame mitres meet on diagonal faces; bounding boxes overlap there.
+    if(/^Front[ _]part\d+$/i.test(a.name)&&/^Front[ _]part\d+$/i.test(b.name)&&a.profile?.axis==='z'&&b.profile?.axis==='z'&&Math.abs(a.profile.origin-b.profile.origin)<1e-6){
+      const ap=a.profile,bp=b.profile,near=(a:number[],b:number[])=>Math.hypot(a[0]-b[0],a[1]-b[1])<1e-6;
+      for(let ai=0;ai<ap.outline.length;ai++)for(let bi=0;bi<bp.outline.length;bi++){
+        const a0=ap.outline[ai],a1=ap.outline[(ai+1)%ap.outline.length],b0=bp.outline[bi],b1=bp.outline[(bi+1)%bp.outline.length];
+        if(!((near(a0,b0)&&near(a1,b1))||(near(a0,b1)&&near(a1,b0))))continue;
+        const normal=new THREE.Vector3(a1[1]-a0[1],a0[0]-a1[0],0).normalize();
+        const bounds=new THREE.Box3(new THREE.Vector3(Math.min(a0[0],a1[0]),Math.min(a0[1],a1[1]),ap.origin),new THREE.Vector3(Math.max(a0[0],a1[0]),Math.max(a0[1],a1[1]),ap.origin+Math.min(ap.thickness,bp.thickness)));
+        const joint:PartJoint={axis:'z',normal:normal.toArray() as [number,number,number],plane:normal.x*a0[0]+normal.y*a0[1],bounds};
+        for(const part of [a,b])joints.set(part.name,[...(joints.get(part.name)||[]),joint]);
+      }
+    }
     const roof = /^Roof[ _]/i.test(a.name) && /^Roof[ _]/i.test(b.name);
     const shaker = /^Front[ _]part[12]$/i.test(a.name) && /^Front[ _]part[12]$/i.test(b.name);
     // MDF body panels and their inner reinforcement rails meet on square faces.
     // Rounding the two mating faces independently opens a visible light slit.
-    const bodyPanel = (name: string) => /^Front[ _]part[1-4]\)?$/i.test(name.trim()) || /^(Left|Right)[ _]side[ _]?[12]$/i.test(name.trim());
+    const bodyPanel = (name: string) => /^Front[ _]part\d+\)?$/i.test(name.trim()) || /^(Left|Right)[ _]side[ _]?[12]$/i.test(name.trim());
     const body = bodyPanel(a.name) && bodyPanel(b.name);
     const borderFamily = (name:string) => /^(Top|Buttom|Bottom)[ _](?:part)?\d+$/i.exec(name)?.[1].toLowerCase().replace('buttom','bottom');
     const border=borderFamily(a.name)&&borderFamily(a.name)===borderFamily(b.name);
@@ -50,10 +62,12 @@ export function keepPartJointsSquare(geometry: THREE.BufferGeometry, joints: Par
   for (let i = 0; i < positions.count; i++) {
     const point = new THREE.Vector3().fromBufferAttribute(positions, i);
     for (const joint of joints) {
-      if (Math.abs(point[joint.axis] - joint.plane) > tolerance) continue;
-      if (!(['x', 'y', 'z'] as const).filter(axis => axis !== joint.axis).every(axis =>
+      const normal=joint.normal?new THREE.Vector3(...joint.normal):null;
+      const distance=normal?point.dot(normal)-joint.plane:point[joint.axis]-joint.plane;
+      if (Math.abs(distance) > tolerance) continue;
+      if (!(['x', 'y', 'z'] as const).filter(axis => normal || axis !== joint.axis).every(axis =>
         point[axis] >= joint.bounds.min[axis] - tolerance && point[axis] <= joint.bounds.max[axis] + tolerance)) continue;
-      point[joint.axis] = joint.plane;
+      if(normal)point.addScaledVector(normal,-distance);else point[joint.axis] = joint.plane;
       positions.setXYZ(i, point.x, point.y, point.z);
       changed.add(Math.floor(i / 3));
     }
@@ -95,7 +109,7 @@ function roundedPath(points: THREE.Vector2[], radius: number, path: THREE.Path):
 
 export function createRoundedPart(profile: RoundingProfile, radiusMm: number): THREE.BufferGeometry {
   const r = radiusMm / 1000;
-  if (!(r > 0 && r * 2 < profile.thickness) || profile.outline.length < 3) throw new Error('Недопустимый радиус скругления детали.');
+  if (!(r >= 0 && r * 2 < profile.thickness) || profile.outline.length < 3) throw new Error('Недопустимый радиус скругления детали.');
   const points = (outline: number[][]) => outline.map(([u, v]) => new THREE.Vector2(profile.axis === 'x' ? -u : u, profile.axis === 'y' ? -v : v));
   const shape = new THREE.Shape();
   roundedPath(points(profile.outline), r, shape);
@@ -114,7 +128,7 @@ export function createRoundedPart(profile: RoundingProfile, radiusMm: number): T
     shape.holes.push(hole);
   }
   const extrusion = new THREE.ExtrudeGeometry(shape, {
-    depth: profile.thickness - r * 2, steps: 1, bevelEnabled: true,
+    depth: profile.thickness - r * 2, steps: 1, bevelEnabled: r > 0,
     bevelThickness: r, bevelSize: r, bevelOffset: -r, bevelSegments: 6, curveSegments: 3,
   });
   extrusion.deleteAttribute('normal'); extrusion.deleteAttribute('uv');

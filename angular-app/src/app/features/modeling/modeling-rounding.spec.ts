@@ -130,3 +130,12 @@ it('keeps top and bottom border joints square against their panels',()=>{
  ]);
  expect(joints.get('Top_part2')?.[0].plane).toBeCloseTo(.834);expect(joints.get('Buttom_part2')?.[0].plane).toBeCloseTo(.111);
 });
+
+
+it('keeps diagonal front frame mitres square',()=>{
+ const profile=(outline:number[][])=>({axis:'z' as const,origin:.568,thickness:.012,outline,holes:[]});
+ const a=profile([[.02,.834],[.09,.764],[1.41,.764],[1.48,.834]]),b=profile([[.02,.111],[.09,.181],[.09,.764],[.02,.834]]);
+ const bounds=new THREE.Box3(new THREE.Vector3(.02,.111,.568),new THREE.Vector3(1.48,.834,.58));const joints=matingPartJoints([{name:'Front part2',bounds,profile:a},{name:'Front part3',bounds,profile:b}]);
+ const joint=joints.get('Front part2')![0];expect(joint.normal).toBeDefined();const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([.056,.800,.57,.055,.799,.57,.055,.799,.58],3));geometry.computeVertexNormals();keepPartJointsSquare(geometry,[joint],1.5);
+ const point=new THREE.Vector3().fromBufferAttribute(geometry.getAttribute('position'),0);expect(point.dot(new THREE.Vector3(...joint.normal!))).toBeCloseTo(joint.plane,6);
+});

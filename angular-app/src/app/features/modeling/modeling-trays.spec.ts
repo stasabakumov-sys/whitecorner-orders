@@ -6,3 +6,9 @@ it('creates thirteen open trays with confirmed outside dimensions and depth',()=
   const trays=createGastronormTrays(850,null);expect(trays.children.length).toBe(13);expect(trays.children.filter(t=>t.name==='GN 1/6').length).toBe(12);
   for(const [i,tray] of trays.children.entries()){expect(tray.position.x).toBeCloseTo((CHARCUTERIE_CUTOUTS[i].x+CHARCUTERIE_CUTOUTS[i].width/2)/1000);expect(tray.position.y).toBe(.85);}
 });
+
+
+it('rotates selected trays to match a reversed layout',()=>{
+ const normal=createGastronormTrays(850,null,[0,5]),reverse=createGastronormTrays(850,null,[0,5],true);
+ for(let i=0;i<2;i++){expect(reverse.children[i].position.x).toBeCloseTo(1.5-normal.children[i].position.x);expect(reverse.children[i].position.z).toBeCloseTo(.6-normal.children[i].position.z);expect(reverse.children[i].position.y).toBe(.85);}
+});

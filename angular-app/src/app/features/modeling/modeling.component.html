@@ -18,7 +18,6 @@
     </div>
     <div class="settings">
 
-
       <app-modeling-section class="setting-card" sectionId="dimensions" title="Dimensions" [summary]="sectionSummary('dimensions')" iconPath="M4 4h16v16H4zM8 4v3m4-3v3m4-3v3M4 8h3m-3 4h3m-3 4h3">
         <div class="setting-title"><button type="button" class="text-action" (click)="resetDimensions()">Reset</button></div>
         <p class="help">Tabletop height includes {{castorHeight()}} mm castors. @if (hasRoof()) { Roof height: {{overallHeight()}} mm. }</p>
@@ -47,10 +46,15 @@
       </app-modeling-section>
       <app-modeling-section class="setting-card" sectionId="cutouts-trays" title="Cutouts & trays" [summary]="cutoutTraySummary()" iconPath="M3 3h18v18H3zM6 6h5v12H6zM14 6h4v4h-4zM14 14h4v4h-4z">
         <p class="help">Choose cutouts, then add 65 mm stainless steel trays.</p>
+        <label class="shelf-option"><input type="checkbox" [checked]="reverseCutoutLayout()" [disabled]="loading() || roundingBusy()" (change)="setReverseCutoutLayout($any($event.target).checked)"><span>Reverse layout 180°</span></label>
         <div class="tray-actions"><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setCutoutsIncluded(true)">All cutouts</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setCutoutsIncluded(false)">Clear</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy() || !selectedCutouts().length" (click)="setTraysIncluded(true)">Fill trays</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy() || !selectedTrays().length" (click)="setTraysIncluded(false)">Remove trays</button></div>
         <div class="tray-layout" role="group" aria-label="Cutout and tray positions on tabletop">
-          @for(slot of traySlots;track $index){<div class="tray-slot" [class.tray-large]="$index===0"><span>{{slot.type}}@if($index>0){<br>#{{$index}}}</span><label><input type="checkbox" [attr.aria-label]="slot.type+' cutout '+($index||1)" [checked]="selectedCutouts().includes($index)" [disabled]="loading() || roundingBusy()" (change)="setCutoutIncluded($index,$any($event.target).checked)"><span>Cutout</span></label><label><input type="checkbox" [attr.aria-label]="slot.type+' tray '+($index||1)" [checked]="selectedTrays().includes($index)" [disabled]="loading() || roundingBusy() || !selectedCutouts().includes($index)" (change)="setTrayIncluded($index,$any($event.target).checked)"><span>Tray</span></label></div>}
+          @for(index of trayLayoutIndices();track index){<div class="tray-slot" [class.tray-large]="index===0"><span>{{traySlots[index].type}}@if(index>0){<br>#{{index}}}</span><label><input type="checkbox" [attr.aria-label]="traySlots[index].type+' cutout '+(index||1)" [checked]="selectedCutouts().includes(index)" [disabled]="loading() || roundingBusy()" (change)="setCutoutIncluded(index,$any($event.target).checked)"><span>Cutout</span></label><label><input type="checkbox" [attr.aria-label]="traySlots[index].type+' tray '+(index||1)" [checked]="selectedTrays().includes(index)" [disabled]="loading() || roundingBusy() || !selectedCutouts().includes(index)" (change)="setTrayIncluded(index,$any($event.target).checked)"><span>Tray</span></label></div>}
         </div>
+      </app-modeling-section>
+      <app-modeling-section class="setting-card" sectionId="umbrella-hole" title="Umbrella hole" [summary]="umbrellaHole() ? 'Ø'+umbrellaDiameter()+' mm' : 'None'" iconPath="M4 12a8 8 0 0 1 16 0H4ZM12 12v8">
+        <label class="shelf-option"><input type="checkbox" [checked]="umbrellaHole()" [disabled]="loading() || roundingBusy() || umbrellaDiameterMax()<32" (change)="setUmbrellaHole($any($event.target).checked)"><span>Top, shelves & bottom holder</span></label>
+        @if(umbrellaHole()) {<label class="shelf-option"><input type="checkbox" [checked]="showUmbrella()" [disabled]="loading() || roundingBusy()" (change)="setShowUmbrella($any($event.target).checked)"><span>Show umbrella · preview only</span></label><label>Diameter <output>{{umbrellaDiameter()}} mm</output></label><input type="range" aria-label="Umbrella hole diameter" min="32" [max]="umbrellaDiameterMax()" [value]="umbrellaDiameter()" [disabled]="loading() || roundingBusy()" (change)="setUmbrellaDiameter(+$any($event.target).value)"><p class="help">Maximum {{umbrellaDiameterMax()}} mm · clear of tray rims.</p>}
       </app-modeling-section>
       } @else {
       <app-modeling-section class="setting-card" sectionId="front" [title]="isClassic() ? 'Front panel moulding' : 'Front panel'" [summary]="sectionSummary('front')" iconPath="M4 3h16v18H4zM8 7h8v10H8z">
