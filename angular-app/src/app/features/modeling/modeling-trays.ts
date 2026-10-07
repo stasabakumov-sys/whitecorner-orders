@@ -36,7 +36,7 @@ export function gastronormTrayGeometry(widthMm:number,depthMm:number):THREE.Buff
 
 export function createGastronormTrays(heightMm:number,environment:THREE.Texture|null,selected:readonly number[]=CHARCUTERIE_CUTOUTS.map((_,i)=>i)):THREE.Group {
   const group=new THREE.Group();group.name='Top trays';
-  const material=new THREE.MeshPhysicalMaterial({color:'#dce1e5',metalness:.92,roughness:.24,envMap:environment,envMapIntensity:.8,side:THREE.DoubleSide});
+  const material=new THREE.MeshPhysicalMaterial({color:'#bbc1c7',metalness:.92,roughness:.28,envMap:environment,envMapIntensity:.65,side:THREE.DoubleSide});
   for(const index of selected){
     const cutout=CHARCUTERIE_CUTOUTS[index];if(!cutout)continue;
     const tray=new THREE.Mesh(gastronormTrayGeometry(cutout.type==='GN 1/1'?325:176,cutout.type==='GN 1/1'?530:162),material);

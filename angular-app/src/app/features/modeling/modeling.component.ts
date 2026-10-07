@@ -150,10 +150,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const top=this.topFinish()==='body'?'In cart finish / colour':this.topFinish()==='oak'?'Tasmanian oak':this.topFinish()==='mdf'?'RAW MDF':this.isClassic()?'Varnished plywood':'Plywood';
       const fields=[{label:'Dimensions',value:`${this.width()} x ${this.depth()} x ${this.height()} mm`},{label:'Cart body',value:body},{label:'Table top',value:top},
         {label:'Front panel',value:this.isClassic()?(this.moulding()?'With moulding':'Plain'):this.frontStyle()==='shaker'?'Shaker':this.frontStyle()==='moulding'?'With moulding':'Plain'},
-        {label:'Castors',value:'Ø'+(this.isClassic()?'75':'50')+' mm'},
+        {label:'Castors',value:'Ø'+(this.hasRoof()?'50':'75')+' mm'},
         {label:'Shelf',value:this.shelfIncluded()?'Middle':'None'}];
       if(this.frontLogo()){const logo=fitLogo(this.logoPanel(),this.frontLogo()!);fields.push({label:'Front logo',value:`${logo.width.toFixed(1)} x ${logoHeight(logo).toFixed(1)} mm · left ${logo.x.toFixed(1)} · top ${logo.y.toFixed(1)} mm`});}
-      if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Cutouts',value:this.cutoutsIncluded()?'12 × GN 1/6 + 1 × GN 1/1':'None'},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
+      if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Cutouts',value:this.cutoutSummary()},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
       if(this.hasRoof())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
@@ -191,18 +191,26 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   @ViewChild('shelfDrawingDialog') shelfDrawingDialog?: ElementRef<HTMLDialogElement>;
   readonly traySlots = CHARCUTERIE_CUTOUTS;
   readonly selectedTrays = signal<number[]>([]);
+  readonly selectedCutouts = signal<number[]>([]);
   readonly traysIncluded = signal(false);
   private trays?:THREE.Group;
   private trayEnvironment?:THREE.WebGLRenderTarget;
-  setTraysIncluded(value:boolean):void { this.selectedTrays.set(value?this.traySlots.map((_,i)=>i):[]);this.traysIncluded.set(value);if(value)this.cutoutsIncluded.set(true);this.bindAssembly(); }
+  setTraysIncluded(value:boolean):void { const selected=value?[...this.selectedCutouts()]:[];this.selectedTrays.set(selected);this.traysIncluded.set(selected.length>0);this.bindAssembly(); }
   setTrayIncluded(index:number,value:boolean):void {
-    if(!Number.isInteger(index)||index<0||index>=this.traySlots.length)return;
+    if(!Number.isInteger(index)||index<0||index>=this.traySlots.length||!this.selectedCutouts().includes(index))return;
     const next=this.selectedTrays().filter(i=>i!==index);if(value)next.push(index);next.sort((a,b)=>a-b);
     this.selectedTrays.set(next);this.traysIncluded.set(next.length>0);if(next.length)this.cutoutsIncluded.set(true);this.bindAssembly();
   }
   traySummary():string {const selected=this.selectedTrays();if(!selected.length)return 'None';return (selected.includes(0)?'1 × GN 1/1':'')+(selected.includes(0)&&selected.length>1?' · ':'')+(selected.filter(i=>i>0).length?selected.filter(i=>i>0).length+' × GN 1/6':'');}
   readonly cutoutsIncluded = signal(false);
-  setCutoutsIncluded(value:boolean):void { this.cutoutsIncluded.set(value);if(!value){this.traysIncluded.set(false);this.selectedTrays.set([]);}this.bindAssembly(); }
+  setCutoutsIncluded(value:boolean):void {this.selectedCutouts.set(value?this.traySlots.map((_,i)=>i):[]);this.cutoutsIncluded.set(value);if(!value){this.traysIncluded.set(false);this.selectedTrays.set([]);}this.bindAssembly();}
+  setCutoutIncluded(index:number,value:boolean):void {
+    if(!Number.isInteger(index)||index<0||index>=this.traySlots.length)return;
+    const next=this.selectedCutouts().filter(i=>i!==index);if(value)next.push(index);next.sort((a,b)=>a-b);this.selectedCutouts.set(next);this.cutoutsIncluded.set(next.length>0);
+    this.selectedTrays.update(trays=>trays.filter(i=>next.includes(i)));this.traysIncluded.set(this.selectedTrays().length>0);this.bindAssembly();
+  }
+  cutoutSummary():string {const selected=this.selectedCutouts();return selected.length?(selected.includes(0)?'1 × GN 1/1':'')+(selected.includes(0)&&selected.length>1?' · ':'')+(selected.filter(i=>i>0).length?selected.filter(i=>i>0).length+' × GN 1/6':''):'None';}
+  cutoutTraySummary():string {return this.selectedCutouts().length?this.selectedCutouts().length+' cutouts · '+this.selectedTrays().length+' trays':'None';}
   readonly iceShelfIncluded = signal(true);
   readonly sideShelvesIncluded = signal(true);
   setIceShelfIncluded(value:boolean):void { this.iceShelfIncluded.set(value); this.bindAssembly(); }
@@ -493,7 +501,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.roundingEditing.set(false);
     this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
     this.shelfIncluded.set(true);
-    this.iceShelfIncluded.set(true);this.sideShelvesIncluded.set(true);this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);
+    this.iceShelfIncluded.set(true);this.sideShelvesIncluded.set(true);this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);this.selectedCutouts.set([]);
     this.roofClosed.set(false);
     this.glassRackCount.set(0);
     this.showGlasses.set(false);
@@ -544,7 +552,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.model = new THREE.Group();
     this.body = new THREE.Group();
     this.casters.clear();
-    if (!this.isClassic()) { if(this.hasRoof())fitFurnitureBolts(gltf.scene); shortenCastorBrakes(gltf.scene); turnCastorWheels(gltf.scene); }
+    if (this.hasRoof()) { fitFurnitureBolts(gltf.scene); shortenCastorBrakes(gltf.scene); turnCastorWheels(gltf.scene); }
     const nodes = [...gltf.scene.children];
     for (const node of nodes) {
       const key = casterGroupKey(node.name);
@@ -742,7 +750,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       // CAD profiles and positions share model coordinates. Read the original
       // positions so rotation, resized previews and assembly offsets do not
       // alter which roof and Shaker faces meet.
-      const joints = matingPartJoints(this.sourceParts.filter(part => !/cutouts/i.test(part.name)).filter(part => !/^Front[ _]part2$/i.test(part.name)
+      const joints = matingPartJoints(this.sourceParts.filter(part => !/cutout/i.test(part.name)).filter(part => !/^Front[ _]part2$/i.test(part.name)
         || (!this.isClassic() && this.frontStyle() === 'shaker')).map(part => {
         const bounds = new THREE.Box3();
         part.traverse(node => {
@@ -753,7 +761,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const nodes = this.sourceParts.map(part => {
         let supported = false;
         part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) supported = true; });
-        if (!raw || !supported || /^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts)?$/i.test(part.name)) {
+        if (!raw || !supported || /^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts|[ _]cutout[ _]plug[ _]\d+)?$/i.test(part.name)) {
           const copy = part.clone(true);
           copy.traverse(node => {
             if (!(node instanceof THREE.Mesh)) return;
@@ -931,6 +939,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (!this.model || !this.body) return;
     if(this.isSideShelfCart())this.body.traverse(node=>{
       const name=node.userData['plywoodPart']||node.name;
+      const plug=/^Top[ _]part1[ _]cutout[ _]plug[ _](\d+)$/i.exec(name);
+      if(plug){const visible=this.cutoutsIncluded()&&!this.selectedCutouts().includes(+plug[1]);node.userData['assemblyHidden']=!visible;node.visible=visible&&(this.assembly?.state.visible.top??true);}
       const key=/^Ice[ _]shelf/i.test(name)?'ice-shelf':/^Side[ _]shelf/i.test(name)?'side-shelves':null;
       if(/^Top[ _]part1(?:[ _]cutouts)?$/i.test(name)){
         const visible=/cutouts/i.test(name)===this.cutoutsIncluded();node.userData['assemblyHidden']=!visible;node.visible=visible&&(this.assembly?.state.visible.top??true);
@@ -1098,8 +1108,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       for (const material of materials) {
         if (!(material instanceof THREE.MeshStandardMaterial)) continue;
         const finish = isTopPanelName(partName) ? this.topFinish() : 'body';
-        const pine = /pine[ _]trim$/i.test(material.name) || (!this.isClassic() && finish === 'plywood' && /^Top[ _]2$/i.test(partName));
-        const edge = /plywood[ _]edge$/i.test(material.name);
+        const pine = /pine[ _]trim$/i.test(material.name) && !(isTopPanelName(partName) && finish === 'plywood');
+        const edge = /plywood[ _]edge$/i.test(material.name) || (this.isClassic() && isTopPanelName(partName) && finish === 'plywood' && /pine[ _]trim$/i.test(material.name));
         const plywood = (pine ? this.modelPineTexture : edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
         const map = finish === 'oak' ? this.finishTextures.get('tasmanian-oak.png') || null
           : finish === 'mdf' ? null : !this.isClassic() ? finish === 'plywood' ? this.finishTextures.get(pine ? 'pine.jpg' : edge ? 'plywood-edge.jpg' : 'plywood-face.jpg') || null : null
