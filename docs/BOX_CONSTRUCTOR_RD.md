@@ -25,6 +25,28 @@ not emitted, so no misleading travel-speed field is offered.
 
 ## Owner settings (2026-10-03)
 
+### Shared Laser setup (2026-10-07)
+
+The owner's corrected new defaults are Dot time **0.2 s**, Dot interval
+**4 mm** (start to start), and Dot length **2 mm**. Cut and Dot each retain
+120 mm/s, minimum power 70% and maximum 80% until edited by a manager.
+**Manage cutting → Laser setup** stores these shared defaults in the Hub
+`wc_laser_setup` row, protected by active membership for reads and a manager-only
+save RPC with revision checking. A retry of an identical successful save recovers
+its receipt. Failed or stale saves retain the draft for retry or Cancel/reload.
+
+The shared constructor loads these settings for Card and Small boxes, including
+the packaging dialog. A failed load blocks new RD generation and provides Retry;
+existing generated files and dimensions remain intact. Laser settings are edited
+in one place. Existing saved RD files and cutting tasks are not rewritten:
+generate and save replacement files explicitly to apply new settings to them.
+Moving dashes now use 2 mm on / 2 mm off. Dot time is retained as a setup value;
+the moving-dash exporter does not emit a stationary dwell. This preserves the
+existing RDWorks semantics described below.
+
+Migration: `20261007000300_laser_setup.sql`. Apply it before publishing the UI.
+The earlier settings below are historical.
+
 - Red Laser Cut: speed 120 mm/s; minimum power 70%, maximum 80%.
 - Blue Laser Dot: speed 120 mm/s; minimum power 70%, maximum 80%; dot time
   0.1 s, dot interval 2 mm, dot length 1 mm.
