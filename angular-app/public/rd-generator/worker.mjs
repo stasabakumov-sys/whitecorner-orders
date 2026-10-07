@@ -18,7 +18,7 @@ async function runtime() {
 self.onmessage = async ({data}) => {
   try {
     const py = await runtime();
-    self.postMessage({stage: data.jobs.length === 1 ? 'Creating Small box RD file…' : 'Creating bottom and lid RD files…'});
+    self.postMessage({stage: data.jobs.length === 1 ? 'Creating Small box RD file…' : data.jobs.length === 4 ? 'Creating four Backdrop box RD files…' : 'Creating bottom and lid RD files…'});
     py.globals.set('request_json', JSON.stringify(data));
     const encoded = await py.runPythonAsync('generate_json(request_json)');
     const files = JSON.parse(encoded).map(file => ({filename: file.filename,

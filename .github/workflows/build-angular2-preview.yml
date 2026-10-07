@@ -134,6 +134,8 @@ jobs:
           npm run build -- --base-href /whitecorner-orders/angular2/
       - name: Test delivery estimate worker with mocks
         run: node --test .github/scripts/delivery-review-worker.test.cjs
+      - name: Test Constructor RD adapter
+        run: python3 scripts/rd-generator/test-adapter.py
       - name: Test packing station with a local mock controller
         run: node --test scripts/packing-station/ruida-udp.test.mjs scripts/packing-station/transfer-task.test.mjs
       - name: Test Wix history import with mocks

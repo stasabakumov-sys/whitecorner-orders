@@ -1,4 +1,5 @@
 import {BoxNet, Point, boxNet} from './box-constructor-geometry';
+import {BackdropBox} from './backdrop-box-geometry';
 
 export interface RdLayerSettings {speed: number | null; minPower: number | null; maxPower: number | null}
 export interface RdSettings {
@@ -37,6 +38,12 @@ export function prepareRdRequest(bottom: BoxNet, settings: RdSettings): RdReques
 
 export function prepareSmallRdRequest(net: BoxNet, settings: RdSettings, tuck = 40): RdRequest {
   return prepareNetJobs([net], settings, ['S'], tuck);
+}
+
+export function prepareBackdropRdRequest(box: BackdropBox, settings: RdSettings): RdRequest {
+  // Four different parts, one copy each. Include the split in the short name
+  // so changing it cannot reuse a different cutting file under the same name.
+  return prepareNetJobs([...box.bottom, ...box.lid], settings, ['A', 'B', 'C', 'D'], box.bottom[0].panelLength);
 }
 
 function shortRdFilename(kind: string, net: BoxNet, settings: RdSettings, tuck?: number): string {
