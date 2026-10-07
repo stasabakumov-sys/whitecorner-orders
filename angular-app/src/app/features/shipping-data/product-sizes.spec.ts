@@ -18,6 +18,12 @@ describe('Backdrop shared box library',()=>{
   expect(manualBackdropSizeKey('100 × 190')).toBe('1900x1000');
   expect(manualBackdropSizeKey('1900mm x 1000mm')).toBe('1900x1000');
  });
+ it('reads named Wix sizes only when they contain one explicit metric pair',()=>{
+  expect(backdropSizeKey('Small (150cm x 90cm)')).toBe('1500x900');
+  expect(backdropSizeKey('Medium (160cm x 90cm)')).toBe('1600x900');
+  expect(backdropSizeKey('Large (180cm x 90cm)')).toBe('1800x900');
+  for(const value of ['Small (150 x 90)','Small (150cm x 90cm x 3cm)','Small (150cm x 90cm) / Large (180cm x 90cm)','150cm x 90cm (180cm x 90cm)'])expect(backdropSizeKey(value)).toBe('');
+ });
  it('uses product options and not box measurements for size',()=>{
   expect(packagingSizes({template_item:{wix_options:{Size:'190cm x 95cm'}},packages:[{length_mm:970,width_mm:970,contents:[]}]},'Backdrop')).toEqual(['190cm x 95cm']);
  });

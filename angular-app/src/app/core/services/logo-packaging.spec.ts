@@ -38,6 +38,8 @@ describe('Backdrop shared dimension key',()=>{
  it('uses exact metric size and folding while ignoring colour',()=>{
   expect(backdropPackagingKey({id:'i',wix_options:{Size:'95cm × 190cm',Foldable:'YES',Colour:'Raw'}})).toBe('1900x950:foldable');
   expect(backdropPackagingKey({id:'i',wix_options:{Dimensions:'2000 x 1000 mm',Foldable:'No'}})).toBe('2000x1000:nonfoldable');
+  expect(backdropPackagingKey({id:'i',wix_options:{Size:'Small (150cm x 90cm)',Foldable:'YES'}})).toBe('1500x900:foldable');
+  expect(backdropPackagingKey({id:'i',wix_options:{Size:'Large (180cm x 90cm)',Foldable:'NO'}})).toBe('1800x900:nonfoldable');
  });
  it('does not guess without a unit or folding option',()=>{
   expect(backdropPackagingKey({id:'i',wix_options:{Size:'200 x 100',Foldable:'YES'}})).toBe('');

@@ -215,7 +215,9 @@ export function backdropCostProfiles(productId:string,productName:string,sizes:s
               <div class="missing-packing-actions"><button type="button" class="square" title="Save dimensions" aria-label="Save dimensions" (click)="saveBackdropDimensions(key)" [disabled]="!!dimensionSaving"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button><button type="button" (click)="resetDimensionDraft(key)" [disabled]="!!dimensionSaving">Cancel</button></div>
               @if(dimensionFeedback[key]){<p [attr.role]="dimensionFeedback[key].ok?'status':'alert'">{{dimensionFeedback[key].text}}</p>}
              </section>
-            }}
+            }
+             @if(!visiblePackingProfiles(p).length&&!missingBackdropPacking(p).length){<p class="error" role="alert">Packaging needs an exact metric size. Select a size such as 150cm x 90cm or Small (150cm x 90cm). Update the product size if its dimensions or units are missing.</p>}
+            }
             @if(!p.saved_only){
             @if(isCart(p)){
              <p class="small cart-packaging-note">Quote uses the reusable Main packages below. Select one or several Add-ons in the far-right column to create an exact, manually entered Main + Add-ons replacement variant.</p>
@@ -367,7 +369,8 @@ export class ShippingDataComponent implements OnInit {
   cartSizes(p:ShippingProduct){return cartSizeRows(this.productSizes(p));}
   activeProductSize(p:ShippingProduct){if(this.isCart(p))return this.cartSizeLabel(p);const sizes=this.productSizes(p);return sizes.find(size=>'size:'+(backdropSizeKey(size)||size.trim().toLowerCase())===this.selectedPackingSize)||sizes[0]||'';}
   selectProductSize(p:ShippingProduct,size:string){if(!this.productSizes(p).includes(size))return;if(this.isCart(p))this.selectCartSize(cartSizeKey(size));else this.selectPackingSize('size:'+(backdropSizeKey(size)||size.trim().toLowerCase()));}
-  productDrawingKey(p:ShippingProduct){const size=this.activeProductSize(p);return size?'product-size:'+(backdropSizeKey(size)?'metric:'+backdropSizeKey(size):'text:'+size.trim().toLowerCase()):'';}
+  // Product drawing IDs predate named-size packaging support; retain their text keys.
+  productDrawingKey(p:ShippingProduct){const size=this.activeProductSize(p),metric=/^\d/.test(size.trim())?backdropSizeKey(size):'';return size?'product-size:'+(metric?'metric:'+metric:'text:'+size.trim().toLowerCase()):'';}
   activeCartSize(p:ShippingProduct){const sizes=this.cartSizes(p);return sizes.some(size=>size.key===this.selectedCartSize)?this.selectedCartSize:sizes[0]?.key||'';}
   selectCartSize(size:string){this.selectedCartSize=size;this.mainAddOns.set([]);}
   cartSizeLabel(p:ShippingProduct){return this.cartSizes(p).find(size=>size.key===this.activeCartSize(p))?.label||'';}
