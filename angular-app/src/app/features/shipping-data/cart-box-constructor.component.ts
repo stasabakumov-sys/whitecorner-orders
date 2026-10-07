@@ -4,7 +4,7 @@ import {DialogModule} from 'primeng/dialog';
 import {HubMembersService} from '../../core/services/hub-members.service';
 import {BoxConstructorComponent} from '../packing/box-constructor.component';
 import {exportBoxSvg} from '../packing/box-constructor-geometry';
-import {CartConstructorFilesService,CartConstructorSave,ProfileConstructorSave,BackdropConstructorSave,CartConstructorState,CartBoxType,cartConstructorDimensions} from './cart-constructor-files.service';
+import {CartConstructorFilesService,CartConstructorSave,ProfileConstructorSave,BackdropConstructorSave,CartConstructorState,CartBoxType,cartConstructorDimensions,constructorFileCount,constructorCopies,validConstructorFileCount} from './cart-constructor-files.service';
 import {qualifiedDrawingKey,sizeKeyLabel} from './product-sizes';
 
 @Component({selector:'app-cart-box-constructor',standalone:true,imports:[FormsModule,DialogModule,BoxConstructorComponent],template:`
@@ -15,7 +15,7 @@ import {qualifiedDrawingKey,sizeKeyLabel} from './product-sizes';
  @if(sharedKey){<p><strong>{{sizeLabel(sharedKey)}}</strong> · Shared by all matching Backdrops, Painted and Raw. The other folding option uses a separate box and files.</p>}
  @if(open){
  <p>Packaging: {{snapshot.length_mm}} × {{snapshot.width_mm}} × {{snapshot.height_mm}} mm. {{boxType==='small'?'Small box: L/W − 5 mm.':'Bottom: L/W − 15 mm. Lid: L/W − 5 mm.'}} Height stays unchanged.</p>
- <label class="box-type" for="packing-constructor-type">Box type<select id="packing-constructor-type" [(ngModel)]="boxType" [disabled]="busy||!!pending||loading||editor?.rdBusy" (ngModelChange)="changeType()"><option value="card">Card box</option><option value="small">Small box</option></select></label>
+ <label class="box-type" for="packing-constructor-type">Box type<select id="packing-constructor-type" [(ngModel)]="boxType" [disabled]="busy||!!pending||loading||editor?.rdBusy" (ngModelChange)="changeType()"><option value="card">Card box</option><option value="small">Small box</option><option value="backdrop">Backdrop box</option></select></label>
  @if(progress){<p role="status">{{progress}}</p>}
  @if(error){<p class="error" role="alert">{{error}} @if(loadFailed){<button type="button" (click)="load()">Retry load</button>}</p>}
  @if(success){<p role="status">{{success}}</p>}
@@ -26,7 +26,7 @@ import {qualifiedDrawingKey,sizeKeyLabel} from './product-sizes';
  @if(state.files.length===fileCount){
  <p>Saving replaces the selected RD files and updates unfinished packing tasks. Each file will have {{copies}} {{copies===1?'copy':'copies'}}.</p>
  <div class="replacements">@for(label of fileLabels;track label;let i=$index){<label>{{label}} RD to replace<select [(ngModel)]="replacementIds[i]" [disabled]="busy||!!pending"><option value="">Choose existing file</option>@for(file of state.files;track file.id){<option [value]="file.id">{{file.filename}}</option>}</select></label>}</div>
- }@else if(state.files.length>2){<p class="error" role="alert">This box has {{state.files.length}} RD files. Review its RD set first; Constructor supports one or two saved files.</p>}
+ }@else if(!validFileCount(state.files.length)){<p class="error" role="alert">This box has {{state.files.length}} RD files. Review its RD set first; Constructor supports one, two or four saved files.</p>}
  @else if(state.files.length>0){<p>Saving changes the RD set from {{state.files.length}} to {{fileCount}} files. Any active cutting task using the old files must be completed or cancelled first. @if(profileSignature){Remove the existing files in the RD editor before saving this box type.}</p>}
  <div class="save"><button type="button" class="icon" [attr.aria-label]="saveLabel" [title]="saveLabel" [disabled]="busy||!canSave" (click)="save()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button><span>{{pending?'Retry saving the same files to packaging':saveLabel+' · '+copies+' '+(copies===1?'copy':'copies')+' each'}}</span></div>
  @if(pending&&!busy){<button type="button" (click)="leavePending()">Close and check saved files later</button>}
@@ -34,7 +34,7 @@ import {qualifiedDrawingKey,sizeKeyLabel} from './product-sizes';
  }
  </p-dialog>
  <p-dialog [(visible)]="confirmOpen" header="Save packaging files" [modal]="true" appendTo="body" [draggable]="false" [closable]="!busy" [closeOnEscape]="!busy" [style]="{width:'480px',maxWidth:'calc(100vw - 24px)'}">
- <p><strong>{{snapshot?.package_name}} · {{boxType==='small'?'Small box':'Card box'}}</strong></p>
+ <p><strong>{{snapshot?.package_name}} · {{typeLabel}}</strong></p>
  <p>Save one SVG and {{fileCount}} RD {{fileCount===1?'file':'files'}} to this packaging box, {{copies}} {{copies===1?'copy':'copies'}} each. Existing files will be replaced. Matching unfinished cutting tasks are updated when the file count stays the same.</p>
  <div class="save"><button type="button" [disabled]="busy" (click)="confirmOpen=false">Cancel</button><button type="button" class="icon" [attr.aria-label]="saveLabel" [title]="saveLabel" [disabled]="busy" (click)="confirmSave()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button></div>
  </p-dialog>
@@ -53,19 +53,21 @@ export class CartBoxConstructorComponent {
   await this.load();
  }
  async load(){const version=++this.loadVersion;this.loading=true;this.loadFailed=false;this.error='';this.progress='Loading saved packaging files…';
-  try{const state=this.sharedKey?await this.files.loadBackdrop(this.sharedKey):this.profileSignature?await this.files.loadProfile(this.profileSignature,this.profileIndex):await this.files.load(this.snapshot.id);if(version!==this.loadVersion)return;this.state=state;const ids=this.state.drawing?.constructor_data?.rd_ids||[];this.boxType=state.drawing?.constructor_data?.box_type==='small'||(this.sharedKey||this.profileSignature)&&state.files.length===1?'small':'card';this.changeType();this.tuckSeed=state.drawing?.constructor_data?.tuck??this.tuckSeed;this.replacementIds=this.fileLabels.map((_,i)=>this.state.files.some(file=>file.id===ids[i])?ids[i]:(this.sharedKey||this.profileSignature)&&this.state.files.length===this.fileCount?this.state.files[i]?.id||'':'');}
+  try{const state=this.sharedKey?await this.files.loadBackdrop(this.sharedKey):this.profileSignature?await this.files.loadProfile(this.profileSignature,this.profileIndex):await this.files.load(this.snapshot.id);if(version!==this.loadVersion)return;this.state=state;const ids=this.state.drawing?.constructor_data?.rd_ids||[];const savedType=state.drawing?.constructor_data?.box_type;this.boxType=['card','small','backdrop'].includes(savedType)?savedType:(this.sharedKey||this.profileSignature)&&state.files.length===4?'backdrop':(this.sharedKey||this.profileSignature)&&state.files.length===1?'small':'card';this.changeType();this.tuckSeed=state.drawing?.constructor_data?.tuck??this.tuckSeed;this.replacementIds=this.fileLabels.map((_,i)=>this.state.files.some(file=>file.id===ids[i])?ids[i]:(this.sharedKey||this.profileSignature)&&this.state.files.length===this.fileCount?this.state.files[i]?.id||'':'');}
   catch(error){if(version===this.loadVersion){this.loadFailed=true;this.error=`Could not load packaging files. ${this.message(error)} Retry load.`;}}
   finally{if(version===this.loadVersion){this.loading=false;this.progress='';this.cdr.markForCheck();}}
  }
- get fileCount(){return this.boxType==='small'?1:2;}
- get copies(){return this.boxType==='small'?1:2;}
- get fileLabels(){return this.boxType==='small'?['Box']:['Bottom','Lid'];}
- get saveLabel(){return `Save SVG and ${this.fileCount===1?'one RD file':'two RD files'} to packaging`;}
+ readonly validFileCount=validConstructorFileCount;
+ get typeLabel(){return this.boxType==='backdrop'?'Backdrop box':this.boxType==='small'?'Small box':'Card box';}
+ get fileCount(){return constructorFileCount(this.boxType);}
+ get copies(){return constructorCopies(this.boxType);}
+ get fileLabels(){return this.boxType==='backdrop'?['Bottom main','Bottom short','Lid main','Lid short']:this.boxType==='small'?['Box']:['Bottom','Lid'];}
+ get saveLabel(){return `Save SVG and ${this.fileCount===1?'one RD file':this.fileCount===4?'four RD files':'two RD files'} to packaging`;}
  changeType(){this.error='';this.success='';this.confirmOpen=false;this.replacementIds=this.fileLabels.map(()=> '');
   try{this.seed=cartConstructorDimensions(this.snapshot,this.boxType);this.tuckSeed=Math.min(40,this.seed.depth,(this.seed.length-1)/2);}
   catch(error){this.seed=null;this.error=this.message(error);}this.cdr.markForCheck();
  }
- get canSave(){return !!this.pending||!!this.editor?.drawing&&this.editor.rdFiles!==this.savedFiles&&this.editor.rdFiles.length===this.fileCount&&!this.editor.rdBusy&&this.state.files.length<=2&&(!this.profileSignature||!this.state.files.length||this.state.files.length===this.fileCount)&&(this.state.files.length!==this.fileCount||new Set(this.replacementIds).size===this.fileCount&&this.replacementIds.every(Boolean));}
+ get canSave(){return !!this.pending||!!this.editor?.drawing&&this.editor.rdFiles!==this.savedFiles&&this.editor.rdFiles.length===this.fileCount&&!this.editor.rdBusy&&validConstructorFileCount(this.state.files.length)&&(!this.profileSignature||!this.state.files.length||this.state.files.length===this.fileCount)&&(this.state.files.length!==this.fileCount||new Set(this.replacementIds).size===this.fileCount&&this.replacementIds.every(Boolean));}
  save(){if(!this.busy&&this.canSave)this.confirmOpen=true;}
  async confirmSave(){if(this.busy||!this.canSave)return;this.busy=true;this.confirmOpen=false;this.error='';this.success='';
   try{

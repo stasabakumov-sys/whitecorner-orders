@@ -639,19 +639,20 @@ try{
  {
  await db.exec('reset role');
  await db.exec(await readFile('supabase/migrations/20261007000400_backdrop_constructor_files.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261007000500_packaging_backdrop_box.sql','utf8'));
  await db.query("select set_config('test.actor',$1,false)",[managerA]);await db.exec('set role authenticated');
  const foldKey='3000x1500:foldable',flatKey='3000x1500:nonfoldable';
  await db.query('select wc_save_backdrop_packaging_dimensions($1,$2,1110,810,60,null)',[foldKey,'Folded box']);
  await db.query('select wc_save_backdrop_packaging_dimensions($1,$2,2110,810,60,null)',[flatKey,'Flat box']);
  const constructorSql='select wc_save_backdrop_constructor_files($1,$2,$3,$4,$5,$6) result';
  async function backdropRequest(key,length,name,previous=null,type='card'){
-  const id=randomUUID(),svgPath=`${managerA}/${id}/source.svg`,count=type==='card'?2:1;
+  const id=randomUUID(),svgPath=`${managerA}/${id}/source.svg`,count=type==='backdrop'?4:type==='card'?2:1;
   const files=Array.from({length:count},(_,i)=>({id:previous?.rd_files?.length===count?previous.rd_files[i].id:null,expected:previous?.rd_files?.length===count?previous.rd_files[i].revision:null,path:`${managerA}/${id}/${i}.rd`,filename:`${type==='small'?'SMALL':'FOLD'}${i+1}.rd`,bytes:120}));
   await db.exec('reset role');
   await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-drawings',$1,'{\"size\":20}')",[svgPath]);
   for(const file of files)await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-rd-files',$1,'{\"size\":120}')",[file.path]);
   await db.exec('set role authenticated');
-  const settings=type==='small'?{box_type:type,box:{length:length-5,width:805,depth:60},tuck:40}:{box_type:type,bottom:{length:length-15,width:795,depth:60},lid:{length:length-5,width:805,depth:60}};
+  const settings=type==='backdrop'?{box_type:type,bottom:{length:length-15,width:795,depth:60},lid:{length:length-5,width:805,depth:60},rim:60,main_panel:Math.min(930,Math.max((length-15)/2,length-144,length-5-930))}:type==='small'?{box_type:type,box:{length:length-5,width:805,depth:60},tuck:40}:{box_type:type,bottom:{length:length-15,width:795,depth:60},lid:{length:length-5,width:805,depth:60}};
   if(previous&&previous.rd_files.length!==count)settings.replace_files=previous.rd_files.map(file=>({id:file.id,expected:file.revision}));
   return [id,key,{package_name:name,length_mm:length,width_mm:810,height_mm:60},settings,{path:svgPath,filename:'source.svg',bytes:20,expected:previous?.drawing.revision??null},files];
  }
@@ -690,6 +691,33 @@ try{
  await db.query('select wc_cancel_packing_task($1)',[sharedCut.task.id]);
  const smallSaved=(await db.query(constructorSql,smallArgs)).rows[0].result;
  assert.equal(smallSaved.rd_files.length,1);assert.equal(smallSaved.rd_files[0].copies,1);
+ // One -> four is atomic; failed last upload preserves the single saved file.
+ const fourArgs=await backdropRequest(foldKey,1110,'Folded box',smallSaved,'backdrop');
+ const fourthPath=fourArgs[5][3].path;fourArgs[5][3].path=`${managerA}/missing-fourth`;
+ await assert.rejects(db.query(constructorSql,fourArgs),/upload|Upload|missing|storage/i);
+ assert.equal((await db.query('select count(*)::int n from wc_box_rd_files where backdrop_size_key=$1',[foldKey])).rows[0].n,1);
+ fourArgs[5][3].path=fourthPath;
+ const badGeometry=structuredClone(fourArgs);badGeometry[3].main_panel+=1;
+ await assert.rejects(db.query(constructorSql,badGeometry),/canonical Backdrop/);
+ const duplicatePart=structuredClone(fourArgs);duplicatePart[5][3].filename=duplicatePart[5][0].filename;
+ await assert.rejects(db.query(constructorSql,duplicatePart),/separate RD/);
+ const fourSaved=(await db.query(constructorSql,fourArgs)).rows[0].result;
+ assert.deepEqual(fourSaved.rd_files.map(file=>file.copies),[1,1,1,1]);
+ assert.equal(fourSaved.drawing.constructor_data.box_type,'backdrop');
+ assert.deepEqual((await db.query(constructorSql,fourArgs)).rows[0].result,fourSaved);
+ const fourTask=(await sendBox(fourSaved.rd_files.map(file=>({id:file.id,revision:file.revision,copies:1})))).rows[0].result;
+ const backToCard=await backdropRequest(foldKey,1110,'Folded box',fourSaved);
+ await assert.rejects(db.query(constructorSql,backToCard),/active|Active|task/i);
+ const fourReplace=await backdropRequest(foldKey,1110,'Folded box',fourSaved,'backdrop');
+ const fourUpdated=(await db.query(constructorSql,fourReplace)).rows[0].result;
+ assert.deepEqual(fourUpdated.rd_files.map(file=>file.id),fourSaved.rd_files.map(file=>file.id));
+ const updatedTask=(await db.query('select files from wc_packing_tasks where id=$1',[fourTask.task.id])).rows[0];
+ assert.ok(updatedTask.files.every(file=>fourUpdated.rd_files.some(rd=>rd.object_path===file.object_path)));
+ await db.query('select wc_cancel_packing_task($1)',[fourTask.task.id]);
+ const latestBack=await backdropRequest(foldKey,1110,'Folded box',fourUpdated);
+ const backSaved=(await db.query(constructorSql,latestBack)).rows[0].result;
+ assert.equal(backSaved.rd_files.length,2);
+
  assert.equal((await db.query('select count(*)::int n from wc_box_rd_files where backdrop_size_key=$1',[flatKey])).rows[0].n,2);
  await db.query("select set_config('test.actor',$1,false)",[worker]);
  assert.equal((await db.query('select count(*)::int n from wc_backdrop_box_svg_drawings')).rows[0].n,2);
@@ -701,5 +729,27 @@ try{
  await assert.rejects(db.query('select * from wc_backdrop_box_svg_drawings'),/permission denied/);
  await assert.rejects(db.query(constructorSql,foldArgs),/permission denied/);
  }
+ // Cart/profile reuse of the same four-piece generator keeps its existing owner.
+ await db.exec('reset role');await db.query("select set_config('test.actor',$1,false)",[managerA]);
+ const backdropCart=randomUUID();
+ await db.query("insert into wc_shipping_packages(id,shipping_product_id,source_type,active,size_key,package_name,length_mm,width_mm,height_mm,package_no) values($1,$2,'Base',true,'backdrop-type','Large box',1850,1100,80,1)",[backdropCart,cart]);
+ const requestId=randomUUID(),source=`${managerA}/${requestId}/source.svg`;
+ const fourFiles=Array.from({length:4},(_,i)=>({id:null,expected:null,path:`${managerA}/${requestId}/${i}.rd`,filename:`PART${i}.rd`,bytes:120}));
+ await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-drawings',$1,'{\"size\":20}')",[source]);
+ for(const file of fourFiles)await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-rd-files',$1,'{\"size\":120}')",[file.path]);
+ await db.exec('set role authenticated');
+ const largeBox={package_name:'Large box',length_mm:1850,width_mm:1100,height_mm:80};
+ const largeGeometry={box_type:'backdrop',bottom:{length:1835,width:1085,depth:80},lid:{length:1845,width:1095,depth:80},rim:37.5,main_panel:952.5};
+ const largeArgs=[requestId,backdropCart,largeBox,largeGeometry,{path:source,filename:'source.svg',bytes:20,expected:null},fourFiles];
+ const largeSaved=(await db.query(constructorSql,largeArgs)).rows[0].result;
+ assert.deepEqual(largeSaved.rd_files.map(file=>file.copies),[1,1,1,1]);
+ assert.ok(largeSaved.rd_files.every(file=>file.cart_base_package_id===backdropCart));
+ assert.deepEqual((await db.query(constructorSql,largeArgs)).rows[0].result,largeSaved);
+ await db.exec('reset role');
+ for(const dimensions of [{length_mm:1911,width_mm:1100,height_mm:80},{length_mm:930,width_mm:1175,height_mm:80}]){
+  await assert.rejects(db.query('select wc_backdrop_constructor_geometry($1)',[dimensions]),/laser field|cardboard/);
+ }
+ await db.exec('set role anon');
+ await assert.rejects(db.query('select wc_backdrop_constructor_geometry($1)',[largeBox]),/permission denied/);
  console.log('Packing checks passed, including shared Backdrop Constructor, atomic retries, folding isolation, cutting guards and RLS.');
 }finally{await db.close();}
