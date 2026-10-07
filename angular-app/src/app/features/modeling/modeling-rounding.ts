@@ -24,7 +24,9 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3 }[]):
     // Rounding the two mating faces independently opens a visible light slit.
     const bodyPanel = (name: string) => /^Front[ _]part[1-4]\)?$/i.test(name.trim()) || /^(Left|Right)[ _]side[ _]?[12]$/i.test(name.trim());
     const body = bodyPanel(a.name) && bodyPanel(b.name);
-    if (!roof && !shaker && !body) continue;
+    const borderFamily = (name:string) => /^(Top|Buttom|Bottom)[ _](?:part)?\d+$/i.exec(name)?.[1].toLowerCase().replace('buttom','bottom');
+    const border=borderFamily(a.name)&&borderFamily(a.name)===borderFamily(b.name);
+    if (!roof && !shaker && !body && !border) continue;
     for (const axis of axes) {
       const others = axes.filter(value => value !== axis);
       if (!others.every(value => Math.min(a.bounds.max[value], b.bounds.max[value]) - Math.max(a.bounds.min[value], b.bounds.min[value]) > 1e-5)) continue;

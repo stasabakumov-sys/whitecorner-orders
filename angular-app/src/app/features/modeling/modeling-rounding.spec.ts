@@ -120,3 +120,13 @@ it('closes MDF front-to-side mating faces for Shaker and 16 mm Plain without mov
   });
  }
 });
+
+it('keeps top and bottom border joints square against their panels',()=>{
+ const joints=matingPartJoints([
+  {name:'Top_part1',bounds:new THREE.Box3(new THREE.Vector3(0,.834,0),new THREE.Vector3(1.5,.85,.6))},
+  {name:'Top_part2',bounds:new THREE.Box3(new THREE.Vector3(0,.814,0),new THREE.Vector3(1.5,.834,.02))},
+  {name:'Buttom_part1',bounds:new THREE.Box3(new THREE.Vector3(0,.095,0),new THREE.Vector3(1.5,.111,.6))},
+  {name:'Buttom_part2',bounds:new THREE.Box3(new THREE.Vector3(0,.111,0),new THREE.Vector3(1.5,.131,.02))},
+ ]);
+ expect(joints.get('Top_part2')?.[0].plane).toBeCloseTo(.834);expect(joints.get('Buttom_part2')?.[0].plane).toBeCloseTo(.111);
+});

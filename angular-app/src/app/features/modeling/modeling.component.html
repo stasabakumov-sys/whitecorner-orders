@@ -18,6 +18,7 @@
     </div>
     <div class="settings">
 
+
       <app-modeling-section class="setting-card" sectionId="dimensions" title="Dimensions" [summary]="sectionSummary('dimensions')" iconPath="M4 4h16v16H4zM8 4v3m4-3v3m4-3v3M4 8h3m-3 4h3m-3 4h3">
         <div class="setting-title"><button type="button" class="text-action" (click)="resetDimensions()">Reset</button></div>
         <p class="help">Tabletop height includes {{castorHeight()}} mm castors. @if (hasRoof()) { Roof height: {{overallHeight()}} mm. }</p>
@@ -44,14 +45,11 @@
       <app-modeling-section class="setting-card" sectionId="side-shelves" title="Side shelves" [summary]="sideShelvesIncluded() ? 'Both sides' : 'None'" iconPath="M2 8h5v3H2zM17 8h5v3h-5zM7 5h10v15H7z">
         <label class="shelf-option"><input type="checkbox" [checked]="sideShelvesIncluded()" [disabled]="loading() || roundingBusy()" (change)="setSideShelvesIncluded($any($event.target).checked)"><span>Side shelves · 2 × 200 × 600 mm</span></label>
       </app-modeling-section>
-      <app-modeling-section class="setting-card" sectionId="cutouts" title="Cutouts" [summary]="cutoutsIncluded() ? '12 × GN 1/6 + 1 × GN 1/1' : 'None'" iconPath="M3 3h18v18H3zM6 6h5v12H6zM14 6h4v4h-4zM14 14h4v4h-4z">
-        <label class="shelf-option"><input type="checkbox" [checked]="cutoutsIncluded()" [disabled]="loading() || roundingBusy()" (change)="setCutoutsIncluded($any($event.target).checked)"><span>12 × GN 1/6 + 1 × GN 1/1</span></label>
-      </app-modeling-section>
-      <app-modeling-section class="setting-card" sectionId="trays" title="Trays" [summary]="traySummary()" iconPath="M3 7h18l-2 11H5L3 7ZM2 7h20">
-        <p class="help">Stainless steel · 65 mm deep</p>
-        <div class="setting-title"><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setTraysIncluded(true)">All</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setTraysIncluded(false)">None</button></div>
-        <div class="tray-layout" role="group" aria-label="Tray positions on tabletop">
-          @for(slot of traySlots;track $index){<label class="tray-slot" [class.tray-large]="$index===0"><input type="checkbox" [attr.aria-label]="slot.type+' position '+($index||1)" [checked]="selectedTrays().includes($index)" [disabled]="loading() || roundingBusy()" (change)="setTrayIncluded($index,$any($event.target).checked)"><span>{{slot.type}}@if($index>0){<br>#{{$index}}}</span></label>}
+      <app-modeling-section class="setting-card" sectionId="cutouts-trays" title="Cutouts & trays" [summary]="cutoutTraySummary()" iconPath="M3 3h18v18H3zM6 6h5v12H6zM14 6h4v4h-4zM14 14h4v4h-4z">
+        <p class="help">Choose cutouts, then add 65 mm stainless steel trays.</p>
+        <div class="tray-actions"><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setCutoutsIncluded(true)">All cutouts</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setCutoutsIncluded(false)">Clear</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy() || !selectedCutouts().length" (click)="setTraysIncluded(true)">Fill trays</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy() || !selectedTrays().length" (click)="setTraysIncluded(false)">Remove trays</button></div>
+        <div class="tray-layout" role="group" aria-label="Cutout and tray positions on tabletop">
+          @for(slot of traySlots;track $index){<div class="tray-slot" [class.tray-large]="$index===0"><span>{{slot.type}}@if($index>0){<br>#{{$index}}}</span><label><input type="checkbox" [attr.aria-label]="slot.type+' cutout '+($index||1)" [checked]="selectedCutouts().includes($index)" [disabled]="loading() || roundingBusy()" (change)="setCutoutIncluded($index,$any($event.target).checked)"><span>Cutout</span></label><label><input type="checkbox" [attr.aria-label]="slot.type+' tray '+($index||1)" [checked]="selectedTrays().includes($index)" [disabled]="loading() || roundingBusy() || !selectedCutouts().includes($index)" (change)="setTrayIncluded($index,$any($event.target).checked)"><span>Tray</span></label></div>}
         </div>
       </app-modeling-section>
       } @else {

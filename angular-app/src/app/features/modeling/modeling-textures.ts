@@ -30,7 +30,7 @@ export function groupTopFacesAndEdges(geometry: THREE.BufferGeometry): void {
   const count = index?.count || normal.count;
   for (let i = 0; i < count; i += 3) {
     const vertex = index ? index.getX(i) : i;
-    const material = Math.abs(normal.getY(vertex)) > .5 ? 0 : 1;
+    const material = Math.abs(normal.getY(vertex)) > .99 ? 0 : 1;
     const last = geometry.groups[geometry.groups.length - 1];
     if (last && last.materialIndex === material) last.count += 3;
     else geometry.addGroup(i, 3, material);

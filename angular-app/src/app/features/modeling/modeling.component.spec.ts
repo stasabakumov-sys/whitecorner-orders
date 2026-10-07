@@ -282,9 +282,9 @@ describe('Plywood finishes', () => {
     expect(front.material.color.r).toBeCloseTo(1.05);
     expect(edge.material.color.r).toBeCloseTo(1.30);
     expect(topEdge.material.map).toBe(layers);
-    expect(trim.material.map).toBe(pine);
-    expect(trim.material.color.r).toBeCloseTo(1.15 * 1.05);
-    expect(trim.material.color.b).toBeCloseTo(2.4 * 1.05);
+    expect(trim.material.map).toBe(layers);
+    expect(trim.material.color.r).toBeCloseTo(1.30);
+    expect(trim.material.color.b).toBeCloseTo(1.30);
     expect(top.material.roughness).toBe(front.material.roughness);
     expect(top.material.color.equals(front.material.color)).toBe(true);
     expect(topEdge.material.color.equals(edge.material.color)).toBe(true);
@@ -292,7 +292,7 @@ describe('Plywood finishes', () => {
     component.setBodyColor('#33383e');
     expect(front.material.map).toBeNull();
     expect(edge.material.map).toBeNull();
-    expect(trim.material.map).toBe(pine);
+    expect(trim.material.map).toBe(layers);
     expect(front.material.bumpMap).toBe(paintBump);
     expect(trim.material.bumpMap).toBeNull();
     expect(top.material.bumpMap).toBeNull();
@@ -322,7 +322,7 @@ describe('Plywood finishes', () => {
     expect(front.material.map).toBe(birch);
     expect(top.material.envMap).toBeNull();
     expect(edge.material.map).toBe(layers);
-    expect(trim.material.map).toBe(pine);
+    expect(trim.material.map).toBe(layers);
     expect(front.material.bumpMap).toBeNull();
     await component.setTopFinish('oak');
     expect(top.material.map).toBe(oak);
@@ -350,7 +350,7 @@ describe('MDF front variants', () => {
 });
 
 
-it('uses Classic plywood layers and a pine border on the MDF cart tabletop', async () => {
+it('uses plywood layers across the MDF cart tabletop and border edges', async () => {
   const { component } = setup(); const editor = component as any;
   component.activeSlug.set('decorative-wheel-roof-cart-mdf');
   editor.body = new THREE.Group(); editor.rawTexture = new THREE.Texture(); editor.plywoodTexture = new THREE.Texture();
@@ -362,9 +362,9 @@ it('uses Classic plywood layers and a pine border on the MDF cart tabletop', asy
   const topMaterials = top.material as unknown as THREE.MeshPhysicalMaterial[], trimMaterials = trim.material as unknown as THREE.MeshPhysicalMaterial[];
   expect(topMaterials.map(material => material.map)).toEqual([face, edge]);
   expect(topMaterials[0].color.r).toBeCloseTo(1.05); expect(topMaterials[1].color.r).toBeCloseTo(1.30);
-  expect(trimMaterials.every(material => material.map === pine)).toBe(true);
-  expect(trimMaterials[0].color.r).toBeCloseTo(1.15 * 1.05);
-  expect(trimMaterials[0].color.b).toBeCloseTo(2.4 * 1.05);
+  expect(trimMaterials.map(material => material.map)).toEqual([face, edge]);
+  expect(trimMaterials[0].color.r).toBeCloseTo(1.05);
+  expect(trimMaterials[1].color.r).toBeCloseTo(1.30);
   expect(trim.geometry.hasAttribute('uv')).toBe(true);
 });
 
@@ -482,10 +482,10 @@ it('toggles shelf, ice shelf and side shelves independently without adding a roo
   component.height.set(850);component.width.set(1500);
   const body=new THREE.Group(), model=new THREE.Group();model.add(body);
   const make=(name:string)=>{const part=new THREE.Mesh(new THREE.BoxGeometry(1,1,1));part.name=name;body.add(part);return part;};
-  const shelf=make('Shelf'),ice=make('Ice_shelf_4'),side=make('Side_shelf_left_1'),solid=make('Top_part1'),cut=make('Top_part1_cutouts');
+  const shelf=make('Shelf'),ice=make('Ice_shelf_4'),side=make('Side_shelf_left_1'),solid=make('Top_part1'),cut=make('Top_part1_cutouts'),plug=make('Top_part1_cutout_plug_4');
   (component as any).body=body;(component as any).model=model;
   component.setCutoutsIncluded(false);expect(solid.visible).toBe(true);expect(cut.visible).toBe(false);
-  component.setCutoutsIncluded(true);expect(solid.visible).toBe(false);expect(cut.visible).toBe(true);
+  component.setCutoutsIncluded(true);expect(solid.visible).toBe(false);expect(cut.visible).toBe(true);expect(plug.visible).toBe(false);component.setCutoutIncluded(4,false);expect(plug.visible).toBe(true);
   component.setIceShelfIncluded(false);expect(ice.visible).toBe(false);expect(shelf.visible).toBe(true);expect(side.visible).toBe(true);
   component.setShelfIncluded(false);expect(shelf.visible).toBe(false);expect(side.visible).toBe(true);
   component.setSideShelvesIncluded(false);expect(side.visible).toBe(false);
@@ -497,8 +497,14 @@ it('toggles shelf, ice shelf and side shelves independently without adding a roo
 
 it('selects individual trays, includes matching cutouts, and clears trays when cutouts are removed',()=>{
   const {component}=setup();component.activeSlug.set('side-shelf-cart-mdf');
-  component.setTrayIncluded(0,true);component.setTrayIncluded(4,true);
+  component.setCutoutIncluded(0,true);component.setCutoutIncluded(4,true);component.setTrayIncluded(0,true);component.setTrayIncluded(4,true);
   expect(component.selectedTrays()).toEqual([0,4]);expect(component.cutoutsIncluded()).toBe(true);expect(component.traySummary()).toBe('1 × GN 1/1 · 1 × GN 1/6');
   component.setTrayIncluded(0,false);expect(component.selectedTrays()).toEqual([4]);
   component.setCutoutsIncluded(false);expect(component.selectedTrays()).toEqual([]);expect(component.traysIncluded()).toBe(false);
+});
+
+it('fills only selected cutouts and removes a tray when its cutout is removed',()=>{
+ const {component}=setup();component.activeSlug.set('side-shelf-cart-mdf');component.setCutoutIncluded(0,true);component.setCutoutIncluded(7,true);component.setTraysIncluded(true);
+ expect(component.selectedTrays()).toEqual([0,7]);component.setCutoutIncluded(0,false);expect(component.selectedTrays()).toEqual([7]);expect(component.cutoutSummary()).toBe('1 × GN 1/6');
+ component.setTrayIncluded(4,true);expect(component.selectedTrays()).toEqual([7]);
 });
