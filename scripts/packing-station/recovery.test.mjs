@@ -2,13 +2,25 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import {createHubClient} from './hub-client.mjs';
-import {StationSupervisor} from './supervisor.mjs';
+import {StationSupervisor,drainIfOwnerExited} from './supervisor.mjs';
 import {runStationWorker} from './worker-runtime.mjs';
 
 const settings={url:'https://hub.example.test',anonKey:'public-test-key',email:'manager@example.test',password:'test-only'};
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status});
 const auth=()=>json({access_token:'test-access',refresh_token:'test-refresh',expires_in:120});
 const blocked=signal=>new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(Error('aborted')),{once:true}));
+
+test('drains an orphan worker without killing it or claiming more work',async()=>{
+ const worker=new EventEmitter();const messages=[];worker.send=message=>messages.push(message);
+ let calls=0;const supervisor=new StationSupervisor({station:'Test',rpc:async()=>{calls++;},spawnWorker:()=>worker});
+ supervisor.spawn();
+ drainIfOwnerExited(supervisor,123,()=>{});assert.equal(supervisor.stopping,false);
+ drainIfOwnerExited(supervisor,123,()=>{throw Object.assign(Error(),{code:'EPERM'});});assert.equal(supervisor.stopping,false);
+ drainIfOwnerExited(supervisor,123,()=>{throw Object.assign(Error(),{code:'ESRCH'});});
+ assert.equal(supervisor.stopping,true);assert.equal(supervisor.worker,worker);assert.deepEqual(messages,[{type:'drain'}]);
+ await supervisor.tick();assert.equal(calls,0);assert.equal(messages.length,1);
+ worker.emit('exit');assert.equal(supervisor.worker,null);
+});
 
 test('bounds a stalled HTTP request and permits the next heartbeat without replaying a command',async()=>{
  let hang=true,calls=0;

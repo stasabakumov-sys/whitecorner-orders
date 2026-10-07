@@ -3,6 +3,13 @@ import {randomUUID} from 'node:crypto';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {createHubClient} from './hub-client.mjs';
 
+// Task Scheduler can lose its launcher during sign-out or suspend recovery.
+// Drain an orphan before its replacement takes the supervisor lease.
+export function drainIfOwnerExited(supervisor,ownerPid,probe=pid=>process.kill(pid,0)){
+ if(ownerPid<=0)return;
+ try{probe(ownerPid);}catch(error){if(error?.code==='ESRCH')supervisor.stop();}
+}
+
 // Restart only our own child. A drain request lets the entire active transfer
 // finish and record its result before the worker exits; no RD files are replayed.
 export class StationSupervisor{
@@ -42,7 +49,9 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const supervisor=new StationSupervisor({rpc:hub.rpc,station:process.env.HUB_STATION_NAME||'Packing laptop',
   spawnWorker:()=>fork(fileURLToPath(new URL('./station.mjs',import.meta.url)),['--send'],{stdio:['ignore','inherit','inherit','ipc']}),onError:message=>console.error(message)});
  process.on('SIGINT',()=>supervisor.stop());process.on('SIGTERM',()=>supervisor.stop());
+ const ownerPid=process.ppid;
  while(!supervisor.stopping||supervisor.worker){
+  drainIfOwnerExited(supervisor,ownerPid);
   try{await supervisor.tick();}catch(error){console.error(error instanceof Error?error.message:'Station recovery connection failed.');}
   await new Promise(resolve=>setTimeout(resolve,5000));
  }
