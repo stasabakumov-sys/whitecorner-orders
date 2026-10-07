@@ -42,4 +42,17 @@ describe('Direct saved packaging editing',()=>{
  it('uses the existing shared dimensions while editing only this model weight',()=>{
   const {component}=setup();component.backdrop=true;component.backdropDimensions={package_name:'Backdrop',length_mm:1030,width_mm:1030,height_mm:90};component.edit();expect(component.draft[0]).toMatchObject({length_mm:1030,width_mm:1030,height_mm:90,weight_kg:13});
  });
+ it('edits the selected shared box with its revision while keeping the other folding option separate',async()=>{
+  const {component,rpc,invoke}=setup();component.backdrop=true;component.sharedSize='1800x900:nonfoldable';component.backdropDimensions={package_name:'Flat box',length_mm:1830,width_mm:930,height_mm:90,revision:'flat-r1'};component.ngOnChanges();
+  component.edit();component.draft[0].length_mm=1850;component.weightDraft=17;
+  rpc.mockResolvedValue({data:{...component.backdropDimensions,length_mm:1850,revision:'flat-r2'},error:null});
+  await component.saveWeight();
+  expect(rpc).toHaveBeenCalledWith('wc_save_backdrop_packaging_dimensions',{p_size:'1800x900:nonfoldable',p_package_name:'Flat box',p_length:1850,p_width:930,p_height:90,p_expected:'flat-r1'});
+  expect(invoke.mock.calls[0][1].body.packages[0]).toMatchObject({length_mm:1850,weight_kg:17});expect(component.editing).toBe(false);
+ });
+ it('keeps the shared dimension draft after a conflicting save and preserves the saved box',async()=>{
+  const {component,rpc,invoke}=setup();component.backdrop=true;component.sharedSize='1800x900:foldable';component.backdropDimensions={package_name:'Box',length_mm:930,width_mm:930,height_mm:90,revision:'r1'};component.ngOnChanges();component.edit();component.draft[0].height_mm=100;
+  rpc.mockResolvedValue({data:null,error:Error('Backdrop dimensions changed. Reload before saving.')} as any);
+  await component.saveWeight();expect(component.error()).toContain('Reload before saving');expect(component.draft[0].height_mm).toBe(100);expect(component.backdropDimensions.height_mm).toBe(90);expect(component.editing).toBe(true);expect(invoke).not.toHaveBeenCalled();
+ });
 });

@@ -1,7 +1,7 @@
 <section class="page">
   @if(showHeading){<h1>Constructor</h1>}
   @if(small){<p class="intro">Enter the folded box dimensions in millimetres. One piece includes the base, sides, hinged lid and rounded tuck flap, following Small box.ai.</p>}
-  @else{<p class="intro">{{fixedDimensions ? 'Bottom dimensions come from saved Cart packaging.' : 'Enter the finished bottom dimensions in millimetres.'}} The bottom and lid are created together; the lid is 10 mm longer and wider, with the same depth.</p>}
+  @else{<p class="intro">{{fixedDimensions ? 'Bottom dimensions come from saved packaging.' : 'Enter the finished bottom dimensions in millimetres.'}} The bottom and lid are created together; the lid is 10 mm longer and wider, with the same depth.</p>}
   <div class="controls">
     <label [attr.for]="idPrefix+'box-length'">L · length, mm<input [attr.id]="idPrefix+'box-length'" type="number" min="0.1" step="0.1" [disabled]="fixedDimensions" [(ngModel)]="length" (ngModelChange)="update()"></label>
     <label [attr.for]="idPrefix+'box-width'">W · width, mm<input [attr.id]="idPrefix+'box-width'" type="number" min="0.1" step="0.1" [disabled]="fixedDimensions" [(ngModel)]="width" (ngModelChange)="update()"></label>

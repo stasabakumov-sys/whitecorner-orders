@@ -4,6 +4,7 @@ import {RdFile} from '../packing/box-constructor-rd';
 import {drawingNumber} from '../packing/box-constructor-geometry';
 import {baseDrawingBox} from './box-drawing.component';
 import {BoxRdFile} from './box-rd-files.component';
+import {qualifiedDrawingKey} from './product-sizes';
 
 export type CartBoxType = 'card' | 'small';
 export function cartConstructorDimensions(box:any,type:CartBoxType='card') {
@@ -15,6 +16,7 @@ export function cartConstructorDimensions(box:any,type:CartBoxType='card') {
 export interface CartConstructorState {drawing:any; files:BoxRdFile[]}
 export interface CartConstructorSave {p_request:string;p_package:string;p_box:any;p_constructor:any;p_svg:any;p_rd_files:any[]}
 export interface ProfileConstructorSave extends CartConstructorSave {p_signature:string;p_index:number}
+export type BackdropConstructorSave=Omit<CartConstructorSave,'p_package'>&{p_size:string};
 
 function stableJson(value:any):string {
  return JSON.stringify(value,(_,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))):item);
@@ -39,14 +41,34 @@ export class CartConstructorFilesService {
   for(const result of results)if(result.error)throw result.error;
   return {drawing:results[0].data,files:results[1].data||[]};
  }
- async prepare(box:any,svg:string,files:RdFile[],settings:any,previous:CartConstructorState,replacements:string[],progress:(text:string)=>void,type:CartBoxType='card',tuck=40):Promise<CartConstructorSave>{
+ async loadBackdrop(size:string):Promise<CartConstructorState>{
+  if(!qualifiedDrawingKey(size))throw Error('Choose an exact size and Foldable or Non-foldable.');
+  const results=await Promise.all([
+   this.db.client.from('wc_backdrop_box_svg_drawings').select('*').eq('size_key',size).maybeSingle(),
+   this.db.client.from('wc_box_rd_files').select('*').eq('backdrop_size_key',size).order('created_at'),
+  ]);
+  for(const result of results)if(result.error)throw result.error;
+  return {drawing:results[0].data,files:results[1].data||[]};
+ }
+ async prepareBackdrop(size:string,box:any,svg:string,files:RdFile[],settings:any,previous:CartConstructorState,replacements:string[],progress:(text:string)=>void,type:CartBoxType='card',tuck=40):Promise<BackdropConstructorSave>{
+  if(!qualifiedDrawingKey(size))throw Error('Save dimensions for an exact size and Foldable or Non-foldable before opening Constructor.');
+  const {p_package,...request}=await this.prepare(box,svg,files,settings,previous,replacements,progress,type,tuck,'backdrop');
+  return {...request,p_size:size};
+ }
+ async saveBackdrop(request:BackdropConstructorSave):Promise<CartConstructorState>{
+  const result=await this.db.client.rpc('wc_save_backdrop_constructor_files',request);if(result.error)throw result.error;
+  const data=result.data;
+  if(data?.drawing?.size_key!==request.p_size||data.drawing.object_path!==request.p_svg.path||data.rd_files?.length!==request.p_rd_files.length||data.rd_files.some((file:any,index:number)=>file.backdrop_size_key!==request.p_size||file.object_path!==request.p_rd_files[index].path||file.copies!==(request.p_constructor.box_type==='small'?1:2)))throw Error('Server confirmation is incomplete. Retry the same save to check the result.');
+  return {drawing:data.drawing,files:data.rd_files};
+ }
+ async prepare(box:any,svg:string,files:RdFile[],settings:any,previous:CartConstructorState,replacements:string[],progress:(text:string)=>void,type:CartBoxType='card',tuck=40,scope:'cart'|'backdrop'='cart'):Promise<CartConstructorSave>{
   const bottom=cartConstructorDimensions(box,type),count=type==='small'?1:2;
   if(files.length!==count)throw Error(`Generate ${count} RD file${count===1?'':'s'} first.`);
   if(previous.files.length>2)throw Error('Review this RD set first; Constructor supports one or two saved files.');
   const resize=previous.files.length>0&&previous.files.length!==count;
   if(!resize&&previous.files.length!==0&&(replacements.length!==count||new Set(replacements).size!==count||replacements.some(id=>!previous.files.some(file=>file.id===id))))throw Error('Select the existing RD files to replace.');
   const svgBlob=new Blob([svg],{type:'image/svg+xml'}),blobs=[svgBlob,...files.map(file=>new Blob([file.bytes],{type:'application/octet-stream'}))];
-  const filename=`cart-${type}-box-L${bottom.length}-W${bottom.width}-D${bottom.depth}${type==='small'?'-T'+drawingNumber(tuck):''}.svg`;
+  const filename=`${scope}-${type}-box-L${bottom.length}-W${bottom.width}-D${bottom.depth}${type==='small'?'-T'+drawingNumber(tuck):''}.svg`;
   const names=[filename,...files.map(file=>file.filename)];
   blobs.forEach((blob,index)=>{if(!blob.size||blob.size>20971520)throw Error(`${names[index]}: ${blob.size} bytes; allowed size is 1–20971520 bytes.`);});
   const auth=await this.db.client.auth.getUser();if(auth.error)throw auth.error;if(!auth.data.user)throw Error('Sign in and retry.');

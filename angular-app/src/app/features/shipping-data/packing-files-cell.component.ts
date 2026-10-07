@@ -51,7 +51,8 @@ export class PackingFilesCellComponent implements OnChanges{
    const table=drawing?(this.sharedSize?'wc_backdrop_box_drawings':packageId?'wc_cart_base_box_drawings':'wc_box_drawings'):'wc_box_rd_files';
    const key=this.sharedSize?(drawing?'size_key':'backdrop_size_key'):packageId?'cart_base_package_id':'profile_signature',value=this.sharedSize||packageId||this.signature;
    let query=this.db.client.from(table).select(drawing?'*':'id').eq(key,value);if(!this.sharedSize&&!packageId)query=query.eq('box_index',this.index);
-   const [response,svgResponse]=await Promise.all([query,drawing&&packageId?this.db.client.from('wc_cart_box_svg_drawings').select('*').eq('cart_base_package_id',packageId):Promise.resolve({data:[],error:null})]);
+   const svgQuery=drawing&&qualifiedDrawingKey(this.sharedSize)?this.db.client.from('wc_backdrop_box_svg_drawings').select('*').eq('size_key',this.sharedSize):drawing&&packageId?this.db.client.from('wc_cart_box_svg_drawings').select('*').eq('cart_base_package_id',packageId):Promise.resolve({data:[],error:null});
+   const [response,svgResponse]=await Promise.all([query,svgQuery]);
    if(response.error)throw response.error;if(svgResponse.error)throw svgResponse.error;let rows=response.data||[];
    if(!rows.length&&packageId&&this.signature){const legacy=await this.db.client.from(drawing?'wc_box_drawings':'wc_box_rd_files').select(drawing?'*':'id').eq('profile_signature',this.signature).eq('box_index',this.index);if(legacy.error)throw legacy.error;rows=legacy.data||[];}
    if(!rows.length&&drawing&&qualifiedDrawingKey(this.sharedSize)){const legacy=await this.db.client.from(table).select('*').eq('size_key',this.sharedSize.split(':')[0]);if(legacy.error)throw legacy.error;rows=legacy.data||[];}

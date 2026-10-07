@@ -1,18 +1,30 @@
-import {Component,Input,Output,EventEmitter,signal,OnChanges} from '@angular/core';
+import {Component,Input,Output,EventEmitter,signal,OnChanges,Optional} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {PackingFilesCellComponent} from './packing-files-cell.component';
+import {CartBoxConstructorComponent} from './cart-box-constructor.component';
+import {HubMembersService} from '../../core/services/hub-members.service';
 import {packagingError,reviewComponents} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
-@Component({selector:'app-saved-packing',standalone:true,imports:[FormsModule,PackingFilesCellComponent],template:`
+@Component({selector:'app-saved-packing',standalone:true,imports:[FormsModule,PackingFilesCellComponent,CartBoxConstructorComponent],template:`
  @if(backdrop&&backdropDimensions){
- <div class="tablewrap"><table class="backdrop-pack-table"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>.CDR</th><th>.RD</th></tr></thead><tbody><tr>
- <td>{{backdropDimensions.package_name}}</td><td>{{backdropDimensions.length_mm}}</td><td>{{backdropDimensions.width_mm}}</td><td>{{backdropDimensions.height_mm}}</td>
- <td><input aria-label="Weight kg" type="number" min="0.001" step="0.1" [disabled]="saving()" [(ngModel)]="weightDraft" (ngModelChange)="saved.set(false)"></td>
- <td><app-packing-files-cell [signature]="profile.signature" [box]="profile.packages[0]" [dimensions]="backdropDimensions" [backdrop]="true" [sharedSize]="sharedSize" kind="cdr" /></td><td><app-packing-files-cell [signature]="profile.signature" [box]="profile.packages[0]" [dimensions]="backdropDimensions" [backdrop]="true" [sharedSize]="sharedSize" kind="rd" /></td>
+ <div class="tablewrap"><table class="backdrop-pack-table"><thead><tr><th>Box</th><th>L mm</th><th>W mm</th><th>H mm</th><th>kg</th><th>.CDR</th><th>.RD</th><th>Actions</th></tr></thead><tbody><tr>
+ @if(editing){
+ <td><input aria-label="Box name" maxlength="150" [disabled]="saving()" [(ngModel)]="draft[0].package_name"></td>
+ <td><input aria-label="Length mm" type="number" min="1" [disabled]="saving()" [(ngModel)]="draft[0].length_mm"></td>
+ <td><input aria-label="Width mm" type="number" min="1" [disabled]="saving()" [(ngModel)]="draft[0].width_mm"></td>
+ <td><input aria-label="Height mm" type="number" min="1" [disabled]="saving()" [(ngModel)]="draft[0].height_mm"></td>
+ }@else{<td>{{backdropDimensions.package_name}}</td><td>{{backdropDimensions.length_mm}}</td><td>{{backdropDimensions.width_mm}}</td><td>{{backdropDimensions.height_mm}}</td>}
+ <td>@if(editing){<input aria-label="Weight kg" type="number" min="0.001" step="0.1" [disabled]="saving()" [(ngModel)]="weightDraft" (ngModelChange)="saved.set(false)">}@else{ {{profile.packages[0]?.weight_kg??'Enter weight'}} }</td>
+ <td><app-packing-files-cell [signature]="profile.signature" [box]="profile.packages[0]" [dimensions]="backdropDimensions" [backdrop]="true" [sharedSize]="sharedSize" kind="cdr" [locked]="editing||saving()" [refreshVersion]="constructorRefresh" /></td><td><div class="file-actions"><app-packing-files-cell [signature]="profile.signature" [box]="profile.packages[0]" [dimensions]="backdropDimensions" [backdrop]="true" [sharedSize]="sharedSize" kind="rd" [locked]="editing||saving()" [refreshVersion]="constructorRefresh" /><app-cart-box-constructor [box]="canonical(profile.packages[0])" [sharedSize]="sharedSize" [locked]="editing||saving()" (filesSaved)="constructorRefresh=constructorRefresh+1" /></div></td>
+ <td><div class="row-actions">
+ @if(!editing&&members?.manager()){<button type="button" class="icon" title="Edit packaging" aria-label="Edit packaging" [disabled]="saving()" (click)="edit()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4"/></svg></button>}
+ @if(editing){<button type="button" class="icon" title="Save packaging" aria-label="Save packaging" [disabled]="saving()" (click)="saveWeight()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>}
+ @if(editing){<button type="button" class="icon" title="Cancel packaging changes" aria-label="Cancel packaging changes" [disabled]="saving()" (click)="cancel();resetWeight()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>}
+ </div></td>
  </tr></tbody></table></div>
- <div class="actions"><button type="button" class="icon" title="Save weight" aria-label="Save weight" [disabled]="saving()" (click)="saveWeight()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button><button type="button" [disabled]="saving()" (click)="resetWeight()">Cancel</button></div>
- @if(error()){<p role="alert">{{error()}}</p>}@if(saved()){<p role="status">Weight saved.</p>}
+ @if(editing){<p class="shared-note">Box name and dimensions are shared by all Backdrops with this size and folding option, Painted and Raw. Weight belongs to this model.</p>}
+ @if(error()){<p role="alert">{{error()}}</p>}@if(saved()){<p role="status">Packaging saved.</p>}
  }@else{
  <div class="actions">
  @if(!editing){<button type="button" class="icon" title="Edit packaging" aria-label="Edit packaging" (click)="edit()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4"/></svg></button><button type="button" (click)="replace()">Replace packaging</button>}
@@ -41,19 +53,19 @@ import {packagingError,reviewComponents} from '../../../../../supabase/functions
  </tbody></table></div>
  @if(replacing&&!backdrop){<button type="button" class="icon" title="Add box" aria-label="Add box" [disabled]="saving()" (click)="addBox()">+</button>}
  }
- `,styles:[`.icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}:host{display:block}.actions{display:flex;gap:8px;margin:8px 0}.tablewrap{overflow:auto;border:1px solid var(--wc-border);border-radius:12px;background:var(--wc-surface)}table{width:100%;min-width:550px;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--wc-border)}input:not([type=checkbox]){width:58px;padding:6px;max-width:100%;box-sizing:border-box}td:first-child input{width:160px}.icon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0}label{display:block}p{font-size:.875rem}[role=alert]{color:#b91c1c}`]})
+ `,styles:[`.file-actions,.row-actions{display:flex;align-items:center;gap:6px}.backdrop-pack-table td:first-child input{width:110px}.row-actions{white-space:nowrap}.icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}:host{display:block}.actions{display:flex;gap:8px;margin:8px 0}.tablewrap{overflow:auto;border:1px solid var(--wc-border);border-radius:12px;background:var(--wc-surface)}table{width:100%;min-width:550px;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--wc-border)}input:not([type=checkbox]){width:58px;padding:6px;max-width:100%;box-sizing:border-box}td:first-child input{width:160px}.icon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0}label{display:block}p{font-size:.875rem}[role=alert]{color:#b91c1c}`]})
 export class SavedPackingComponent implements OnChanges{
  @Input()product:any;@Input()profile:any;@Input()rules:any[]=[];@Input()backdrop=false;@Input()sharedSize='';@Input()sharedSizeLabel='';@Input()fallbackOptions:Record<string,string>={};@Input()backdropDimensions:any=null;
  @Output()profileSaved=new EventEmitter<any>();@Output()dimensionsSaved=new EventEmitter<any>();
- editing=false;replacing=false;draft:any[]=[];saving=signal(false);error=signal('');saved=signal(false);
- constructor(private db:SupabaseService){}
- weightDraft:number|null=null;private weightIdentity='';
+ constructorRefresh=0;editing=false;replacing=false;draft:any[]=[];saving=signal(false);error=signal('');saved=signal(false);
+ constructor(private db:SupabaseService,@Optional() readonly members?:HubMembersService){}
+ weightDraft:number|null=null;private weightIdentity='';private editDimensionsRevision:string|null=null;
  ngOnChanges(){const identity=this.product?.id+'|'+this.profile?.signature;if(identity!==this.weightIdentity){this.weightIdentity=identity;this.resetWeight();}}
  resetWeight(){this.weightDraft=this.profile?.packages?.[0]?.weight_kg??null;this.error.set('');this.saved.set(false);}
- async saveWeight(){this.draft=[{...this.canonical(this.profile.packages[0]),weight_kg:this.weightDraft,contents:this.components()}];await this.save();}
+ async saveWeight(){this.draft=[{...(this.editing?this.draft[0]:this.canonical(this.profile.packages[0])),weight_kg:this.weightDraft,contents:this.components()}];await this.save();}
  components(){const stored=this.profile.template_item?.wix_options||{};return reviewComponents({wc_order_items:[{...this.profile.template_item,id:this.product.id,product_name:this.product.product_name,quantity:1,catalog_reference:{catalogItemId:this.product.wix_product_id},wix_options:Object.keys(stored).length?stored:this.fallbackOptions}]},this.rules);}
  canonical(box:any){return this.backdrop&&this.backdropDimensions?{...box,package_name:this.backdropDimensions.package_name,length_mm:Number(this.backdropDimensions.length_mm),width_mm:Number(this.backdropDimensions.width_mm),height_mm:Number(this.backdropDimensions.height_mm)}:box;}
- edit(){this.saved.set(false);this.error.set('');this.editing=true;this.replacing=false;const components=this.components();this.draft=structuredClone(this.profile.packages).map((box:any)=>this.canonical({...box,contents:(box.contents||[]).flatMap((c:any)=>{const match=components.find(x=>x.component_key===(c.component_key||'main')&&x.unit_index===(c.unit_index||1));return match?[match]:[];})}));}
+ edit(){if(this.backdrop&&this.backdropDimensions)this.weightDraft=this.profile?.packages?.[0]?.weight_kg??null;this.editDimensionsRevision=this.backdropDimensions?.revision??null;this.saved.set(false);this.error.set('');this.editing=true;this.replacing=false;const components=this.components();this.draft=structuredClone(this.profile.packages).map((box:any)=>this.canonical({...box,contents:(box.contents||[]).flatMap((c:any)=>{const match=components.find(x=>x.component_key===(c.component_key||'main')&&x.unit_index===(c.unit_index||1));return match?[match]:[];})}));}
  replace(){this.edit();if(!this.editing)return;this.replacing=true;this.draft=[];this.addBox();}
  cancel(){if(this.saving())return;this.editing=false;this.replacing=false;this.draft=[];this.error.set('');}
  addBox(){const components=this.components();if(this.backdrop&&this.draft.length)return;this.draft.push(this.canonical({package_name:'Box '+(this.draft.length+1),length_mm:null,width_mm:null,height_mm:null,weight_kg:null,contents:components.length===1?components:[]}));}
@@ -62,19 +74,20 @@ export class SavedPackingComponent implements OnChanges{
  async save(){
   if(this.saving())return;
   const issue=packagingError(this.draft,this.components());if(issue){this.error.set(issue);return;}
-  this.saving.set(true);this.error.set('');
+  this.saving.set(true);this.error.set('');let dimensionsPersisted=false;
   try{
-   if(this.backdrop&&!this.backdropDimensions){
+   if(this.backdrop&&(!this.backdropDimensions||this.editing&&this.dimensionsChanged())){
     if(!this.sharedSize)throw Error('This legacy profile has no exact Size and Foldable/Non-foldable identity. Classify it before saving.');
-    const box=this.draft[0],result=await this.db.client.rpc('wc_save_backdrop_packaging_dimensions',{p_size:this.sharedSize,p_package_name:String(box.package_name||'').trim(),p_length:Number(box.length_mm),p_width:Number(box.width_mm),p_height:Number(box.height_mm),p_expected:null});
+    const box=this.draft[0],result=await this.db.client.rpc('wc_save_backdrop_packaging_dimensions',{p_size:this.sharedSize,p_package_name:String(box.package_name||'').trim(),p_length:Number(box.length_mm),p_width:Number(box.width_mm),p_height:Number(box.height_mm),p_expected:this.editing?this.editDimensionsRevision:this.backdropDimensions?.revision??null});
     if(result.error||!result.data?.revision)throw Error(result.error?.message||'Shared dimensions were not saved.');
-    this.backdropDimensions=result.data;this.dimensionsSaved.emit(result.data);
+    this.backdropDimensions=result.data;this.editDimensionsRevision=result.data.revision;dimensionsPersisted=true;this.dimensionsSaved.emit(result.data);
    }
    const packages=structuredClone(this.draft).map((box:any)=>this.canonical(box)),stored=this.profile.template_item?.wix_options||{},options=Object.entries(Object.keys(stored).length?stored:this.fallbackOptions).map(([name,value])=>({name,value:String(value)}));
    const {data,error}=await this.db.client.functions.invoke('delivery-cost-review',{body:{action:'save-packaging-variant',productId:this.product.id,sourceItemId:this.profile.template_item?.source_item_id||'',existingSignature:this.profile.reference_only?'':this.profile.signature,options,packages}});
    if(error||!data?.ok){const detail=await error?.context?.json?.().catch(()=>null);throw Error(detail?.error||data?.error||error?.message||'Server did not confirm saving.');}
    this.profileSaved.emit({...this.profile,reference_only:false,previousSignature:this.profile.signature,template_item:data.template_item===undefined?{...this.profile.template_item,wix_options:Object.fromEntries(options.map(option=>[option.name,option.value]))}:data.template_item,signature:data.signature||this.profile.signature,packages:data.packages||packages});this.editing=false;this.replacing=false;this.saved.set(true);
-  }catch(e:any){this.error.set('Could not save packaging: '+e.message+' Your edits are kept. Please retry.');}
+  }catch(e:any){this.error.set((dimensionsPersisted?'Shared dimensions saved. Could not save this model’s weight: ':'Could not save packaging: ')+e.message+' Your edits are kept. Please retry.');}
   finally{this.saving.set(false);}
  }
+ private dimensionsChanged(){const a=this.draft[0],b=this.backdropDimensions;return String(a.package_name||'').trim()!==b.package_name||['length_mm','width_mm','height_mm'].some(key=>Number(a[key])!==Number(b[key]));}
 }
