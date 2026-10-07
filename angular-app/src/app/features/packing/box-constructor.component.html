@@ -13,15 +13,17 @@
   @if(error){<p class="error" role="alert">{{error}}</p>}
   @if(result){<p class="result" role="status">{{result}}</p>}
   <section class="rd-section" [attr.aria-label]="small ? 'RD export · one file' : 'RD export · two files'">
+    @if(laserLoading){<p class="measure" role="status">Loading laser setup…</p>}
+    @if(laserError){<p class="error" role="alert">{{laserError}} <button type="button" (click)="loadLaserSetup()" [disabled]="laserLoading||rdBusy">Retry</button></p>}
     <details class="rd-settings">
-    <summary>RD Settings</summary>
+    <summary>Laser settings</summary><p class="measure">Loaded from <a href="#/packing/manage?tab=laser">Manage cutting · Laser setup</a>. Edit shared speed, power and Dot settings there.</p>
     <p class="measure">{{small ? 'The RD contains the complete box. Cut once for each box.' : 'Each RD contains one half: bottom or lid. Cut each file twice.'}} Settings are required before export.</p>
     <div class="controls rd-controls">
       <label [attr.for]="idPrefix+'rd-mode'">Fold mode<select [attr.id]="idPrefix+'rd-mode'" [(ngModel)]="rdSettings.foldMode" (ngModelChange)="rdChanged()"><option value="">Choose mode</option><option value="dot">Laser Dot · moving dashes</option><option value="line">Continuous line</option><option value="perforation">Perforation</option></select></label>
       @if(rdSettings.foldMode === 'dot'){
-        <label [attr.for]="idPrefix+'rd-dot-time'">Dot time, s<input [attr.id]="idPrefix+'rd-dot-time'" type="number" min="0.001" step="0.001" [(ngModel)]="rdSettings.dotTime" (ngModelChange)="rdChanged()"></label>
-        <label [attr.for]="idPrefix+'rd-dot-interval'">Dot interval, mm<input [attr.id]="idPrefix+'rd-dot-interval'" type="number" min="0.1" step="0.1" [(ngModel)]="rdSettings.dotInterval" (ngModelChange)="rdChanged()"></label>
-        <label [attr.for]="idPrefix+'rd-dot-length'">Dot length, mm<input [attr.id]="idPrefix+'rd-dot-length'" type="number" min="0.1" step="0.1" [(ngModel)]="rdSettings.dotLength" (ngModelChange)="rdChanged()"></label>
+        <label [attr.for]="idPrefix+'rd-dot-time'">Dot time, s<input [attr.id]="idPrefix+'rd-dot-time'" type="number" min="0.001" step="0.001" [ngModel]="rdSettings.dotTime" [disabled]="true"></label>
+        <label [attr.for]="idPrefix+'rd-dot-interval'">Dot interval, mm<input [attr.id]="idPrefix+'rd-dot-interval'" type="number" min="0.1" step="0.1" [ngModel]="rdSettings.dotInterval" [disabled]="true"></label>
+        <label [attr.for]="idPrefix+'rd-dot-length'">Dot length, mm<input [attr.id]="idPrefix+'rd-dot-length'" type="number" min="0.1" step="0.1" [ngModel]="rdSettings.dotLength" [disabled]="true"></label>
       }
       @if(rdSettings.foldMode === 'perforation'){
         <label [attr.for]="idPrefix+'rd-dash'">Fold dash, mm<input [attr.id]="idPrefix+'rd-dash'" type="number" min="0.1" step="0.1" [(ngModel)]="rdSettings.dash" (ngModelChange)="rdChanged()"></label>
@@ -31,19 +33,19 @@
     @for(layer of rdLayers;track layer.name){
       <div class="controls rd-controls">
         <strong class="rd-layer">{{layer.name}}</strong>
-        <label [attr.for]="idPrefix+'rd-'+layer.name+'-speed'">{{layer.name}} speed, mm/s<input [id]="idPrefix+'rd-'+layer.name+'-speed'" type="number" min="0.1" max="1000" step="0.1" [(ngModel)]="layer.value.speed" (ngModelChange)="rdChanged()"></label>
-        <label [attr.for]="idPrefix+'rd-'+layer.name+'-min'">{{layer.name}} min power, %<input [id]="idPrefix+'rd-'+layer.name+'-min'" type="number" min="0" max="100" step="0.1" [(ngModel)]="layer.value.minPower" (ngModelChange)="rdChanged()"></label>
-        <label [attr.for]="idPrefix+'rd-'+layer.name+'-max'">{{layer.name}} max power, %<input [id]="idPrefix+'rd-'+layer.name+'-max'" type="number" min="0" max="100" step="0.1" [(ngModel)]="layer.value.maxPower" (ngModelChange)="rdChanged()"></label>
+        <label [attr.for]="idPrefix+'rd-'+layer.name+'-speed'">{{layer.name}} speed, mm/s<input [id]="idPrefix+'rd-'+layer.name+'-speed'" type="number" min="0.1" max="1000" step="0.1" [ngModel]="layer.value.speed" [disabled]="true"></label>
+        <label [attr.for]="idPrefix+'rd-'+layer.name+'-min'">{{layer.name}} min power, %<input [id]="idPrefix+'rd-'+layer.name+'-min'" type="number" min="0" max="100" step="0.1" [ngModel]="layer.value.minPower" [disabled]="true"></label>
+        <label [attr.for]="idPrefix+'rd-'+layer.name+'-max'">{{layer.name}} max power, %<input [id]="idPrefix+'rd-'+layer.name+'-max'" type="number" min="0" max="100" step="0.1" [ngModel]="layer.value.maxPower" [disabled]="true"></label>
       </div>
     }
     <p class="measure">Fold runs first, then the outline. Laser 1 only; air assist on; position: Anchor point. First export loads Python from the internet; geometry and settings stay in your browser.</p>
     @if(rdSettings.foldMode === 'dot'){<p class="measure">Dot interval is start-to-start spacing. With a positive dot length, RDWorks uses moving dashes at the specified speed; dot time applies only to stationary dots (length 0), which this export does not support.</p>}
     </details>
-    @if(rdValidation){<p class="error" role="alert">{{rdValidation}} Open RD Settings to correct it.</p>}
+    @if(rdValidation){<p class="error" role="alert">{{rdValidation}} Open Laser settings to correct it.</p>}
     <div class="controls rd-controls">
-      <button type="button" (click)="generateRd()" [disabled]="!net || !!rdValidation || rdBusy">{{rdBusy ? 'Generating RD…' : small ? 'Generate RD file' : 'Generate two RD files'}}</button>
+      <button type="button" (click)="generateRd()" [disabled]="!net || !!rdValidation || rdBusy || !laserReady || laserLoading">{{rdBusy ? 'Generating RD…' : small ? 'Generate RD file' : 'Generate two RD files'}}</button>
       @if(small){@for(file of rdFiles;track file.filename){<button type="button" (click)="downloadRd(file)">Download RD</button>}}
-      @if(customCut){<button type="button" (click)="customCutRequested.emit()" [disabled]="!net || !!rdValidation || rdBusy">Send to Custom cut</button>}
+      @if(customCut){<button type="button" (click)="customCutRequested.emit()" [disabled]="!net || !!rdValidation || rdBusy || !laserReady || laserLoading">Send to Custom cut</button>}
     </div>
     @if(rdProgress){<p class="measure" role="status">{{rdProgress}}</p>}
     @if(rdError){<p class="error" role="alert">{{rdError}}</p>}

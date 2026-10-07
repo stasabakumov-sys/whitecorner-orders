@@ -1,11 +1,12 @@
 import {TestBed} from '@angular/core/testing';
+import {LaserSetupService,initialLaserSetup} from './laser-setup.service';
 import {ConstructorPageComponent} from './constructor-page.component';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {HubMembersService} from '../../core/services/hub-members.service';
 
 describe('Constructor box tabs',()=>{
   it('keeps independent Card and Small box inputs when switching tabs',async()=>{
-    TestBed.configureTestingModule({providers:[{provide:SupabaseService,useValue:{client:{}}},{provide:HubMembersService,useValue:{manager:()=>true}}]});
+    TestBed.configureTestingModule({providers:[{provide:SupabaseService,useValue:{client:{}}},{provide:HubMembersService,useValue:{manager:()=>true}},{provide:LaserSetupService,useValue:{load:async()=>({settings:initialLaserSetup(),revision:'test'})}}]});
     const fixture=TestBed.createComponent(ConstructorPageComponent);fixture.detectChanges();await fixture.whenStable();fixture.detectChanges();
     const root=fixture.nativeElement as HTMLElement;
     const input=root.querySelector<HTMLInputElement>('#box-length')!;
