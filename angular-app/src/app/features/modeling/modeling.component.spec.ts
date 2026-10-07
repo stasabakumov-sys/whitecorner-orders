@@ -476,3 +476,29 @@ it('keeps source tabletop grouping flags independent across repeated geometry re
     }
   } finally { frame.mockRestore(); editor.model = editor.body; component.ngOnDestroy(); }
 });
+
+it('toggles shelf, ice shelf and side shelves independently without adding a roof', () => {
+  const {component}=setup();component.activeSlug.set('side-shelf-cart-mdf');
+  component.height.set(850);component.width.set(1500);
+  const body=new THREE.Group(), model=new THREE.Group();model.add(body);
+  const make=(name:string)=>{const part=new THREE.Mesh(new THREE.BoxGeometry(1,1,1));part.name=name;body.add(part);return part;};
+  const shelf=make('Shelf'),ice=make('Ice_shelf_4'),side=make('Side_shelf_left_1'),solid=make('Top_part1'),cut=make('Top_part1_cutouts');
+  (component as any).body=body;(component as any).model=model;
+  component.setCutoutsIncluded(false);expect(solid.visible).toBe(true);expect(cut.visible).toBe(false);
+  component.setCutoutsIncluded(true);expect(solid.visible).toBe(false);expect(cut.visible).toBe(true);
+  component.setIceShelfIncluded(false);expect(ice.visible).toBe(false);expect(shelf.visible).toBe(true);expect(side.visible).toBe(true);
+  component.setShelfIncluded(false);expect(shelf.visible).toBe(false);expect(side.visible).toBe(true);
+  component.setSideShelvesIncluded(false);expect(side.visible).toBe(false);
+  component.setIceShelfIncluded(true);expect(ice.visible).toBe(true);expect(shelf.visible).toBe(false);expect(side.visible).toBe(false);
+  expect(component.overallHeight()).toBe(850);expect(component.hasRoof()).toBe(false);
+  expect(component.parts.some(part=>part.key==='side-shelves')).toBe(true);
+  component.activeSlug.set('classic-bar-plywood');expect(component.parts.some(part=>part.key==='side-shelves')).toBe(false);
+});
+
+it('selects individual trays, includes matching cutouts, and clears trays when cutouts are removed',()=>{
+  const {component}=setup();component.activeSlug.set('side-shelf-cart-mdf');
+  component.setTrayIncluded(0,true);component.setTrayIncluded(4,true);
+  expect(component.selectedTrays()).toEqual([0,4]);expect(component.cutoutsIncluded()).toBe(true);expect(component.traySummary()).toBe('1 × GN 1/1 · 1 × GN 1/6');
+  component.setTrayIncluded(0,false);expect(component.selectedTrays()).toEqual([4]);
+  component.setCutoutsIncluded(false);expect(component.selectedTrays()).toEqual([]);expect(component.traysIncluded()).toBe(false);
+});

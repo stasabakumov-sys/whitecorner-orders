@@ -1,11 +1,13 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, computed, signal } from '@angular/core';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { HubMembersService } from '../../core/services/hub-members.service';
+import { createGastronormTrays, CHARCUTERIE_CUTOUTS } from './modeling-trays';
 import { fitFurnitureBolts, shortenCastorBrakes, turnCastorWheels } from './modeling-hardware';
-import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
+import { resizePlywoodPosition, resizeRoofCartPosition, resizeSideShelfCartPosition } from './modeling-geometry';
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
@@ -70,8 +72,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const catalog=this.catalog();if(!catalog)return null;
     const price=catalogPricing(catalog,{slug:this.activeSlug(),width:this.width(),depth:this.depth(),height:this.height(),raw:this.rawBody(),colour:this.bodyColor(),shelf:this.shelfIncluded()});
     price.lines.push({label:'Front panel',amount:null},{label:'Table top finish',amount:null});
-    if(!this.isClassic()&&this.roofClosed())price.lines.push({label:'Closed roof',amount:null});
-    if(!this.isClassic()&&this.roofClosed()&&this.glassRackCount())price.lines.push({label:this.glassRackCount()+' × Wine Glass Rack Chrome 405mm',amount:null});
+    if(this.hasRoof()&&this.roofClosed())price.lines.push({label:'Closed roof',amount:null});
+    if(this.hasRoof()&&this.roofClosed()&&this.glassRackCount())price.lines.push({label:this.glassRackCount()+' × Wine Glass Rack Chrome 405mm',amount:null});
     return price;
   });
   priceText = formatModelingPrice;
@@ -118,8 +120,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
   private selectionVersion = 0;
   isClassic(): boolean { return this.activeSlug() === CLASSIC_SLUG; }
+  isSideShelfCart(): boolean { return this.activeSlug() === 'side-shelf-cart-mdf'; }
+  hasRoof(): boolean { return this.activeSlug() === 'decorative-wheel-roof-cart-mdf'; }
+  castorHeight(): number { return this.record?.caster_height_mm || (this.isClassic() ? 95 : 73); }
   materialLabel(): string { return this.record?.material_name || 'Plywood'; }
-  overallHeight(): number { return this.height() + (this.isClassic() ? 0 : 1030); }
+  overallHeight(): number { return this.height() + (this.hasRoof() ? 1030 : 0); }
 
   @ViewChild('configurationDialog') configurationDialog?: ElementRef<HTMLDialogElement>;
   readonly configurationBusy = signal(false);
@@ -148,8 +153,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         {label:'Castors',value:'Ø'+(this.isClassic()?'75':'50')+' mm'},
         {label:'Shelf',value:this.shelfIncluded()?'Middle':'None'}];
       if(this.frontLogo()){const logo=fitLogo(this.logoPanel(),this.frontLogo()!);fields.push({label:'Front logo',value:`${logo.width.toFixed(1)} x ${logoHeight(logo).toFixed(1)} mm · left ${logo.x.toFixed(1)} · top ${logo.y.toFixed(1)} mm`});}
+      if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Cutouts',value:this.cutoutsIncluded()?'12 × GN 1/6 + 1 × GN 1/1':'None'},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
-      if(!this.isClassic())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
+      if(this.hasRoof())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
       const snapshot:ConfigurationDocument={product:linkedModelProduct(this.catalog(),this.activeSlug())?.name||this.record?.product_name||this.modelLabel(),material:this.materialLabel(),code:this.activeSlug(),produced:new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric',timeZone:'Australia/Brisbane'}).format(new Date()),logo,...views,fields,...(prices?{pricing:prices}:{})};
       const blob=createConfigurationPdf(snapshot).output('blob');
@@ -183,6 +189,24 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   setPaintedBody():void{this.setBodyColor(this.bodyColor()==='#d4b894'?'#f6f6f3':this.bodyColor());}
 
   @ViewChild('shelfDrawingDialog') shelfDrawingDialog?: ElementRef<HTMLDialogElement>;
+  readonly traySlots = CHARCUTERIE_CUTOUTS;
+  readonly selectedTrays = signal<number[]>([]);
+  readonly traysIncluded = signal(false);
+  private trays?:THREE.Group;
+  private trayEnvironment?:THREE.WebGLRenderTarget;
+  setTraysIncluded(value:boolean):void { this.selectedTrays.set(value?this.traySlots.map((_,i)=>i):[]);this.traysIncluded.set(value);if(value)this.cutoutsIncluded.set(true);this.bindAssembly(); }
+  setTrayIncluded(index:number,value:boolean):void {
+    if(!Number.isInteger(index)||index<0||index>=this.traySlots.length)return;
+    const next=this.selectedTrays().filter(i=>i!==index);if(value)next.push(index);next.sort((a,b)=>a-b);
+    this.selectedTrays.set(next);this.traysIncluded.set(next.length>0);if(next.length)this.cutoutsIncluded.set(true);this.bindAssembly();
+  }
+  traySummary():string {const selected=this.selectedTrays();if(!selected.length)return 'None';return (selected.includes(0)?'1 × GN 1/1':'')+(selected.includes(0)&&selected.length>1?' · ':'')+(selected.filter(i=>i>0).length?selected.filter(i=>i>0).length+' × GN 1/6':'');}
+  readonly cutoutsIncluded = signal(false);
+  setCutoutsIncluded(value:boolean):void { this.cutoutsIncluded.set(value);if(!value){this.traysIncluded.set(false);this.selectedTrays.set([]);}this.bindAssembly(); }
+  readonly iceShelfIncluded = signal(true);
+  readonly sideShelvesIncluded = signal(true);
+  setIceShelfIncluded(value:boolean):void { this.iceShelfIncluded.set(value); this.bindAssembly(); }
+  setSideShelvesIncluded(value:boolean):void { this.sideShelvesIncluded.set(value); this.bindAssembly(); }
   readonly shelfIncluded = signal(true);
   setShelfIncluded(included:boolean):void {
     this.shelfIncluded.set(included);
@@ -228,7 +252,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly frontLogo=signal<LogoPlacement|null>(null);
   readonly logoError=signal('');
   readonly logoBusy=signal(false);
-  readonly logoPanel=computed(()=>({width:this.width()-(this.isClassic()?38:32),height:this.height()-(this.isClassic()?125:255),inset:this.moulding()?121:!this.isClassic()&&this.frontStyle()==='shaker'?Math.max(73,70*(this.height()-255)/645+3):0}));
+  readonly logoPanel=computed(()=>this.isSideShelfCart()?{width:this.width()-40,height:this.height()-127,inset:73}:({width:this.width()-(this.isClassic()?38:32),height:this.height()-(this.isClassic()?125:255),inset:this.moulding()?121:!this.isClassic()&&this.frontStyle()==='shaker'?Math.max(73,70*(this.height()-255)/645+3):0}));
   private logoMesh?:THREE.Mesh<THREE.PlaneGeometry,THREE.MeshStandardMaterial>;
   private logoTexture?:THREE.Texture;
   private logoVersion=0;
@@ -250,7 +274,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const panel=this.logoPanel(),logo=fitLogo(panel,saved),h=logoHeight(logo);
     const mesh=new THREE.Mesh(new THREE.PlaneGeometry(logo.width/1000,h/1000),new THREE.MeshStandardMaterial({map:this.logoTexture,transparent:true,alphaTest:.01,depthWrite:false,roughness:.8,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));
     mesh.name='Front logo';
-    mesh.position.set(this.isClassic()?(this.width()-19-logo.x-logo.width/2)/1000:(16+logo.x+logo.width/2)/1000,(this.height()-(this.isClassic()?15:16)-logo.y-h/2)/1000,this.isClassic()?.0185:this.frontStyle()==='shaker'?.5725004:.5845004);
+    mesh.position.set(this.isClassic()?(this.width()-19-logo.x-logo.width/2)/1000:((this.isSideShelfCart()?20:16)+logo.x+logo.width/2)/1000,(this.height()-(this.isClassic()?15:16)-logo.y-h/2)/1000,this.isClassic()?.0185:this.isSideShelfCart()?.5685:this.frontStyle()==='shaker'?.5725004:.5845004);
     if(this.isClassic())mesh.rotation.y=Math.PI;
     mesh.receiveShadow=true;this.logoMesh=mesh;this.model.add(mesh);
   }
@@ -300,9 +324,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly selectedFile = signal<File | null>(null);
   readonly assemblyMode = signal(false);
   readonly assemblyRevision = signal(0);
-  get parts() { return ASSEMBLY_PARTS.filter(part => this.isClassic()
-    ? !['roof', 'posts', 'legs', 'decorative-wheels'].includes(part.key)
-    : true); }
+  get parts() { return ASSEMBLY_PARTS.filter(part => this.isSideShelfCart() ? !['roof','posts','legs','decorative-wheels'].includes(part.key) : this.isClassic()
+    ? !['roof', 'posts', 'legs', 'decorative-wheels','side-shelves','ice-shelf'].includes(part.key)
+    : !['side-shelves','ice-shelf'].includes(part.key)); }
   private assembly?: AssemblyController;
 
   private readonly scene = new THREE.Scene();
@@ -469,6 +493,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.roundingEditing.set(false);
     this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
     this.shelfIncluded.set(true);
+    this.iceShelfIncluded.set(true);this.sideShelvesIncluded.set(true);this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);
     this.roofClosed.set(false);
     this.glassRackCount.set(0);
     this.showGlasses.set(false);
@@ -519,7 +544,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.model = new THREE.Group();
     this.body = new THREE.Group();
     this.casters.clear();
-    if (!this.isClassic()) { fitFurnitureBolts(gltf.scene); shortenCastorBrakes(gltf.scene); turnCastorWheels(gltf.scene); }
+    if (!this.isClassic()) { if(this.hasRoof())fitFurnitureBolts(gltf.scene); shortenCastorBrakes(gltf.scene); turnCastorWheels(gltf.scene); }
     const nodes = [...gltf.scene.children];
     for (const node of nodes) {
       const key = casterGroupKey(node.name);
@@ -597,6 +622,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.logoMesh = undefined;
     this.roofBottom = undefined;
     this.glassRacks = undefined;
+    this.trays = undefined;
     this.model = undefined;
     this.body = undefined;
     this.originalPositions.clear();
@@ -696,6 +722,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   setDimension(axis: 'width' | 'height', raw: string): void {
     const value = Number(raw);
     if (!Number.isFinite(value)) return;
+    if(this.isSideShelfCart() && axis==='width')return;
     const limits = axis === 'width' ? [1200, 1500] : [850, 1000];
     const step = axis === 'width' ? 100 : 50;
     const next = Math.round(Math.max(limits[0], Math.min(limits[1], value)) / step) * step;
@@ -715,7 +742,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       // CAD profiles and positions share model coordinates. Read the original
       // positions so rotation, resized previews and assembly offsets do not
       // alter which roof and Shaker faces meet.
-      const joints = matingPartJoints(this.sourceParts.filter(part => !/^Front[ _]part2$/i.test(part.name)
+      const joints = matingPartJoints(this.sourceParts.filter(part => !/cutouts/i.test(part.name)).filter(part => !/^Front[ _]part2$/i.test(part.name)
         || (!this.isClassic() && this.frontStyle() === 'shaker')).map(part => {
         const bounds = new THREE.Box3();
         part.traverse(node => {
@@ -726,7 +753,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const nodes = this.sourceParts.map(part => {
         let supported = false;
         part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) supported = true; });
-        if (!raw || !supported || /^(Top|Buttom|Bottom)[ _](?:part)?1$/i.test(part.name)) {
+        if (!raw || !supported || /^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts)?$/i.test(part.name)) {
           const copy = part.clone(true);
           copy.traverse(node => {
             if (!(node instanceof THREE.Mesh)) return;
@@ -888,9 +915,30 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   movePart(mm: string): void { this.assembly?.move(Number(mm)); }
   restorePart(): void { const key = this.selectedPart(); if (key) this.assembly?.restore(key); }
   restoreAssembly(): void { this.assembly?.restore(); }
+  private stainlessReflection():THREE.Texture|null {
+    if(!this.renderer)return null;
+    if(!this.trayEnvironment){const room=new RoomEnvironment();const generator=new THREE.PMREMGenerator(this.renderer);try{this.trayEnvironment=generator.fromScene(room,.04);}finally{room.dispose();generator.dispose();}}
+    return this.trayEnvironment.texture;
+  }
+  private updateTrays():void {
+    if(this.trays){this.trays.removeFromParent();this.trays.traverse(node=>{if(node instanceof THREE.Mesh)node.geometry.dispose();});const mesh=this.trays.children[0] as THREE.Mesh|undefined;if(mesh)(mesh.material as THREE.Material).dispose();this.trays=undefined;}
+    if(!this.model||!this.isSideShelfCart()||!this.cutoutsIncluded()||!this.traysIncluded())return;
+    this.trays=createGastronormTrays(this.height(),this.stainlessReflection(),this.selectedTrays());this.model.add(this.trays);
+  }
   private bindAssembly(): void {
+    this.updateTrays();
     this.updateFrontLogo();
     if (!this.model || !this.body) return;
+    if(this.isSideShelfCart())this.body.traverse(node=>{
+      const name=node.userData['plywoodPart']||node.name;
+      const key=/^Ice[ _]shelf/i.test(name)?'ice-shelf':/^Side[ _]shelf/i.test(name)?'side-shelves':null;
+      if(/^Top[ _]part1(?:[ _]cutouts)?$/i.test(name)){
+        const visible=/cutouts/i.test(name)===this.cutoutsIncluded();node.userData['assemblyHidden']=!visible;node.visible=visible&&(this.assembly?.state.visible.top??true);
+      }
+      if(!key)return;
+      const included=key==='ice-shelf'?this.iceShelfIncluded():this.sideShelvesIncluded();
+      node.userData['assemblyHidden']=!included;node.visible=included&&(this.assembly?.state.visible[key]??true);
+    });
     this.body.traverse(node=>{
       if(!/^Shelf/i.test(node.userData['plywoodPart']||node.name))return;
       node.userData['assemblyHidden']=!this.shelfIncluded();
@@ -901,7 +949,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       node.userData['assemblyHidden'] = this.frontStyle() !== 'shaker';
     });
     if (this.assembly) this.assembly.normals = this.isClassic() ? {} : { front: [0, 0, 1], left: [1, 0, 0], right: [-1, 0, 0] };
-    this.assembly?.bind(this.model, [...this.body.children, ...(this.frontMoulding ? [this.frontMoulding] : []), ...(this.logoMesh ? [this.logoMesh] : []),
+    this.assembly?.bind(this.model, [...this.body.children, ...(this.frontMoulding ? [this.frontMoulding] : []), ...(this.logoMesh ? [this.logoMesh] : []), ...(this.trays ? [this.trays] : []),
       ...[...this.casters.values()].flatMap(group => group.children)]);
   }
 
@@ -911,7 +959,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const positions = node.geometry.getAttribute('position');
       for (let i = 0; i < original.count; i++) {
         const name = node.userData['plywoodPart'] || node.name;
-        const [x, y, z] = this.isClassic()
+        const [x, y, z] = this.isSideShelfCart()
+          ? resizeSideShelfCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height()) : this.isClassic()
           ? resizePlywoodPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height())
           : resizeRoofCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height(), this.frontStyle() !== 'shaker');
         positions.setXYZ(i, x, y, z);
@@ -927,7 +976,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     for (const [key, group] of this.casters) {
       const [side, row] = key.split('-');
       group.position.set(
-        side === 'R' ? (this.width() - 1200) / 1000 : 0,
+        side === 'R' ? (this.width() - (this.record?.base_width_mm || 1200)) / 1000 : 0,
         0,
         row === 'rear' ? (this.depth() - 600) / 1000 : 0,
       );
@@ -971,7 +1020,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       materials.forEach(material => material.dispose());
       this.roofBottom = undefined;
     }
-    if (!this.body || this.isClassic() || !this.roofClosed()) return;
+    if (!this.body || !this.hasRoof() || !this.roofClosed()) return;
     const skirts: THREE.Box3[] = [], posts: THREE.Box3[] = [];
     for (const part of this.body.children) {
       const name = part.userData['plywoodPart'] || part.name;
@@ -1090,7 +1139,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   async setFrontStyle(style: 'shaker' | 'plain' | 'moulding'): Promise<void> {
-    if (this.roundingBusy()) return;
+    if (this.roundingBusy() || this.isSideShelfCart()) return;
     this.frontStyle.set(style);
     this.moulding.set(style === 'moulding');
     if (this.body && this.roundingSupported()) await this.setRounding(this.rounding());
@@ -1222,6 +1271,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private message(cause: unknown): string { return cause instanceof Error ? cause.message : String(cause); }
 
   ngOnDestroy(): void {
+    this.trayEnvironment?.dispose();
     this.alive = false;
     this.logoVersion++;this.logoTexture?.dispose();
     const configuration=this.savedConfiguration();if(configuration)URL.revokeObjectURL(configuration.url);

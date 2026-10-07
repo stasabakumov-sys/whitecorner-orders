@@ -53,3 +53,17 @@ export function resizeRoofCartPosition(name: string, x: number, y: number, z: nu
   } else if (plainFront && /^(Left|Right)[ _]side[ _]?2$/i.test(name.trim())) nextZ = z + .008;
   return [nextX, nextY, nextZ];
 }
+
+// 1500 × 600 × 755 mm STEP body on 95 mm castors. Side shelves and hardware
+// retain their size; both shelves follow their respective ends of the body.
+export function resizeSideShelfCartPosition(name: string, x: number, y: number, z: number,
+  lengthMm: number, heightMm: number): [number, number, number] {
+  const dx=(lengthMm-1500)/1000, dy=(heightMm-850)/1000;
+  const nx=/^Side[ _]shelf/i.test(name) ? x+(x>.75?dx:0)
+    : x<=.15?x:x>=1.35?x+dx:x+dx*(x-.15)/1.2;
+  const ny=/^(Buttom|Bottom|Body)/i.test(name)?y
+    : /^(Top|Side[ _]shelf)/i.test(name)?y+dy
+    : /^Shelf/i.test(name)?y+dy/2
+    : y<=.111?y:y>=.834?y+dy:y+dy*(y-.111)/.723;
+  return [nx,ny,z];
+}

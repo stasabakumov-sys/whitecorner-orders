@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 
-export type PartKey = 'top' | 'bottom' | 'left' | 'right' | 'front' | 'shelf' | 'wheels' | 'roof' | 'posts' | 'legs' | 'decorative-wheels';
+export type PartKey = 'top' | 'bottom' | 'left' | 'right' | 'front' | 'shelf' | 'wheels' | 'roof' | 'posts' | 'legs' | 'decorative-wheels' | 'side-shelves' | 'ice-shelf';
 export const ASSEMBLY_PARTS: { key: PartKey; label: string; normal: [number, number, number] }[] = [
+  { key: 'side-shelves', label: 'Side shelves · fixed', normal: [0, 0, 0] },
+  { key: 'ice-shelf', label: 'Ice shelf · fixed', normal: [0, 0, 0] },
   { key: 'top', label: 'Top', normal: [0, 1, 0] },
   { key: 'bottom', label: 'Bottom', normal: [0, -1, 0] },
   { key: 'left', label: 'Left side', normal: [-1, 0, 0] },
@@ -16,6 +18,8 @@ export const ASSEMBLY_PARTS: { key: PartKey; label: string; normal: [number, num
 ];
 const WALLS: PartKey[] = ['left', 'right', 'front'];
 export function assemblyPartKey(name: string): PartKey | null {
+  if (/^Side[ _]shelf/i.test(name)) return 'side-shelves';
+  if (/^Ice[ _]shelf/i.test(name)) return 'ice-shelf';
   if (/^Top[ _]/i.test(name)) return 'top';
   if (/^(Buttom|Bottom)[ _]/i.test(name)) return 'bottom';
   if (/^Left[ _]side/i.test(name)) return 'left';
