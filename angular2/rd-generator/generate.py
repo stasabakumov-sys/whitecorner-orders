@@ -7,8 +7,8 @@ from ruida import Ruida
 
 def generate_json(request_json):
     request = json.loads(request_json)
-    if len(request['jobs']) not in (1, 2):
-        raise ValueError('Expected one box job or bottom and lid jobs')
+    if len(request['jobs']) not in (1, 2, 4):
+        raise ValueError('Expected one Small box, two Card box or four Backdrop box jobs')
     outputs = []
     for job in request['jobs']:
         if len(job['layers']) != 2:
