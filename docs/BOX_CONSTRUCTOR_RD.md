@@ -244,3 +244,9 @@ cuts. SVG contains all four parts at 1:1. Four RD files use shared Laser setup;
 **cut each once**, with download labels identifying each part. Six-character RD
 names depend on geometry/split/settings. Generation does not load or start the
 laser. Physical cutting is not part of automated/browser verification.
+
+### Backdrop box from Product Packing
+
+The box's Constructor dialog offers Card box, Small box and Backdrop box. Backdrop box uses saved external package L/W/H directly; do not subtract allowances before passing them to the generator. Saving attaches one overview SVG and four RD files (Bottom main, Bottom short, Lid main, Lid short), one copy each. Reopening restores the type and ordered file IDs. Profile-local drawings without constructor metadata infer Backdrop box from four saved files.
+
+Deploy `20261007000500_packaging_backdrop_box.sql` before publishing this Product Packing option. The **Packaging Backdrop box release** workflow supports explicit verify/apply. Shared Backdrop and Cart saves retain atomic receipts, optimistic revisions, private uploads and exact owner checks. The server validates the canonical border/split against the saved dimensions. Conversions between one, two and four files require the full previous revision set and reject active cutting work; same-count replacement retains IDs and updates unfinished tasks. Profile-local boxes retain their existing rule: remove the old RD set before changing file count. No save or generation dispatches files to the laser.
