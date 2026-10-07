@@ -1,5 +1,8 @@
 import {TestBed} from '@angular/core/testing';
 import {BoxConstructorComponent} from './box-constructor.component';
+import {LaserSetupService,initialLaserSetup} from './laser-setup.service';
+
+beforeEach(()=>TestBed.configureTestingModule({providers:[{provide:LaserSetupService,useValue:{load:async()=>({settings:initialLaserSetup(),revision:'test'})}}]}));
 
 describe('Constructor input and download recovery', () => {
   it('blocks export for a cleared dimension and restores the preview after correction', async () => {
@@ -34,6 +37,7 @@ describe('Constructor input and download recovery', () => {
   it('reports a failed RD generation and retains previous files, inputs and settings for retry', async () => {
     const component = TestBed.createComponent(BoxConstructorComponent).componentInstance;
     const existing = {filename: 'previous.rd', bytes: new Uint8Array(120)};
+    await component.loadLaserSetup();
     component.rdFiles = [existing];
     vi.stubGlobal('Worker', class {
       onerror: (() => void) | null = null;
@@ -53,6 +57,7 @@ describe('Constructor input and download recovery', () => {
 
   it('discards an export that finishes after dimensions change', async () => {
     const component = TestBed.createComponent(BoxConstructorComponent).componentInstance;
+    await component.loadLaserSetup();
     const terminate = vi.fn();
     vi.stubGlobal('Worker', class {postMessage() {} terminate = terminate;});
     try {

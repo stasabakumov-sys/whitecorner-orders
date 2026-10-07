@@ -10,6 +10,7 @@ import {OrderItemRow} from '../../core/models/order.models';
 import {orderItemImageUrl} from '../../core/utils/order-item-image';
 import {canonicalPackagingSignature,variantSignature} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 import {PackingCustomComponent} from './packing-custom.component';
+import {LaserSetupComponent} from './laser-setup.component';
 import {backdropDrawingKey,qualifiedDrawingKey} from '../shipping-data/product-sizes';
 import {cartSizeFromOptions} from '../shipping-data/cart-size';
 import {isBackdropProduct} from '../../core/utils/backdrop-product';
@@ -20,10 +21,12 @@ interface RdFile {id:string;profile_signature:string|null;box_index:number|null;
 interface CartBasePackage {id:string;shipping_product_id:string;size_key:string|null;package_name:string;length_mm:number;width_mm:number;height_mm:number}
 interface Task {id:string;unit_id:string;profile_signature:string;state:string;files:any[];cut_file_ids:string[];completed_at?:string|null}
 
-@Component({selector:'app-packing-manage',standalone:true,imports:[FormsModule,RouterLink,DrawerModule,DatePipe,PackingCustomComponent],template:`
+@Component({selector:'app-packing-manage',standalone:true,imports:[FormsModule,RouterLink,DrawerModule,DatePipe,PackingCustomComponent,LaserSetupComponent],template:`
  <section class="packing-page"><h1>Manage Packing</h1>
- <div class="tabs" role="tablist" aria-label="Packing job types"><button type="button" role="tab" id="product-jobs-tab" aria-controls="product-jobs-panel" [attr.aria-selected]="activeTab()==='product'" [class.active]="activeTab()==='product'" (click)="activeTab.set('product')">Product jobs</button><button type="button" role="tab" id="custom-jobs-tab" aria-controls="custom-jobs-panel" [attr.aria-selected]="activeTab()==='custom'" [class.active]="activeTab()==='custom'" (click)="activeTab.set('custom')">Custom jobs</button></div>
- @if(activeTab()==='custom'){<div id="custom-jobs-panel" role="tabpanel" aria-labelledby="custom-jobs-tab"><app-packing-custom/></div>}
+ <div class="tabs" role="tablist" aria-label="Manage cutting sections"><button type="button" role="tab" id="product-jobs-tab" aria-controls="product-jobs-panel" [attr.aria-selected]="activeTab()==='product'" [class.active]="activeTab()==='product'" (click)="activeTab.set('product')">Product jobs</button><button type="button" role="tab" id="custom-jobs-tab" aria-controls="custom-jobs-panel" [attr.aria-selected]="activeTab()==='custom'" [class.active]="activeTab()==='custom'" (click)="activeTab.set('custom')">Custom jobs</button>
+ <button type="button" class="laser-tab" role="tab" id="laser-setup-tab" aria-controls="laser-setup-panel" [attr.aria-selected]="activeTab()==='laser'" [class.active]="activeTab()==='laser'" (click)="activeTab.set('laser')">Laser setup</button></div>
+ @if(activeTab()==='laser'){<div id="laser-setup-panel" role="tabpanel" aria-labelledby="laser-setup-tab"><app-laser-setup/></div>}
+ @else if(activeTab()==='custom'){<div id="custom-jobs-panel" role="tabpanel" aria-labelledby="custom-jobs-tab"><app-packing-custom/></div>}
  @else{<div id="product-jobs-panel" role="tabpanel" aria-labelledby="product-jobs-tab"><p class="sub">Send box cutting work to everyone in Packing work. Products nearest Packing appear first.</p>
  @if(loading()){<p role="status">Loading Packing work…</p>}
  @if(error()){<p class="error" role="alert">{{error()}} <button type="button" (click)="load()" [disabled]="loading()||!!busy()">Retry</button></p>}
@@ -58,7 +61,7 @@ interface Task {id:string;unit_id:string;profile_signature:string;state:string;f
  table{min-width:820px}.action-col{width:146px}.row-actions{white-space:nowrap}.row-actions button+button{margin-left:6px}.row-error{display:block;white-space:normal;min-width:130px;color:#991b1b;margin-top:6px}.file-count span{display:inline-block;margin-left:8px}.missing{color:#991b1b}
  `]})
 export class PackingManageComponent implements OnInit,OnDestroy {
- readonly activeTab=signal<'product'|'custom'>('product');
+ readonly activeTab=signal<'product'|'custom'|'laser'>('product');
  readonly candidates=signal<Candidate[]>([]);readonly profiles=signal<Profile[]>([]);readonly tasks=signal<Task[]>([]);readonly rdFiles=signal<RdFile[]>([]);readonly cartBasePackages=signal<CartBasePackage[]>([]);readonly cartFileBoxes=signal<Record<string,string>>({});
  readonly failedImages=new Set<string>();
  readonly selected=signal<Candidate|null>(null);readonly search=signal('');readonly loading=signal(false);readonly error=signal('');readonly success=signal('');readonly busy=signal('');readonly rowError=signal<{unit:string;message:string}|null>(null);
@@ -68,7 +71,7 @@ export class PackingManageComponent implements OnInit,OnDestroy {
  readonly taskSyncError=signal('');
  private refreshTimer?:ReturnType<typeof setInterval>;
  private taskVersion=0;private refreshingTasks=false;
- ngOnInit(){if(this.route?.snapshot.queryParamMap.get('tab')==='custom')this.activeTab.set('custom');void this.load();this.refreshTimer=setInterval(()=>void this.refreshTasks(),10000);}
+ ngOnInit(){const tab=this.route?.snapshot.queryParamMap.get('tab');if(tab==='custom'||tab==='laser')this.activeTab.set(tab);void this.load();this.refreshTimer=setInterval(()=>void this.refreshTasks(),10000);}
  ngOnDestroy(){if(this.refreshTimer)clearInterval(this.refreshTimer);++this.taskVersion;}
  async refreshTasks(){
   if(this.loading()||this.busy()||this.refreshingTasks||!this.members.manager())return;

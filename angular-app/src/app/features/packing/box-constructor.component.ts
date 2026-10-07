@@ -1,15 +1,16 @@
-import {ChangeDetectorRef, Component, Input, Output, EventEmitter, OnChanges, OnDestroy, inject} from '@angular/core';
+import {ChangeDetectorRef, Component, Input, Output, EventEmitter, OnChanges, OnInit, OnDestroy, inject} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {BoxDrawing, BoxLayout, BoxNet, boxNet, drawingWithLid, drawingNumber, exportBoxSvg} from './box-constructor-geometry';
 import {RdFile, RdSettings, generateRdFiles, prepareRdRequest, prepareSmallRdRequest, rdSettingsError} from './box-constructor-rd';
 import {smallBoxNet, smallBoxDrawing} from './small-box-geometry';
+import {LaserSetupService,initialLaserSetup} from './laser-setup.service';
 
 @Component({
   selector: 'app-box-constructor', standalone: true, imports: [FormsModule],
   templateUrl: './box-constructor.component.html',
   styleUrl: './box-constructor.component.css',
 })
-export class BoxConstructorComponent implements OnChanges, OnDestroy {
+export class BoxConstructorComponent implements OnChanges, OnInit, OnDestroy {
   @Input() showHeading = true;
   @Input() boxType: 'card' | 'small' = 'card';
   @Input() customCut = false;
@@ -18,6 +19,11 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
   @Input() fixedDimensions = false;
   @Input() initialTuck: number | null = null;
   private readonly changeDetector = inject(ChangeDetectorRef);
+  private readonly laserSetup = inject(LaserSetupService);
+  private destroyed = false;
+  laserLoading = false;
+  laserReady = false;
+  laserError = '';
   private rdCancel?: () => void;
   private rdRevision = 0;
   rdBusy = false;
@@ -25,8 +31,8 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
   rdError = '';
   rdResult = '';
   rdFiles: RdFile[] = [];
-  rdSettings: RdSettings = {cut: {speed: 120, minPower: 70, maxPower: 80}, fold: {speed: 120, minPower: 70, maxPower: 80}, foldMode: 'dot', dash: null, gap: null, dotTime: 0.1, dotInterval: 2, dotLength: 1};
-  readonly rdLayers = [{name: 'Cut', value: this.rdSettings.cut}, {name: 'Fold', value: this.rdSettings.fold}];
+  rdSettings: RdSettings = {cut:initialLaserSetup().cut,fold:initialLaserSetup().dot,foldMode:'dot',dash:null,gap:null,dotTime:initialLaserSetup().dotTime,dotInterval:initialLaserSetup().dotInterval,dotLength:initialLaserSetup().dotLength};
+  get rdLayers(){return [{name:'Cut',value:this.rdSettings.cut},{name:'Dot',value:this.rdSettings.fold}];}
   length: number | null = 1515;
   width: number | null = 615;
   depth: number | null = 70;
@@ -42,6 +48,18 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
   readonly number = drawingNumber;
 
   constructor() { this.update(); }
+  ngOnInit(): void {void this.loadLaserSetup();}
+  async loadLaserSetup():Promise<void>{
+    if(this.laserLoading||this.rdBusy)return;this.laserLoading=true;this.laserReady=false;this.laserError='';
+    try{
+      const {settings}=await this.laserSetup.load();
+      if(this.destroyed)return;
+      this.rdChanged();
+      this.rdSettings={...this.rdSettings,cut:structuredClone(settings.cut),fold:structuredClone(settings.dot),dotTime:settings.dotTime,dotInterval:settings.dotInterval,dotLength:settings.dotLength};
+      this.laserReady=true;
+    }catch(error){this.laserError=`Could not load laser setup. ${(error as Error)?.message||'Check the connection and retry.'} Your dimensions and files are retained.`;}
+    finally{this.laserLoading=false;if(!this.destroyed)this.changeDetector.markForCheck();}
+  }
 
   ngOnChanges(): void {
     if(this.initialTuck !== null) this.tuck=this.initialTuck;
@@ -87,6 +105,7 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
 
   async generateRd(): Promise<void> {
     if (!this.net || this.rdBusy) return;
+    if(!this.laserReady){this.rdError='Load Laser setup before generating RD files.';return;}
     const revision = ++this.rdRevision;
     this.rdBusy = true;
     this.rdError = '';
@@ -124,7 +143,7 @@ export class BoxConstructorComponent implements OnChanges, OnDestroy {
     } finally {if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);}
   }
 
-  ngOnDestroy(): void {this.rdRevision++; this.rdCancel?.();}
+  ngOnDestroy(): void {this.destroyed=true;this.rdRevision++; this.rdCancel?.();}
 
   download(): void {
     if (!this.net || !this.drawing || this.busy) return;
