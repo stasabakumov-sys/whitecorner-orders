@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
+import { resizePlywoodPosition, resizeRoofCartPosition, resizeSideShelfCartPosition } from './modeling-geometry';
 
 describe('MDF roof cart dimensions', () => {
   it('uses 16 mm plain MDF with sides 8 mm deeper and preserves rounded ends', () => {
@@ -99,4 +99,12 @@ describe('Classic plywood parts', () => {
       }
     }
   });
+});
+
+it('keeps the new cart side shelves rigid at either end and moves its middle shelf half the height change', () => {
+  expect(resizeSideShelfCartPosition('Side_shelf_left_1',-.2,.85,0,1200,950)).toEqual([-.2,.95,0]);
+  const right=resizeSideShelfCartPosition('Side_shelf_right_1',1.7,.85,0,1200,950);
+  expect(right[0]).toBeCloseTo(1.4);expect(right[1]).toBeCloseTo(.95);
+  expect(resizeSideShelfCartPosition('Shelf',.75,.4725,0,1500,950)[1]).toBeCloseTo(.5225);
+  expect(resizeSideShelfCartPosition('Buttom_part1',0,.095,0,1500,950)[1]).toBeCloseTo(.095);
 });

@@ -65,3 +65,5 @@
 .modeling-page .settings h3.setting-subtitle{font-size:10px;font-weight:600;color:#35455e;margin:12px 0 6px}
 .modeling-page .settings .colour-value{margin-top:8px;text-transform:none;color:#667587}
 .modeling-page .settings .custom-colour{font-size:10px;font-weight:400}
+
+.tray-layout{display:grid;grid-template-columns:1.4fr repeat(4,1fr);grid-template-rows:repeat(3,minmax(42px,auto));grid-auto-flow:column;gap:4px;margin-top:8px}.tray-slot{display:flex!important;align-items:center;justify-content:center;gap:3px;padding:4px 2px;border:1px solid #dce3eb;border-radius:6px;text-align:center;font:inherit!important;font-size:10px!important;font-weight:400!important;line-height:1.45!important}.tray-slot.tray-large{grid-row:span 3}.tray-slot:has(input:checked){background:#eef5fc;border-color:#90a5be}.tray-slot input{margin:0;width:11px;height:11px}.tray-slot span{font:inherit}

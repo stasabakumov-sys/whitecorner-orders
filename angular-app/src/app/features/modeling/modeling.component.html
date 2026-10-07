@@ -20,10 +20,10 @@
 
       <app-modeling-section class="setting-card" sectionId="dimensions" title="Dimensions" [summary]="sectionSummary('dimensions')" iconPath="M4 4h16v16H4zM8 4v3m4-3v3m4-3v3M4 8h3m-3 4h3m-3 4h3">
         <div class="setting-title"><button type="button" class="text-action" (click)="resetDimensions()">Reset</button></div>
-        <p class="help">Tabletop height includes {{isClassic() ? 95 : 73}} mm castors. @if (!isClassic()) { Roof height: {{overallHeight()}} mm. }</p>
+        <p class="help">Tabletop height includes {{castorHeight()}} mm castors. @if (hasRoof()) { Roof height: {{overallHeight()}} mm. }</p>
         <label id="model-length-label">Length <output>{{width() / 10}} cm</output></label>
         <div class="length-options" role="group" aria-labelledby="model-length-label">
-          @for (length of [1200, 1300, 1400, 1500]; track length) {
+          @for (length of (isSideShelfCart() ? [1500] : [1200, 1300, 1400, 1500]); track length) {
             <button type="button" [class.selected]="width() === length" [attr.aria-pressed]="width() === length" (click)="setDimension('width', length.toString())">{{length / 10}} cm</button>
           }
         </div>
@@ -37,6 +37,24 @@
       <app-modeling-section class="setting-card shelf-card" sectionId="shelf" title="Shelf" [summary]="sectionSummary('shelf')" iconPath="M3 8h18v3H3zM5 11v5m14-5v5">
         <label class="shelf-option"><input type="checkbox" [checked]="shelfIncluded()" [disabled]="loading() || roundingBusy()" (change)="setShelfIncluded($any($event.target).checked)"><span>Internal shelf</span><span class="shelf-option-price">{{optionSurcharge('Internal shelf') || (catalogBusy() ? 'Loading…' : 'Quote required')}}</span></label>
       </app-modeling-section>
+      @if (isSideShelfCart()) {
+      <app-modeling-section class="setting-card" sectionId="ice-shelf" title="Ice shelf" [summary]="iceShelfIncluded() ? 'Included' : 'None'" iconPath="M3 8h18v3H3zM5 11v5m14-5v5">
+        <label class="shelf-option"><input type="checkbox" [checked]="iceShelfIncluded()" [disabled]="loading() || roundingBusy()" (change)="setIceShelfIncluded($any($event.target).checked)"><span>Ice shelf</span></label>
+      </app-modeling-section>
+      <app-modeling-section class="setting-card" sectionId="side-shelves" title="Side shelves" [summary]="sideShelvesIncluded() ? 'Both sides' : 'None'" iconPath="M2 8h5v3H2zM17 8h5v3h-5zM7 5h10v15H7z">
+        <label class="shelf-option"><input type="checkbox" [checked]="sideShelvesIncluded()" [disabled]="loading() || roundingBusy()" (change)="setSideShelvesIncluded($any($event.target).checked)"><span>Side shelves · 2 × 200 × 600 mm</span></label>
+      </app-modeling-section>
+      <app-modeling-section class="setting-card" sectionId="cutouts" title="Cutouts" [summary]="cutoutsIncluded() ? '12 × GN 1/6 + 1 × GN 1/1' : 'None'" iconPath="M3 3h18v18H3zM6 6h5v12H6zM14 6h4v4h-4zM14 14h4v4h-4z">
+        <label class="shelf-option"><input type="checkbox" [checked]="cutoutsIncluded()" [disabled]="loading() || roundingBusy()" (change)="setCutoutsIncluded($any($event.target).checked)"><span>12 × GN 1/6 + 1 × GN 1/1</span></label>
+      </app-modeling-section>
+      <app-modeling-section class="setting-card" sectionId="trays" title="Trays" [summary]="traySummary()" iconPath="M3 7h18l-2 11H5L3 7ZM2 7h20">
+        <p class="help">Stainless steel · 65 mm deep</p>
+        <div class="setting-title"><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setTraysIncluded(true)">All</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setTraysIncluded(false)">None</button></div>
+        <div class="tray-layout" role="group" aria-label="Tray positions on tabletop">
+          @for(slot of traySlots;track $index){<label class="tray-slot" [class.tray-large]="$index===0"><input type="checkbox" [attr.aria-label]="slot.type+' position '+($index||1)" [checked]="selectedTrays().includes($index)" [disabled]="loading() || roundingBusy()" (change)="setTrayIncluded($index,$any($event.target).checked)"><span>{{slot.type}}@if($index>0){<br>#{{$index}}}</span></label>}
+        </div>
+      </app-modeling-section>
+      } @else {
       <app-modeling-section class="setting-card" sectionId="front" [title]="isClassic() ? 'Front panel moulding' : 'Front panel'" [summary]="sectionSummary('front')" iconPath="M4 3h16v18H4zM8 7h8v10H8z">
 
         <p class="help">Pine · 31 × 15 mm profile · 90 mm inset.</p>
@@ -51,7 +69,8 @@
         <label class="shelf-option"><input type="checkbox" [checked]="moulding()" [disabled]="loading() || roundingBusy()" (change)="setMoulding($any($event.target).checked)"><span>Moulding</span><span class="shelf-option-price">Quote required</span></label>
         }
       </app-modeling-section>
-      @if (!isClassic()) {
+      }
+      @if (hasRoof()) {
       <app-modeling-section class="setting-card" sectionId="roof" title="Roof" [summary]="sectionSummary('roof')" iconPath="M2 8 12 3l10 5M4 8h16v3H4zM5 11v9m14-9v9">
 
         <p class="help">Closed roof adds a 12 mm MDF bottom panel with cutouts for the supports. Roof height stays unchanged.</p>
@@ -182,7 +201,7 @@
         @if (selectedPart(); as key) {
           <div class="setting-title"><label for="part-offset">Move out <output>{{partOffset(key)}} mm</output></label><button type="button" class="text-action" (click)="restorePart()">Return part</button></div>
           <input id="part-offset" type="range" min="0" max="500" step="1" [value]="partOffset(key)" [disabled]="!partMovable(key)" (input)="movePart($any($event.target).value)" aria-label="Selected part distance in millimetres">
-          @if (!partMovable(key)) { <p class="help">{{["shelf","wheels","roof","posts","legs","decorative-wheels"].includes(key) ? "This part stays fixed." : "Move or hide Top and Bottom first."}}</p> }
+          @if (!partMovable(key)) { <p class="help">{{["shelf","wheels","roof","posts","legs","decorative-wheels","side-shelves","ice-shelf"].includes(key) ? "This part stays fixed." : "Move or hide Top and Bottom first."}}</p> }
         }
         </div>
         }
