@@ -44,20 +44,21 @@ export class BoxDrawingComponent implements OnChanges {
  @Input() productId='';@Input() variantKey='';
  @Input() cartBasePackageId='';cartBaseId='';
  @Input() readOnly=false;
- legacySizeDrawing=false;
+ legacySizeDrawing=false;constructorDrawing:any=null;
  record:any=null;busy=false;loading=false;error='';success='';loadError=false;pendingBytes=0;private generation=0;
  constructor(private db:SupabaseService,@Optional() private cdr?:ChangeDetectorRef){}
- get current(){return this.record&&(this.productId||this.sharedSize||sameDrawingBox(this.record.box_snapshot,this.record.cart_base_package_id?baseDrawingBox(this.box):this.box))?this.record:null;}
+ get current(){return this.record&&(this.productId||this.sharedSize||sameDrawingBox(this.record.box_snapshot,this.record.cart_base_package_id?baseDrawingBox(this.box):this.box))?this.record:this.readOnly&&this.constructorDrawing&&sameDrawingBox(this.constructorDrawing.box_snapshot,baseDrawingBox(this.box))?this.constructorDrawing:null;}
  get stale(){return !!this.record&&!this.current;}
  sizeLabel(bytes:number){return bytes>=1048576?`${(bytes/1048576).toFixed(1)} MB`:`${Math.ceil(bytes/1024)} KB`;}
  ngOnChanges(){void this.load();}
- async load(){const generation=++this.generation;this.loading=true;this.error='';this.success='';this.loadError=false;this.record=null;this.legacySizeDrawing=false;this.cartBaseId=this.cartBasePackageId;
+ async load(){const generation=++this.generation;this.loading=true;this.error='';this.success='';this.loadError=false;this.record=null;this.constructorDrawing=null;this.legacySizeDrawing=false;this.cartBaseId=this.cartBasePackageId;
   try{if(!this.productId&&!this.sharedSize&&!this.cartBaseId&&this.signature){const key=await this.db.client.rpc('wc_cart_base_package',{p_signature:this.signature,p_index:this.index});if(key.error)throw key.error;if(generation!==this.generation)return;this.cartBaseId=typeof key.data==='string'?key.data:'';}
    const [table,key,value]=this.productId?['wc_product_drawings','product_id',this.productId]:this.sharedSize?['wc_backdrop_box_drawings','size_key',this.sharedSize]:this.cartBaseId?['wc_cart_base_box_drawings','cart_base_package_id',this.cartBaseId]:['wc_box_drawings','profile_signature',this.signature];
    let query=this.db.client.from(table).select('*').eq(key,value);if(this.productId)query=query.eq('variant_key',this.variantKey);else if(!this.sharedSize&&!this.cartBaseId)query=query.eq('box_index',this.index);
    const {data,error}=await query.maybeSingle();if(error)throw error;if(generation!==this.generation)return;this.record=data;
    if(!data&&this.cartBaseId&&this.signature){const legacy=await this.db.client.from('wc_box_drawings').select('*').eq('profile_signature',this.signature).eq('box_index',this.index).maybeSingle();if(legacy.error)throw legacy.error;if(generation!==this.generation)return;this.record=legacy.data;}
    if(!data&&qualifiedDrawingKey(this.sharedSize)){
+    if(this.readOnly){const generated=await this.db.client.from('wc_backdrop_box_svg_drawings').select('*').eq('size_key',this.sharedSize).maybeSingle();if(generated.error)throw generated.error;if(generation!==this.generation)return;this.constructorDrawing=generated.data;if(this.current)return;}
     const legacy=await this.db.client.from('wc_backdrop_box_drawings').select('*').eq('size_key',this.sharedSize.split(':')[0]).maybeSingle();
     if(legacy.error)throw legacy.error;if(generation!==this.generation)return;
     if(legacy.data){this.record=legacy.data;this.legacySizeDrawing=true;}
