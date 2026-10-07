@@ -9,7 +9,7 @@ export interface RoundingProfile {
   holes: number[][][];
 }
 
-export interface PartJoint { axis: 'x' | 'y' | 'z'; plane: number; bounds: THREE.Box3; normal?: [number,number,number]; }
+export interface PartJoint { axis: 'x' | 'y' | 'z'; plane: number; bounds: THREE.Box3; normal?: [number,number,number]; cap?: {axis: 'x'|'y'|'z';min:number;max:number}; }
 
 // STEP roof members meet on planar faces. Detect shared faces before rounding,
 // while excluding overlaps, edges and separate parts.
@@ -18,15 +18,19 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3; prof
   const axes = ['x', 'y', 'z'] as const;
   for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
     const a = parts[i], b = parts[j];
-    // Front frame mitres meet on diagonal faces; bounding boxes overlap there.
-    if(/^Front[ _]part\d+$/i.test(a.name)&&/^Front[ _]part\d+$/i.test(b.name)&&a.profile?.axis==='z'&&b.profile?.axis==='z'&&Math.abs(a.profile.origin-b.profile.origin)<1e-6){
+    // Parts in one panel share both their outline seam and their flat face.
+    // Closing only the seam plane leaves the extrusion bevel as a visible groove.
+    const family=(name:string)=>/^(Front[ _]part|(?:Left|Right)[ _]side[ _]?|Top[ _](?:part)?|(?:Buttom|Bottom)[ _](?:part)?)\d+$/i.exec(name.trim())?.[1].toLowerCase().replace(/[ _]/g,'').replace('buttom','bottom');
+    if(family(a.name)&&family(a.name)===family(b.name)&&a.profile&&b.profile&&a.profile.axis===b.profile.axis&&Math.abs(a.profile.origin-b.profile.origin)<1e-6){
       const ap=a.profile,bp=b.profile,near=(a:number[],b:number[])=>Math.hypot(a[0]-b[0],a[1]-b[1])<1e-6;
+      const world=(p:number[],depth:number)=>ap.axis==='x'?new THREE.Vector3(depth,p[1],p[0]):ap.axis==='y'?new THREE.Vector3(p[0],depth,p[1]):new THREE.Vector3(p[0],p[1],depth);
       for(let ai=0;ai<ap.outline.length;ai++)for(let bi=0;bi<bp.outline.length;bi++){
         const a0=ap.outline[ai],a1=ap.outline[(ai+1)%ap.outline.length],b0=bp.outline[bi],b1=bp.outline[(bi+1)%bp.outline.length];
         if(!((near(a0,b0)&&near(a1,b1))||(near(a0,b1)&&near(a1,b0))))continue;
-        const normal=new THREE.Vector3(a1[1]-a0[1],a0[0]-a1[0],0).normalize();
-        const bounds=new THREE.Box3(new THREE.Vector3(Math.min(a0[0],a1[0]),Math.min(a0[1],a1[1]),ap.origin),new THREE.Vector3(Math.max(a0[0],a1[0]),Math.max(a0[1],a1[1]),ap.origin+Math.min(ap.thickness,bp.thickness)));
-        const joint:PartJoint={axis:'z',normal:normal.toArray() as [number,number,number],plane:normal.x*a0[0]+normal.y*a0[1],bounds};
+        const du=a1[0]-a0[0],dv=a1[1]-a0[1];if(Math.hypot(du,dv)<1e-7)continue;
+        const normal=(ap.axis==='x'?new THREE.Vector3(0,-du,dv):ap.axis==='y'?new THREE.Vector3(dv,0,-du):new THREE.Vector3(dv,-du,0)).normalize();
+        const max=ap.origin+Math.min(ap.thickness,bp.thickness),bounds=new THREE.Box3().setFromPoints([world(a0,ap.origin),world(a1,ap.origin),world(a0,max),world(a1,max)]);
+        const joint:PartJoint={axis:ap.axis,normal:normal.toArray() as [number,number,number],plane:normal.dot(world(a0,ap.origin)),bounds,cap:{axis:ap.axis,min:ap.origin,max}};
         for(const part of [a,b])joints.set(part.name,[...(joints.get(part.name)||[]),joint]);
       }
     }
@@ -68,6 +72,7 @@ export function keepPartJointsSquare(geometry: THREE.BufferGeometry, joints: Par
       if (!(['x', 'y', 'z'] as const).filter(axis => normal || axis !== joint.axis).every(axis =>
         point[axis] >= joint.bounds.min[axis] - tolerance && point[axis] <= joint.bounds.max[axis] + tolerance)) continue;
       if(normal)point.addScaledVector(normal,-distance);else point[joint.axis] = joint.plane;
+      if(joint.cap){const cap=joint.cap;point[cap.axis]=point[cap.axis]<(cap.min+cap.max)/2?cap.min:cap.max;}
       positions.setXYZ(i, point.x, point.y, point.z);
       changed.add(Math.floor(i / 3));
     }

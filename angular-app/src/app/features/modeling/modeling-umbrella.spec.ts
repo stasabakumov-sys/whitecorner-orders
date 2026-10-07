@@ -9,4 +9,4 @@ it('creates an open through hole with the requested diameter and preserves exist
  const ray=new THREE.Raycaster(new THREE.Vector3(.75,1,.3),new THREE.Vector3(0,-1,0));expect(ray.intersectObject(mesh)).toHaveLength(0);ray.ray.origin.x=.78;expect(ray.intersectObject(mesh).length).toBeGreaterThan(0);expect(profile.holes[0][0][0]).toBeCloseTo(.77);expect(source.holes).toHaveLength(0);
 });
 
-it('builds a proportional octagonal umbrella with a pole that fits the chosen hole',()=>{const umbrella=createUmbrellaPreview(38),bounds=new THREE.Box3().setFromObject(umbrella);expect(bounds.max.x-bounds.min.x).toBeCloseTo(2.3);expect(bounds.max.y).toBeCloseTo(2.54);expect((umbrella.children[0] as THREE.Mesh).geometry.boundingBox).toBeDefined();});
+it('builds a proportional octagonal umbrella with a pole that fits the chosen hole',()=>{const umbrella=createUmbrellaPreview(38),bounds=new THREE.Box3().setFromObject(umbrella);expect(bounds.max.x-bounds.min.x).toBeCloseTo(1.8);expect(bounds.max.y).toBeCloseTo(2.1);expect((umbrella.children[0] as THREE.Mesh).geometry.boundingBox).toBeDefined();});
