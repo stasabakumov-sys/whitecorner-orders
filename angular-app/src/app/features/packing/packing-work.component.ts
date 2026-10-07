@@ -13,6 +13,7 @@ interface WorkFile {file_id:string;box_index:number;box_name:string;filename:str
 interface WorkTask {id:string;unit_id:string|null;custom_job_id?:string|null;box_rd_source_key?:string|null;custom_instructions?:string|null;order_number:string;product_name:string;profile_signature:string|null;state:string;files:WorkFile[];cut_file_ids:string[];packages:any[];assigned_at:string;unit?:{item:OrderItemRow|null}|null}
 interface Profile {signature:string;packages:any[];template_item:any}
 interface Station {station_name:string;last_seen:string}
+interface StationControl {station_name:string;supervisor_seen:string;restart_id:string|null;restart_state:'idle'|'requested'|'restarting'|'completed'|'failed';restart_error:string|null}
 interface Transfer {id:string;task_id:string;state:string;error:string|null;claimed_at:string|null;requested_at:string}
 
 @Component({selector:'app-packing-work',standalone:true,imports:[BoxDrawingComponent,DialogModule],template:`
@@ -20,7 +21,17 @@ interface Transfer {id:string;task_id:string;state:string;error:string|null;clai
  @if(loading()){<p role="status">Loading assignments…</p>}
  @if(error()){<p class="error" role="alert">{{error()}} <button type="button" (click)="load()" [disabled]="loading()||!!busy()">Retry</button></p>}
  @if(success()){<p class="success" role="status">{{success()}}</p>}
- <div class="controls"><span class="station" [class.online]="stationOnline()">{{stationOnline()?'Cutting laptop connected':'Cutting laptop offline'}}</span><button type="button" (click)="load()" [disabled]="loading()||!!busy()">Refresh</button></div>
+ <div class="controls"><span class="station" [class.online]="stationOnline()">{{stationOnline()?'Cutting laptop connected':'Cutting laptop offline'}}</span><button type="button" title="Refresh tasks and station connection status" (click)="load()" [disabled]="loading()||!!busy()">Refresh</button>
+  @if(members.manager()){<button type="button" title="Restart the cutting station program on the connected laptop" (click)="openRestart()" [disabled]="loading()||!!busy()||!stationControls().length">Restart station</button>}
+ </div>
+ @if(members.manager()){
+  @for(control of stationControls();track control.station_name){
+   @if(control.restart_state==='requested'||control.restart_state==='restarting'){<p class="hint" role="status">{{control.station_name}}: {{control.restart_state==='restarting'?'Restarting station. Waiting for the new worker to connect…':'Restart requested. Waiting for the laptop and any active upload to finish…'}}</p>}
+   @if(control.restart_state==='completed'){<p class="success" role="status">{{control.station_name}}: station restart confirmed. Tasks and Done marks are retained.</p>}
+   @if(control.restart_error){<p class="error" role="alert">{{control.station_name}}: {{control.restart_error}}</p>}
+  }
+  @if(!stationOnline()&&!stationControls().length){<p class="hint">Station recovery is not configured on this laptop.</p>}
+ }
  <div class="cards">@for(task of visibleTasks();track task.id){<article class="task">
   <div class="task-head"><div class="product-heading"><span class="product-image">@if(imageUrl(task);as src){<img [src]="src" [alt]="task.product_name" loading="lazy" decoding="async" (error)="failedImages.add(src)">}@else{<svg viewBox="0 0 24 24" role="img" aria-label="No product image"><path d="M3 3h18v18H3zM3 17l6-6 4 4 3-3 5 5M16 7h.01"/></svg>}</span><div><span class="order">{{task.box_rd_source_key?'Box cutting':task.custom_job_id?'Custom job':'#'+task.order_number}}</span><h2>{{task.product_name}}</h2></div></div><strong class="state">{{stateLabel(task.state)}}</strong></div>
   @if(task.custom_instructions){<p class="instructions">{{task.custom_instructions}}</p>}
@@ -33,7 +44,7 @@ interface Transfer {id:string;task_id:string;state:string;error:string|null;clai
   </div>}</div>
   @if(lastTransfer(task)?.state==='failed'){<p class="error" role="alert">{{lastTransfer(task)?.error||'Transfer failed.'}} Check the controller file list before retrying.</p>}
   @if(task.state==='assigned'||task.state==='transferred'){<button type="button" class="primary" (click)="requestTransfer(task)" [disabled]="!!busy()||!stationOnline()">{{busy()===task.id?'Requesting transfer…':(task.state==='transferred'?'Reload ':'Load ')+task.files.length+' files to laser'}}</button>
-   @if(!stationOnline()){<p class="hint">Start the cutting station on the connected laptop, then refresh.</p>}}
+   @if(!stationOnline()){<p class="hint">Keep the cutting laptop awake and connected. {{members.manager()?'If it does not reconnect automatically, use Restart station.':'If it does not reconnect automatically, ask a manager to restart the station.'}}</p>}}
   @if(task.state==='transfer_requested'){<p class="hint" role="status">Waiting for the laptop to confirm transfer. Check the machine file list before cutting.</p>
    @if(members.manager()&&staleClaim(task)){<button type="button" (click)="resetStale(task)" [disabled]="!!busy()">Reset stalled transfer</button>}}
   @if(task.state==='transferred'){<p class="hint">All {{task.files.length}} files transferred. Cut the listed quantities manually, then mark each file done.</p>
@@ -42,6 +53,13 @@ interface Transfer {id:string;task_id:string;state:string;error:string|null;clai
   @if(taskError()?.id===task.id){<p class="error" role="alert">{{taskError()?.message}}</p>}
  </article>}@empty{<p>No Packing work sent yet.</p>}</div>
  </section>
+ <p-dialog header="Restart cutting station" [visible]="restartOpen()" (visibleChange)="closeRestart()" [modal]="true" [closable]="!busy()" [closeOnEscape]="!busy()" appendTo="body" [style]="{width:'30rem',maxWidth:'95vw'}">
+  <p>Restart the station program on <strong>{{restartStation()}}</strong>? Any active upload finishes first. Saved tasks, RD files and Done marks are retained. This does not start cutting or resend transferred files.</p>
+  @if(stationControls().length>1){<label>Cutting station <select aria-label="Cutting station to restart" [value]="restartStation()" (change)="restartStation.set($any($event.target).value)" [disabled]="!!busy()">@for(control of stationControls();track control.station_name){<option [value]="control.station_name">{{control.station_name}}</option>}</select></label>}
+  <p class="hint">The laptop must be awake and connected. Close RDWorks before loading files to the laser.</p>
+  @if(restartError()){<p class="error" role="alert">{{restartError()}}</p>}
+  <ng-template #footer><button type="button" (click)="closeRestart()" [disabled]="!!busy()">Cancel</button><button type="button" (click)="confirmRestart()" [disabled]="!!busy()">{{busy()==='station-restart'?'Requesting restart…':'Restart station'}}</button></ng-template>
+ </p-dialog>
  <p-dialog header="Confirm boxes made" [visible]="!!completionTask()" (visibleChange)="closeCompletion()" [modal]="true" [closable]="!busy()" [closeOnEscape]="!busy()" [dismissableMask]="false" [style]="{width:'30rem',maxWidth:'95vw'}" appendTo="body">
   @if(completionTask();as task){<p><strong>{{task.box_rd_source_key?'Box cutting':task.custom_job_id?'Custom job':'#'+task.order_number}} · {{task.product_name}}</strong></p><p>All {{task.files.length}} files are marked Done. Confirm that every required copy has been cut and the boxes are made. This closes the Packing task.</p>}
   @if(completionError()){<p class="error" role="alert">{{completionError()}}</p>}
@@ -59,6 +77,7 @@ interface Transfer {id:string;task_id:string;state:string;error:string|null;clai
  .product-heading{display:flex;gap:10px;min-width:0}.product-heading>div{min-width:0}.product-image{display:flex;align-items:center;justify-content:center;flex:0 0 64px;width:64px;height:64px;background:#f4f6f8;border-radius:8px;overflow:hidden}.product-image img{width:100%;height:100%;object-fit:contain}.product-image svg{width:26px;height:26px;fill:none;stroke:var(--wc-muted);stroke-width:1.5}.task-head .state{flex:0 0 62px}.task-head h2{overflow-wrap:anywhere}.instructions{white-space:pre-wrap;overflow-wrap:anywhere}
  `]})
 export class PackingWorkComponent implements OnInit,OnDestroy {
+ readonly stationControls=signal<StationControl[]>([]);readonly restartOpen=signal(false);readonly restartStation=signal('');readonly restartError=signal('');
  cancellationTask=signal<WorkTask|null>(null);cancellationError=signal('');
  readonly tasks=signal<WorkTask[]>([]);readonly profiles=signal<Profile[]>([]);readonly stations=signal<Station[]>([]);readonly transfers=signal<Transfer[]>([]);readonly loading=signal(false);readonly error=signal('');readonly success=signal('');readonly busy=signal('');
  readonly taskError=signal<{id:string;message:string}|null>(null);
@@ -69,14 +88,15 @@ export class PackingWorkComponent implements OnInit,OnDestroy {
  constructor(private db:SupabaseService,readonly members:HubMembersService){}
  ngOnInit(){void this.load();this.refreshTimer=setInterval(()=>void this.load(true),10000);}
  ngOnDestroy(){if(this.refreshTimer)clearInterval(this.refreshTimer);}
- async load(silent=false){if(this.loadInFlight||this.busy()||this.completionTask()||this.cancellationTask())return;this.loadInFlight=true;const version=++this.loadVersion;if(!silent)this.loading.set(true);if(!silent)this.error.set('');
+ async load(silent=false){if(this.loadInFlight||this.busy()||this.completionTask()||this.cancellationTask()||this.restartOpen())return;this.loadInFlight=true;const version=++this.loadVersion;if(!silent)this.loading.set(true);if(!silent)this.error.set('');
   try{await this.members.load();const {data:user,error:authError}=await this.db.client.auth.getUser();if(authError||!user.user)throw authError||Error('Sign in again.');
-   const [taskResult,stationResult,transferResult]=await Promise.all([
+   const [taskResult,stationResult,transferResult,controlResult]=await Promise.all([
     this.db.client.from('wc_packing_tasks').select('id,unit_id,custom_job_id,box_rd_source_key,custom_instructions,order_number,product_name,profile_signature,state,files,cut_file_ids,packages,assigned_at,unit:wc_production_units(item:wc_order_items(image,raw_item))').neq('state','cancelled').neq('state','completed').order('assigned_at'),
     this.db.client.from('wc_packing_stations').select('station_name,last_seen'),
     this.db.client.from('wc_packing_transfers').select('id,task_id,state,error,claimed_at,requested_at').order('requested_at',{ascending:false}).limit(200),
+    this.members.manager()?this.db.client.from('wc_packing_station_controls').select('station_name,supervisor_seen,restart_id,restart_state,restart_error').order('supervisor_seen',{ascending:false}):Promise.resolve({data:[],error:null}),
    ]);
-   if(taskResult.error)throw taskResult.error;if(stationResult.error)throw stationResult.error;if(transferResult.error)throw transferResult.error;
+   if(taskResult.error)throw taskResult.error;if(stationResult.error)throw stationResult.error;if(transferResult.error)throw transferResult.error;if(controlResult.error)throw controlResult.error;
    const tasks=(taskResult.data||[]) as unknown as WorkTask[];
    const signatures=[...new Set(tasks.map(task=>task.profile_signature).filter((value):value is string=>!!value))];
    let profiles:Profile[]=[];
@@ -84,10 +104,20 @@ export class PackingWorkComponent implements OnInit,OnDestroy {
    if(version!==this.loadVersion)return;
    this.profiles.set(profiles);
    this.tasks.set(silent?tasks.map(task=>this.retainPackages(task)):tasks);this.stations.set((stationResult.data||[]) as Station[]);this.transfers.set((transferResult.data||[]) as Transfer[]);
+   this.stationControls.set((controlResult.data||[]) as StationControl[]);
   }catch(e){if(version===this.loadVersion)this.error.set(`Could not load Packing assignments. ${(e as Error)?.message||'Check the connection and retry.'}`);}
   finally{this.loadInFlight=false;if(!silent)this.loading.set(false);}
  }
  visibleTasks(){return this.tasks();}
+ openRestart(){if(this.busy()||!this.members.manager()||!this.stationControls().length)return;++this.loadVersion;this.restartStation.set(this.stationControls()[0].station_name);this.restartError.set('');this.restartOpen.set(true);}
+ closeRestart(){if(this.busy())return;this.restartOpen.set(false);this.restartError.set('');}
+ async confirmRestart(){const station=this.restartStation();if(this.busy()||!this.restartOpen()||!this.members.manager()||!this.stationControls().some(row=>row.station_name===station))return;
+  ++this.loadVersion;this.busy.set('station-restart');this.restartError.set('');
+  try{const {data,error}=await this.db.client.rpc('wc_request_packing_station_restart',{p_station:station});
+   if(error||data?.station_name!==station||!data?.restart_id||!['requested','restarting'].includes(data?.restart_state))throw error||Error('Server did not confirm the restart request.');
+   this.stationControls.update(rows=>rows.map(row=>row.station_name===station?data:row));this.restartOpen.set(false);
+  }catch(error){this.restartError.set(`Could not request a station restart. ${(error as Error)?.message||'Check the connection and retry.'}`);}finally{this.busy.set('');}
+ }
  imageUrl(task:WorkTask){const item=task.unit?.item||this.profileFor(task)?.template_item;const src=item?orderItemImageUrl(item):'';return this.failedImages.has(src)?'':src;}
  private retainPackages(task:WorkTask):WorkTask {
   const previous=this.tasks().find(row=>row.id===task.id&&row.profile_signature===task.profile_signature);

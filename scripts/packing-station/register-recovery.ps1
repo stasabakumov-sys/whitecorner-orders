@@ -1,4 +1,4 @@
-param([string]$StationRoot=(Join-Path $env:LOCALAPPDATA 'WhiteCorner\PackingStation'))
+param([string]$StationRoot=(Join-Path ([Environment]::GetFolderPath('UserProfile')) 'WhiteCorner\PackingStation'))
 $ErrorActionPreference='Stop'
 $env:PSModulePath=(Join-Path $PSHOME 'Modules')+';'+$env:PSModulePath
 $resolvedRoot=(Resolve-Path -LiteralPath $StationRoot).Path
@@ -8,7 +8,9 @@ foreach($file in @('run-background.ps1','supervisor.mjs','station.mjs','worker-r
 $powershellPath=Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $arguments='-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File "'+(Join-Path $resolvedRoot 'run-background.ps1')+'"'
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
-$action=New-ScheduledTaskAction -Execute $powershellPath -Argument $arguments -WorkingDirectory $resolvedRoot
+# Every station path is absolute or relative to PSScriptRoot/import.meta.url.
+# Leave the Scheduler working directory unset so it can start in its own context.
+$action=New-ScheduledTaskAction -Execute $powershellPath -Argument $arguments
 $logon=New-ScheduledTaskTrigger -AtLogOn -User $identity.Name
 $recovery=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1)
 $principal=New-ScheduledTaskPrincipal -UserId $identity.User.Value -LogonType Interactive -RunLevel Limited
