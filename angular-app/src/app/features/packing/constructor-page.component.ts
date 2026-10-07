@@ -1,3 +1,4 @@
+import {BACKDROP_REFERENCE} from './backdrop-box-geometry';
 import {Component} from '@angular/core';
 import {BoxConstructorComponent} from './box-constructor.component';
 import {ConstructorCustomSendComponent} from './constructor-custom-send.component';
@@ -21,7 +22,9 @@ import {HubMembersService} from '../../core/services/hub-members.service';
     <section id="constructor-panel-small" role="tabpanel" aria-labelledby="constructor-tab-small" [hidden]="active!=='small'">
       <app-box-constructor [showHeading]="false" boxType="small" [initialDimensions]="smallDimensions" />
     </section>
-    <section id="constructor-panel-backdrop" role="tabpanel" aria-labelledby="constructor-tab-backdrop" [hidden]="active!=='backdrop'"></section>
+    <section id="constructor-panel-backdrop" role="tabpanel" aria-labelledby="constructor-tab-backdrop" [hidden]="active!=='backdrop'">
+      <app-box-constructor [showHeading]="false" boxType="backdrop" [initialDimensions]="backdropDimensions" />
+    </section>
   `,
   styles: [`
     :host{display:block}h1{margin:0}.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 14px}
@@ -37,6 +40,7 @@ export class ConstructorPageComponent {
   readonly tabs=[{id:'card',label:'Card box'},{id:'small',label:'Small box'},{id:'backdrop',label:'Backdrop box'}];
   active='card';
   readonly smallDimensions={length:270,width:140,depth:140};
+  readonly backdropDimensions=BACKDROP_REFERENCE;
   navigate(event:KeyboardEvent,id:string):void {
     const index=this.tabs.findIndex(tab=>tab.id===id);
     const next=event.key==='ArrowRight'?(index+1)%3:event.key==='ArrowLeft'?(index+2)%3:event.key==='Home'?0:event.key==='End'?2:-1;

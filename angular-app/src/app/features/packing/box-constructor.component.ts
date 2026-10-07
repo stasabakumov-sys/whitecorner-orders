@@ -1,7 +1,8 @@
 import {ChangeDetectorRef, Component, Input, Output, EventEmitter, OnChanges, OnInit, OnDestroy, inject} from '@angular/core';
 import {FormsModule} from '@angular/forms';
 import {BoxDrawing, BoxLayout, BoxNet, boxNet, drawingWithLid, drawingNumber, exportBoxSvg} from './box-constructor-geometry';
-import {RdFile, RdSettings, generateRdFiles, prepareRdRequest, prepareSmallRdRequest, rdSettingsError} from './box-constructor-rd';
+import {RdFile, RdSettings, generateRdFiles, prepareRdRequest, prepareSmallRdRequest, prepareBackdropRdRequest, rdSettingsError} from './box-constructor-rd';
+import {backdropBox, BackdropBox} from './backdrop-box-geometry';
 import {smallBoxNet, smallBoxDrawing} from './small-box-geometry';
 import {LaserSetupService,initialLaserSetup} from './laser-setup.service';
 
@@ -12,7 +13,7 @@ import {LaserSetupService,initialLaserSetup} from './laser-setup.service';
 })
 export class BoxConstructorComponent implements OnChanges, OnInit, OnDestroy {
   @Input() showHeading = true;
-  @Input() boxType: 'card' | 'small' = 'card';
+  @Input() boxType: 'card' | 'small' | 'backdrop' = 'card';
   @Input() customCut = false;
   @Output() customCutRequested = new EventEmitter<void>();
   @Input() initialDimensions: {length: number; width: number; depth: number} | null = null;
@@ -38,7 +39,11 @@ export class BoxConstructorComponent implements OnChanges, OnInit, OnDestroy {
   depth: number | null = 70;
   tuck: number | null = 40;
   get small(): boolean {return this.boxType === 'small';}
-  get idPrefix(): string {return this.small ? 'small-' : '';}
+  get backdrop(): boolean {return this.boxType === 'backdrop';}
+  backdropNet: BackdropBox | null = null;
+  get idPrefix(): string {return this.small ? 'small-' : this.backdrop ? 'backdrop-' : '';}
+  get rdDescription(): string {return this.small ? 'The RD contains the complete box. Cut once for each box.' : this.backdrop ? 'Four RD files: bottom main, bottom short, lid main and lid short. Cut each file once.' : 'Each RD contains one half: bottom or lid. Cut each file twice.';}
+  rdLabel(index: number): string {return this.backdrop ? ['Bottom main', 'Bottom short', 'Lid main', 'Lid short'][index] : this.small ? 'Box' : ['Bottom', 'Lid'][index];}
   layout: BoxLayout = 'pair';
   net: BoxNet | null = null;
   drawing: BoxDrawing | null = null;
@@ -74,8 +79,12 @@ export class BoxConstructorComponent implements OnChanges, OnInit, OnDestroy {
   update(): void {
     this.rdChanged();
     this.result = '';
+    this.backdropNet = null;
     try {
-      if(this.small){
+      if(this.backdrop){
+        this.backdropNet = backdropBox(Number(this.length), Number(this.width), Number(this.depth));
+        this.net = this.backdropNet.bottom[0]; this.drawing = this.backdropNet.drawing;
+      }else if(this.small){
         const net=smallBoxNet(Number(this.length),Number(this.width),Number(this.depth),Number(this.tuck));
         this.net=net;this.drawing=smallBoxDrawing(net);
       }else{
@@ -112,14 +121,14 @@ export class BoxConstructorComponent implements OnChanges, OnInit, OnDestroy {
     this.rdResult = '';
     this.rdProgress = 'Preparing RD export…';
     try {
-      const generation = generateRdFiles(this.small ? prepareSmallRdRequest(this.net,this.rdSettings,Number(this.tuck)) : prepareRdRequest(this.net, this.rdSettings), stage => {
+      const generation = generateRdFiles(this.backdropNet ? prepareBackdropRdRequest(this.backdropNet, this.rdSettings) : this.small ? prepareSmallRdRequest(this.net,this.rdSettings,Number(this.tuck)) : prepareRdRequest(this.net, this.rdSettings), stage => {
         if (revision === this.rdRevision) {this.rdProgress = stage; this.changeDetector.markForCheck();}
       });
       this.rdCancel = generation.cancel;
       const files = await generation.result;
       if (revision !== this.rdRevision) return;
       this.rdFiles = files;
-      this.rdResult = this.small ? 'One RD file prepared. Cut once for each box.' : 'Two RD files prepared: bottom and lid. Cut each half twice.';
+      this.rdResult = this.backdrop ? 'Four RD files prepared: bottom main, bottom short, lid main and lid short. Cut each once.' : this.small ? 'One RD file prepared. Cut once for each box.' : 'Two RD files prepared: bottom and lid. Cut each half twice.';
     } catch (error) {
       if (revision === this.rdRevision) this.rdError = (error instanceof Error ? error.message : 'Could not prepare RD files.') + ' Your dimensions and settings are kept.';
     } finally {
@@ -153,7 +162,9 @@ export class BoxConstructorComponent implements OnChanges, OnInit, OnDestroy {
     let url = '';
     try {
       const content = exportBoxSvg(this.drawing);
-      const filename = this.small
+      const filename = this.backdrop
+        ? `backdrop-box-L${this.number(Number(this.length))}-W${this.number(Number(this.width))}-D${this.number(this.net.depth)}-4-pieces.svg`
+        : this.small
         ? `small-box-L${this.number(this.net.length)}-W${this.number(this.net.width)}-D${this.number(this.net.depth)}-T${this.number(Number(this.tuck))}.svg`
         : `box-L${this.number(this.net.length)}-W${this.number(this.net.width)}-D${this.number(this.net.depth)}-bottom-and-lid-${this.layout === 'pair' ? '4-pieces' : '2-pieces-cut-each-twice'}.svg`;
       url = URL.createObjectURL(new Blob([content], {type: 'image/svg+xml'}));

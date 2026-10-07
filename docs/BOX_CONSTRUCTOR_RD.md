@@ -200,3 +200,47 @@ delete operation. An unfinished cutting task referencing the old files blocks
 that switch. Same-count replacement retains existing IDs and task updates;
 completed task snapshots retain their historical files. Neither saving nor
 switching type uploads to the laser or starts cutting.
+
+## Backdrop box generator (2026-10-07)
+
+**Constructor → Backdrop box** follows the owner's `Arch Box 180x90.cdr`.
+CorelDRAW COM was used read-only to measure its actual vector folds/outlines.
+Four unequal U-shaped pieces: bottom main + short on the left, lid main + short
+on the right. Manual coordinate drift below 0.5 mm is normalized symmetrically.
+
+Owner-confirmed inputs are **outside package L/W/D**, including 5 mm for bulging.
+Package **930 × 930 × 80** gives bottom **915 × 915 × 80** and lid
+**925 × 925 × 80**. Only L/W have allowances: bottom = package −15 mm,
+lid = package −5 mm; depth stays unchanged. This standalone generator does not
+change product packaging, order matching or existing files/tasks.
+
+Reference blank measurements in mm:
+
+| Piece | CDR width | CDR height | Nominal blank |
+| --- | ---: | ---: | --- |
+| Bottom main | 1074.9895 | 866.0407 | 1075 × 866 |
+| Bottom short | 1075.0020 | 209.4255 | 1075 × 209 |
+| Lid main | 1084.9919 | 866.0458 | 1085 × 866 |
+| Lid short | 1085.0017 | 219.4248 | 1085 × 219 |
+
+**Cardboard sheet: 1170 × 1170 mm. Laser field: 1300 × 990 mm.**
+The central fields never shrink to meet these limits. The surrounding border
+may shrink: common rim = min(D, (1170 − lid W)/2). The actual border is shown
+in the UI; requested package depth remains visible separately. A central width
+leaving no positive border is rejected. Blanks use central W+2×rim by panel+rim.
+
+The preferred bottom short panel is 129 mm (the reference); for small boxes the
+split is balanced. Main panel length is capped at 990−rim, extending the second
+part as needed. Lid main length equals bottom main; the lid's extra 10 mm goes
+into its second part. Both parts must fit, including the lid: maximum lid L is
+2×(990−rim). An impossible size blocks drawing/download/export with a visible
+error and retains the inputs. The combined SVG is a reference layout, not a
+single laser-bed job. Each of the four RD jobs fits independently.
+
+Corner relief is 1.5 mm (reduced for shallow rims). The joining edge has no cut
+line in the supplied CDR; use pre-cut straight joining edges and tape the two
+panels edge to edge. Tiny manual gaps/skew become symmetric connected corner
+cuts. SVG contains all four parts at 1:1. Four RD files use shared Laser setup;
+**cut each once**, with download labels identifying each part. Six-character RD
+names depend on geometry/split/settings. Generation does not load or start the
+laser. Physical cutting is not part of automated/browser verification.

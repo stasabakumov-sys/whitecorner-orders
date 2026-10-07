@@ -1,23 +1,27 @@
 <section class="page">
   @if(showHeading){<h1>Constructor</h1>}
   @if(small){<p class="intro">Enter the folded box dimensions in millimetres. One piece includes the base, sides, hinged lid and rounded tuck flap, following Small box.ai.</p>}
+  @else if(backdrop){<p class="intro">Enter the outside package dimensions in millimetres, including 5 mm for bulging. The lid uses L/W minus 5 mm; the bottom uses L/W minus 15 mm. Depth stays unchanged. Each uses two parts, following Arch Box 180x90.cdr.</p>}
   @else{<p class="intro">{{fixedDimensions ? 'Bottom dimensions come from saved packaging.' : 'Enter the finished bottom dimensions in millimetres.'}} The bottom and lid are created together; the lid is 10 mm longer and wider, with the same depth.</p>}
   <div class="controls">
     <label [attr.for]="idPrefix+'box-length'">L · length, mm<input [attr.id]="idPrefix+'box-length'" type="number" min="0.1" step="0.1" [disabled]="fixedDimensions" [(ngModel)]="length" (ngModelChange)="update()"></label>
     <label [attr.for]="idPrefix+'box-width'">W · width, mm<input [attr.id]="idPrefix+'box-width'" type="number" min="0.1" step="0.1" [disabled]="fixedDimensions" [(ngModel)]="width" (ngModelChange)="update()"></label>
     <label [attr.for]="idPrefix+'box-depth'">D · depth, mm<input [attr.id]="idPrefix+'box-depth'" type="number" min="0.1" step="0.1" [disabled]="fixedDimensions" [(ngModel)]="depth" (ngModelChange)="update()"></label>
     @if(small){<label for="small-tuck">Tuck flap, mm<input id="small-tuck" type="number" min="0.6" step="0.1" [(ngModel)]="tuck" (ngModelChange)="update()"></label>}
-    @else{<label [attr.for]="idPrefix+'box-layout'">File layout<select [attr.id]="idPrefix+'box-layout'" [(ngModel)]="layout" (ngModelChange)="update()"><option value="pair">All four pieces</option><option value="single">One half each · cut twice</option></select></label>}
+    @else if(!backdrop){<label [attr.for]="idPrefix+'box-layout'">File layout<select [attr.id]="idPrefix+'box-layout'" [(ngModel)]="layout" (ngModelChange)="update()"><option value="pair">All four pieces</option><option value="single">One half each · cut twice</option></select></label>}
     <button type="button" (click)="download()" [disabled]="!drawing || busy">{{busy ? 'Preparing…' : 'Download SVG'}}</button>
   </div>
+  @if(backdrop){<p class="measure">Cardboard: 1170 × 1170 mm. Laser field: 1300 × 990 mm per part. The split and border adjust automatically; the main box field stays unchanged.</p>}
+  @if(backdropNet;as box){@if(box.rim < box.package.depth){<p class="result" role="status">Border reduced to {{number(box.rim)}} mm to fit the cardboard. Main field dimensions are unchanged.</p>}}
+  @if(backdropNet?.splitAdjusted){<p class="result" role="status">Join position adjusted automatically; the second panel is extended. Finished field dimensions are unchanged.</p>}
   @if(error){<p class="error" role="alert">{{error}}</p>}
   @if(result){<p class="result" role="status">{{result}}</p>}
-  <section class="rd-section" [attr.aria-label]="small ? 'RD export · one file' : 'RD export · two files'">
+  <section class="rd-section" [attr.aria-label]="small ? 'RD export · one file' : backdrop ? 'RD export · four files' : 'RD export · two files'">
     @if(laserLoading){<p class="measure" role="status">Loading laser setup…</p>}
     @if(laserError){<p class="error" role="alert">{{laserError}} <button type="button" (click)="loadLaserSetup()" [disabled]="laserLoading||rdBusy">Retry</button></p>}
     <details class="rd-settings">
     <summary>Laser settings</summary><p class="measure">Loaded from <a href="#/packing/manage?tab=laser">Manage cutting · Laser setup</a>. Edit shared speed, power and Dot settings there.</p>
-    <p class="measure">{{small ? 'The RD contains the complete box. Cut once for each box.' : 'Each RD contains one half: bottom or lid. Cut each file twice.'}} Settings are required before export.</p>
+    <p class="measure">{{rdDescription}} Settings are required before export.</p>
     <div class="controls rd-controls">
       <label [attr.for]="idPrefix+'rd-mode'">Fold mode<select [attr.id]="idPrefix+'rd-mode'" [(ngModel)]="rdSettings.foldMode" (ngModelChange)="rdChanged()"><option value="">Choose mode</option><option value="dot">Laser Dot · moving dashes</option><option value="line">Continuous line</option><option value="perforation">Perforation</option></select></label>
       @if(rdSettings.foldMode === 'dot'){
@@ -43,8 +47,8 @@
     </details>
     @if(rdValidation){<p class="error" role="alert">{{rdValidation}} Open Laser settings to correct it.</p>}
     <div class="controls rd-controls">
-      <button type="button" (click)="generateRd()" [disabled]="!net || !!rdValidation || rdBusy || !laserReady || laserLoading">{{rdBusy ? 'Generating RD…' : small ? 'Generate RD file' : 'Generate two RD files'}}</button>
-      @if(small){@for(file of rdFiles;track file.filename){<button type="button" (click)="downloadRd(file)">Download RD</button>}}
+      <button type="button" (click)="generateRd()" [disabled]="!net || !!rdValidation || rdBusy || !laserReady || laserLoading">{{rdBusy ? 'Generating RD…' : small ? 'Generate RD file' : backdrop ? 'Generate four RD files' : 'Generate two RD files'}}</button>
+      @if(small||backdrop){@for(file of rdFiles;track file.filename;let index=$index){<button type="button" (click)="downloadRd(file)">{{backdrop ? 'Download '+rdLabel(index)+' RD' : 'Download RD'}}</button>}}
       @if(customCut){<button type="button" (click)="customCutRequested.emit()" [disabled]="!net || !!rdValidation || rdBusy || !laserReady || laserLoading">Send to Custom cut</button>}
     </div>
     @if(rdProgress){<p class="measure" role="status">{{rdProgress}}</p>}
@@ -53,7 +57,7 @@
   </section>
   @if(drawing;as view){
       <div class="drawing-card">
-        <div class="drawing-head"><strong>{{small ? 'Small box · one piece' : 'Bottom + lid · '+(view.pieces === 4 ? 'four pieces' : 'cut each half twice')}}</strong><span>File size {{number(view.width)}} × {{number(view.height)}} mm</span></div>
+        <div class="drawing-head"><strong>{{small ? 'Small box · one piece' : backdrop ? 'Bottom + lid · four different pieces' : 'Bottom + lid · '+(view.pieces === 4 ? 'four pieces' : 'cut each half twice')}}</strong><span>File size {{number(view.width)}} × {{number(view.height)}} mm</span></div>
         @if(small){
           <div class="preview">
             <svg [attr.viewBox]="'-2 -2 '+(view.width+4)+' '+(view.height+4)" role="img" aria-label="Small box drawing with red cutting lines and blue folding lines">
@@ -73,13 +77,16 @@
                   @for(line of part.drawing.folds;track $index){<line [attr.x1]="line.from[0]" [attr.y1]="line.from[1]" [attr.x2]="line.to[0]" [attr.y2]="line.to[1]" class="fold"/>}
                 </svg>
               </div>
-              <p class="measure">Each piece {{number(part.net.sheetWidth)}} × {{number(part.net.sheetHeight)}} mm · {{part.drawing.pieces === 2 ? 'two mirrored pieces' : 'cut twice'}}</p>
+              @if(backdropNet;as box){
+                @for(piece of part.name === 'Bottom' ? box.bottom : box.lid;track $index){<p class="measure">{{$index === 0 ? 'Main' : 'Short'}} panel {{number(piece.panelLength)}} mm · blank {{number(piece.sheetWidth)}} × {{number(piece.sheetHeight)}} mm · border {{number(box.rim)}} mm · cut once</p>}
+              }@else{<p class="measure">Each piece {{number(part.net.sheetWidth)}} × {{number(part.net.sheetHeight)}} mm · {{part.drawing.pieces === 2 ? 'two mirrored pieces' : 'cut twice'}}</p>}
             </section>
           }
         </div>
         }
         <div class="drawing-footer"><p class="legend"><span class="red"></span>Cut<span class="blue"></span>Fold</p><span>Scale 1:1 in the downloaded file</span></div>
-        @if(!small){<p class="measure">The file separates the bottom and lid by {{view.gap}} mm for cutting. Join each part's two straight inner edges with tape.</p>}
+        @if(backdrop){<p class="measure">Join the main and short panels edge to edge with tape. The joining edges have no cutting line, following the CDR: use blanks with pre-cut straight joining edges. Red lines cut the remaining outline; blue lines fold the walls.</p>}
+        @else if(!small){<p class="measure">The file separates the bottom and lid by {{view.gap}} mm for cutting. Join each part's two straight inner edges with tape.</p>}
       </div>
   }
 </section>
