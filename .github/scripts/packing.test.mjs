@@ -522,5 +522,57 @@ try{
  assert.deepEqual((await db.query(constructorSql,returnArgs)).rows[0].result,returned);
  // Old two-file requests still replay under the replaced contract.
  assert.deepEqual((await db.query(constructorSql,constructorArgs)).rows[0].result,constructorSaved);
- console.log('Packing checks passed, including atomic Custom creation, rollback and idempotent retry.');
+ // Direct box dispatch: original IDs, saved copies, all source types and safe retries.
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20260918000100_backdrop_packaging_dimensions.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261007000100_box_cutting_dispatch.sql','utf8'));
+ await db.exec('set role authenticated');
+ const directFiles=returned.rd_files.map(f=>({id:f.id,revision:f.revision,copies:f.copies}));
+ const sendBox=files=>db.query('select wc_send_box_cutting_task($1) result',[files]);
+ await db.query("select set_config('test.actor',$1,false)",[worker]);
+ await assert.rejects(sendBox(directFiles),/Manager access/);
+ await db.query("select set_config('test.actor',$1,false)",[managerA]);
+ await assert.rejects(sendBox([]),/Add and save RD/);
+ await assert.rejects(sendBox([{...directFiles[0],copies:99}]),/files or copies changed/);
+ const direct=(await sendBox(directFiles)).rows[0].result;
+ assert.equal(direct.created,true);assert.equal(direct.task.unit_id,null);assert.equal(direct.task.custom_job_id,null);
+ assert.equal(direct.task.box_rd_source_key,`cart:${smallPackage}`);
+ assert.equal(direct.task.packages[0].cutting_cart_package_id,smallPackage);
+ assert.deepEqual(direct.task.files.map(f=>[f.file_id,f.copies]),directFiles.map(f=>[f.id,f.copies]));
+ const retry=(await sendBox(directFiles)).rows[0].result;assert.equal(retry.created,false);assert.equal(retry.task.id,direct.task.id);
+ assert.equal((await db.query('select count(*)::int n from wc_packing_transfers where task_id=$1',[direct.task.id])).rows[0].n,0);
+ await assert.rejects(db.query('select wc_delete_box_rd_file($1,$2)',[directFiles[0].id,directFiles[0].revision]),/active Packing task/);
+ // Existing profile/order work continues to use its original source contract.
+ const profileFiles=(await db.query("select * from wc_box_rd_files where profile_signature='profile' and box_index=0 order by id")).rows;
+ const profileFile=profileFiles[0],profileRequest=profileFiles.map(f=>({id:f.id,revision:f.revision,copies:f.copies}));
+ await assert.rejects(sendBox(profileRequest.slice(0,1)),/files or copies changed/);
+ const profileDispatch=(await sendBox(profileRequest)).rows[0].result;
+ assert.equal(profileDispatch.task.profile_signature,'profile');assert.equal(profileDispatch.task.files.every(f=>f.box_index===0),true);
+ assert.equal(profileDispatch.task.packages[0].cutting_source_index,profileFile.box_index);
+ assert.deepEqual(profileDispatch.task.packages[0].cutting_source_box,{package_name:'Box 1'});
+ const sharedFiles=(await db.query('select * from wc_box_rd_files where backdrop_size_key=$1',[archKey])).rows;
+ const sharedRequest=sharedFiles.map(f=>({id:f.id,revision:f.revision,copies:f.copies}));
+ await assert.rejects(sendBox(sharedRequest),/Save packaging dimensions/);
+ await db.query('select wc_save_backdrop_packaging_dimensions($1,$2,1230,630,80,null)',[archKey,'Backdrop box']);
+ const sharedDirect=(await sendBox(sharedRequest)).rows[0].result;
+ assert.equal(sharedDirect.task.packages[0].cutting_size_key,archKey);
+ await assert.rejects(sendBox([...directFiles,...sharedRequest]),/files or copies changed/);
+ // Replacement propagates to direct tasks; completed snapshots stay immutable.
+ await db.exec('reset role');
+ const directReplacement=`${managerA}/${randomUUID()}`;
+ await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-rd-files',$1,'{\"size\":222}')",[directReplacement]);
+ await db.exec('set role authenticated');
+ const updatedDirectFile=(await db.query('select to_jsonb(wc_save_cart_base_rd_file_for_package($1,$2,$3,$4,222,2,$5)) result',[directFiles[0].id,smallPackage,directReplacement,'NEW.rd',directFiles[0].revision])).rows[0].result;
+ assert.equal((await db.query('select files from wc_packing_tasks where id=$1',[direct.task.id])).rows[0].files[0].filename,'NEW.rd');
+ await assert.rejects(sendBox(directFiles),/files or copies changed/);
+ await db.query('select wc_cancel_packing_task($1)',[direct.task.id]);
+ const nextDirect=(await sendBox([{id:updatedDirectFile.id,revision:updatedDirectFile.revision,copies:2}])).rows[0].result;
+ assert.equal(nextDirect.created,true);assert.notEqual(nextDirect.task.id,direct.task.id);
+ await db.query("select set_config('test.actor',$1,false)",[worker]);
+ assert.equal((await db.query('select count(*)::int n from wc_packing_tasks where id=$1',[nextDirect.task.id])).rows[0].n,1);
+ await db.exec('reset role');await db.query("update wc_hub_members set active=false where user_id=$1",[worker]);await db.exec('set role authenticated');
+ assert.equal((await db.query('select count(*)::int n from wc_packing_tasks where id=$1',[nextDirect.task.id])).rows[0].n,0);
+ await db.exec('reset role');await db.exec('set role anon');
+ await assert.rejects(sendBox(directFiles),/permission denied/);
+ console.log('Packing checks passed, including direct box dispatch, RLS, saved-copy validation, retry and replacement.');
 }finally{await db.close();}
