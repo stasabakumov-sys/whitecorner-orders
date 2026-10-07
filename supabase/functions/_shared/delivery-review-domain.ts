@@ -177,6 +177,27 @@ export async function resolveBackdropProfileDimensions(db:any,profile:any){
   return shared?{...box,package_name:shared.package_name,length_mm:Number(shared.length_mm),width_mm:Number(shared.width_mm),height_mm:Number(shared.height_mm)}:box;
  })},error:null};
 }
+// Products saves one model weight per exact shared size/folding box. Wix's other
+// choices (curve direction, shelves, finish) do not form another Backdrop box.
+// Keep product ownership strict: another model's weight is never a fallback.
+async function productBackdropProfile(db:any,item:OrderItemRow,product:ModularShippingProduct){
+ const key=backdropPackagingKey(item);if(!key)return null;
+ const candidates:any[]=[];
+ for(let start=0;;start+=250){
+  const page=await db.from('wc_delivery_packaging_profiles').select('*').eq('shipping_product_id',product.id).order('signature').range(start,start+249);
+  if(page.error)throw Error('Could not load saved Backdrop packaging. Please retry.');
+  candidates.push(...(page.data||[]).filter((profile:any)=>profile.shipping_product_id===product.id&&
+   backdropPackagingKey(profile.template_item||{})===key&&
+   (!productId(profile.template_item||{})||productId(profile.template_item)===productId(item))&&
+   profile.packages?.length===1&&profile.packages[0].backdrop_size_key===key));
+  if((page.data||[]).length<250)break;
+ }
+ if(candidates.length>1)throw Error('Multiple saved Backdrop weights match this model, size and construction. Review its packaging in Products.');
+ if(!candidates.length)return null;
+ const resolved=await resolveBackdropProfileDimensions(db,candidates[0]);
+ if(resolved.error)throw Error(resolved.error.message);
+ return resolved.data;
+}
 export function productId(item:OrderItemRow){const c=item.catalog_reference as any,r=item.raw_item as any;return String(c?.catalogItemId||c?.productId||r?.catalogReference?.catalogItemId||r?.productId||'');}
 const attribute=/^(colou?r|size|dimensions?|width|height|length|finish|foldable|material|tabletop(?: design)?|personalisation|personalization|engraving|notes?|message)$/i;
 // Pans are supplied directly by a partner, never packed with our cart.
@@ -380,14 +401,31 @@ export async function resolveOrderPackaging(db:any,order:any,ignoredRules:any[]=
   }
  }
  const base=allTemplates.filter((p:any)=>!p.contents?.some((c:any)=>c.profile_signature));
- let boxes=composeModularPackages(order,checked(products)||[],base,checked(rules)||[],ignoredRules,checked(variants)||[]);
+ const allProducts=checked(products)||[];
+ let boxes=composeModularPackages(order,allProducts,base,checked(rules)||[],ignoredRules,checked(variants)||[]);
  // A cross-item saved combination is indivisible. Otherwise an exact item
  // profile takes precedence over reusable Base/option boxes for that item.
  for(const item of reviewItems(order,ignoredRules)){
   const existing=boxes.filter(box=>box.contents.some(c=>c.order_item_id===item.id));
   if(existing.some(box=>box.contents.some(c=>c.order_item_id!==item.id)))continue;
+  const product=productForItem(item,allProducts);
+  if(product&&(componentNormal(product.product_type||'')==='backdrop'||/backdrop/i.test(product.product_name||''))){
+   const shared=await productBackdropProfile(db,item,product);
+   if(shared){
+    const qty=Math.max(1,Math.floor(Number(item.quantity)||1)),contents=components.filter(c=>c.order_item_id===item.id);
+    const counts=new Map<string,number>();
+    for(const content of contents)counts.set(content.component_key,(counts.get(content.component_key)||0)+1);
+    // Keep each physical unit's options together, including numeric quantities.
+    const restored=Array.from({length:qty},(_,index)=>({
+     ...shared.packages[0],
+     contents:contents.filter(c=>Math.floor((c.unit_index-1)*qty/counts.get(c.component_key)!)===index)
+    }));
+    boxes=[...boxes.filter(box=>!existing.includes(box)),...restored];
+    continue;
+   }
+  }
   const variant=checked(await findPackagingProfile(db,variantSignature(item)));
-  const ownedProduct=(checked(products)||[]).find((product:any)=>product.id===variant?.shipping_product_id&&productForItem(item,[product]));
+  const ownedProduct=allProducts.find((product:any)=>product.id===variant?.shipping_product_id&&productForItem(item,[product]));
   if(variant&&(!catalogOnly||ownedProduct)){
    const restored=expandVariant(variant.packages,item,ignoredRules);
    if(!restored.length)throw Error('The saved item packaging is incomplete. Review it in Products.');
