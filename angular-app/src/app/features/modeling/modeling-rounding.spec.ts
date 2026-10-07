@@ -139,3 +139,15 @@ it('keeps diagonal front frame mitres square',()=>{
  const joint=joints.get('Front part2')![0];expect(joint.normal).toBeDefined();const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute([.056,.800,.57,.055,.799,.57,.055,.799,.58],3));geometry.computeVertexNormals();keepPartJointsSquare(geometry,[joint],1.5);
  const point=new THREE.Vector3().fromBufferAttribute(geometry.getAttribute('position'),0);expect(point.dot(new THREE.Vector3(...joint.normal!))).toBeCloseTo(joint.plane,6);
 });
+
+
+it.each([1,1.5,2,2.5,3])('removes the face bevel along a complete front mitre at %s mm',radius=>{
+ const top:RoundingProfile={axis:'z',origin:.568,thickness:.012,outline:[[.02,.834],[.09,.764],[1.41,.764],[1.48,.834]],holes:[]};
+ const left:RoundingProfile={...top,outline:[[.02,.111],[.09,.181],[.09,.764],[.02,.834]]};
+ const parts=[top,left].map((profile,index)=>{const geometry=createRoundedPart(profile,radius);geometry.computeBoundingBox();return {name:'Front part'+(index+2),profile,geometry,bounds:geometry.boundingBox!.clone()};});
+ const joints=matingPartJoints(parts);
+ for(const part of parts){keepPartJointsSquare(part.geometry,joints.get(part.name)!,radius);const p=part.geometry.getAttribute('position');let seam=0,freeBevel=0;const joint=joints.get(part.name)!.find(j=>j.cap)!;const n=new THREE.Vector3(...joint.normal!);
+  for(let i=0;i<p.count;i++){const v=new THREE.Vector3().fromBufferAttribute(p,i);if(Math.abs(v.dot(n)-joint.plane)<1e-6&&v.y>.763&&v.y<.835){expect(Math.min(Math.abs(v.z-.568),Math.abs(v.z-.58))).toBeLessThan(1e-6);seam++;}else if(v.z>.56801&&v.z<.57999)freeBevel++;}
+  expect(seam).toBeGreaterThan(0);expect(freeBevel).toBeGreaterThan(0);part.geometry.dispose();
+ }
+});

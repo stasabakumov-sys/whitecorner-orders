@@ -282,9 +282,9 @@ describe('Plywood finishes', () => {
     expect(front.material.color.r).toBeCloseTo(1.05);
     expect(edge.material.color.r).toBeCloseTo(1.30);
     expect(topEdge.material.map).toBe(layers);
-    expect(trim.material.map).toBe(layers);
-    expect(trim.material.color.r).toBeCloseTo(1.30);
-    expect(trim.material.color.b).toBeCloseTo(1.30);
+    expect(trim.material.map).toBe(pine);
+    expect(trim.material.color.r).toBeCloseTo(1.15*1.05);
+    expect(trim.material.color.b).toBeCloseTo(2.4*1.05);
     expect(top.material.roughness).toBe(front.material.roughness);
     expect(top.material.color.equals(front.material.color)).toBe(true);
     expect(topEdge.material.color.equals(edge.material.color)).toBe(true);
@@ -292,7 +292,7 @@ describe('Plywood finishes', () => {
     component.setBodyColor('#33383e');
     expect(front.material.map).toBeNull();
     expect(edge.material.map).toBeNull();
-    expect(trim.material.map).toBe(layers);
+    expect(trim.material.map).toBe(pine);
     expect(front.material.bumpMap).toBe(paintBump);
     expect(trim.material.bumpMap).toBeNull();
     expect(top.material.bumpMap).toBeNull();
@@ -322,7 +322,7 @@ describe('Plywood finishes', () => {
     expect(front.material.map).toBe(birch);
     expect(top.material.envMap).toBeNull();
     expect(edge.material.map).toBe(layers);
-    expect(trim.material.map).toBe(layers);
+    expect(trim.material.map).toBe(pine);
     expect(front.material.bumpMap).toBeNull();
     await component.setTopFinish('oak');
     expect(top.material.map).toBe(oak);
@@ -539,4 +539,16 @@ it('drills aligned umbrella openings through the top, middle shelf and ice shelf
 it('limits umbrella diameter to 32–50 mm and includes its bottom holder only with the hole option',()=>{
  const {component}=setup(),editor=component as any;component.activeSlug.set('side-shelf-cart-mdf');component.width.set(1500);vi.spyOn(component,'setRounding').mockResolvedValue();component.setUmbrellaDiameter(20);expect(component.umbrellaDiameter()).toBe(32);component.setUmbrellaDiameter(80);expect(component.umbrellaDiameter()).toBe(50);
  editor.body=new THREE.Group();editor.model=new THREE.Group();editor.model.add(editor.body);const holder=new THREE.Mesh(new THREE.BoxGeometry(.074,.016,.053));holder.name='Body5';editor.body.add(holder);editor.bindAssembly();expect(holder.visible).toBe(false);component.umbrellaHole.set(true);editor.bindAssembly();expect(holder.visible).toBe(true);
+});
+
+
+it.each(['left','centre','right'] as const)('drills aligned Classic Ply holes at %s across product lengths and restores its panels',async position=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('classic-bar-plywood');component.roundingSupported.set(true);component.height.set(900);editor.body=new THREE.Group();
+ for(const [name,y] of [['Top part1',.885],['Shelf',.49]] as const){const mesh=new THREE.Mesh(new THREE.BoxGeometry(1.162,.015,.562).translate(.6,y+.0075,.3),new THREE.MeshStandardMaterial());mesh.name=name;mesh.userData['roundingProfile']={axis:'y',origin:y,thickness:.015,outline:[[.019,.019],[1.181,.019],[1.181,.581],[.019,.581]],holes:[]};editor.sourceParts.push(mesh);editor.sourcePositions.set(mesh.geometry,mesh.geometry.getAttribute('position').clone());}
+ vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});vi.spyOn(editor,'updateMoulding').mockImplementation(()=>{});
+ component.umbrellaHole.set(true);component.umbrellaPosition.set(position);
+ for(const width of [1200,1500]){component.width.set(width);await component.setRounding(1.5);const x=position==='left'?.2:position==='right'?width/1000-.2:width/2000;
+  const ray=new THREE.Raycaster(new THREE.Vector3(x,1.2,.3),new THREE.Vector3(0,-1,0));for(const mesh of editor.body.children){mesh.updateMatrixWorld();expect(ray.intersectObject(mesh)).toHaveLength(0);ray.ray.origin.x=x+.025;expect(ray.intersectObject(mesh).length).toBeGreaterThan(0);ray.ray.origin.x=x;}
+ }
+ component.umbrellaHole.set(false);await component.setRounding(1.5);const ray=new THREE.Raycaster(new THREE.Vector3(component.umbrellaX()/1000,1.2,.3),new THREE.Vector3(0,-1,0));for(const mesh of editor.body.children){mesh.updateMatrixWorld();expect(ray.intersectObject(mesh).length).toBeGreaterThan(0);}
 });

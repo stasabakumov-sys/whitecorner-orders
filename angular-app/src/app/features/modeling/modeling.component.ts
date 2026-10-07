@@ -154,7 +154,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         {label:'Castors',value:'Ø'+(this.hasRoof()?'50':'75')+' mm'},
         {label:'Shelf',value:this.shelfIncluded()?'Middle':'None'}];
       if(this.frontLogo()){const logo=fitLogo(this.logoPanel(),this.frontLogo()!);fields.push({label:'Front logo',value:`${logo.width.toFixed(1)} x ${logoHeight(logo).toFixed(1)} mm · left ${logo.x.toFixed(1)} · top ${logo.y.toFixed(1)} mm`});}
-      if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Umbrella hole',value:this.umbrellaHole()?'Ø'+this.umbrellaDiameter()+' mm · top, shelves & centred bottom holder':'None'},{label:'Cutouts',value:this.cutoutSummary()+(this.cutoutsIncluded()&&this.reverseCutoutLayout()?' · reversed 180°':'')},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
+      if(this.isClassic()||this.isSideShelfCart())fields.push({label:'Umbrella hole',value:this.umbrellaHole()?'Ø'+this.umbrellaDiameter()+' mm · '+(this.isClassic()?this.umbrellaPosition()+' · top & shelf':'top, shelves & centred bottom holder'):'None'});
+      if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Cutouts',value:this.cutoutSummary()+(this.cutoutsIncluded()&&this.reverseCutoutLayout()?' · reversed 180°':'')},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
       if(this.hasRoof())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
@@ -196,13 +197,28 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly showUmbrella = signal(false);
   private umbrellaPreview?:THREE.Group;
   private umbrellaPreviewKey='';
+  optionsSummary():string {
+    const selected:string[]=[];
+    if(this.shelfIncluded())selected.push('Shelf: Middle');
+    if(this.isSideShelfCart()){
+      if(this.sideShelvesIncluded())selected.push('Side shelves');
+      if(this.iceShelfIncluded())selected.push('Ice shelf');
+      if(this.umbrellaHole())selected.push('Hole: Ø'+this.umbrellaDiameter()+' mm');
+    }
+    if(!this.isSideShelfCart() && this.moulding())selected.push('Moulding');
+    if(this.isClassic()&&this.umbrellaHole())selected.push('Hole: '+this.umbrellaPosition()+' Ø'+this.umbrellaDiameter()+' mm');
+    return selected.join(' · ') || 'None';
+  }
   previewHeight():number {return this.showUmbrella()&&this.umbrellaHole()?UMBRELLA_PREVIEW_HEIGHT*1000:this.overallHeight();}
   setShowUmbrella(value:boolean):void {this.showUmbrella.set(value);this.applyDimensions();}
   readonly umbrellaHole = signal(false);
   readonly umbrellaDiameter = signal(40);
-  umbrellaDiameterMax():number {return umbrellaDiameterLimit(this.width(),this.depth());}
+  umbrellaDiameterMax():number {return this.isClassic()?80:umbrellaDiameterLimit(this.width(),this.depth());}
   setUmbrellaHole(value:boolean):void {this.umbrellaHole.set(value);if(!value)this.showUmbrella.set(false);void this.setRounding(this.rounding());}
   setUmbrellaDiameter(value:number):void {if(!Number.isFinite(value))return;this.umbrellaDiameter.set(Math.max(32,Math.min(this.umbrellaDiameterMax(),Math.round(value))));void this.setRounding(this.rounding());}
+  readonly umbrellaPosition = signal<'left'|'centre'|'right'>('centre');
+  umbrellaX():number {return this.isClassic()?this.umbrellaPosition()==='left'?200:this.umbrellaPosition()==='right'?this.width()-200:this.width()/2:this.width()/2;}
+  setUmbrellaPosition(value:'left'|'centre'|'right'):void {this.umbrellaPosition.set(value);void this.setRounding(this.rounding());}
   readonly reverseCutoutLayout = signal(true);
   trayLayoutIndices():number[] {const indices=this.traySlots.map((_,i)=>i);return this.reverseCutoutLayout()?indices.reverse():indices;}
   setReverseCutoutLayout(value:boolean):void {this.reverseCutoutLayout.set(value);this.applyDimensions();this.applyFinishes();}
@@ -419,6 +435,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.controls = new OrbitControls(this.orbitCamera, this.renderer.domElement);
       this.controls.target.set(0.6, 0.45, 0.3);
       this.controls.enableDamping = true;
+      this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+      this.controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+      this.controls.screenSpacePanning = true;
       this.controls.maxPolarAngle = Math.PI / 2.05;
       this.controls.update();
       this.assembly = new AssemblyController(this.scene, this.camera, this.renderer.domElement,
@@ -467,8 +486,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (this.controls) {
       const offset = this.orbitCamera.position.clone().sub(this.controls.target);
       const spherical = new THREE.Spherical().setFromVector3(offset);
-      this.camera.position.copy(this.controls.target).add(new THREE.Vector3().setFromSphericalCoords(spherical.radius, spherical.phi, this.viewAzimuth));
-      this.camera.lookAt(this.controls.target);
+      const centre = new THREE.Vector3(this.width()/2000,this.previewHeight()/2000,this.depth()/2000);
+      const target = this.controls.target.clone().sub(centre).applyAxisAngle(new THREE.Vector3(0,1,0),this.viewAzimuth-spherical.theta).add(centre);
+      this.camera.position.copy(target).add(new THREE.Vector3().setFromSphericalCoords(spherical.radius, spherical.phi, this.viewAzimuth));
+      this.camera.lookAt(target);
       if (this.turntable) this.turntable.rotation.y = this.viewAzimuth - spherical.theta;
     }
     this.assembly?.update();
@@ -515,7 +536,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.roundingEditing.set(false);
     this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
     this.shelfIncluded.set(true);
-    this.iceShelfIncluded.set(true);this.sideShelvesIncluded.set(true);this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);this.selectedCutouts.set([]);this.reverseCutoutLayout.set(true);this.umbrellaHole.set(false);this.umbrellaDiameter.set(40);this.showUmbrella.set(false);
+    this.iceShelfIncluded.set(true);this.sideShelvesIncluded.set(true);this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);this.selectedCutouts.set([]);this.reverseCutoutLayout.set(true);this.umbrellaHole.set(false);this.umbrellaPosition.set('centre');this.umbrellaDiameter.set(40);this.showUmbrella.set(false);
     this.roofClosed.set(false);
     this.glassRackCount.set(0);
     this.showGlasses.set(false);
@@ -750,7 +771,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const step = axis === 'width' ? 100 : 50;
     const next = Math.round(Math.max(limits[0], Math.min(limits[1], value)) / step) * step;
     this[axis].set(next);
-    if(this.isSideShelfCart()&&this.umbrellaHole()){const max=this.umbrellaDiameterMax();if(max<32)this.umbrellaHole.set(false);else this.umbrellaDiameter.update(value=>Math.min(value,max));void this.setRounding(this.rounding());return;}
+    if((this.isSideShelfCart()||this.isClassic())&&this.umbrellaHole()){const max=this.umbrellaDiameterMax();if(max<32)this.umbrellaHole.set(false);else this.umbrellaDiameter.update(value=>Math.min(value,max));void this.setRounding(this.rounding());return;}
     this.applyDimensions();
   }
 
@@ -779,7 +800,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         let supported = false;
         part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) supported = true; });
         const solidSide=this.isSideShelfCart()&&!this.sideShelvesIncluded()&&/^(Left|Right)[ _]side[ _]?1$/i.test(part.name);
-        const umbrellaPanel=this.isSideShelfCart()&&this.umbrellaHole()&&/^(Top[ _]part1(?:[ _]cutouts)?|Shelf|Ice[ _]shelf[ _]4|Body5)$/i.test(part.name);
+        const umbrellaPanel=(this.isSideShelfCart()||this.isClassic())&&this.umbrellaHole()&&/^(Top[ _]part1(?:[ _]cutouts)?|Shelf|Ice[ _]shelf[ _]4|Body5)$/i.test(part.name);
         if (!umbrellaPanel&&((!raw&&!solidSide) || !supported || /^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts|[ _]cutout[ _]plug[ _]\d+)?$/i.test(part.name))) {
           const copy = part.clone(true);
           copy.traverse(node => {
@@ -806,7 +827,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
           if(/^Body5$/i.test(name)){const w=Math.max(bounds.max.x-bounds.min.x,(this.umbrellaDiameter()+15)/1000),d=Math.max(bounds.max.z-bounds.min.z,(this.umbrellaDiameter()+15)/1000);bounds.min.x=.75-w/2;bounds.max.x=.75+w/2;bounds.min.z=.3-d/2;bounds.max.z=.3+d/2;}
           profile={axis:'y',origin:bounds.min.y,thickness:bounds.max.y-bounds.min.y,outline:[[bounds.min.x,bounds.min.z],[bounds.max.x,bounds.min.z],[bounds.max.x,bounds.max.z],[bounds.min.x,bounds.max.z]],holes:[]};}
         if (!profile) throw new Error('The GLB is missing a part profile. Upload an updated model.');
-        if(umbrellaPanel)profile=withUmbrellaHole(profile,this.umbrellaDiameter(),this.width());
+        if(umbrellaPanel)profile=withUmbrellaHole(profile,this.umbrellaDiameter(),this.width(),this.umbrellaX(),this.isClassic()?1200:1500);
         if(solidSide){const us=profile.outline.map(p=>p[0]),vs=profile.outline.map(p=>p[1]),u0=Math.min(...us),u1=Math.max(...us),v0=Math.min(...vs),v1=Math.max(...vs);profile={...profile,outline:[[u0,v0],[u1,v0],[u1,v1],[u0,v1]],holes:[]};}
         const partJoints = joints.get(name) || [];
         const key = JSON.stringify([profile, raw, /^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name), partJoints]);
@@ -960,9 +981,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.trays=createGastronormTrays(this.height(),this.stainlessReflection(),this.selectedTrays(),this.reverseCutoutLayout(),this.width(),this.depth());this.model.add(this.trays);
   }
   private updateUmbrella():void {
-    const visible=this.isSideShelfCart()&&this.umbrellaHole()&&this.showUmbrella(),key=JSON.stringify([visible,this.umbrellaDiameter(),this.width(),this.depth()]);if(key===this.umbrellaPreviewKey)return;this.umbrellaPreviewKey=key;
+    const visible=(this.isSideShelfCart()||this.isClassic())&&this.umbrellaHole()&&this.showUmbrella(),key=JSON.stringify([visible,this.umbrellaDiameter(),this.umbrellaX(),this.width(),this.depth()]);if(key===this.umbrellaPreviewKey)return;this.umbrellaPreviewKey=key;
     if(this.umbrellaPreview){this.umbrellaPreview.removeFromParent();const materials=new Set<THREE.Material>();this.umbrellaPreview.traverse(node=>{if(node instanceof THREE.Mesh){node.geometry.dispose();materials.add(node.material as THREE.Material);}});materials.forEach(material=>material.dispose());this.umbrellaPreview=undefined;}
-    if(!visible||!this.model)return;this.umbrellaPreview=createUmbrellaPreview(this.umbrellaDiameter()-2);this.umbrellaPreview.position.set(this.width()/2000,0,this.depth()/2000);this.model.add(this.umbrellaPreview);
+    if(!visible||!this.model)return;this.umbrellaPreview=createUmbrellaPreview(this.umbrellaDiameter()-2);this.umbrellaPreview.position.set(this.umbrellaX()/1000,0,this.depth()/2000);this.model.add(this.umbrellaPreview);
   }
   private bindAssembly(): void {
     this.updateUmbrella();
@@ -1143,8 +1164,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       for (const material of materials) {
         if (!(material instanceof THREE.MeshStandardMaterial)) continue;
         const finish = isTopPanelName(partName) ? this.topFinish() : 'body';
-        const pine = /pine[ _]trim$/i.test(material.name) && !(isTopPanelName(partName) && finish === 'plywood');
-        const edge = /plywood[ _]edge$/i.test(material.name) || (this.isClassic() && isTopPanelName(partName) && finish === 'plywood' && /pine[ _]trim$/i.test(material.name));
+        const pine = /pine[ _]trim$/i.test(material.name);
+        const edge = /plywood[ _]edge$/i.test(material.name);
         const plywood = (pine ? this.modelPineTexture : edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
         const map = finish === 'oak' ? this.finishTextures.get('tasmanian-oak.png') || null
           : finish === 'mdf' ? null : !this.isClassic() ? finish === 'plywood' ? this.finishTextures.get(pine ? 'pine.jpg' : edge ? 'plywood-edge.jpg' : 'plywood-face.jpg') || null : null
