@@ -66,6 +66,12 @@ The installed copy lives in `%LOCALAPPDATA%\WhiteCorner\PackingStation`, indepen
 
 The station starts immediately after setup and processes Hub transfer requests, including already queued requests. Cutting remains manual. Close RDWorks before uploading. `transfer.log` contains original-to-controller filename mappings, `errors.log` contains station errors, and `setup-status.json` records installation progress without credentials. To disable future automatic starts, remove the named shortcut from `shell:startup`; this does not stop an already-running transfer. Re-run setup after changing the Hub password, moving to a different Windows account, or upgrading the installed station code. Real end-to-end file transfer still requires operator verification on the controller.
 
+## Send one saved box from its RD editor
+
+Managers can choose **Send to Cutting work** in a packaging box's RD window, or use the scissors icon beside its RD file control in the table. A separate confirmation lists every saved RD file and its copy count. Save copy edits first. The server checks the complete file set and revisions, then creates one independent box task; a retry returns the existing active task. This action does not request a laser transfer. Cart reusable boxes, profile-local boxes and shared Backdrop size/folding libraries use their existing RD owners and original file IDs. Replacing a file therefore updates unfinished box tasks through the existing replacement guard.
+
+Migration `20261007000100_box_cutting_dispatch.sql` must be applied before publishing the updated UI. It adds the independent box task source without changing order/custom job sources or task RLS. Cutting work displays the saved box and its matching drawing. Managers can cancel an untransferred box task through an icon and separate confirmation; claimed transfers remain protected by the existing server check. Completion still requires transferred files, saved Done marks and explicit Boxes made confirmation.
+
 ## Checks
 
 - `npm test -- --watch=false` and `npm run build` from `angular-app/`.

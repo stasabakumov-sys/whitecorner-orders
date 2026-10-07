@@ -1,16 +1,20 @@
-import {ChangeDetectorRef,Component,Input,OnChanges} from '@angular/core';
+import {ChangeDetectorRef,Component,Input,OnChanges,Optional} from '@angular/core';
 import {DialogModule} from 'primeng/dialog';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {BoxDrawingComponent,baseDrawingBox,sameDrawingBox} from './box-drawing.component';
 import {qualifiedDrawingKey} from './product-sizes';
 import {BoxRdFilesComponent} from './box-rd-files.component';
+import {HubMembersService} from '../../core/services/hub-members.service';
 
 @Component({selector:'app-packing-files-cell',standalone:true,imports:[DialogModule,BoxDrawingComponent,BoxRdFilesComponent],template:`
  <div class="presence">
   <span [class.present]="present" [attr.aria-label]="label" [title]="label">{{loading?'…':error?'?':present?'✓':'—'}}</span>
-  <button type="button" class="edit" [title]="locked?'Save packaging changes before editing files':(readOnly?'View ':'Edit ')+kind.toUpperCase()+' files for '+(viewBox.package_name||sharedSize||'box')" [attr.aria-label]="(readOnly?'View ':'Edit ')+kind.toUpperCase()+' files for '+(viewBox.package_name||sharedSize||'box')" (click)="open=true" [disabled]="locked||!enabled">
+  <button type="button" class="edit" [title]="locked?'Save packaging changes before editing files':(readOnly?'View ':'Edit ')+kind.toUpperCase()+' files for '+(viewBox.package_name||sharedSize||'box')" [attr.aria-label]="(readOnly?'View ':'Edit ')+kind.toUpperCase()+' files for '+(viewBox.package_name||sharedSize||'box')" (click)="sendOnLoad=false;open=true" [disabled]="locked||!enabled">
    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z"/></svg>
   </button>
+  @if(kind==='rd'&&!readOnly&&members?.manager()){
+   <button type="button" class="edit" [title]="locked?'Save packaging changes before sending':!present?'Save RD files before sending':'Send box to Cutting work'" [attr.aria-label]="'Send '+(viewBox.package_name||sharedSize||'box')+' to Cutting work'" [disabled]="locked||!enabled||loading||error||!present" (click)="sendOnLoad=true;open=true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="m8.5 7.5 12 13m-12-4 12-13"/></svg></button>
+  }
  </div>
  @if(error){<small role="alert">Could not check files. <button type="button" (click)="load()">Retry</button></small>}
  <p-dialog [(visible)]="open" [modal]="true" appendTo="body" [header]="kind.toUpperCase()+' · '+(viewBox.package_name||sharedSize||'Packaging')+' · Box '+(viewBox.package_no||index+1)" [style]="{width:'580px',maxWidth:'calc(100vw - 24px)'}" (onHide)="load()">
@@ -20,18 +24,18 @@ import {BoxRdFilesComponent} from './box-rd-files.component';
     @if(svgError){<p class="svg-error" role="alert">{{svgError}} <button type="button" (click)="downloadSvg()" [disabled]="svgBusy">Retry download</button></p>}
     <app-box-drawing [cartBasePackageId]="signature?'':viewBox.id||''" [signature]="signature" [index]="index" [sharedSize]="sharedSize" [box]="viewBox" [readOnly]="readOnly||!!sharedSize&&!qualifiedKey(sharedSize)" />
    }
-   @else{<app-box-rd-files [cartBasePackageId]="signature?'':viewBox.id||''" [signature]="signature" [index]="index" [sharedSize]="sharedSize" />}
+   @else{<app-box-rd-files [cartBasePackageId]="signature?'':viewBox.id||''" [signature]="signature" [index]="index" [sharedSize]="sharedSize" [boxName]="viewBox.package_name||sharedSize||'Packaging box'" [sendOnLoad]="sendOnLoad" />}
   }
  </p-dialog>
  `,styles:[`
- .presence{display:flex;align-items:center;gap:8px}.presence>span{width:14px;text-align:center;color:var(--wc-muted)}.presence>.present{color:#047857;font-weight:700}.edit{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0}.edit svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}.help{color:var(--wc-muted);margin:0 0 18px;font-size:.875rem;line-height:1.5}small{color:#b91c1c}
+ .presence{display:flex;align-items:center;gap:4px}.presence>span{width:14px;text-align:center;color:var(--wc-muted)}.presence>.present{color:#047857;font-weight:700}.edit{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0}.edit svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}.help{color:var(--wc-muted);margin:0 0 18px;font-size:.875rem;line-height:1.5}small{color:#b91c1c}
  .svg-source{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:16px}.svg-source button{max-width:100%;overflow-wrap:anywhere;text-align:left}.svg-error{color:#991b1b;background:#fff1f1;padding:8px;border-radius:6px}
  `]})
 export class PackingFilesCellComponent implements OnChanges{
  @Input()box:any={};@Input()kind:'cdr'|'rd'='rd';@Input()signature='';@Input()index=0;@Input()sharedSize='';@Input()backdrop=false;@Input()dimensions:any=null;@Input()readOnly=false;@Input()locked=false;@Input()refreshVersion=0;
  viewBox:any={};resolvedId='';qualifiedKey=qualifiedDrawingKey;svgDrawing:any=null;svgBusy=false;svgError='';
- open=false;present=false;loading=false;error=false;private generation=0;
- constructor(private db:SupabaseService,private cdr:ChangeDetectorRef){}
+ open=false;sendOnLoad=false;present=false;loading=false;error=false;private generation=0;
+ constructor(private db:SupabaseService,private cdr:ChangeDetectorRef,@Optional() readonly members?:HubMembersService){}
  get enabled(){return (!this.backdrop||!!this.sharedSize)&&(!this.sharedSize||this.kind==='cdr'||qualifiedDrawingKey(this.sharedSize))&&!!(this.viewBox.id||this.signature||this.sharedSize);}
  get label(){return `${this.kind==='cdr'&&this.svgDrawing?'CDR / SVG':this.kind.toUpperCase()}: ${this.loading?'checking files':this.error?'check failed':this.present?'file uploaded':'no saved file'}`;}
  ngOnChanges(){this.viewBox=this.dimensions?{...this.box,package_name:this.dimensions.package_name,length_mm:Number(this.dimensions.length_mm),width_mm:Number(this.dimensions.width_mm),height_mm:Number(this.dimensions.height_mm)}:this.box;void this.load();}

@@ -2,6 +2,11 @@ import {describe,expect,it,vi} from 'vitest';
 import {CartMainPackagingComponent} from './cart-main-packaging.component';
 
 describe('Cart Main packaging variants',()=>{
+ it('removes a box only after confirmation and keeps the draft when cancelled',()=>{
+  const component=new CartMainPackagingComponent({} as any);const box={package_name:'Shelf',contents:[]};component.boxes=[box];component.confirmed=true;
+  component.requestRemove(box);expect(component.boxes).toEqual([box]);component.removeCandidate=null;component.confirmRemove();expect(component.boxes).toEqual([box]);
+  component.requestRemove(box);component.confirmRemove();expect(component.boxes).toEqual([]);expect(component.confirmed).toBe(false);
+ });
  function setup(){
   const invoke=vi.fn(async()=>({data:{ok:true},error:null}));
   const from=vi.fn((table:string)=>{const query:any={select:()=>query,eq:()=>query,then:(resolve:any)=>resolve({data:table==='wc_delivery_packaging_profiles'?[]:[],error:null})};return query;});
@@ -12,6 +17,22 @@ describe('Cart Main packaging variants',()=>{
  it('puts Internal Shelf inside the manually entered Main composition',()=>{
   const{component}=setup();
   expect(component.components().map(c=>c.component_key).sort()).toEqual(['main','option:internal shelf']);
+ });
+ it('locks saved rows until Edit, opens new rows for entry and confirms the complete variant before saving',async()=>{
+  const{component,invoke}=setup();const box={package_name:'Cart',length_mm:1230,width_mm:630,height_mm:80,weight_kg:20,contents:component.components()};component.boxes=[box];
+  expect(component.editingBoxes.has(box)).toBe(false);
+  component.startEdit(box);expect(component.editingBoxes.has(box)).toBe(true);
+  component.requestSave();expect(component.saveConfirmOpen).toBe(true);expect(component.confirmed).toBe(false);expect(invoke).not.toHaveBeenCalled();
+  component.saveConfirmOpen=false;expect(component.editingBoxes.has(box)).toBe(true);
+  component.requestSave();component.confirmed=true;await component.save();
+  expect(component.editingBoxes.size).toBe(0);expect(component.saveConfirmOpen).toBe(false);expect(component.dirty).toBe(false);
+  component.addBox();expect(component.editingBoxes.has(component.boxes.at(-1))).toBe(true);
+ });
+ it('keeps edited rows and the confirmation open after a failed save',async()=>{
+  const{component,invoke}=setup();invoke.mockResolvedValue({data:{ok:false},error:null});
+  const box={package_name:'Cart',length_mm:1230,width_mm:630,height_mm:80,weight_kg:20,contents:component.components()};component.boxes=[box];component.startEdit(box);component.requestSave();component.confirmed=true;
+  await component.save();
+  expect(component.boxes).toEqual([box]);expect(component.editingBoxes.has(box)).toBe(true);expect(component.saveConfirmOpen).toBe(true);expect(component.saved()).toBe(false);expect(component.error()).toContain('Your entries are retained');
  });
  it('saves the complete dimensions as a Cart Main profile without calculating them',async()=>{
   const{component,invoke}=setup();component.boxes=[{package_name:'Top/Bottom + shelf',length_mm:1430,width_mm:630,height_mm:110,weight_kg:22.5,contents:component.components()}];component.confirmed=true;

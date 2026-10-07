@@ -1,4 +1,5 @@
 import {TestBed} from '@angular/core/testing';
+import {By} from '@angular/platform-browser';
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {PackingWorkComponent} from './packing-work.component';
 import {BoxDrawingComponent} from '../shipping-data/box-drawing.component';
@@ -17,6 +18,19 @@ async function setup(){
 }
 afterEach(()=>{TestBed.resetTestingModule();vi.restoreAllMocks();});
 describe('Packing work viewing',()=>{
+ it('uses the original profile box and source index when displaying a standalone box drawing',async()=>{
+  const {fixture,c}=await setup();const source={package_name:'Shelf',length_mm:1185,width_mm:670,height_mm:40,contents:[]};
+  c.tasks.set([{...c.tasks()[0],unit_id:null,box_rd_source_key:'profile:profile:3',packages:[{...source,cutting_source_index:3,cutting_source_box:source}]}]);fixture.detectChanges();await fixture.whenStable();
+  const drawing=fixture.debugElement.query(By.directive(BoxDrawingComponent)).componentInstance as BoxDrawingComponent;
+  expect(drawing.index).toBe(3);expect(drawing.box).toBe(source);expect(drawing.current).not.toBeNull();
+ });
+ it('keeps direct box work until cancellation is separately confirmed by the server',async()=>{
+  const {fixture,c,rpc}=await setup();const task={...c.tasks()[0],unit_id:null,profile_signature:null,box_rd_source_key:'cart:box',state:'assigned'};c.tasks.set([task]);fixture.detectChanges();
+  expect(fixture.nativeElement.querySelector('.order').textContent).toBe('Box cutting');
+  c.openCancellation(task);c.closeCancellation();expect(c.tasks()).toHaveLength(1);expect(rpc).not.toHaveBeenCalled();
+  c.openCancellation(task);rpc.mockResolvedValueOnce({data:null,error:{message:'Already claimed by station'}} as any);await c.confirmCancellation();expect(c.tasks()).toHaveLength(1);expect(c.cancellationError()).toContain('Already claimed');
+  rpc.mockResolvedValueOnce({data:{...task,state:'cancelled'},error:null});await c.confirmCancellation();expect(c.tasks()).toEqual([]);expect(c.cancellationTask()).toBeNull();
+ });
  it('shows independent Custom work without a product drawing',async()=>{
   const custom={id:'custom-task',unit_id:null,custom_job_id:'custom-1',custom_instructions:'Cut two panels',order_number:'',product_name:'Special arch',profile_signature:null,state:'assigned',assigned_at:'2026-10-01',cut_file_ids:[],packages:[{package_name:'Custom job'}],files:[{file_id:'f1',box_index:0,filename:'D1.rd',copies:2,object_path:'owner/file'}]};
   const from=vi.fn((table:string)=>{const q:any={select:()=>q,neq:()=>q,order:()=>q,limit:()=>q,then:(resolve:any)=>Promise.resolve({data:table==='wc_packing_tasks'?[custom]:[],error:null}).then(resolve)};return q;});

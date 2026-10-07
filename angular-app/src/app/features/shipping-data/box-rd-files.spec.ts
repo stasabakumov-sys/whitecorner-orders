@@ -12,6 +12,24 @@ function setup(){
 }
 
 describe('box RD files',()=>{
+ it('reviews saved files before dispatch and blocks unsaved copy edits',async()=>{
+  const {component,rpc,event}=setup();await component.upload(event(new File(['rd'],'box.rd')));rpc.mockClear();
+  component.files[0].copies=4;component.openSend();expect(component.sendOpen).toBe(false);expect(component.error).toContain('Save copy changes');
+  component.files[0].copies=3;component.openSend();expect(component.sendOpen).toBe(true);expect(component.sendFiles[0].copies).toBe(3);expect(rpc).not.toHaveBeenCalled();
+  rpc.mockResolvedValueOnce({data:{task:{id:'task',state:'assigned'},created:true},error:null});await component.confirmSend();
+  expect(rpc).toHaveBeenCalledWith('wc_send_box_cutting_task',{p_files:[{id:'saved',revision:'new',copies:3}]});expect(component.sentTask).toBe('task');expect(component.sendOpen).toBe(false);
+ });
+ it('keeps confirmation and files after dispatch failure, then accepts an idempotent retry',async()=>{
+  const {component,rpc,event}=setup();await component.upload(event(new File(['rd'],'box.rd')));component.openSend();
+  rpc.mockResolvedValueOnce({data:null,error:{message:'Connection lost'}});await component.confirmSend();
+  expect(component.sendOpen).toBe(true);expect(component.sendError).toContain('Connection lost');expect(component.files).toHaveLength(1);expect(component.sentTask).toBe('');
+  rpc.mockResolvedValueOnce({data:{task:{id:'task',state:'assigned'},created:false},error:null});await component.confirmSend();expect(component.success).toContain('already has an active');
+ });
+ it('requires manager access and explicit confirmation to dispatch',async()=>{
+  const {component,rpc,event}=setup();await component.upload(event(new File(['rd'],'box.rd')));rpc.mockClear();
+  await component.confirmSend();expect(rpc).not.toHaveBeenCalled();
+  vi.spyOn(component.members,'manager').mockReturnValue(false);component.openSend();expect(component.sendOpen).toBe(false);
+ });
  it('rejects the wrong type and an oversized file before uploading',async()=>{
   const {component,upload,event}=setup();await component.upload(event(new File(['x'],'box.txt')));
   expect(component.error).toContain('.rd');expect(upload).not.toHaveBeenCalled();

@@ -11,6 +11,15 @@ function setup(data:any[],error:any=null){
  return {c,from,eq};
 }
 describe('Cart file presence columns',()=>{
+ it('opens a saved box cutting confirmation directly from the row without dispatching',async()=>{
+  TestBed.resetTestingModule();
+  const file={id:'rd',filename:'box.rd',copies:2,revision:'revision'},response=Promise.resolve({data:[file],error:null}),query:any={select:()=>query,eq:()=>query,order:()=>response,then:response.then.bind(response)},rpc=vi.fn();
+  await TestBed.configureTestingModule({imports:[PackingFilesCellComponent],providers:[{provide:SupabaseService,useValue:{client:{from:()=>query,rpc}}},{provide:HubMembersService,useValue:{manager:()=>true}}]}).compileComponents();
+  const fixture=TestBed.createComponent(PackingFilesCellComponent);fixture.componentRef.setInput('box',{id:'shelf',package_name:'Shelf',package_no:1});fixture.detectChanges();await fixture.componentInstance.load();await fixture.whenStable();fixture.detectChanges();
+  const send=fixture.nativeElement.querySelector('button[aria-label="Send Shelf to Cutting work"]') as HTMLButtonElement;expect(send.disabled).toBe(false);send.click();fixture.detectChanges();await fixture.whenStable();fixture.detectChanges();
+  await vi.waitFor(()=>{fixture.detectChanges();expect(document.body.textContent).toContain('Send box to Cutting work');expect(document.body.textContent).toContain('box.rd · 2 copies');});expect(rpc).not.toHaveBeenCalled();
+  fixture.destroy();
+ });
  it('opens the RD editor from its cell without rendering file controls in the table',async()=>{
   TestBed.resetTestingModule();
   const response=Promise.resolve({data:[],error:null}),query:any={select:()=>query,eq:()=>query,order:()=>response,then:response.then.bind(response)};

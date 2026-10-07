@@ -1,5 +1,7 @@
 import {ChangeDetectorRef,Component,Input,OnChanges,Optional} from '@angular/core';
 import {FormsModule} from '@angular/forms';
+import {DialogModule} from 'primeng/dialog';
+import {RouterLink} from '@angular/router';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {HubMembersService} from '../../core/services/hub-members.service';
 
@@ -8,11 +10,11 @@ export interface BoxRdFile {
  size_bytes:number;copies:number;revision:string;
 }
 
-@Component({selector:'app-box-rd-files',standalone:true,imports:[FormsModule],template:`
+@Component({selector:'app-box-rd-files',standalone:true,imports:[FormsModule,DialogModule,RouterLink],template:`
  <div class="rd-files">
   <strong>Laser cutting · RD files</strong>
   @if(loading){<span role="status">Loading RD files…</span>}
-  @if(busy){<span role="status">{{busy==='upload'?'Uploading and saving RD file…':'Saving RD files…'}}</span>}
+  @if(busy){<span role="status">{{busy==='send'?'Sending to Cutting work…':busy==='upload'?'Uploading and saving RD file…':'Saving RD files…'}}</span>}
   @if(error){<p class="error" role="alert">{{error}} @if(loadError){<button type="button" (click)="load()">Retry load</button>}</p>}
   @if(success){<p role="status">{{success}}</p>}
   @if((sharedSize||cartBaseId)&&legacyFiles.length){<div class="legacy-files"><strong>Earlier files in this product profile</strong>
@@ -26,24 +28,39 @@ export interface BoxRdFile {
     <label>Copies <input type="number" min="1" max="1000" step="1" [(ngModel)]="file.copies" [disabled]="!!busy" [attr.aria-label]="'Copies for '+file.filename"></label>
     <button type="button" class="icon" title="Save copies" [attr.aria-label]="'Save copies for '+file.filename" [disabled]="!!busy" (click)="saveCopies(file)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>
     <label class="icon replace" [title]="'Replace '+file.filename"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.35-5.66M20 4v7h-7"/></svg><input type="file" accept=".rd" [attr.aria-label]="'Replace '+file.filename" [disabled]="!!busy" (change)="upload($event,file)"></label>
-    <button type="button" class="icon remove" [title]="'Remove '+file.filename" [attr.aria-label]="'Remove '+file.filename" [disabled]="!!busy" (click)="remove(file)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 7l1 13h6l1-13"/></svg></button>
+    <button type="button" class="icon remove" [title]="'Remove '+file.filename" [attr.aria-label]="'Remove '+file.filename" [disabled]="!!busy" (click)="removeCandidate=file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 7l1 13h6l1-13"/></svg></button>
    }@else{<span>{{file.copies}} ×</span>}
   </div>}@empty{<small>No RD files for this box.</small>}
   @if(members.manager()){
   <small>Replacement updates unfinished tasks and clears this file's Done mark. Load the files to the laser again before cutting.</small>
   <div class="new-file"><label class="upload icon" title="Add RD file" aria-label="Add RD file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><input type="file" accept=".rd" aria-label="Add RD file" [disabled]="!!busy||loading||loadError" (change)="upload($event)"></label><label>Copies <input type="number" min="1" max="1000" step="1" [(ngModel)]="newCopies" [disabled]="!!busy" aria-label="Copies for new RD file"></label></div>
+  @if(files.length){<div class="dispatch"><button type="button" (click)="openSend()" [disabled]="!!busy||loading||loadError">Send to Cutting work</button>@if(sentTask){<a routerLink="/packing/work">Open Cutting work</a>}</div>
+   @if(unsavedCopies()){<small>Save copy changes before sending this box.</small>}}
   }
- </div>`,styles:[`
+ </div>
+ <p-dialog header="Send box to Cutting work" [(visible)]="sendOpen" [modal]="true" appendTo="body" [closable]="!busy" [closeOnEscape]="!busy" [style]="{width:'28rem',maxWidth:'95vw'}">
+  <p><strong>{{boxName||'Packaging box'}}</strong></p><p>Create a cutting task for this box with the following saved files and copies.</p>
+  <ul>@for(file of sendFiles;track file.id){<li>{{file.filename}} · {{file.copies}} {{file.copies===1?'copy':'copies'}}</li>}</ul>
+  @if(sendError){<p class="error" role="alert">{{sendError}}</p>}
+  <ng-template #footer><button type="button" (click)="sendOpen=false" [disabled]="!!busy">Cancel</button><button type="button" (click)="confirmSend()" [disabled]="!!busy">{{busy==='send'?'Sending…':'Send to Cutting work'}}</button></ng-template>
+ </p-dialog>
+ <p-dialog header="Remove RD file" [visible]="!!removeCandidate" (visibleChange)="removeCandidate=null" [modal]="true" appendTo="body" [closable]="!busy" [closeOnEscape]="!busy" [style]="{width:'26rem',maxWidth:'95vw'}">
+  <p>Remove <strong>{{removeCandidate?.filename}}</strong> from this box? Active cutting tasks may prevent removal.</p>
+  @if(error){<p class="error" role="alert">{{error}}</p>}
+  <ng-template #footer><button type="button" (click)="removeCandidate=null" [disabled]="!!busy">Cancel</button><button type="button" (click)="remove(removeCandidate!)" [disabled]="!!busy">{{busy?'Removing…':'Remove file'}}</button></ng-template>
+ </p-dialog>`,styles:[`
  :host{display:block;min-width:0}.rd-files{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding-top:8px}.rd-files strong{font-size:.82rem}
  .file-row,.new-file{display:flex;align-items:center;flex-wrap:wrap;gap:5px;max-width:100%;font-size:.8rem}.filename{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:none;border:0;text-decoration:underline;text-align:left;cursor:pointer;padding:3px}
  input[type=number]{width:54px;padding:4px;border:1px solid var(--wc-border);border-radius:6px}.icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;box-sizing:border-box;border:1px solid var(--wc-border);border-radius:6px;background:var(--wc-surface);cursor:pointer;padding:0}.icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.replace,.upload{position:relative;overflow:hidden}.replace input,.upload input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}.replace:focus-within,.upload:focus-within{outline:2px solid currentColor;outline-offset:2px}.remove{color:#991b1b}.error{color:#991b1b;background:#fff1f1;border:1px solid #fecaca;padding:8px;border-radius:6px;margin:0}small{color:var(--wc-muted)}[disabled]{opacity:.55;cursor:default}
  .legacy-files{padding:8px;border:1px solid var(--wc-border);border-radius:8px;background:#f8fafc}.legacy-files p{margin:4px 0;font-size:.78rem}.legacy-files span{margin-right:8px}
+ .dispatch{display:flex;align-items:center;gap:10px;margin-top:8px}
  `]})
 export class BoxRdFilesComponent implements OnChanges {
- @Input() signature='';@Input() index=0;@Input() sharedSize='';@Input() cartBasePackageId='';
- files:BoxRdFile[]=[];legacyFiles:BoxRdFile[]=[];cartBaseId='';newCopies=1;loading=false;loadError=false;busy:''|'upload'|'save'='';error='';success='';private generation=0;
+ @Input() signature='';@Input() index=0;@Input() sharedSize='';@Input() cartBasePackageId='';@Input() boxName='';@Input() sendOnLoad=false;
+ files:BoxRdFile[]=[];legacyFiles:BoxRdFile[]=[];cartBaseId='';newCopies=1;loading=false;loadError=false;busy:''|'upload'|'save'|'send'='';error='';success='';private generation=0;
+ sendOpen=false;sendFiles:BoxRdFile[]=[];sendError='';sentTask='';removeCandidate:BoxRdFile|null=null;private savedCopies=new Map<string,number>();
  constructor(private db:SupabaseService,readonly members:HubMembersService,@Optional() private cdr?:ChangeDetectorRef){}
- ngOnChanges(){void this.load();}
+ ngOnChanges(){void this.load().then(()=>{if(this.sendOnLoad){this.openSend();if(!this.loadError&&!this.files.length)this.error='No saved RD files for this box. Save its cutting files, then retry.';this.refresh();}});}
  private refresh(){this.cdr?.markForCheck();}
  private message(e:unknown){return e instanceof Error?e.message:(e as {message?:string})?.message||'Connection or server error.';}
  private copies(value:number){return Number.isSafeInteger(Number(value))&&Number(value)>=1&&Number(value)<=1000;}
@@ -51,12 +68,12 @@ export class BoxRdFilesComponent implements OnChanges {
   const [method,owner]=this.sharedSize?['wc_save_backdrop_rd_file',{p_size:this.sharedSize}]:this.cartBasePackageId?['wc_save_cart_base_rd_file_for_package',{p_package:this.cartBasePackageId}]:[this.cartBaseId?'wc_save_cart_base_rd_file':'wc_save_box_rd_file',{p_signature:this.signature,p_index:this.index}];
   return this.db.client.rpc(method as string,{...owner as object,...values});
  }
- async load(){const generation=++this.generation;this.loading=true;this.loadError=false;this.error='';this.success='';this.files=[];this.legacyFiles=[];this.cartBaseId='';
+ async load(){const generation=++this.generation;this.loading=true;this.loadError=false;this.error='';this.success='';this.files=[];this.legacyFiles=[];this.cartBaseId='';this.sendOpen=false;this.sentTask='';this.savedCopies.clear();
   try{if(this.cartBasePackageId){this.cartBaseId=this.cartBasePackageId;}else if(!this.sharedSize&&this.signature){const key=await this.db.client.rpc('wc_cart_base_package',{p_signature:this.signature,p_index:this.index});if(key.error)throw key.error;if(generation!==this.generation)return;this.cartBaseId=key.data||'';}
    let query=this.db.client.from('wc_box_rd_files').select('*');query=this.sharedSize?query.eq('backdrop_size_key',this.sharedSize):this.cartBaseId?query.eq('cart_base_package_id',this.cartBaseId):query.eq('profile_signature',this.signature).eq('box_index',this.index);
    const {data,error}=await query.order('created_at');if(error)throw error;
    if((this.sharedSize||this.cartBaseId)&&this.signature){const older=await this.db.client.from('wc_box_rd_files').select('*').eq('profile_signature',this.signature).eq('box_index',this.index).order('created_at');if(older.error)throw older.error;if(generation===this.generation)this.legacyFiles=(older.data||[]) as BoxRdFile[];}
-   if(generation===this.generation)this.files=(data||[]) as BoxRdFile[];}
+   if(generation===this.generation){this.files=(data||[]) as BoxRdFile[];this.files.forEach(file=>this.savedCopies.set(file.id,file.copies));}}
   catch(e){if(generation===this.generation){this.loadError=true;this.error=`Could not load RD files. ${this.message(e)} Retry load.`;}}
   finally{if(generation===this.generation){this.loading=false;this.refresh();}}
  }
@@ -72,17 +89,17 @@ export class BoxRdFilesComponent implements OnChanges {
    const {error:uploadError}=await bucket.upload(path,file,{contentType:'application/octet-stream',upsert:false});if(uploadError)throw uploadError;uploaded=true;
    attaching=true;const {data:saved,error:saveError}=await this.persistFile({p_id:replacing?.id||null,p_path:path,p_filename:file.name,p_bytes:file.size,p_copies:copies,p_expected:replacing?.revision||null});if(saveError)throw saveError;
    if(!saved?.id)throw Error('Server did not confirm the saved file.');
-   if(generation===this.generation){this.files=replacing?this.files.map(row=>row.id===saved.id?saved:row):[...this.files,saved];this.success=`${file.name} uploaded and saved with ${copies} ${copies===1?'copy':'copies'}.`+(replacing?' Updated in all unfinished Packing tasks using this file. Load the files to the laser again before cutting.':'');this.newCopies=1;}
+   if(generation===this.generation){this.files=replacing?this.files.map(row=>row.id===saved.id?saved:row):[...this.files,saved];this.savedCopies.set(saved.id,saved.copies);this.success=`${file.name} uploaded and saved with ${copies} ${copies===1?'copy':'copies'}.`+(replacing?' Updated in all unfinished Packing tasks using this file. Load the files to the laser again before cutting.':'');this.newCopies=1;}
    if(previous)await bucket.remove([previous]);
   }catch(e){if(generation===this.generation)this.error=`${file.name}: ${this.message(e)} ${attaching?'Reload this box to check whether it was saved, then retry.':'Check the file and connection, then retry.'}`;
    if(uploaded&&!attaching)await this.db.client.storage.from('box-rd-files').remove([path]);
   }finally{this.busy='';this.refresh();}
  }
  async saveCopies(file:BoxRdFile){if(this.busy)return;this.error='';this.success='';if(!this.copies(file.copies)){this.error=`${file.filename}: enter a whole copy count from 1 to 1000.`;return;}
-  this.busy='save';try{const {data,error}=await this.persistFile({p_id:file.id,p_path:null,p_filename:null,p_bytes:null,p_copies:Number(file.copies),p_expected:file.revision});if(error||!data?.revision)throw error||Error('Server did not confirm the copy count.');file.revision=data.revision;this.success=`${file.filename}: copy count saved.`;}
+  this.busy='save';try{const {data,error}=await this.persistFile({p_id:file.id,p_path:null,p_filename:null,p_bytes:null,p_copies:Number(file.copies),p_expected:file.revision});if(error||!data?.revision)throw error||Error('Server did not confirm the copy count.');file.revision=data.revision;this.savedCopies.set(file.id,Number(file.copies));this.success=`${file.filename}: copy count saved.`;}
   catch(e){this.error=`Could not save copies for ${file.filename}. ${this.message(e)} Retry.`;}finally{this.busy='';this.refresh();}
  }
- async remove(file:BoxRdFile){if(this.busy)return;this.error='';this.success='';this.busy='save';try{const {data,error}=await this.db.client.rpc('wc_delete_box_rd_file',{p_id:file.id,p_expected:file.revision});if(error||!data)throw error||Error('Server did not confirm removal.');this.files=this.files.filter(row=>row.id!==file.id);this.success=`${file.filename} removed.`;await this.db.client.storage.from('box-rd-files').remove([data]);}
+ async remove(file:BoxRdFile){if(this.busy||!file||!this.members.manager())return;this.error='';this.success='';this.busy='save';try{const {data,error}=await this.db.client.rpc('wc_delete_box_rd_file',{p_id:file.id,p_expected:file.revision});if(error||!data)throw error||Error('Server did not confirm removal.');this.files=this.files.filter(row=>row.id!==file.id);this.removeCandidate=null;this.success=`${file.filename} removed.`;await this.db.client.storage.from('box-rd-files').remove([data]);}
   catch(e){this.error=`Could not remove ${file.filename}. ${this.message(e)} Reload and retry.`;}finally{this.busy='';this.refresh();}
  }
  async download(file:BoxRdFile){this.error='';try{const {data,error}=await this.db.client.storage.from('box-rd-files').createSignedUrl(file.object_path,60,{download:file.filename});if(error||!data)throw error||Error('File unavailable.');const link=document.createElement('a');link.href=data.signedUrl;link.download=file.filename;link.rel='noopener';link.click();}
@@ -91,6 +108,18 @@ export class BoxRdFilesComponent implements OnChanges {
   try{const {data,error}=this.sharedSize?await this.db.client.rpc('wc_promote_backdrop_rd',{p_signature:this.signature}):await this.db.client.rpc('wc_promote_cart_base_rd',{p_signature:this.signature,p_index:this.index});if(error||data!==(this.sharedSize||this.cartBaseId))throw error||Error('Server did not confirm the shared RD set.');
    await this.load();this.success=this.sharedSize?'RD files are now shared with all Backdrops of this size and folding option.':'RD files are now shared with this Cart box in all matching packaging variants.';
   }catch(e){this.error=`Could not share these RD files. ${this.message(e)} Review the files and retry.`;}
+  finally{this.busy='';this.refresh();}
+ }
+ unsavedCopies(){return this.files.some(file=>this.savedCopies.get(file.id)!==Number(file.copies));}
+ openSend(){if(this.busy||this.loading||this.loadError||!this.members.manager()||!this.files.length)return;this.error='';this.success='';
+  if(this.unsavedCopies()){this.error='Save copy changes before sending this box to Cutting work.';return;}
+  this.sendFiles=structuredClone(this.files);this.sendError='';this.sendOpen=true;
+ }
+ async confirmSend(){if(this.busy||!this.sendOpen||!this.members.manager())return;this.busy='send';this.sendError='';
+  try{const {data,error}=await this.db.client.rpc('wc_send_box_cutting_task',{p_files:this.sendFiles.map(file=>({id:file.id,revision:file.revision,copies:Number(file.copies)}))});
+   if(error||!data?.task?.id||!['assigned','transfer_requested','transferred'].includes(data.task.state))throw error||Error('Server did not confirm the cutting task.');
+   this.sentTask=data.task.id;this.sendOpen=false;this.success=data.created?'Box sent to Cutting work.':'This box already has an active Cutting work task. Open Cutting work to continue.';
+  }catch(e){this.sendError=`Could not send this box. ${this.message(e)} Your files are retained. Retry, or reload if the files changed.`;}
   finally{this.busy='';this.refresh();}
  }
  private size(bytes:number){return bytes>=1048576?`${(bytes/1048576).toFixed(1)} MB`:`${Math.ceil(bytes/1024)} KB`;}
