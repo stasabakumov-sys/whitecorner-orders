@@ -47,7 +47,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const settings={url:process.env.HUB_SUPABASE_URL?.replace(/\/$/,''),anonKey:process.env.HUB_SUPABASE_ANON_KEY,email:process.env.HUB_STATION_EMAIL,password:process.env.HUB_STATION_PASSWORD};
  const hub=createHubClient(settings);
  const supervisor=new StationSupervisor({rpc:hub.rpc,station:process.env.HUB_STATION_NAME||'Packing laptop',
-  spawnWorker:()=>fork(fileURLToPath(new URL('./station.mjs',import.meta.url)),['--send'],{stdio:['ignore','inherit','inherit','ipc']}),onError:message=>console.error(message)});
+  spawnWorker:()=>fork(fileURLToPath(new URL('./station.mjs',import.meta.url)),['--send'],{stdio:['ignore','inherit','inherit','ipc'],windowsHide:true}),onError:message=>console.error(message)});
  process.on('SIGINT',()=>supervisor.stop());process.on('SIGTERM',()=>supervisor.stop());
  const ownerPid=process.ppid;
  while(!supervisor.stopping||supervisor.worker){
