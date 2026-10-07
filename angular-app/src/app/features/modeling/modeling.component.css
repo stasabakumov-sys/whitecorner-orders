@@ -71,3 +71,8 @@
 .tray-slot{flex-direction:column;gap:4px}.tray-slot label{display:flex!important;align-items:center;justify-content:center;gap:2px;margin:0!important;font:inherit!important}.tray-actions{display:flex;flex-wrap:wrap;gap:4px}.tray-actions button{margin:0}.tray-layout{grid-template-columns:1.2fr repeat(4,1fr)}
 
 .tray-layout{grid-template-columns:repeat(5,minmax(0,1fr))}.tray-slot{min-width:0;padding:4px 0}.tray-slot label{flex-direction:column;gap:0}.tray-slot>span{overflow-wrap:anywhere}
+
+.viewer-navigation{position:absolute;top:12px;left:12px;z-index:2;display:flex;gap:5px}
+.viewer-navigation button{min-height:28px;padding:5px 10px;border:1px solid #dce3e9;border-radius:8px;background:#fff;color:#425162;font-family:inherit;font-size:10px;font-weight:400;line-height:1.45;cursor:pointer}
+.viewer-navigation button.selected{border-color:#556b82;background:#f3f6f9;color:#25384a}
+.viewer-navigation button:focus-visible{outline:2px solid #35485d;outline-offset:2px}

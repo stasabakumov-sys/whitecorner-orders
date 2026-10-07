@@ -194,6 +194,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly traySlots = CHARCUTERIE_CUTOUTS;
   readonly selectedTrays = signal<number[]>([]);
   readonly selectedCutouts = signal<number[]>([]);
+  readonly navigationMode = signal<'rotate'|'move'>('rotate');
+  setNavigationMode(mode:'rotate'|'move'):void {
+    this.navigationMode.set(mode);
+    if(this.controls)this.controls.mouseButtons.LEFT=mode==='move'?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;
+    this.setAssemblyMode(false);
+  }
   readonly showUmbrella = signal(false);
   private umbrellaPreview?:THREE.Group;
   private umbrellaPreviewKey='';
@@ -435,8 +441,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.controls = new OrbitControls(this.orbitCamera, this.renderer.domElement);
       this.controls.target.set(0.6, 0.45, 0.3);
       this.controls.enableDamping = true;
-      this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
-      this.controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+      this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+      this.controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
       this.controls.screenSpacePanning = true;
       this.controls.maxPolarAngle = Math.PI / 2.05;
       this.controls.update();
@@ -957,6 +963,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   setAssemblyMode(enabled: boolean): void {
+    if(enabled){this.navigationMode.set('rotate');if(this.controls)this.controls.mouseButtons.LEFT=THREE.MOUSE.ROTATE;}
     this.assemblyMode.set(enabled);
     this.assembly?.setEnabled(enabled);
   }

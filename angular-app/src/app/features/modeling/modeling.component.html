@@ -11,10 +11,14 @@
   @if(error()){<p class="error" role="alert">{{error()}}</p>}
   <div class="workspace">
     <div class="viewer-card">
+      <div class="viewer-navigation" role="group" aria-label="Model navigation">
+        <button type="button" [class.selected]="navigationMode()==='rotate'" [attr.aria-pressed]="navigationMode()==='rotate'" title="Rotate model with left drag" (click)="setNavigationMode('rotate')">Rotate</button>
+        <button type="button" [class.selected]="navigationMode()==='move'" [attr.aria-pressed]="navigationMode()==='move'" title="Move model with left drag" (click)="setNavigationMode('move')">Move</button>
+      </div>
       <div #canvasHost class="canvas-host" [class.scene-event]="previewScene()==='event'" [class.scene-office]="previewScene()==='office'" role="img" [attr.aria-label]="'Interactive 3D model '+modelLabel()"></div>
       @if (loading()) { <div class="viewer-status">Loading model…</div> }
       @if (!loading() && !fileName()) { <div class="viewer-status">Model preview is unavailable</div> }
-      <div class="viewer-footer"><span>Left drag to move · Right drag to rotate · Scroll to zoom</span><span>{{width()}} × {{depth()}} × {{height()}} mm</span></div>
+      <div class="viewer-footer"><span>{{navigationMode()==='move' ? 'Drag to move' : 'Drag to rotate'}} · Scroll to zoom</span><span>{{width()}} × {{depth()}} × {{height()}} mm</span></div>
     </div>
     <div class="settings">
 
