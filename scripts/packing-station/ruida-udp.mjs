@@ -29,7 +29,7 @@ export async function sendRdFile(data,{address,filename,port=50200,localPort=402
 
  const socket=dgram.createSocket('udp4');
  try{
-  await new Promise((resolve,reject)=>{socket.once('error',reject);socket.bind(localPort,()=>{socket.off('error',reject);resolve();});});
+  await new Promise((resolve,reject)=>{socket.once('error',error=>reject(error.code==='EADDRINUSE'?Error(`RDWorks or another program is using UDP port ${localPort}. Close RDWorks, check the controller file list, then retry Load to laser.`):error));socket.bind(localPort,()=>{socket.removeAllListeners('error');resolve();});});
   const sendPacket=(payload,stage)=>new Promise((resolve,reject)=>{
    const packet=packetFor(payload);
    const timer=setTimeout(()=>{cleanup();reject(Error(`Controller acknowledgement timed out during ${stage}. Check its file list, network access and whether RDWorks is open before retrying.`));},timeoutMs);
@@ -52,5 +52,5 @@ export async function sendRdFile(data,{address,filename,port=50200,localPort=402
    await sendPacket(data.subarray(offset,Math.min(offset+chunkSize,data.length)),`file packet ${Math.floor(offset/chunkSize)+1}/${Math.ceil(data.length/chunkSize)}`);
   }
   return {bytes:data.length,filename};
- }finally{socket.close();}
+ }finally{try{socket.close();}catch(error){if(error.code!=='ERR_SOCKET_DGRAM_NOT_RUNNING')throw error;}}
 }

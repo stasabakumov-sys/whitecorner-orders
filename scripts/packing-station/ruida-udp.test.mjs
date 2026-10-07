@@ -45,3 +45,15 @@ test('does not send file bytes when the filename command is rejected',async()=>{
   assert.equal(packets,1);
  }finally{mock.close();}
 });
+
+test('reports a busy RDWorks port without masking it and can send after the port is released',async()=>{
+ const holder=dgram.createSocket('udp4'),controller=dgram.createSocket('udp4');
+ await new Promise(resolve=>holder.bind(0,resolve));const localPort=holder.address().port;
+ await new Promise(resolve=>controller.bind(0,'127.0.0.1',resolve));let packets=0;
+ controller.on('message',(_packet,remote)=>{packets++;controller.send(Buffer.from([0xc6]),remote.port,remote.address);});
+ const options={address:'127.0.0.1',filename:'TEST',port:controller.address().port,localPort,allowLoopbackForTest:true};
+ try{
+  await assert.rejects(sendRdFile(Buffer.from([1,2,3]),options),/RDWorks.*UDP port.*Close RDWorks/);assert.equal(packets,0);
+  await new Promise(resolve=>holder.close(resolve));await sendRdFile(Buffer.from([1,2,3]),options);assert.equal(packets,2);
+ }finally{try{holder.close();}catch{}controller.close();}
+});

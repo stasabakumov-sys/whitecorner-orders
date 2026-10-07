@@ -40,7 +40,7 @@ try {
   if(-not ($members | Where-Object {$_.role -eq 'manager' -and $_.active})){throw 'Manager access required.'}
  } catch {throw 'Hub sign-in or manager check failed. Check the account and connection, then run setup again.'}
  finally {$body=$null;$headers=$null;$session=$null}
- foreach($file in @('station.mjs','ruida-udp.mjs','transfer-task.mjs','run-background.ps1')){
+ foreach($file in @('station.mjs','worker-runtime.mjs','ruida-udp.mjs','transfer-task.mjs','hub-client.mjs','supervisor.mjs','run-background.ps1','register-recovery.ps1')){
   Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $installRoot $file) -Force
  }
  $credential | Export-Clixml -LiteralPath (Join-Path $installRoot 'credential.xml')
@@ -50,14 +50,7 @@ try {
  $arguments='-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File "'+(Join-Path $installRoot 'run-background.ps1')+'"'
  & $powershellPath -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File (Join-Path $installRoot 'run-background.ps1') -CheckOnly
  if($LASTEXITCODE -ne 0){throw 'Saved station configuration could not be verified.'}
- $shell=New-Object -ComObject WScript.Shell
- $shortcut=$shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Startup')) 'White Corner Packing Station.lnk'))
- $shortcut.TargetPath=$powershellPath
- $shortcut.Arguments=$arguments
- $shortcut.WorkingDirectory=$installRoot
- $shortcut.WindowStyle=7
- $shortcut.Description='White Corner Packing station - file uploads only; manual cutting'
- $shortcut.Save()
+ & (Join-Path $installRoot 'register-recovery.ps1') -StationRoot $installRoot
  Start-Process -FilePath $powershellPath -ArgumentList $arguments -WindowStyle Hidden
  Set-SetupStatus 'installed' 'Autostart enabled for this Windows user. Station started in the background.'
  Write-Host 'Done. Refresh Packing work in Hub. Close this setup window.' -ForegroundColor Green

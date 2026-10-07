@@ -1,0 +1,46 @@
+name: Station recovery release
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect production or apply the station recovery migration
+        type: choice
+        options: [verify, apply]
+        default: verify
+  pull_request:
+    paths:
+      - 'supabase/migrations/20261007000200_packing_station_recovery.sql'
+      - 'scripts/packing-station/**'
+      - '.github/scripts/packing.test.mjs'
+      - '.github/scripts/station-recovery-release.mjs'
+      - '.github/workflows/station-recovery-release.yml'
+permissions:
+  contents: read
+concurrency:
+  group: packing-production-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check safe restart and UDP recovery with local mocks
+        run: node --test scripts/packing-station/ruida-udp.test.mjs scripts/packing-station/transfer-task.test.mjs scripts/packing-station/recovery.test.mjs
+      - name: Rehearse Packing migrations in isolated PostgreSQL
+        run: |
+          npm install --prefix "$RUNNER_TEMP/packing-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/packing.test.mjs "$RUNNER_TEMP/packing-db/node_modules/@electric-sql/pglite/dist/index.js"
+          node --check .github/scripts/station-recovery-release.mjs
+      - name: Inspect production prerequisites
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/station-recovery-release.mjs --verify
+      - name: Apply and verify station recovery migration
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/station-recovery-release.mjs --apply

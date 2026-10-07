@@ -1,5 +1,6 @@
 import {privateControllerAddress} from './ruida-udp.mjs';
-import {transferTask} from './transfer-task.mjs';
+import {createHubClient} from './hub-client.mjs';
+import {runStationWorker} from './worker-runtime.mjs';
 
 const settings={
  url:process.env.HUB_SUPABASE_URL?.replace(/\/$/,''),
@@ -18,65 +19,20 @@ if(!settings.url||!settings.anonKey||!settings.email||!settings.password||!priva
  process.exit(2);
 }
 
-let session=null,expiresAt=0,stopped=false;
+let stopped=false,draining=false;
 process.on('SIGINT',()=>{stopped=true;});
 process.on('SIGTERM',()=>{stopped=true;});
+if(process.send){
+ process.on('message',message=>{if(message?.type==='drain')draining=true;});
+ process.on('disconnect',()=>{draining=true;});
+}
 
-async function authRequest(grant,body){
- const response=await fetch(`${settings.url}/auth/v1/token?grant_type=${grant}`,{
-  method:'POST',headers:{apikey:settings.anonKey,'Content-Type':'application/json'},body:JSON.stringify(body),
- });
- const result=await response.json().catch(()=>null);
- if(!response.ok||!result?.access_token)throw Error('Station sign-in failed. Check the manager account and network.');
- session=result;expiresAt=Date.now()+Math.max(30,Number(result.expires_in||3600)-60)*1000;
-}
-async function token(){
- if(!session)await authRequest('password',{email:settings.email,password:settings.password});
- else if(Date.now()>expiresAt)await authRequest('refresh_token',{refresh_token:session.refresh_token});
- return session.access_token;
-}
-async function rpc(name,body={}){
- const response=await fetch(`${settings.url}/rest/v1/rpc/${name}`,{
-  method:'POST',headers:{apikey:settings.anonKey,Authorization:`Bearer ${await token()}`,'Content-Type':'application/json'},body:JSON.stringify(body),
- });
- const result=await response.json().catch(()=>null);
- if(!response.ok)throw Error(result?.message||`Hub request failed (${response.status}).`);
- return result;
-}
-async function fetchFile(file){
- if(!file?.object_path||!String(file.filename||'').toLowerCase().endsWith('.rd'))throw Error('Task contains an invalid RD file.');
- const path=String(file.object_path).split('/').map(encodeURIComponent).join('/');
- const response=await fetch(`${settings.url}/storage/v1/object/authenticated/box-rd-files/${path}`,{
-  headers:{apikey:settings.anonKey,Authorization:`Bearer ${await token()}`},
- });
- if(!response.ok)throw Error(`${file.filename}: could not download from Hub (${response.status}).`);
- const buffer=Buffer.from(await response.arrayBuffer());
- if(buffer.length!==Number(file.size_bytes)||!buffer.length||buffer.length>20971520)throw Error(`${file.filename}: downloaded file size does not match the saved task.`);
- return buffer;
-}
-const delay=milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds));
-
+const {rpc,fetchFile}=createHubClient(settings);
 console.log(`Packing station ${settings.name} is running. Laser cutting must be started at the machine panel.`);
-while(!stopped){
- try{
-  await rpc('wc_packing_station_heartbeat',{p_station:settings.name});
-  const transfer=await rpc('wc_claim_packing_transfer',{p_station:settings.name});
-  if(transfer?.transfer_id){
-   const heartbeat=setInterval(()=>{void rpc('wc_packing_station_heartbeat',{p_station:settings.name}).catch(()=>{});},10000);
-   try{
-    await transferTask(transfer.files,{address:settings.controller,fetchFile,isStopped:()=>stopped,
-     onFile:({file,filename,completed,total})=>console.log(`[${completed}/${total}] ${file.filename} -> controller ${filename}; cut ${file.copies} copies manually.`),
-    });
-    await rpc('wc_finish_packing_transfer',{p_transfer:transfer.transfer_id,p_ok:true,p_error:null});
-    console.log('All RD files acknowledged. Verify them on the controller before cutting.');
-   }catch(error){
-    const message=error instanceof Error?error.message:'Transfer failed.';
-    console.error(`${message} Check the controller file list before retrying this task.`);
-    try{await rpc('wc_finish_packing_transfer',{p_transfer:transfer.transfer_id,p_ok:false,p_error:message});}
-    catch{console.error('Hub could not record the transfer result. Check the task before retrying.');}
-   }finally{clearInterval(heartbeat);}
-  }
- }catch(error){console.error(error instanceof Error?error.message:'Station connection failed.');}
- if(!stopped)await delay(5000);
-}
+await runStationWorker({rpc,fetchFile,station:settings.name,controller:settings.controller,isStopped:()=>stopped,isDraining:()=>draining,
+ onReady:()=>{if(process.connected)process.send({type:'ready'});},
+ onFile:({file,filename,completed,total})=>console.log(`[${completed}/${total}] ${file.filename} -> controller ${filename}; cut ${file.copies} copies manually.`),
+ onError:message=>console.error(message),onTransferred:()=>console.log('All RD files acknowledged. Verify them on the controller before cutting.'),
+});
 console.log('Packing station stopped.');
+if(process.connected)process.disconnect();

@@ -22,7 +22,7 @@ try {
  while($true){
   if((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -gt 5MB){Move-Item -LiteralPath $log -Destination (Join-Path $stationRoot 'station.previous.log') -Force}
   Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) Starting station; cutting remains manual."
-  $stationProcess=Start-Process -FilePath $config.nodePath -ArgumentList ('"'+(Join-Path $stationRoot 'station.mjs')+'" --send') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $stationRoot 'transfer.log') -RedirectStandardError (Join-Path $stationRoot 'errors.log')
+  $stationProcess=Start-Process -FilePath $config.nodePath -ArgumentList ('"'+(Join-Path $stationRoot 'supervisor.mjs')+'"') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $stationRoot 'transfer.log') -RedirectStandardError (Join-Path $stationRoot 'errors.log')
   $stationProcess.WaitForExit()
   Add-Content -LiteralPath $log -Value "$(Get-Date -Format o) Station exited; restarting in 15 seconds."
   Start-Sleep -Seconds 15
