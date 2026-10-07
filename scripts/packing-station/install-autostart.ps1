@@ -40,18 +40,17 @@ try {
   if(-not ($members | Where-Object {$_.role -eq 'manager' -and $_.active})){throw 'Manager access required.'}
  } catch {throw 'Hub sign-in or manager check failed. Check the account and connection, then run setup again.'}
  finally {$body=$null;$headers=$null;$session=$null}
- foreach($file in @('station.mjs','worker-runtime.mjs','ruida-udp.mjs','transfer-task.mjs','hub-client.mjs','supervisor.mjs','run-background.ps1','register-recovery.ps1')){
+ foreach($file in @('station.mjs','worker-runtime.mjs','ruida-udp.mjs','transfer-task.mjs','hub-client.mjs','supervisor.mjs','run-background.ps1','register-recovery.ps1','station-launcher.cs')){
   Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $installRoot $file) -Force
  }
  $credential | Export-Clixml -LiteralPath (Join-Path $installRoot 'credential.xml')
  $credential=$null
  @{url=$hubUrl;anonKey=$hubKey;controller=$ControllerIp;stationName='Packing laptop';nodePath=$nodePath} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $installRoot 'config.json') -Encoding UTF8
  $powershellPath=Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
- $arguments='-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File "'+(Join-Path $installRoot 'run-background.ps1')+'"'
  & $powershellPath -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File (Join-Path $installRoot 'run-background.ps1') -CheckOnly
  if($LASTEXITCODE -ne 0){throw 'Saved station configuration could not be verified.'}
  & (Join-Path $installRoot 'register-recovery.ps1') -StationRoot $installRoot
- Start-Process -FilePath $powershellPath -ArgumentList $arguments -WindowStyle Hidden
+ Start-ScheduledTask -TaskName 'White Corner Packing Station'
  Set-SetupStatus 'installed' 'Autostart enabled for this Windows user. Station started in the background.'
  Write-Host 'Done. Refresh Packing work in Hub. Close this setup window.' -ForegroundColor Green
 } catch {
