@@ -21,6 +21,7 @@ export function assemblyPartKey(name: string): PartKey | null {
   if (/^Side[ _]shelf/i.test(name)) return 'side-shelves';
   if (/^Ice[ _]shelf/i.test(name)) return 'ice-shelf';
   if (/^Top[ _]/i.test(name)) return 'top';
+  if (/^Body5$/i.test(name)) return 'bottom';
   if (/^(Buttom|Bottom)[ _]/i.test(name)) return 'bottom';
   if (/^Left[ _]side/i.test(name)) return 'left';
   if (/^Right[ _]side/i.test(name)) return 'right';

@@ -508,3 +508,35 @@ it('fills only selected cutouts and removes a tray when its cutout is removed',(
  expect(component.selectedTrays()).toEqual([0,7]);component.setCutoutIncluded(0,false);expect(component.selectedTrays()).toEqual([7]);expect(component.cutoutSummary()).toBe('1 × GN 1/6');
  component.setTrayIncluded(4,true);expect(component.selectedTrays()).toEqual([7]);
 });
+
+
+it('reverses cutout geometry around the tabletop centre without cumulative transforms',()=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('side-shelf-cart-mdf');component.width.set(1500);component.depth.set(600);component.height.set(850);
+ editor.body=new THREE.Group();const mesh=new THREE.Mesh(new THREE.BoxGeometry(.152,.016,.14));mesh.name='Top_part1_cutout_plug_1';mesh.geometry.translate(.63347,.842,.12385);editor.body.add(mesh);editor.originalPositions.set(mesh,mesh.geometry.getAttribute('position').clone());vi.spyOn(editor,'updateMoulding').mockImplementation(()=>{});vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});
+ const original=editor.originalPositions.get(mesh);component.setReverseCutoutLayout(true);let p=mesh.geometry.getAttribute('position');expect(p.getX(0)).toBeCloseTo(1.5-original.getX(0));expect(p.getZ(0)).toBeCloseTo(.6-original.getZ(0));
+ component.setReverseCutoutLayout(false);expect(p.getX(0)).toBeCloseTo(original.getX(0));expect(p.getZ(0)).toBeCloseTo(original.getZ(0));component.setReverseCutoutLayout(true);expect(p.getX(0)).toBeCloseTo(1.5-original.getX(0));expect(component.trayLayoutIndices()).toEqual([12,11,10,9,8,7,6,5,4,3,2,1,0]);
+});
+
+
+it.each([0,1.5])('removes side shelf notches from side panels at rounding %s and restores them',async radius=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('side-shelf-cart-mdf');component.roundingSupported.set(true);editor.body=new THREE.Group();
+ const mesh=new THREE.Mesh(new THREE.BoxGeometry(.012,.723,.556),new THREE.MeshStandardMaterial());mesh.name='Right side 1';mesh.userData['roundingProfile']={axis:'x',origin:.02,thickness:.012,outline:[[0,.111],[.556,.111],[.556,.834],[.112,.834],[.112,.764],[.1,.764],[.1,.834],[0,.834]],holes:[]};editor.sourceParts=[mesh];editor.sourcePositions.set(mesh.geometry,mesh.geometry.getAttribute('position').clone());vi.spyOn(editor,'applyDimensions').mockImplementation(()=>{});vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});
+ const hasNotch=()=>{const p=editor.body.children[0].geometry.getAttribute('position');return Array.from({length:p.count},(_,i)=>i).some(i=>p.getZ(i)>.09&&p.getZ(i)<.12&&p.getY(i)>.75&&p.getY(i)<.78);};
+ component.sideShelvesIncluded.set(false);await component.setRounding(radius);expect(hasNotch()).toBe(false);component.sideShelvesIncluded.set(true);await component.setRounding(1.5);expect(hasNotch()).toBe(true);
+});
+
+
+it('drills aligned umbrella openings through the top, middle shelf and ice shelf and restores solid panels',async()=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('side-shelf-cart-mdf');component.roundingSupported.set(true);component.height.set(850);component.width.set(1500);editor.body=new THREE.Group();
+ for(const [name,y] of [['Top part1',.834],['Shelf',.4565],['Ice shelf 4',.7],['Body5',.111]] as const){const mesh=new THREE.Mesh(new THREE.BoxGeometry(1.5,.016,.6).translate(.75,y+.008,.3),new THREE.MeshStandardMaterial());mesh.name=name;if(name!=='Shelf'&&name!=='Body5')mesh.userData['roundingProfile']={axis:'y',origin:y,thickness:.016,outline:[[0,0],[1.5,0],[1.5,.6],[0,.6]],holes:[]};editor.sourceParts.push(mesh);editor.sourcePositions.set(mesh.geometry,mesh.geometry.getAttribute('position').clone());}
+ vi.spyOn(editor,'applyDimensions').mockImplementation(()=>{});vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});
+ component.umbrellaHole.set(true);await component.setRounding(1.5);expect(editor.body.children).toHaveLength(4);
+ const ray=new THREE.Raycaster(new THREE.Vector3(.75,1,.3),new THREE.Vector3(0,-1,0));for(const mesh of editor.body.children){mesh.updateMatrixWorld();expect(ray.intersectObject(mesh)).toHaveLength(0);}
+ component.umbrellaHole.set(false);await component.setRounding(1.5);for(const mesh of editor.body.children){mesh.updateMatrixWorld();expect(ray.intersectObject(mesh).length).toBeGreaterThan(0);}
+});
+
+
+it('limits umbrella diameter to 32–50 mm and includes its bottom holder only with the hole option',()=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('side-shelf-cart-mdf');component.width.set(1500);vi.spyOn(component,'setRounding').mockResolvedValue();component.setUmbrellaDiameter(20);expect(component.umbrellaDiameter()).toBe(32);component.setUmbrellaDiameter(80);expect(component.umbrellaDiameter()).toBe(50);
+ editor.body=new THREE.Group();editor.model=new THREE.Group();editor.model.add(editor.body);const holder=new THREE.Mesh(new THREE.BoxGeometry(.074,.016,.053));holder.name='Body5';editor.body.add(holder);editor.bindAssembly();expect(holder.visible).toBe(false);component.umbrellaHole.set(true);editor.bindAssembly();expect(holder.visible).toBe(true);
+});

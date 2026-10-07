@@ -9,6 +9,7 @@ import { createGastronormTrays, CHARCUTERIE_CUTOUTS } from './modeling-trays';
 import { fitFurnitureBolts, shortenCastorBrakes, turnCastorWheels } from './modeling-hardware';
 import { resizePlywoodPosition, resizeRoofCartPosition, resizeSideShelfCartPosition } from './modeling-geometry';
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
+import { umbrellaDiameterLimit, withUmbrellaHole, createUmbrellaPreview, UMBRELLA_PREVIEW_HEIGHT } from './modeling-umbrella';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
 import { readModelingCatalog, linkedModelProduct, catalogPricing, formatModelingPrice, ModelingCatalog, ConfigurationPricing } from './modeling-pricing';
@@ -153,7 +154,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         {label:'Castors',value:'Ø'+(this.hasRoof()?'50':'75')+' mm'},
         {label:'Shelf',value:this.shelfIncluded()?'Middle':'None'}];
       if(this.frontLogo()){const logo=fitLogo(this.logoPanel(),this.frontLogo()!);fields.push({label:'Front logo',value:`${logo.width.toFixed(1)} x ${logoHeight(logo).toFixed(1)} mm · left ${logo.x.toFixed(1)} · top ${logo.y.toFixed(1)} mm`});}
-      if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Cutouts',value:this.cutoutSummary()},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
+      if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Umbrella hole',value:this.umbrellaHole()?'Ø'+this.umbrellaDiameter()+' mm · top, shelves & centred bottom holder':'None'},{label:'Cutouts',value:this.cutoutSummary()+(this.cutoutsIncluded()&&this.reverseCutoutLayout()?' · reversed 180°':'')},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
       if(this.hasRoof())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
@@ -171,8 +172,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.assembly?.setEnabled(false);
     this.model!.traverse(node=>{if(Array.isArray(node.userData['assemblyBasePosition'])){parts.push({node,position:node.position.clone(),visible:node.visible});node.position.fromArray(node.userData['assemblyBasePosition']);node.visible=!node.userData['assemblyHidden'];}});
     try {
-      const span=Math.max(this.width(),this.depth(),this.overallHeight())/1000;
-      const target=new THREE.Vector3(this.width()/2000,this.overallHeight()/2000,this.depth()/2000);
+      const span=Math.max(this.width(),this.depth(),this.previewHeight())/1000;
+      const target=new THREE.Vector3(this.width()/2000,this.previewHeight()/2000,this.depth()/2000);
       const camera=new THREE.PerspectiveCamera(42,4/3,.01,30);
       camera.zoom=1.25;camera.updateProjectionMatrix();
       camera.position.copy(target).add(new THREE.Vector3(span*1.05,span*.4,span*1.65));camera.lookAt(target);
@@ -192,6 +193,19 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly traySlots = CHARCUTERIE_CUTOUTS;
   readonly selectedTrays = signal<number[]>([]);
   readonly selectedCutouts = signal<number[]>([]);
+  readonly showUmbrella = signal(false);
+  private umbrellaPreview?:THREE.Group;
+  private umbrellaPreviewKey='';
+  previewHeight():number {return this.showUmbrella()&&this.umbrellaHole()?UMBRELLA_PREVIEW_HEIGHT*1000:this.overallHeight();}
+  setShowUmbrella(value:boolean):void {this.showUmbrella.set(value);this.applyDimensions();}
+  readonly umbrellaHole = signal(false);
+  readonly umbrellaDiameter = signal(40);
+  umbrellaDiameterMax():number {return umbrellaDiameterLimit(this.width(),this.depth());}
+  setUmbrellaHole(value:boolean):void {this.umbrellaHole.set(value);if(!value)this.showUmbrella.set(false);void this.setRounding(this.rounding());}
+  setUmbrellaDiameter(value:number):void {if(!Number.isFinite(value))return;this.umbrellaDiameter.set(Math.max(32,Math.min(this.umbrellaDiameterMax(),Math.round(value))));void this.setRounding(this.rounding());}
+  readonly reverseCutoutLayout = signal(true);
+  trayLayoutIndices():number[] {const indices=this.traySlots.map((_,i)=>i);return this.reverseCutoutLayout()?indices.reverse():indices;}
+  setReverseCutoutLayout(value:boolean):void {this.reverseCutoutLayout.set(value);this.applyDimensions();this.applyFinishes();}
   readonly traysIncluded = signal(false);
   private trays?:THREE.Group;
   private trayEnvironment?:THREE.WebGLRenderTarget;
@@ -214,7 +228,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly iceShelfIncluded = signal(true);
   readonly sideShelvesIncluded = signal(true);
   setIceShelfIncluded(value:boolean):void { this.iceShelfIncluded.set(value); this.bindAssembly(); }
-  setSideShelvesIncluded(value:boolean):void { this.sideShelvesIncluded.set(value); this.bindAssembly(); }
+  setSideShelvesIncluded(value:boolean):void { this.sideShelvesIncluded.set(value); if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());else this.bindAssembly(); }
   readonly shelfIncluded = signal(true);
   setShelfIncluded(included:boolean):void {
     this.shelfIncluded.set(included);
@@ -501,7 +515,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.roundingEditing.set(false);
     this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
     this.shelfIncluded.set(true);
-    this.iceShelfIncluded.set(true);this.sideShelvesIncluded.set(true);this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);this.selectedCutouts.set([]);
+    this.iceShelfIncluded.set(true);this.sideShelvesIncluded.set(true);this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);this.selectedCutouts.set([]);this.reverseCutoutLayout.set(true);this.umbrellaHole.set(false);this.umbrellaDiameter.set(40);this.showUmbrella.set(false);
     this.roofClosed.set(false);
     this.glassRackCount.set(0);
     this.showGlasses.set(false);
@@ -631,6 +645,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.roofBottom = undefined;
     this.glassRacks = undefined;
     this.trays = undefined;
+    this.umbrellaPreview=undefined;this.umbrellaPreviewKey='';
     this.model = undefined;
     this.body = undefined;
     this.originalPositions.clear();
@@ -735,6 +750,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const step = axis === 'width' ? 100 : 50;
     const next = Math.round(Math.max(limits[0], Math.min(limits[1], value)) / step) * step;
     this[axis].set(next);
+    if(this.isSideShelfCart()&&this.umbrellaHole()){const max=this.umbrellaDiameterMax();if(max<32)this.umbrellaHole.set(false);else this.umbrellaDiameter.update(value=>Math.min(value,max));void this.setRounding(this.rounding());return;}
     this.applyDimensions();
   }
 
@@ -756,12 +772,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         part.traverse(node => {
           if (node instanceof THREE.Mesh) bounds.union(new THREE.Box3().setFromBufferAttribute(this.sourcePositions.get(node.geometry)!));
         });
-        return { name: part.name, bounds };
+        let profile:RoundingProfile|undefined;part.traverse(node=>{profile ||= node.userData['roundingProfile'];});
+        return { name: part.name, bounds, profile };
       }));
       const nodes = this.sourceParts.map(part => {
         let supported = false;
         part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) supported = true; });
-        if (!raw || !supported || /^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts|[ _]cutout[ _]plug[ _]\d+)?$/i.test(part.name)) {
+        const solidSide=this.isSideShelfCart()&&!this.sideShelvesIncluded()&&/^(Left|Right)[ _]side[ _]?1$/i.test(part.name);
+        const umbrellaPanel=this.isSideShelfCart()&&this.umbrellaHole()&&/^(Top[ _]part1(?:[ _]cutouts)?|Shelf|Ice[ _]shelf[ _]4|Body5)$/i.test(part.name);
+        if (!umbrellaPanel&&((!raw&&!solidSide) || !supported || /^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts|[ _]cutout[ _]plug[ _]\d+)?$/i.test(part.name))) {
           const copy = part.clone(true);
           copy.traverse(node => {
             if (!(node instanceof THREE.Mesh)) return;
@@ -782,18 +801,25 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
           name = node.userData['plywoodPart'] || name;
           materials.push(...(Array.isArray(node.material) ? node.material : [node.material]));
         });
+        if(!profile&&umbrellaPanel){const bounds=new THREE.Box3();part.traverse(node=>{if(node instanceof THREE.Mesh)bounds.union(new THREE.Box3().setFromBufferAttribute(this.sourcePositions.get(node.geometry)!));});
+          // Centre the existing bottom holder on the pole; retain at least its original 7.5 mm wall.
+          if(/^Body5$/i.test(name)){const w=Math.max(bounds.max.x-bounds.min.x,(this.umbrellaDiameter()+15)/1000),d=Math.max(bounds.max.z-bounds.min.z,(this.umbrellaDiameter()+15)/1000);bounds.min.x=.75-w/2;bounds.max.x=.75+w/2;bounds.min.z=.3-d/2;bounds.max.z=.3+d/2;}
+          profile={axis:'y',origin:bounds.min.y,thickness:bounds.max.y-bounds.min.y,outline:[[bounds.min.x,bounds.min.z],[bounds.max.x,bounds.min.z],[bounds.max.x,bounds.max.z],[bounds.min.x,bounds.max.z]],holes:[]};}
         if (!profile) throw new Error('The GLB is missing a part profile. Upload an updated model.');
+        if(umbrellaPanel)profile=withUmbrellaHole(profile,this.umbrellaDiameter(),this.width());
+        if(solidSide){const us=profile.outline.map(p=>p[0]),vs=profile.outline.map(p=>p[1]),u0=Math.min(...us),u1=Math.max(...us),v0=Math.min(...vs),v1=Math.max(...vs);profile={...profile,outline:[[u0,v0],[u1,v0],[u1,v1],[u0,v1]],holes:[]};}
         const partJoints = joints.get(name) || [];
         const key = JSON.stringify([profile, raw, /^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name), partJoints]);
         const geometry = this.modelCache.roundedPart(key, () => {
-          const rounded = createRoundedPart(profile!, raw);
+          const rounded = createRoundedPart(profile!, umbrellaPanel&&/^Top/i.test(name)?0:raw);
           if (/^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name)) keepTrimJointSquare(rounded, profile!, raw);
           keepPartJointsSquare(rounded, partJoints, raw);
           return rounded;
         });
         geometries.push(geometry);
         const face = materials.find(material => !/plywood[ _]edge$/i.test(material.name)) || materials[0];
-        const edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
+        let edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
+        if(umbrellaPanel&&/^Top/i.test(name)&&edge===face){edge=face.clone();edge.name='plywood edge';}
         const mesh = new THREE.Mesh(geometry, [face, edge]);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -931,14 +957,21 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private updateTrays():void {
     if(this.trays){this.trays.removeFromParent();this.trays.traverse(node=>{if(node instanceof THREE.Mesh)node.geometry.dispose();});const mesh=this.trays.children[0] as THREE.Mesh|undefined;if(mesh)(mesh.material as THREE.Material).dispose();this.trays=undefined;}
     if(!this.model||!this.isSideShelfCart()||!this.cutoutsIncluded()||!this.traysIncluded())return;
-    this.trays=createGastronormTrays(this.height(),this.stainlessReflection(),this.selectedTrays());this.model.add(this.trays);
+    this.trays=createGastronormTrays(this.height(),this.stainlessReflection(),this.selectedTrays(),this.reverseCutoutLayout(),this.width(),this.depth());this.model.add(this.trays);
+  }
+  private updateUmbrella():void {
+    const visible=this.isSideShelfCart()&&this.umbrellaHole()&&this.showUmbrella(),key=JSON.stringify([visible,this.umbrellaDiameter(),this.width(),this.depth()]);if(key===this.umbrellaPreviewKey)return;this.umbrellaPreviewKey=key;
+    if(this.umbrellaPreview){this.umbrellaPreview.removeFromParent();const materials=new Set<THREE.Material>();this.umbrellaPreview.traverse(node=>{if(node instanceof THREE.Mesh){node.geometry.dispose();materials.add(node.material as THREE.Material);}});materials.forEach(material=>material.dispose());this.umbrellaPreview=undefined;}
+    if(!visible||!this.model)return;this.umbrellaPreview=createUmbrellaPreview(this.umbrellaDiameter()-2);this.umbrellaPreview.position.set(this.width()/2000,0,this.depth()/2000);this.model.add(this.umbrellaPreview);
   }
   private bindAssembly(): void {
+    this.updateUmbrella();
     this.updateTrays();
     this.updateFrontLogo();
     if (!this.model || !this.body) return;
     if(this.isSideShelfCart())this.body.traverse(node=>{
       const name=node.userData['plywoodPart']||node.name;
+      if(/^Body5$/i.test(name)){node.userData['assemblyHidden']=!this.umbrellaHole();node.visible=this.umbrellaHole()&&(this.assembly?.state.visible.bottom??true);}
       const plug=/^Top[ _]part1[ _]cutout[ _]plug[ _](\d+)$/i.exec(name);
       if(plug){const visible=this.cutoutsIncluded()&&!this.selectedCutouts().includes(+plug[1]);node.userData['assemblyHidden']=!visible;node.visible=visible&&(this.assembly?.state.visible.top??true);}
       const key=/^Ice[ _]shelf/i.test(name)?'ice-shelf':/^Side[ _]shelf/i.test(name)?'side-shelves':null;
@@ -973,9 +1006,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
           ? resizeSideShelfCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height()) : this.isClassic()
           ? resizePlywoodPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height())
           : resizeRoofCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height(), this.frontStyle() !== 'shaker');
-        positions.setXYZ(i, x, y, z);
+        const reverse=this.isSideShelfCart()&&this.reverseCutoutLayout()&&/^Top[ _]part1[ _]cutout/i.test(name);
+        positions.setXYZ(i, reverse?this.width()/1000-x:x, y, reverse?this.depth()/1000-z:z);
       }
       positions.needsUpdate = true;
+      if(this.isSideShelfCart()&&/^Top[ _]part1[ _]cutout/i.test(node.userData['plywoodPart']||node.name))node.geometry.computeVertexNormals();
       node.geometry.computeBoundingBox();
       node.geometry.computeBoundingSphere();
       const materials = Array.isArray(node.material) ? node.material : [node.material];
@@ -991,12 +1026,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         row === 'rear' ? (this.depth() - 600) / 1000 : 0,
       );
     }
-    const span = Math.max(this.width(), this.depth(), this.overallHeight()) / 1000;
+    const span = Math.max(this.width(), this.depth(), this.previewHeight()) / 1000;
     const centerX = this.width() / 2000, centerZ = this.depth() / 2000;
     this.turntable?.position.set(centerX, 0, centerZ);
     this.model?.position.set(-centerX, 0, -centerZ);
     if (this.controls) {
-      const nextTarget = new THREE.Vector3(this.width() / 2000, this.overallHeight() / 2000, this.depth() / 2000);
+      const nextTarget = new THREE.Vector3(this.width() / 2000, this.previewHeight() / 2000, this.depth() / 2000);
       const offset = this.camera.position.clone().sub(this.controls.target);
       this.camera.position.copy(nextTarget).addScaledVector(offset, span / this.cameraSpan);
       const orbitOffset = this.orbitCamera.position.clone().sub(this.controls.target);
@@ -1269,11 +1304,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   private focusCamera(): void {
-    const span = Math.max(this.width(), this.depth(), this.overallHeight()) / 1000;
+    const span = Math.max(this.width(), this.depth(), this.previewHeight()) / 1000;
     this.cameraSpan = span;
     this.camera.position.set(this.width() / 2000 + span * 1.1, this.overallHeight() / 2000 + span * 0.5, this.depth() / 2000 + span * 1.25);
     this.orbitCamera.position.copy(this.camera.position);
-    this.camera.lookAt(this.width() / 2000, this.overallHeight() / 2000, this.depth() / 2000);
+    this.camera.lookAt(this.width() / 2000, this.previewHeight() / 2000, this.depth() / 2000);
     this.controls?.update();
   }
 
