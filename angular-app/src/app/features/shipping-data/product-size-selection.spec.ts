@@ -42,4 +42,15 @@ describe('Product size selection',()=>{
   c.backdropDimensions.set({'2000x1000:nonfoldable':{size_key:'2000x1000:nonfoldable',package_name:'Backdrop',length_mm:2030,width_mm:1030,height_mm:80,revision:'saved'}});
   c.selectedBackdropFolding='nonfoldable';expect(c.missingBackdropPacking(p)).toEqual([]);
  });
+ it('shows empty or shared Packing for the named Wix sizes of a Half Arch Shelf Wall',()=>{
+  const p={id:'half-arch',product_name:'Half Arch Shelf Wall – Plywood Display Arch with Shelves',product_type:'Backdrop',saved_profiles:[]};
+  const c=setup(p,['Small (150cm x 90cm)','Medium (160cm x 90cm)','Large (180cm x 90cm)']);
+  expect(c.missingBackdropPacking(p)).toEqual(['1500x900:foldable']);
+  expect(c.productDrawingKey(p)).toBe('product-size:text:small (150cm x 90cm)');
+  c.backdropDimensions.set({'1500x900:foldable':{size_key:'1500x900:foldable',package_name:'Backdrop',length_mm:940,width_mm:790,height_mm:90,revision:'saved'}});
+  expect(c.visiblePackingProfiles(p)).toHaveLength(1);expect(c.missingBackdropPacking(p)).toEqual([]);
+  expect(c.visiblePackingProfiles(p)[0].template_item.wix_options.Size).toBe('Small (150cm x 90cm)');
+  c.selectedBackdropFolding='nonfoldable';expect(c.missingBackdropPacking(p)).toEqual(['1500x900:nonfoldable']);
+  c.selectProductSize(p,'Medium (160cm x 90cm)');expect(c.missingBackdropPacking(p)).toEqual(['1600x900:nonfoldable']);
+ });
 });

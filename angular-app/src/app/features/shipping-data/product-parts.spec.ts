@@ -31,9 +31,19 @@ describe('Product-owned Shop Floor parts',()=>{
   for(const product of [{id:'main',product_name:'Ripple Arch Backdrop',product_type:'Backdrop'},{id:'main',product_name:'Portable Display',product_type:'Other'}]){
    const fixture=TestBed.createComponent(ProductPartsComponent);fixture.componentInstance.product=product;await fixture.componentInstance.load();fixture.detectChanges();
    const content=fixture.nativeElement.textContent as string;
-   expect(content).toContain('Belongs to');expect(content).toContain('Extra CNC (min)');expect(content).toContain('Shared CNC (min)');
+   expect(content).not.toContain('Belongs to');expect(content).not.toContain('When option');expect(content).toContain('Extra CNC (min)');expect(content).toContain('Shared CNC (min)');
    expect(content).not.toContain('Main CNC (min)');
   }
+ });
+ it('hides ownership and condition fields without changing saved rules',async()=>{
+  const {component,rpc,templates}=setup();const part={id:'shelf',name:'Shelf',component_product_id:'addon',option_name:'Shelf',option_value:'Yes'};
+  templates.push({id:'template',product_id:'main',name:'Display',version:1,parts:[part],estimates:{'CNC:shelf':4,'Assembly:shelf':8}});
+  TestBed.configureTestingModule({imports:[ProductPartsComponent],providers:[{provide:SupabaseService,useValue:(component as any).db}]});
+  const fixture=TestBed.createComponent(ProductPartsComponent);const c=fixture.componentInstance;c.product={id:'main',product_name:'Display',product_type:'Other'};await c.load();fixture.detectChanges();
+  expect(fixture.nativeElement.querySelector('[aria-label="Part component"]')).toBeNull();
+  expect(fixture.nativeElement.querySelector('[aria-label="Required option name"]')).toBeNull();expect(fixture.nativeElement.querySelector('[aria-label="Required option value"]')).toBeNull();
+  await c.save();expect(rpc).toHaveBeenLastCalledWith('wc_shop_save_product_template',expect.objectContaining({p_parts:[part],p_estimates:expect.objectContaining({'CNC:shelf':4})}));
+  c.pendingRemove='shelf';expect(c.parts).toHaveLength(1);c.pendingRemove='';expect(c.parts).toHaveLength(1);c.pendingRemove='shelf';c.confirmRemovePart();expect(c.parts).toEqual([]);expect(c.estimates['Assembly:shelf']).toBeUndefined();
  });
  it('defaults new Backdrop estimates to Foldable and persists without clicking the option',async()=>{
   const {component,rpc,templates}=setup();component.product={id:'main',product_name:'Hollow Arch Backdrop'};await component.load();

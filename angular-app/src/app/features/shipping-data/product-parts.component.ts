@@ -1,5 +1,6 @@
 import {Component,Input,OnChanges,SimpleChanges,ChangeDetectorRef,Optional} from '@angular/core';
 import {FormsModule} from '@angular/forms';
+import {DialogModule} from 'primeng/dialog';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {ShopPart,ShopTemplate} from '../shop-floor/shop-floor.models';
 import {manualBackdropSizeKey,sizeKeyLabel} from './product-sizes';
@@ -13,7 +14,7 @@ type AssignedPart=ShopPart&{component_product_id:string};
 type PackingRule={id:string;rule_type:string;match_name:string;match_value?:string;active?:boolean};
 type PartScope={key:string;label:string;componentId:string;optionName?:string;optionValue?:string};
 
-@Component({selector:'app-product-parts',standalone:true,imports:[FormsModule],template:`
+@Component({selector:'app-product-parts',standalone:true,imports:[FormsModule,DialogModule],template:`
  <h3>Parts & estimated minutes</h3>
   <p class="mut">@if(isCart){Save Main work once for this Cart size, then save each option in its own block. Options come from Packing. Enter CNC separately for Main and each Add-on; the configuration estimate is their sum.}@else{@if(hasFolding){Save one structural template for Foldable and one for Non-foldable. Every size reuses it.}@else{Save one structural template for each size.} Keep base and optional parts in one template. Extra CNC belongs to a part; Shared CNC applies to the whole product.} Painting is added only to Painted configurations.</p>
  @if(product?.saved_only){<p class="error" role="alert">Link this imported profile to a catalogue product before adding production parts.</p>}
@@ -40,9 +41,12 @@ type PartScope={key:string;label:string;componentId:string;optionName?:string;op
    <div class="estimate-grid"><label>{{scope.label}} CNC (min)<input type="number" min="0" [ngModel]="cncValue(scope)" (ngModelChange)="setCncEstimate(scope,$event)" [disabled]="busy"></label></div>
   </section>}
   }@else{
-   <div class="table-wrap"><table class="legacy-table"><thead><tr><th>Part</th><th>Belongs to</th><th>When option</th><th>Equals</th><th>Extra CNC (min)</th><th>Assembly (min)</th><th>Sanding (min)</th><th></th></tr></thead><tbody>
-    @for(part of parts;track part.id){<tr><td><input [(ngModel)]="part.name" aria-label="Part name" [disabled]="busy"></td><td><select [(ngModel)]="part.component_product_id" aria-label="Part component" [disabled]="busy">@for(c of visibleComponents();track c.id){<option [value]="c.id">{{c.component_role}} · {{c.product_name}}</option>}</select></td><td><input [(ngModel)]="part.option_name" aria-label="Required option name" placeholder="Always" [disabled]="busy"></td><td><input [(ngModel)]="part.option_value" aria-label="Required option value" placeholder="Any" [disabled]="busy"></td><td><input type="number" min="0" [ngModel]="estimates['CNC:'+part.id]" (ngModelChange)="setEstimate('CNC:'+part.id,$event)" aria-label="Extra CNC minutes" [disabled]="busy"></td><td><input type="number" min="0" [ngModel]="estimates['Assembly:'+part.id]" (ngModelChange)="setEstimate('Assembly:'+part.id,$event)" aria-label="Assembly minutes" [disabled]="busy"></td><td><input type="number" min="0" [ngModel]="estimates['Sanding:'+part.id]" (ngModelChange)="setEstimate('Sanding:'+part.id,$event)" aria-label="Sanding minutes" [disabled]="busy"></td><td><button type="button" (click)="removePart(part.id)" [disabled]="busy">Remove</button></td></tr>}
-    @empty{<tr><td colspan="8">Add the first product part.</td></tr>}
+   <div class="table-wrap"><table class="legacy-table"><thead><tr><th>Part</th><th>Extra CNC (min)</th><th>Assembly (min)</th><th>Sanding (min)</th><th aria-label="Part actions"></th></tr></thead><tbody>
+    @for(part of parts;track part.id){<tr><td><input [(ngModel)]="part.name" aria-label="Part name" [title]="part.name" [disabled]="busy"></td><td><input type="number" min="0" [ngModel]="estimates['CNC:'+part.id]" (ngModelChange)="setEstimate('CNC:'+part.id,$event)" aria-label="Extra CNC minutes" [disabled]="busy"></td><td><input type="number" min="0" [ngModel]="estimates['Assembly:'+part.id]" (ngModelChange)="setEstimate('Assembly:'+part.id,$event)" aria-label="Assembly minutes" [disabled]="busy"></td><td><input type="number" min="0" [ngModel]="estimates['Sanding:'+part.id]" (ngModelChange)="setEstimate('Sanding:'+part.id,$event)" aria-label="Sanding minutes" [disabled]="busy"></td><td><span class="part-actions">
+     <button class="icon-action" type="button" [title]="'Remove '+(part.name||'part')" [attr.aria-label]="'Remove '+(part.name||'part')" (click)="pendingRemove=part.id" [disabled]="busy"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
+    </span></td></tr>
+    }
+    @empty{<tr><td colspan="5">Add the first product part.</td></tr>}
    </tbody></table></div>
    <button class="icon-action" type="button" title="Add part" aria-label="Add part" (click)="addPart()" [disabled]="busy||!visibleComponents().length">+</button>
    <div class="estimate-grid"><label>Shared CNC (min)<input type="number" min="0" [ngModel]="estimates['CNC']" (ngModelChange)="setEstimate('CNC',$event)" [disabled]="busy"></label></div>
@@ -50,11 +54,15 @@ type PartScope={key:string;label:string;componentId:string;optionName?:string;op
   <button class="primary icon-action" type="button" title="Save all estimated minutes" aria-label="Save all estimated minutes" (click)="save()" [disabled]="busy||product.saved_only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>@if(busy&&!feedbackScopeKey){<span role="status">Saving parts template…</span>}
  }
  @if(error&&!feedbackScopeKey){<p class="error" role="alert">{{error}}</p>}@if(done&&!feedbackScopeKey){<p class="success" role="status">Parts template saved.</p>}
+ <p-dialog header="Remove part" [visible]="!!pendingRemove" (visibleChange)="!$event&&(pendingRemove='')" [modal]="true" [style]="{width:'380px',maxWidth:'94vw'}"><p>Remove {{pendingPartName}} and its estimated minutes from this template? Save the template to keep the removal.</p><div class="part-actions"><button type="button" (click)="pendingRemove=''">Cancel</button><button type="button" (click)="confirmRemovePart()">Remove part</button></div></p-dialog>
  `,styles:[`
  :host{display:block}.mut{color:var(--wc-muted);font-size:.875rem}.template-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.template-tabs button.active{border-color:var(--p-primary-color);color:var(--p-primary-color)}label{display:flex;flex-direction:column;gap:5px;margin:10px 0}.part-scope{border:1px solid var(--wc-border);border-radius:12px;padding:12px;margin:12px 0;background:var(--wc-surface)}.composition-preview{background:var(--wc-muted-surface,#f7f9fc)}.composition-preview h4{margin:0}.composition-preview .mut{margin:4px 0}.scope-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.scope-actions{display:flex;align-items:center;gap:6px;white-space:nowrap}.scope-actions span{color:var(--wc-muted);font-size:.75rem}.scope-heading h4{margin:0}.scope-heading small{display:block;color:var(--wc-muted);margin-top:3px}.table-wrap{overflow:auto;border:1px solid var(--wc-border);border-radius:var(--wc-radius);background:#fff;margin:8px 0 0}table{width:100%;min-width:680px;border-collapse:collapse;table-layout:auto}th,td{text-align:left;vertical-align:middle;border-bottom:1px solid var(--wc-border);padding:8px 6px}table tr:last-child td{border-bottom:0}input,select{max-width:100%;box-sizing:border-box}.part-scope td:first-child input{width:128px}.part-scope td input[type=number],.estimate-grid input{width:54px;padding:6px}.estimate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}.primary{background:var(--p-primary-color);color:#fff}.icon-action{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:1px solid var(--wc-border);border-radius:7px;vertical-align:middle;font:inherit}.icon-action svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.error{color:var(--p-red-600)}.success{color:var(--p-green-700)}
- .legacy-table{min-width:950px}.legacy-table input:not([type]),.legacy-table input[type=text]{width:128px}.legacy-table select{width:160px}.legacy-table input[type=number]{width:54px;padding:6px}
+ .legacy-table{min-width:440px;table-layout:fixed}.legacy-table th:first-child{width:40%}.legacy-table th:last-child{width:42px}.legacy-table input:not([type]),.legacy-table input[type=text]{width:100%;min-width:0}.legacy-table input[type=number]{width:58px;padding:4px 6px}.legacy-table th,.legacy-table td{padding:6px}.part-actions{display:flex;align-items:center;gap:4px;white-space:nowrap}.part-actions .icon-action{width:30px;height:30px;flex-shrink:0}.legacy-table input{height:32px;padding:4px 6px}
  `]})
 export class ProductPartsComponent implements OnChanges{
+ pendingRemove='';
+ get pendingPartName(){return this.parts.find(part=>part.id===this.pendingRemove)?.name||'this part';}
+ confirmRemovePart(){if(!this.pendingRemove||this.busy)return;this.removePart(this.pendingRemove);this.pendingRemove='';}
  @Input() product:any;@Input() sizes:string[]=[];@Input() selectedSize='';@Input() selectedFolding:Folding|''='';@Input() orderVariant=false;@Input() orderComponentIds:string[]|null=null;@Input() orderOptions:Record<string,unknown>={};@Input() packingRules:PackingRule[]=[];
  folding:Folding|''='';sizeKey='';folds:Folding[]=['foldable','nonfoldable'];foldingLabel=foldingLabel;sizeLabel=sizeKeyLabel;
  private drafts=new Map<string,any>();

@@ -103,6 +103,18 @@ export interface PackageComponent {
   unit_index:number; quantity:number; profile_item_key:string; wix_product_id:string|null;
 }
 export const componentNormal=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+// Wix may label an explicit metric size, e.g. Small (150cm x 90cm).
+// Only unwrap a single named pair; unitless, 3D and conflicting sizes stay ambiguous.
+export function backdropMetricSizeKey(value:string):string{
+ const raw=value.trim().toLowerCase();
+ const named=raw.match(/^[a-z][a-z\s_-]*\(([^()]+)\)$/);
+ const match=(named?named[1].trim():raw).match(/^(\d+(?:\.\d+)?)\s*(mm|cm|m)?\s*[x×]\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)$/);
+ if(!match)return '';
+ const factor=(unit:string)=>unit==='m'?1000:unit==='cm'?10:1;
+ const a=Number(match[1])*factor(match[2]||match[4]),b=Number(match[3])*factor(match[4]);
+ if(!Number.isInteger(a)||!Number.isInteger(b)||a<=0||b<=0||a>10000||b>10000)return '';
+ return [a,b].sort((x,y)=>y-x).join('x');
+}
 export function backdropPackagingKey(item:OrderItemRow):string{
  let size='',fold='';
  for(const label of orderItemOptionLabels(item,Number.MAX_SAFE_INTEGER)){
@@ -111,14 +123,10 @@ export function backdropPackagingKey(item:OrderItemRow):string{
   if(['size','dimension','dimensions'].includes(name))size=value;
   if(name==='foldable')fold=value;
  }
- const match=size.toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(mm|cm|m)?\s*[x×]\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)$/);
- if(!match)return '';
- const factor=(unit:string)=>unit==='m'?1000:unit==='cm'?10:1;
- const a=Number(match[1])*factor(match[2]||match[4]),b=Number(match[3])*factor(match[4]);
- if(!Number.isInteger(a)||!Number.isInteger(b)||a<=0||b<=0||a>10000||b>10000)return '';
+ const key=backdropMetricSizeKey(size);if(!key)return '';
  const normalized=componentNormal(fold).replace(/\s/g,'');
  const folding=['yes','true','foldable'].includes(normalized)?'foldable':['no','false','nonfoldable','unfoldable'].includes(normalized)?'nonfoldable':'';
- return folding?[a,b].sort((x,y)=>y-x).join('x')+':'+folding:'';
+ return folding?key+':'+folding:'';
 }
 export const isLogoFileInstruction=(text:string)=>/^(?:please )?email us (?:a )?ready to use svg\b/.test(componentNormal(text));
 export const isLogoOption=(name:string)=>/^(?:add )?logo(?: or personali[sz]ation)?$/.test(componentNormal(name));
