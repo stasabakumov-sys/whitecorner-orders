@@ -13,7 +13,7 @@ import {HubMembersService} from '../../core/services/hub-members.service';
    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z"/></svg>
   </button>
   @if(kind==='rd'&&!readOnly&&members?.manager()){
-   <button type="button" class="edit" [title]="locked?'Save packaging changes before sending':!present?'Save RD files before sending':'Send box to Cutting work'" [attr.aria-label]="'Send '+(viewBox.package_name||sharedSize||'box')+' to Cutting work'" [disabled]="locked||!enabled||loading||error||!present" (click)="sendOnLoad=true;open=true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="m8.5 7.5 12 13m-12-4 12-13"/></svg></button>
+   <button type="button" class="edit" [title]="locked?'Save packaging changes before sending':!present?'Save RD files before sending':'Send box to Cutting work'" [attr.aria-label]="'Send '+(viewBox.package_name||sharedSize||'box')+' to Cutting work'" [disabled]="locked||!enabled||loading||error||!present" (click)="sendOnLoad=true;open=true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8v8H8zM8 11l4 4 4-4M12 15v4M5 21h14"/></svg></button>
   }
  </div>
  @if(error){<small role="alert">Could not check files. <button type="button" (click)="load()">Retry</button></small>}

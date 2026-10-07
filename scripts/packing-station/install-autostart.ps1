@@ -1,7 +1,7 @@
 param([string]$ControllerIp='192.168.1.100')
 $ErrorActionPreference='Stop'
 $env:PSModulePath=(Join-Path $PSHOME 'Modules')+';'+$env:PSModulePath
-$installRoot=Join-Path $env:LOCALAPPDATA 'WhiteCorner\PackingStation'
+$installRoot=Join-Path ([Environment]::GetFolderPath('UserProfile')) 'WhiteCorner\PackingStation'
 $statusPath=Join-Path $installRoot 'setup-status.json'
 function Set-SetupStatus([string]$state,[string]$message){
  @{state=$state;message=$message;time=(Get-Date -Format o)} | ConvertTo-Json | Set-Content -LiteralPath $statusPath -Encoding UTF8
