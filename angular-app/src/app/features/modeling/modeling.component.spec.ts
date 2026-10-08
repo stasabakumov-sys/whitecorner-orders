@@ -7,7 +7,7 @@ import { TestBed } from '@angular/core/testing';
 import { ModelingCacheService } from './modeling-cache.service';
 import { MODEL_CATALOG_LINKS } from './modeling-pricing';
 import { createRoundedPart, RoundingProfile } from './modeling-rounding';
-import { roofSideShelfTopProfile } from './modeling-roof-side-shelf';
+import { prepareRoofSideShelfCartSource, roofSideShelfTopProfile } from './modeling-roof-side-shelf';
 
 function testCache() {
   return new ModelingCacheService({ client: { auth: { onAuthStateChange: vi.fn() } } } as unknown as SupabaseService);
@@ -532,7 +532,7 @@ it('keeps source tabletop grouping flags independent across repeated geometry re
 
 it('rounds the roof cart outer top edge while keeping leaf seams and post openings square', async () => {
  const {component}=setup(),editor=component as any;
- component.activeSlug.set('roof-side-shelf-cart-mdf');component.roundingSupported.set(true);
+ component.activeSlug.set('roof-side-shelf-cart-mdf');component.roundingSupported.set(true);component.sideShelvesIncluded.set(true);
  editor.body=new THREE.Group();
  const profiles:[string,RoundingProfile][]=[
   ['Top part1',roofSideShelfTopProfile(.834,.016,false)],
@@ -556,6 +556,98 @@ it('rounds the roof cart outer top edge while keeping leaf seams and post openin
   expect(hit('Side shelf right 1',1.5001,.3)).toBeCloseTo(.85,6);
   if(radius)expect(hit('Side shelf right 1',1.6999,.3)).toBeLessThan(.8499);
  }}finally{frame.mockRestore();}
+});
+
+it.each([1200,1300,1500])('resizes the two-post roof cart to %i mm without stretching openings, with optional leaves, closed roof and glasses',async width=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('roof-side-shelf-cart-mdf');component.roundingSupported.set(true);component.height.set(950);component.moulding.set(false);
+ editor.body=new THREE.Group();editor.model=new THREE.Group();editor.model.add(editor.body);
+ const source=new THREE.Group(),top=new THREE.Mesh(new THREE.BoxGeometry(1.5,.016,.6).translate(.75,.842,.3),new THREE.MeshPhysicalMaterial());top.name='Top_part1';source.add(top);
+ prepareRoofSideShelfCartSource(source);
+ for(const part of source.children){editor.sourceParts.push(part);part.traverse(node=>{if(node instanceof THREE.Mesh)editor.sourcePositions.set(node.geometry,node.geometry.getAttribute('position').clone());});}
+ vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});
+ const frame=vi.spyOn(globalThis,'requestAnimationFrame').mockImplementation(callback=>{callback(0);return 0;});
+ try{
+  component.setDimension('width',String(width));await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));
+  await component.setRounding(1.5);expect(component.error()).toBe('');
+  const panel=editor.body.getObjectByName('Top part1') as THREE.Mesh,box=panel.geometry.boundingBox!;
+  expect(box.max.x).toBeCloseTo(width/1000,6);expect(box.max.y-box.min.y).toBeCloseTo(.016,6);
+  const holes=roofSideShelfTopProfile(.834,.016,true,width).holes;
+  for(const [index,x] of [.0675,width/1000-.0675].entries()){
+   expect(Math.max(...holes[index].map(p=>p[0]))-Math.min(...holes[index].map(p=>p[0]))).toBeCloseTo(.042,6);
+   const post=(editor.body.getObjectByName(`Dar${index+1}`) as THREE.Mesh).geometry.boundingBox!;
+   expect(post.getCenter(new THREE.Vector3()).x).toBeCloseTo(x,6);expect(post.max.x-post.min.x).toBeCloseTo(.0418,6);
+   const ray=new THREE.Raycaster(new THREE.Vector3(x,1,.3),new THREE.Vector3(0,-1,0));
+   expect(ray.intersectObject(new THREE.Mesh(panel.geometry,new THREE.MeshBasicMaterial()))).toHaveLength(0);
+  }
+  for(const [index,slot] of component.traySlots.entries()){
+   const hole=holes[index+2];expect(Math.max(...hole.map(p=>p[0]))-Math.min(...hole.map(p=>p[0]))).toBeCloseTo(slot.width/1000,6);
+   expect(Math.min(...hole.map(p=>p[0]))).toBeCloseTo(slot.x/1000,6);
+  }
+  component.setRoofClosed(true);expect(component.roofClosed()).toBe(true);expect(component.error()).toBe('');
+  const bottom=(editor.body.getObjectByName('Roof bottom panel') as THREE.Mesh).geometry.boundingBox!;
+  expect(bottom.max.y-bottom.min.y).toBeCloseTo(.012,6);expect(component.overallHeight()).toBe(1968);
+  component.setGlassRackCount('3');component.setShowGlasses(true);component.setGlassDiameter('80');
+  const racks=editor.body.getObjectByName('Roof glass racks')!;expect(racks.children).toHaveLength(3);expect(racks.children.every(rack=>rack.children.length>10)).toBe(true);
+  component.setRoofClosed(false);expect(editor.body.getObjectByName('Roof bottom panel')).toBeUndefined();expect(editor.body.getObjectByName('Roof glass racks')).toBeUndefined();
+  component.setSideShelvesIncluded(true);await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));expect(component.previewWidth()).toBe(width+400);
+  component.setSideShelvesIncluded(false);await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));expect(component.previewWidth()).toBe(width);
+ component.setDimension('width','1400');expect(component.width()).toBe(width);
+ component.setDimension('width','1500');await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));
+ component.resetDimensions();await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));
+ expect((editor.body.getObjectByName('Top part1') as THREE.Mesh).geometry.boundingBox!.max.x).toBeCloseTo(1.2,6);
+ }finally{frame.mockRestore();}
+});
+
+it.each(['classic-bar-plywood','classic-bar-mdf'])('rounds the Classic outer rim and preserves inset and optional leaf joints for %s',async slug=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set(slug);component.roundingSupported.set(true);editor.body=new THREE.Group();
+ const rail=slug==='classic-bar-mdf'?.016:.019,thickness=slug==='classic-bar-mdf'?.045:.042,panel=slug==='classic-bar-mdf'?.016:.015;
+ const inner=[[rail,rail],[1.2-rail,rail],[1.2-rail,.6-rail],[rail,.6-rail]];
+ for(const [name,profile] of [
+  ['Top part1',{axis:'y',origin:.9-panel,thickness:panel,outline:inner,holes:[]}],
+  ['Top part2',{axis:'y',origin:.9-thickness,thickness,outline:[[0,0],[1.2,0],[1.2,.6],[0,.6]],holes:[inner]}],
+ ] as [string,RoundingProfile][]){const geometry=createRoundedPart(profile,0),mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial());mesh.name=name;mesh.userData['roundingProfile']=profile;editor.sourceParts.push(mesh);editor.sourcePositions.set(geometry,geometry.getAttribute('position').clone());}
+ vi.spyOn(editor,'applyDimensions').mockImplementation(()=>{});vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});
+ const frame=vi.spyOn(globalThis,'requestAnimationFrame').mockImplementation(callback=>{callback(0);return 0;});
+ const hit=(name:string,x:number,z:number)=>new THREE.Raycaster(new THREE.Vector3(x,1,z),new THREE.Vector3(0,-1,0)).intersectObject(editor.body.getObjectByName(name))[0]?.point.y;
+ try{for(const leaves of [false,true])for(const radius of [0,1.5,3]){
+  component.sideShelvesIncluded.set(leaves);await component.setRounding(radius);expect(component.error()).toBe('');editor.body.updateMatrixWorld(true);
+  const front=hit('Top part2',.6,.0001)!;
+  if(radius)expect(front,`radius ${radius}, leaves ${leaves}`).toBeLessThan(.8999);else expect(front).toBeCloseTo(.9,6);
+  const end=hit('Top part2',.0001,.3)!;
+  if(radius&&!leaves)expect(end).toBeLessThan(.8999);else expect(end).toBeCloseTo(.9,6);
+  expect(hit('Top part1',rail+.0001,.3)).toBeCloseTo(.9,6);
+  expect(hit('Top part2',rail-.0001,.3)).toBeCloseTo(.9,6);
+  const box=new THREE.Box3().setFromObject(editor.body.getObjectByName('Top part2'));expect(box.max.x-box.min.x).toBeCloseTo(1.2,6);expect(box.max.y-box.min.y).toBeCloseTo(thickness,6);
+ }}finally{frame.mockRestore();}
+});
+
+it.each(['decorative-wheel-roof-cart-mdf','decorative-wheel-cart-mdf'])('retains the exposed tabletop bevel with owner side shelves on and off for %s',async slug=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set(slug);component.roundingSupported.set(true);editor.body=new THREE.Group();
+ for(const [name,profile] of [
+  ['Top_1',{axis:'y',origin:.884,thickness:.016,outline:[[0,0],[1.2,0],[1.2,.6],[0,.6]],holes:[]}],
+  ['Top_2',{axis:'y',origin:.855,thickness:.029,outline:[[0,0],[1.2,0],[1.2,.6],[0,.6]],holes:[[[.016,.016],[1.184,.016],[1.184,.584],[.016,.584]]]}],
+ ] as [string,RoundingProfile][]){const geometry=createRoundedPart(profile,0),mesh=new THREE.Mesh(geometry,new THREE.MeshPhysicalMaterial());mesh.name=name;mesh.userData['roundingProfile']=profile;editor.sourceParts.push(mesh);editor.sourcePositions.set(geometry,geometry.getAttribute('position').clone());}
+ vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});vi.spyOn(editor,'loadSideShelfReference').mockResolvedValue(undefined);
+ const frame=vi.spyOn(globalThis,'requestAnimationFrame').mockImplementation(callback=>{callback(0);return 0;});
+ try{for(const leaves of [false,true,false]){
+  component.sideShelvesIncluded.set(leaves);await component.setRounding(1.5);expect(component.error()).toBe('');
+  const top=editor.body.getObjectByName('Top_1') as THREE.Mesh;
+  const hit=new THREE.Raycaster(new THREE.Vector3(.6,1,.0001),new THREE.Vector3(0,-1,0)).intersectObject(top)[0];
+  expect(hit.point.y).toBeLessThan(.8999);expect(top.geometry.boundingBox!.max.y-top.geometry.boundingBox!.min.y).toBeCloseTo(.016,6);
+  const seam=new THREE.Raycaster(new THREE.Vector3(.0001,1,.3),new THREE.Vector3(0,-1,0)).intersectObject(top)[0].point.y;
+  if(leaves)expect(seam).toBeCloseTo(.9,6);else expect(seam).toBeLessThan(.8999);
+ }}finally{frame.mockRestore();}
+});
+
+it.each(['classic-bar-plywood','classic-bar-mdf','decorative-wheel-roof-cart-mdf','decorative-wheel-cart-mdf'])('uses matching pink paint and oak on tabletop and inherited side shelf for %s',slug=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set(slug);editor.body=new THREE.Group();editor.rawTexture=new THREE.Texture();editor.plywoodTexture=new THREE.Texture();
+ component.rawBody.set(false);component.bodyColor.set('#c599ae');component.topFinish.set('body');component.sideShelfFinish.set('top');
+ for(const name of ['Top part1','Side shelf left 1']){const mesh=new THREE.Mesh(new THREE.BoxGeometry(.2,.016,.6),new THREE.MeshPhysicalMaterial({side:name==='Top part1'?THREE.DoubleSide:THREE.FrontSide}));mesh.name=name;editor.body.add(mesh);}
+ for(const finish of ['body','oak']){
+ component.topFinish.set(finish as any);editor.finishTextures.set('tasmanian-oak.png',new THREE.Texture());
+ editor.applyFinishes();const materials=editor.body.children.map((mesh:THREE.Mesh)=>Array.isArray(mesh.material)?mesh.material[0]:mesh.material) as THREE.MeshPhysicalMaterial[];
+ expect(materials[0].color.equals(materials[1].color)).toBe(true);expect(materials[0].map).toBe(materials[1].map);expect(materials[0].roughness).toBe(materials[1].roughness);expect(materials[0].envMap).toBe(materials[1].envMap);expect(materials[0].clearcoat).toBe(materials[1].clearcoat);expect(materials[0].shadowSide).toBe(THREE.BackSide);expect(materials[1].shadowSide).toBe(THREE.BackSide);
+ }
 });
 
 it('toggles shelf, ice shelf and side shelves independently without adding a roof', () => {

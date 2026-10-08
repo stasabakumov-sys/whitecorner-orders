@@ -4,6 +4,17 @@ import * as THREE from 'three';
 import { resizePlywoodPosition, resizeRoofCartPosition } from './modeling-geometry';
 
 describe('Wooden part rounding', () => {
+  it('keeps equal flat normals on narrow shelves and large tops while retaining smooth bevels',()=>{
+    for(const width of [.184,1.162])for(const radius of [1,1.5,2,2.5,3]){
+      const geometry=createRoundedPart({axis:'y',origin:.884,thickness:.016,outline:[[0,0],[width,0],[width,.568],[0,.568]],holes:[]},radius);
+      const normals=geometry.getAttribute('normal');
+      for(const group of geometry.groups.filter(group=>group.materialIndex===0))for(let i=group.start;i<group.start+group.count;i++){
+        expect(normals.getX(i)).toBeCloseTo(0,7);expect(Math.abs(normals.getY(i))).toBeCloseTo(1,7);expect(normals.getZ(i)).toBeCloseTo(0,7);
+      }
+      expect(Array.from({length:normals.count},(_,i)=>Math.abs(normals.getY(i))).some(y=>y>.05&&y<.95)).toBe(true);
+      geometry.dispose();
+    }
+  });
   it('keeps the two 12 mm Shaker sheets glued together and retains a 12 mm recess', () => {
     const back: RoundingProfile = { axis: 'z', origin: .56, thickness: .012,
       outline: [[.016, .239], [1.184, .239], [1.184, .884], [.016, .884]], holes: [] };

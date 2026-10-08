@@ -140,7 +140,12 @@ export function createCartSideShelves(source:THREE.Group,widthMm:number,heightMm
   const joints=matingPartJoints(profiles.map(part=>({...part,bounds:bounds(part.profile)})));
   for(const {name,profile} of profiles){
     const support=/[ _][56]$/.test(name),geometry=createRoundedPart(profile,support?0:radiusMm);
-    keepPartJointsSquare(geometry,joints.get(name)||[],radiusMm);
+    const partJoints=joints.get(name)||[];
+    if(!support&&!/[ _]4$/.test(name)){
+      const box=bounds(profile),plane=/[ _]left[ _]/.test(name)?0:width;
+      partJoints.push({axis:'x',plane,bounds:new THREE.Box3(new THREE.Vector3(plane,box.min.y,box.min.z),new THREE.Vector3(plane,box.max.y,box.max.z))});
+    }
+    keepPartJointsSquare(geometry,partJoints,radiusMm);
     const face=new THREE.MeshPhysicalMaterial(),edge=new THREE.MeshPhysicalMaterial();
     face.name=top.pineTrim&&!/[ _][156]$/.test(name)?'pine trim':'side shelf face';edge.name=face.name==='pine trim'?'pine trim':'plywood edge';
     const mesh=new THREE.Mesh(geometry,[face,edge]);mesh.name=name;mesh.userData['plywoodPart']=name;

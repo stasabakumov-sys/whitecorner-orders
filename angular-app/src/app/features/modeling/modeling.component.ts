@@ -14,7 +14,7 @@ import { ModelingFourViews, frontFacingRotation } from './modeling-four-views';
 import { cartTopStructure, createCartSideShelves, extractCartSideShelves, extractCartUmbrellaHolderBounds, preparePlywoodSideThickness, sideShelfSideProfile, sideShelfSlotJoints, SIDE_SHELF_REFERENCE_SCENE } from './modeling-side-shelves';
 import { prepareRooflessCartSource, ROOFLESS_CART_NAME, ROOFLESS_CART_SLUG, ROOF_CART_SLUG } from './modeling-roofless';
 import { prepareTwoInOneCartSource, TWO_IN_ONE_CART_NAME, TWO_IN_ONE_CART_SLUG, SIDE_SHELF_CART_SLUG } from './modeling-two-in-one';
-import { prepareRoofSideShelfCartSource, roofSideShelfHeight, roofSideShelfIceHeight, roofSideShelfTabletopJoints, ROOF_SIDE_SHELF_CART_NAME, ROOF_SIDE_SHELF_CART_SLUG, ROOF_SIDE_SHELF_CUTOUTS } from './modeling-roof-side-shelf';
+import { prepareRoofSideShelfCartSource, roofSideShelfHeight, roofSideShelfIceHeight, roofSideShelfTopProfile, roofSideShelfTabletopJoints, ROOF_SIDE_SHELF_CART_NAME, ROOF_SIDE_SHELF_CART_SLUG, ROOF_SIDE_SHELF_CUTOUTS } from './modeling-roof-side-shelf';
 import { CLASSIC_MDF_NAME, CLASSIC_MDF_SLUG, prepareClassicMdfSource } from './modeling-classic-mdf';
 import { prepareIceShelfSupports, shelfProfilesForIceShelf } from './modeling-ice-shelf';
 import { createFrontMoulding } from './modeling-moulding';
@@ -226,7 +226,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   setPaintedBody():void{this.setBodyColor(this.bodyColor()==='#d4b894'?'#f6f6f3':this.bodyColor());}
 
   @ViewChild('shelfDrawingDialog') shelfDrawingDialog?: ElementRef<HTMLDialogElement>;
-  get traySlots() { return this.isRoofSideShelfCart()?ROOF_SIDE_SHELF_CUTOUTS:CHARCUTERIE_CUTOUTS; }
+  get traySlots() { return this.isRoofSideShelfCart()?ROOF_SIDE_SHELF_CUTOUTS.map(slot=>({...slot,x:slot.x+(this.width()-1200)/2})):CHARCUTERIE_CUTOUTS; }
   readonly selectedTrays = signal<number[]>([]);
   readonly selectedCutouts = signal<number[]>([]);
   readonly fourViews = signal(false);
@@ -307,7 +307,6 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     else this.bindAssembly();
   }
   setSideShelvesIncluded(value:boolean):void {
-    if(this.isRoofSideShelfCart()&&!value)return;
     this.sideShelvesIncluded.set(value);
     if(this.isCharcuterieCart()){if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());else this.bindAssembly();}
     else {
@@ -956,12 +955,13 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   setDimension(axis: 'width' | 'height', raw: string): void {
     const value = Number(raw);
     if (!Number.isFinite(value)) return;
-    if((this.isSideShelfCart() && axis==='width') || this.isTwoInOneCart() || (this.isRoofSideShelfCart() && axis==='width'))return;
-    if(this.isRoofSideShelfCart() && ![850,950].includes(value))return;
+    if((this.isSideShelfCart() && axis==='width') || this.isTwoInOneCart())return;
+    if(this.isRoofSideShelfCart() && !(axis==='width'?[1200,1300,1500]:[850,950]).includes(value))return;
     const limits = axis === 'width' ? [1200, 1500] : [850, 1000];
     const step = axis === 'width' ? 100 : 50;
     const next = Math.round(Math.max(limits[0], Math.min(limits[1], value)) / step) * step;
     this[axis].set(next);
+    if(this.isRoofSideShelfCart()&&axis==='width'&&this.body&&this.roundingSupported()){void this.setRounding(this.rounding());return;}
     if((this.isCharcuterieCart()||this.isClassic()||this.isRooflessCart())&&this.umbrellaHole()){const max=this.umbrellaDiameterMax();if(max<32)this.umbrellaHole.set(false);else this.umbrellaDiameter.update(value=>Math.min(value,max));void this.setRounding(this.rounding());return;}
     this.applyDimensions();
   }
@@ -1015,12 +1015,12 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         }
         let supported = false;
         part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) supported = true; });
-        const plainClassicTop=this.isPlywoodClassic()&&/^Top[ _]part1$/i.test(part.name);
+        const plainClassicTop=this.isClassic()&&/^(Top|Bottom|Buttom)[ _]part1$/i.test(part.name);
         const roofTop=this.isRoofSideShelfCart()&&/^Top[ _]part1(?:[ _]cutouts)?$/i.test(part.name);
         const solidSide=this.isCharcuterieCart()&&!this.sideShelvesIncluded()&&/^(Left|Right)[ _]side[ _]?1$/i.test(part.name);
         const slottedSide=!this.isCharcuterieCart()&&this.sideShelvesIncluded()&&!!this.sideShelfReference&&/^(Left|Right)[ _]side[ _]?(?:part)?1$/i.test(part.name);
         const umbrellaPanel=(this.isCharcuterieCart()||this.isClassic()||this.isRooflessCart())&&this.umbrellaHole()&&/^(Top[ _](?:part)?1(?:[ _]cutouts)?|Shelf|Ice[ _]shelf[ _]4|Body5)$/i.test(part.name);
-        if (!slottedSide&&!umbrellaPanel&&((!raw&&!solidSide) || !supported || (!plainClassicTop&&!roofTop&&/^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts|[ _]cutout[ _]plug[ _]\d+)?$/i.test(part.name)))) {
+        if (!slottedSide&&!umbrellaPanel&&((!raw&&!solidSide&&!roofTop) || !supported)) {
           const copy = part.clone(true);
           copy.traverse(node => {
             if (!(node instanceof THREE.Mesh)) return;
@@ -1053,15 +1053,21 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
             outline:[[bounds.min.z,bounds.min.y],[bounds.max.z,bounds.min.y],[bounds.max.z,bounds.max.y],[bounds.min.z,bounds.max.y]],holes:[]};
         }
         if (!profile) throw new Error('The GLB is missing a part profile. Upload an updated model.');
+        if(roofTop)profile=roofSideShelfTopProfile(profile.origin,profile.thickness,/cutouts/i.test(name),this.width());
         if(slottedSide)profile=sideShelfSideProfile(profile,this.sideShelfReference!);
         if(umbrellaPanel)profile=withUmbrellaHole(profile,this.umbrellaDiameter(),this.width(),this.umbrellaX(),this.isCharcuterieCart()?1500:1200,this.isRooflessCart()?200:150);
         if(solidSide){const us=profile.outline.map(p=>p[0]),vs=profile.outline.map(p=>p[1]),u0=Math.min(...us),u1=Math.max(...us),v0=Math.min(...vs),v1=Math.max(...vs);profile={...profile,outline:[[u0,v0],[u1,v0],[u1,v1],[u0,v1]],holes:[]};}
-        const tabletopJoints=this.isRoofSideShelfCart()?roofSideShelfTabletopJoints(name,profile):[];
+        const tabletopJoints=this.isRoofSideShelfCart()?roofSideShelfTabletopJoints(name,profile,this.sideShelvesIncluded()):[];
         const partJoints = [...(tabletopJoints.length?tabletopJoints:joints.get(name)||[]),...(slottedSide?sideShelfSlotJoints(profile):[])];
+        if(!this.isCharcuterieCart()&&this.sideShelvesIncluded()&&(this.isClassic()?/^Top[ _]part2$/i:/^Top[ _](?:part)?1$/i).test(name)){
+          const xs=profile.outline.map(p=>p[0]),zs=profile.outline.map(p=>p[1]);
+          for(const plane of [Math.min(...xs),Math.max(...xs)])partJoints.push({axis:'x',plane,
+            bounds:new THREE.Box3(new THREE.Vector3(plane,profile.origin,Math.min(...zs)),new THREE.Vector3(plane,profile.origin+profile.thickness,Math.max(...zs)))});
+        }
         const key = JSON.stringify([profile, raw, plainClassicTop, roofTop, /^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name), partJoints]);
         const geometry = this.modelCache.roundedPart(key, () => {
-          const rounded = createRoundedPart(profile!, plainClassicTop||(umbrellaPanel&&/^Top/i.test(name))?0:raw);
-          if(roofTop)for(const hole of profile!.holes)keepTrimJointSquare(rounded,{...profile!,holes:[hole]},raw);
+          const rounded = createRoundedPart(profile!, plainClassicTop?0:raw);
+          if(this.hasRoof()&&/^Top[ _](?:part)?1(?:[ _]cutouts)?$/i.test(name))for(const hole of profile!.holes)keepTrimJointSquare(rounded,{...profile!,holes:[hole]},raw);
           if (/^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name)) keepTrimJointSquare(rounded, profile!, raw);
           keepPartJointsSquare(rounded, partJoints, raw);
           return rounded;
@@ -1101,6 +1107,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.width.set(this.record?.base_width_mm || 1200);
     this.depth.set(this.record?.base_depth_mm || 600);
     this.height.set(this.record ? this.record.base_body_height_mm + this.record.caster_height_mm : 900);
+    if(this.isRoofSideShelfCart()&&this.body&&this.roundingSupported()){void this.setRounding(this.rounding());return;}
     this.applyDimensions();
   }
 
@@ -1264,7 +1271,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const roofTop=this.isRoofSideShelfCart()&&/^Top[ _]part1(?:[ _]cutouts)?$/i.test(name);
         const icePart=this.isRoofSideShelfCart()&&/^Ice[ _]shelf/i.test(name);
         const [x, y, z] = roofPart
-          ? [original.getX(i),roofSideShelfHeight(original.getY(i),this.height()),original.getZ(i)] : roofTop
+          ? [resizePlywoodPosition(name,original.getX(i),original.getY(i),original.getZ(i),this.width(),900)[0],roofSideShelfHeight(original.getY(i),this.height()),original.getZ(i)] : roofTop
           ? [original.getX(i),roofSideShelfHeight(original.getY(i),this.height()),original.getZ(i)] : icePart
           ? (()=>{const [px,py,pz]=resizeSideShelfCartPosition(name,original.getX(i),original.getY(i),original.getZ(i),this.width(),850);
             return [px,roofSideShelfIceHeight(name,py,this.height()),pz] as [number,number,number];})() : this.isCharcuterieCart()
@@ -1320,8 +1327,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const top=this.height()/1000,thickness=this.isPlywoodClassic()?.042:.045;
       for(const node of this.originalPositions.keys())if(/^Top[ _](?:part)?2$/i.test(node.userData['plywoodPart']||node.name)){
         keepPartJointsSquare(node.geometry,[0,this.width()/1000].map(x=>({axis:'x' as const,plane:x,
-          bounds:new THREE.Box3(new THREE.Vector3(x,top-thickness,0),new THREE.Vector3(x,top,.6)),
-          cap:{axis:'y' as const,min:top-thickness,max:top},outlineEnds:[new THREE.Vector3(x,top,0),new THREE.Vector3(x,top,.6)]})),this.rounding());
+          bounds:new THREE.Box3(new THREE.Vector3(x,top-thickness,0),new THREE.Vector3(x,top,.6))})),this.rounding());
       }
     }
     const shelvesChanged=this.updateSideShelfExtensions();
@@ -1332,7 +1338,6 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   setRoofClosed(closed: boolean): void {
-    if(this.isRoofSideShelfCart())return;
     this.roofClosed.set(closed);
     this.updateRoofBottom();
     this.applyFinishes();
@@ -1352,7 +1357,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       materials.forEach(material => material.dispose());
       this.roofBottom = undefined;
     }
-    if (!this.body || !this.hasRoof() || this.isRoofSideShelfCart() || !this.roofClosed()) return;
+    if (!this.body || !this.hasRoof() || !this.roofClosed()) return;
     const skirts: THREE.Box3[] = [], posts: THREE.Box3[] = [];
     for (const part of this.body.children) {
       const name = part.userData['plywoodPart'] || part.name;
@@ -1363,8 +1368,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if (/^Roof[ _][2-5][ _]*$/i.test(name)) skirts.push(bounds);
       if (/^Dar[ _]?[1-4]$/i.test(name)) posts.push(bounds);
     }
-    if (skirts.length !== 4 || posts.length !== 4) {
-      this.error.set('Could not close the roof: the model needs four roof skirt panels and four supports. Upload the complete roof model and retry.');
+    const postCount=this.isRoofSideShelfCart()?2:4;
+    if (skirts.length !== 4 || posts.length !== postCount) {
+      this.error.set(`Could not close the roof: the model needs four roof skirt panels and ${postCount} supports. Upload the complete roof model and retry.`);
       this.roofClosed.set(false);
       return;
     }
@@ -1463,6 +1469,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         material.bumpScale = 0.00015;
         material.roughness = rawMdf ? 0.85 : map ? finish === 'oak' ? 0.55 : 0.78 : this.paintRoughness();
         material.metalness = 0;
+        // Imported closed panels are double-sided; generated leaves are not.
+        // Use the same back-face shadow pass so coplanar faces do not receive
+        // different self-shadowing solely because of their source material.
+        material.shadowSide = THREE.BackSide;
         material.envMap = rawMdf || map ? null : reflection;
         material.envMapIntensity = 0.128;
         if (material instanceof THREE.MeshPhysicalMaterial) {

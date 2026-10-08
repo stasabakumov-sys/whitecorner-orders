@@ -97,6 +97,11 @@ describe('Hub Modeling selling prices',()=>{
   expect(catalogPricing(fixture(),{...s,cutouts:10,trays:10}).subtotal).toBe(1950);
   expect(catalogPricing(fixture(),{...s,height:900}).subtotal).toBeNull();
   expect(catalogPricing(fixture(),{...s,cutouts:10,trays:9}).subtotal).toBeNull();
+  for(const width of [1300,1500])expect(catalogPricing(fixture(),{...s,width}).subtotal).toBeNull();
+  expect(catalogPricing(fixture(),{...s,sideShelves:false}).subtotal).toBeNull();
+  const closed=catalogPricing(fixture(),{...s,roofClosed:true,glassRacks:3});
+  expect(closed.lines.find(line=>line.label==='Closed roof')?.amount).toBeNull();
+  expect(closed.lines.find(line=>line.label==='3 × Wine Glass Rack Chrome 405mm')?.amount).toBeNull();
  });
  it('uses the first product image and shortens visible names at the first full stop',()=>{
   const data=fixture();(data.products[5] as ModelingProduct & {media?:unknown}).media=[{kind:'image',url:'https://example.supabase.co/storage/v1/object/public/catalog-media/cart.jpg'}];

@@ -32,14 +32,15 @@ export function roofSideShelfIceHeight(name:string,y:number,heightMm:number):num
   return y+lift;
 }
 
-export function roofSideShelfTopProfile(origin:number,thickness:number,cutouts:boolean):RoundingProfile {
-  const holes=postCentres.map(x=>square(x,300,42));
+export function roofSideShelfTopProfile(origin:number,thickness:number,cutouts:boolean,widthMm=1200):RoundingProfile {
+  const extra=widthMm-1200;
+  const holes=postCentres.map((x,index)=>square(x+(index?extra:0),300,42));
   if(cutouts)for(const slot of ROOF_SIDE_SHELF_CUTOUTS)holes.push(rectangle(
-    slot.x/1000,(slot.x+slot.width)/1000,slot.z/1000,(slot.z+slot.depth)/1000));
-  return {axis:'y',origin,thickness,outline:rectangle(0,1.2,0,.6),holes};
+    (slot.x+extra/2)/1000,(slot.x+extra/2+slot.width)/1000,slot.z/1000,(slot.z+slot.depth)/1000));
+  return {axis:'y',origin,thickness,outline:rectangle(0,widthMm/1000,0,.6),holes};
 }
 
-export function roofSideShelfTabletopJoints(name:string,profile:RoundingProfile):PartJoint[] {
+export function roofSideShelfTabletopJoints(name:string,profile:RoundingProfile,sideShelves=true):PartJoint[] {
   const top=/^Top[ _]part1(?:[ _]cutouts)?$/i.test(name);
   const leaf=/^Side[ _]shelf[ _](left|right)[ _]1$/i.exec(name);
   if(profile.axis!=='y'||(!top&&!leaf))return [];
@@ -48,7 +49,7 @@ export function roofSideShelfTabletopJoints(name:string,profile:RoundingProfile)
   const y0=profile.origin,y1=y0+profile.thickness;
   // The replacement top is already 1200 mm wide; the source leaves still use
   // 1500 mm coordinates until resizing. Define each seam in its own profile.
-  const seams=top?[x0,x1]:[leaf![1].toLowerCase()==='left'?x1:x0];
+  const seams=!sideShelves?[]:top?[x0,x1]:[leaf![1].toLowerCase()==='left'?x1:x0];
   // Close only the seam plane. Its endpoints retain the front/rear bevel so
   // that the free outer edge continues smoothly across the assembled leaves.
   const joints:PartJoint[]=seams.map(x=>({axis:'x',plane:x,
@@ -88,6 +89,10 @@ export function prepareRoofSideShelfCartSource(scene:THREE.Group):void {
     const geometry=new THREE.BoxGeometry(w,h,d);geometry.translate(x,y,z);
     const material=new THREE.MeshPhysicalMaterial();material.name='roof MDF';
     const mesh=new THREE.Mesh(geometry,material);mesh.name=name;mesh.userData['plywoodPart']=name;
+    const axis:'x'|'y'|'z'=h<=w&&h<=d?'y':w<=d?'x':'z';
+    mesh.userData['roundingProfile']={axis,origin:axis==='x'?x-w/2:axis==='y'?y-h/2:z-d/2,
+      thickness:axis==='x'?w:axis==='y'?h:d,
+      outline:axis==='x'?rectangle(z-d/2,z+d/2,y-h/2,y+h/2):axis==='y'?rectangle(x-w/2,x+w/2,z-d/2,z+d/2):rectangle(x-w/2,x+w/2,y-h/2,y+h/2),holes:[]};
     mesh.castShadow=mesh.receiveShadow=true;scene.add(mesh);
   };
   // Source Size I: table 850 mm, roof underside 1800 mm, top 1930 mm.
