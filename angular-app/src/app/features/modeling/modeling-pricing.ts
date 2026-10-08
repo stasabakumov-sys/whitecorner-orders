@@ -5,6 +5,7 @@ export const MODEL_CATALOG_LINKS: Record<string,{id:string;path:string}> = {
  'decorative-wheel-roof-cart-mdf': {id:'f33d3815-564c-47d9-b4c0-8ffa6dd4541d',path:'/product-page/mdf-mobile-bar-cart-with-roof-decorative-wheels-foldable-serving-cart'},
  'decorative-wheel-cart-mdf': {id:'07ce16db-6737-44a2-a69e-29bf7de313e0',path:'/product-page/mdf-mobile-bar-cart-with-decorative-wheels-foldable-serving-cart'},
  'side-shelf-cart-mdf': {id:'bb41466d-c2a1-4c08-adb1-5ed4cd2f0576',path:'/product-page/mobile-foldable-charcuterie-cart-with-wheels-bar-cart-vendor-cart'},
+ 'two-in-one-cart-mdf': {id:'08f8e57a-50e3-49e7-a030-2bb6b6a27e33',path:'/product-page/2-in-1-mobile-bar-event-bar-mobile-food-service-charcuterie-cart'},
 };
 export const MODEL_ADDON_LINKS = {
  sideShelves: {id:'a0ff6072-49be-413c-99f9-1a9cc2c9e770',path:'/product-page/side-shelves-for-mobile-carts-as-an-addition-to-the-main-order-only'},
@@ -12,7 +13,7 @@ export const MODEL_ADDON_LINKS = {
  iceShelf: {id:'dccabced-cbb4-458f-bad1-a7b1292105f6',path:'/product-page/integrated-ice-storage-shelf-with-support-panel-for-charcuterie-carts'},
 } as const;
 export interface CatalogVariant {id:string;price:number;choices:Record<string,string>}
-export interface ModelingProduct {id:string;name:string;path:string;currency:'AUD';options:{name:string;values:string[]}[];variants:CatalogVariant[]}
+export interface ModelingProduct {id:string;name:string;path:string;currency:'AUD';options:{name:string;values:string[]}[];variants:CatalogVariant[];imageUrl?:string}
 export interface ModelingCatalog {publishedAt:string;products:ModelingProduct[]}
 export interface PricingLine {label:string;amount:number|null}
 export interface ConfigurationPricing {productId:string;variantId:string|null;publishedAt:string;subtotal:number|null;lines:PricingLine[]}
@@ -32,7 +33,8 @@ export function readModelingCatalog(payload:unknown,publishedAt:string):Modeling
   if(!matches.length)continue;
   const p=matches[0];
   if(!p.name?.trim()||p.currency!=='AUD'||!Array.isArray(p.options)||p.options.some(o=>!o.name||!Array.isArray(o.values))||!Array.isArray(p.variants)||!p.variants.length||p.variants.some(v=>!v.id||!Number.isFinite(v.price)||v.price<0||!v.choices))throw Error('A linked Hub product has incomplete names or prices.');
-  products.push({id:p.id,name:p.name,path:p.path,currency:p.currency,options:p.options.map(o=>({name:o.name,values:o.values})),variants:p.variants.map(v=>({id:v.id,price:v.price,choices:{...v.choices}}))});
+  const image=(p as ModelingProduct & {media?:{kind:string;url:string}[]}).media?.find(item=>item.kind==='image'&&/^https:\/\/[^/]+\/storage\/v1\/object\/public\/catalog-media\//.test(item.url))?.url;
+  products.push({id:p.id,name:p.name,path:p.path,currency:p.currency,options:p.options.map(o=>({name:o.name,values:o.values})),variants:p.variants.map(v=>({id:v.id,price:v.price,choices:{...v.choices}})),...(image?{imageUrl:image}:{})});
  }
  return {publishedAt,products};
 }
@@ -40,6 +42,7 @@ function linkedProduct(catalog:ModelingCatalog,link:{id:string;path:string}):Mod
 export function linkedModelProduct(catalog:ModelingCatalog|null,slug:string):ModelingProduct|undefined {
  const link=MODEL_CATALOG_LINKS[slug];return catalog&&link?linkedProduct(catalog,link):undefined;
 }
+export function shortModelName(name:string):string {return name.split('.',1)[0].trim();}
 function variant(product:ModelingProduct|undefined,choices:Record<string,string>):CatalogVariant|undefined {
  const matches=product?.variants.filter(v=>Object.keys(v.choices).length===Object.keys(choices).length&&Object.entries(choices).every(([key,value])=>v.choices[key]===value))||[];
  return matches.length===1?matches[0]:undefined;
@@ -81,6 +84,13 @@ export function catalogPricing(catalog:ModelingCatalog,s:PricingSelection):Confi
   if(s.width!==1500||s.depth!==600||s.height!==850||![0,13].includes(s.cutouts||0)||![0,13].includes(s.trays||0))return empty;
   choices['Tabletop design']=s.cutouts===13?'13 cutouts - 12 x 1/6 GS plus 1 x 1/1 GS':'Plain - without cutouts';
   choices['Pans']=s.trays===13?'With 12/13/14 pans in a separate parcel':'Cart without pans';
+ }else if(s.slug==='two-in-one-cart-mdf'){
+  if(s.width!==1200||s.depth!==600||s.height!==850||!['Raw','White'].includes(body)||s.cutouts||s.trays)return empty;
+  if(s.topFinish==='body')choices['Material (Tabletop)']='MDF';
+  else if(s.topFinish==='plywood')choices['Material (Tabletop)']='Varnished Plywood';
+  else return empty;
+  choices['Tabletop']='Plain';
+  choices['Set of steel pans in a separate parcel']='No';
  }else{
   if(s.width!==1200||s.depth!==600||s.height!==900)return empty;
   choices['Internal Shelf']=s.shelf?'Yes':'No';
@@ -89,13 +99,16 @@ export function catalogPricing(catalog:ModelingCatalog,s:PricingSelection):Confi
  const selected=variant(product,choices);if(!selected)return empty;
  const lines:PricingLine[]=[{label:'Cart configuration',amount:selected.price}];let subtotal=selected.price;
  const add=(label:string,amount:number|null)=>{lines.push({label,amount});if(amount!=null)subtotal=Math.round((subtotal+amount)*100)/100;};
- if(s.sideShelves&&!integrated){const choice=shelfChoice(s,body);const addon=choice?variant(linkedProduct(catalog,MODEL_ADDON_LINKS.sideShelves),{'Material and Colour':choice}):undefined;add('Side shelves · 2 × 200 × 600 mm',addon?.price??null);}
+ if(s.sideShelves&&!integrated&&s.slug!=='two-in-one-cart-mdf'){const choice=shelfChoice(s,body);const addon=choice?variant(linkedProduct(catalog,MODEL_ADDON_LINKS.sideShelves),{'Material and Colour':choice}):undefined;add('Side shelves · 2 × 200 × 600 mm',addon?.price??null);}
+ if(s.slug==='two-in-one-cart-mdf'&&!s.sideShelves)add('Side shelves',null);
+ if(s.slug==='two-in-one-cart-mdf'&&s.sideShelves&&s.sideFinish&&s.sideFinish!==s.topFinish)add('Side shelves finish',null);
  if(s.umbrella){const hole=linkedProduct(catalog,MODEL_ADDON_LINKS.umbrellaHole);const listed=hole?.options.find(o=>o.name==='Diameter of the Cutout')?.values.includes(`${s.umbrellaDiameter}mm`);add('Umbrella hole',listed?variant(hole,{})?.price??null:null);}
- if(s.slug==='side-shelf-cart-mdf'){
-  if(s.shelf)add('Internal shelf',null);
+ if(s.slug==='side-shelf-cart-mdf'||s.slug==='two-in-one-cart-mdf'){
+  if(s.slug==='side-shelf-cart-mdf'&&s.shelf)add('Internal shelf',null);
+  if(s.slug==='two-in-one-cart-mdf'&&s.shelf)add('Internal shelf',null);
   if(s.iceShelf){const ice=variant(linkedProduct(catalog,MODEL_ADDON_LINKS.iceShelf),{Pans:'Shelf without steel pans',Colour:body});add('Ice shelf',ice?.price??null);}
  }
- if(s.topFinish&&s.slug!=='classic-bar-plywood'&&s.topFinish!=='body')add('Table top finish',null);
+ if(s.topFinish&&s.slug!=='classic-bar-plywood'&&s.slug!=='two-in-one-cart-mdf'&&s.topFinish!=='body')add('Table top finish',null);
  if(s.frontStyle&&s.frontStyle!==(s.slug==='classic-bar-plywood'?'plain':'shaker'))add('Front panel',null);
  if(s.slug==='classic-bar-plywood'&&s.moulding)add('Moulding',null);
  if(s.frontLogo)add('Front logo',null);

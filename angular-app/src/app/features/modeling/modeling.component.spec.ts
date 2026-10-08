@@ -140,6 +140,7 @@ describe('Independent editor models', () => {
       fixture.componentInstance.models.set([roof, classic]);
       await fixture.whenStable(); fixture.detectChanges();
       const picker = fixture.nativeElement.querySelector('#model-choice') as HTMLSelectElement;
+      expect(picker.closest('.settings')).toBeTruthy();
       expect(picker.value).toBe(classic.slug);
       await fixture.componentInstance.selectModel(roof.slug);
       fixture.detectChanges(); expect(picker.value).toBe(roof.slug);
@@ -176,6 +177,21 @@ describe('Independent editor models', () => {
     await component.saveModel();
     expect(upload).not.toHaveBeenCalled();
     expect(component.error()).toContain('cannot overwrite');
+  });
+
+  it('opens the compact 2-in-1 cart with its own dimensions and independent options', async () => {
+    const {component,upload}=setup();
+    const source={...classic,slug:'side-shelf-cart-mdf',product_name:'Charcuterie cart',material_name:'MDF',base_width_mm:1500,base_body_height_mm:755};
+    const compact={...source,slug:'two-in-one-cart-mdf',product_name:'2-in-1 Mobile Bar',base_width_mm:1200,derived_from_side_shelf:true};
+    component.models.set([source,compact]);await component.selectModel(compact.slug);
+    expect([component.width(),component.depth(),component.height()]).toEqual([1200,600,850]);
+    expect(component.isCharcuterieCart()).toBe(true);expect(component.sideShelvesIncluded()).toBe(true);
+    expect(component.shelfIncluded()).toBe(false);expect(component.iceShelfIncluded()).toBe(false);
+    component.setDimension('width','1500');component.setDimension('height','950');expect([component.width(),component.height()]).toEqual([1200,850]);
+    component.umbrellaPosition.set('left');expect(component.umbrellaX()).toBe(200);
+    component.umbrellaPosition.set('centre');expect(component.umbrellaX()).toBe(600);
+    component.umbrellaPosition.set('right');expect(component.umbrellaX()).toBe(1000);
+    component.selectedFile.set(new File(['cart'],'cart.glb'));await component.saveModel();expect(upload).not.toHaveBeenCalled();
   });
 
   it('saves an uploaded roof model only into its own record and Storage folder', async () => {
@@ -554,6 +570,20 @@ it('drills aligned umbrella openings through the top, middle shelf and ice shelf
 it('limits umbrella diameter to 32–50 mm and includes its bottom holder only with the hole option',()=>{
  const {component}=setup(),editor=component as any;component.activeSlug.set('side-shelf-cart-mdf');component.width.set(1500);vi.spyOn(component,'setRounding').mockResolvedValue();component.setUmbrellaDiameter(20);expect(component.umbrellaDiameter()).toBe(32);component.setUmbrellaDiameter(80);expect(component.umbrellaDiameter()).toBe(50);
  editor.body=new THREE.Group();editor.model=new THREE.Group();editor.model.add(editor.body);const holder=new THREE.Mesh(new THREE.BoxGeometry(.074,.016,.053));holder.name='Body5';editor.body.add(holder);editor.bindAssembly();expect(holder.visible).toBe(false);component.umbrellaHole.set(true);editor.bindAssembly();expect(holder.visible).toBe(true);
+});
+
+it.each(['left','centre','right'] as const)('aligns the compact cart umbrella through top, shelves and bottom holder at %s',async position=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('two-in-one-cart-mdf');component.roundingSupported.set(true);component.width.set(1200);component.height.set(850);component.umbrellaHole.set(true);component.umbrellaPosition.set(position);editor.body=new THREE.Group();
+ for(const [name,y] of [['Top part1',.834],['Shelf',.4565],['Ice shelf 4',.7],['Body5',.111]] as const){
+  const geometry=new THREE.BoxGeometry(name==='Body5'?.074:1.5,.016,name==='Body5'?.053:.6).translate(.75,y+.008,.3);
+  const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial());mesh.name=name;
+  if(name!=='Shelf'&&name!=='Body5')mesh.userData['roundingProfile']={axis:'y',origin:y,thickness:.016,outline:[[0,0],[1.5,0],[1.5,.6],[0,.6]],holes:[]};
+  editor.sourceParts.push(mesh);editor.sourcePositions.set(geometry,geometry.getAttribute('position').clone());
+ }
+ vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});vi.spyOn(editor,'updateMoulding').mockImplementation(()=>{});
+ await component.setRounding(1.5);
+ const x=component.umbrellaX()/1000,ray=new THREE.Raycaster(new THREE.Vector3(x,1,.3),new THREE.Vector3(0,-1,0));
+ for(const mesh of editor.body.children){mesh.updateMatrixWorld();expect(ray.intersectObject(mesh)).toHaveLength(0);}
 });
 
 
