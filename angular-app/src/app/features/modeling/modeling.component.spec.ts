@@ -564,16 +564,29 @@ it('toggles shelf, ice shelf and side shelves independently without adding a roo
   const body=new THREE.Group(), model=new THREE.Group();model.add(body);
   const make=(name:string)=>{const part=new THREE.Mesh(new THREE.BoxGeometry(1,1,1));part.name=name;body.add(part);return part;};
   const shelf=make('Shelf'),ice=make('Ice_shelf_4'),side=make('Side_shelf_left_1'),solid=make('Top_part1'),cut=make('Top_part1_cutouts'),plug=make('Top_part1_cutout_plug_4');
+  const upperSupports=[make('Ice shelf 5'),make('Ice shelf 6')];
   (component as any).body=body;(component as any).model=model;
   component.setCutoutsIncluded(false);expect(solid.visible).toBe(true);expect(cut.visible).toBe(false);
   component.setCutoutsIncluded(true);expect(solid.visible).toBe(false);expect(cut.visible).toBe(true);expect(plug.visible).toBe(false);component.setCutoutIncluded(4,false);expect(plug.visible).toBe(true);
   component.setIceShelfIncluded(false);expect(ice.visible).toBe(false);expect(shelf.visible).toBe(true);expect(side.visible).toBe(true);
+  expect(upperSupports.every(part=>!part.visible)).toBe(true);
   component.setShelfIncluded(false);expect(shelf.visible).toBe(false);expect(side.visible).toBe(true);
   component.setSideShelvesIncluded(false);expect(side.visible).toBe(false);
   component.setIceShelfIncluded(true);expect(ice.visible).toBe(true);expect(shelf.visible).toBe(false);expect(side.visible).toBe(false);
+  expect(upperSupports.every(part=>part.visible)).toBe(true);
   expect(component.overallHeight()).toBe(850);expect(component.hasRoof()).toBe(false);
   expect(component.parts.some(part=>part.key==='side-shelves')).toBe(true);
   component.activeSlug.set('classic-bar-plywood');expect(component.parts.some(part=>part.key==='side-shelves')).toBe(true);
+});
+
+it.each(['side-shelf-cart-mdf','two-in-one-cart-mdf','roof-side-shelf-cart-mdf'])('toggles the upper divider supports together with Ice shelf for %s', slug => {
+  const {component}=setup(),editor=component as any;
+  component.activeSlug.set(slug);component.width.set(slug==='side-shelf-cart-mdf'?1500:1200);component.height.set(850);
+  editor.model=new THREE.Group();editor.body=new THREE.Group();editor.model.add(editor.body);
+  const supports=[5,6].map(index=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(.02,.016,.556));mesh.name=`Ice shelf ${index}`;editor.body.add(mesh);return mesh;});
+  component.setIceShelfIncluded(true);expect(supports.every(mesh=>mesh.visible)).toBe(true);
+  component.setIceShelfIncluded(false);expect(supports.every(mesh=>!mesh.visible&&mesh.userData['assemblyHidden'])).toBe(true);
+  component.setIceShelfIncluded(true);expect(supports.every(mesh=>mesh.visible&&!mesh.userData['assemblyHidden'])).toBe(true);
 });
 
 it('selects individual trays, includes matching cutouts, and clears trays when cutouts are removed',()=>{

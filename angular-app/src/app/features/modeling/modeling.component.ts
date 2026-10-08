@@ -16,7 +16,7 @@ import { prepareRooflessCartSource, ROOFLESS_CART_NAME, ROOFLESS_CART_SLUG, ROOF
 import { prepareTwoInOneCartSource, TWO_IN_ONE_CART_NAME, TWO_IN_ONE_CART_SLUG, SIDE_SHELF_CART_SLUG } from './modeling-two-in-one';
 import { prepareRoofSideShelfCartSource, roofSideShelfHeight, roofSideShelfIceHeight, roofSideShelfTabletopJoints, ROOF_SIDE_SHELF_CART_NAME, ROOF_SIDE_SHELF_CART_SLUG, ROOF_SIDE_SHELF_CUTOUTS } from './modeling-roof-side-shelf';
 import { CLASSIC_MDF_NAME, CLASSIC_MDF_SLUG, prepareClassicMdfSource } from './modeling-classic-mdf';
-import { shelfProfilesForIceShelf } from './modeling-ice-shelf';
+import { prepareIceShelfSupports, shelfProfilesForIceShelf } from './modeling-ice-shelf';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
 import { readModelingCatalog, linkedModelProduct, shortModelName, catalogPricing, formatModelingPrice, ModelingCatalog, ConfigurationPricing, PricingSelection } from './modeling-pricing';
@@ -746,6 +746,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (this.isRoofSideShelfCart()) prepareRoofSideShelfCartSource(gltf.scene);
     else if (this.record?.derived_from_side_shelf) prepareTwoInOneCartSource(gltf.scene);
     if (this.record?.derived_from_classic) prepareClassicMdfSource(gltf.scene);
+    if (this.isCharcuterieCart()) prepareIceShelfSupports(gltf.scene);
     const nodes = [...gltf.scene.children];
     for (const node of nodes) {
       const key = casterGroupKey(node.name);
