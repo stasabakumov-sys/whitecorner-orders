@@ -12,8 +12,8 @@ export function umbrellaDiameterLimit(widthMm=1500,depthMm=600):number {
  return Math.max(0,Math.floor(2*(Math.min(cx,cz,distance)-2)));
 }
 
-export function withUmbrellaHole(profile:RoundingProfile,diameterMm:number,widthMm=1500,centreXmm=widthMm/2,baseWidthMm=1500):RoundingProfile {
- const radius=diameterMm/2000,scale=(widthMm-300)/(baseWidthMm-300),cx=.15+(centreXmm/1000-.15)/scale;
+export function withUmbrellaHole(profile:RoundingProfile,diameterMm:number,widthMm=1500,centreXmm=widthMm/2,baseWidthMm=1500,endZoneMm=150):RoundingProfile {
+ const radius=diameterMm/2000,end=endZoneMm/1000,scale=(widthMm-2*endZoneMm)/(baseWidthMm-2*endZoneMm),cx=end+(centreXmm/1000-end)/scale;
  const circle=Array.from({length:128},(_,i)=>{const a=2*Math.PI*i/128;return [cx+radius*Math.cos(a)/scale,.3+radius*Math.sin(a)];});
  return {...profile,holes:[...profile.holes,circle]};
 }

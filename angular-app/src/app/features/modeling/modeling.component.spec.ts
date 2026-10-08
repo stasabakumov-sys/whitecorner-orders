@@ -163,6 +163,21 @@ describe('Independent editor models', () => {
     expect(component.isClassic()).toBe(true);
   });
 
+  it('keeps the roofless cart separate from the roof record and blocks a derived upload', async () => {
+    const {component,upload}=setup();
+    component.models.set([classic,roof,{...roof,slug:'decorative-wheel-cart-mdf',product_name:'MDF Mobile Bar Cart with Decorative Wheels – Foldable Serving Cart',derived_from_roof:true}]);
+    await component.selectModel('decorative-wheel-cart-mdf');
+    expect(component.isRooflessCart()).toBe(true);
+    expect(component.hasRoof()).toBe(false);
+    expect(component.parts.map(part=>part.key)).toContain('decorative-wheels');
+    expect(component.parts.map(part=>part.key)).not.toContain('roof');
+    expect(component.iceShelfIncluded()).toBe(false);
+    component.selectedFile.set(new File(['cart'],'cart.glb'));
+    await component.saveModel();
+    expect(upload).not.toHaveBeenCalled();
+    expect(component.error()).toContain('cannot overwrite');
+  });
+
   it('saves an uploaded roof model only into its own record and Storage folder', async () => {
     const { component, upload } = setup();
     component.models.set([classic, roof]);
@@ -426,7 +441,7 @@ describe('Hub catalogue names and export pricing',()=>{
 it('shows the paint surcharge for the colour that selecting Painted will actually apply',()=>{
  const {component}=setup();component.shelfIncluded.set(false);component.bodyColor.set('#d4b894');
  const size='Size I (W1200mm x D600mm x H900mm)';
- component.catalog.set({publishedAt:'2026-10-04',products:[{id:'750a0827-801d-4cb4-b630-1e07167ad400',path:'/product-page/collapsible-plywood-mobile-bar-classic-mobile-food-service-event-bar-cart',name:'Fixture',currency:'AUD',options:[{name:'Size',values:[size]}],variants:[{id:'raw',price:100,choices:{Size:size,Colour:'Raw','Internal Shelf':'No'}},{id:'white',price:150,choices:{Size:size,Colour:'White','Internal Shelf':'No'}}]}]});
+ component.catalog.set({publishedAt:'2026-10-04',products:[{id:'750a0827-801d-4cb4-b630-1e07167ad400',path:'/product-page/collapsible-plywood-mobile-bar-classic-mobile-food-service-event-bar-cart',name:'Fixture',currency:'AUD',options:[{name:'Size',values:[size]}],variants:[{id:'raw',price:100,choices:{Size:size,Colour:'Raw','Internal Shelf':'No','Tabletop material':'Plywood'}},{id:'white',price:150,choices:{Size:size,Colour:'White','Internal Shelf':'No','Tabletop material':'Plywood'}}]}]});
  expect(component.optionSurcharge('Finish / colour')).toBe('+$50');
  component.setPaintedBody();expect(component.pricing()?.subtotal).toBe(150);
 });
