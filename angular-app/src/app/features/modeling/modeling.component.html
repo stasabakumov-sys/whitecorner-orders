@@ -115,7 +115,7 @@
         @if(isCharcuterieCart()) {
         <label class="shelf-option"><input type="checkbox" [checked]="iceShelfIncluded()" [disabled]="loading() || roundingBusy()" (change)="setIceShelfIncluded($any($event.target).checked)"><span>Ice shelf</span></label>
         } @else {
-        <p class="help">Side shelf panels follow this cart's table top; folding supports use the source cart construction.</p>
+        <p class="help">Side shelves use the owner's construction with slotted side panels and 12 mm holders.</p>
         @if (!isClassic()) {
         <p class="help">Shaker: 2 × 12 mm MDF · 12 mm recess. Plain / With moulding: 16 mm MDF.</p>
         <div class="finish-options" role="group" aria-label="Front panel style">

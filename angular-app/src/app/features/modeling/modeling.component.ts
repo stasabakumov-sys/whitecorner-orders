@@ -11,7 +11,7 @@ import { resizePlywoodPosition, resizeRoofCartPosition, resizeSideShelfCartPosit
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { umbrellaDiameterLimit, withUmbrellaHole, createUmbrellaPreview, createBottomUmbrellaHolder, UMBRELLA_PREVIEW_HEIGHT } from './modeling-umbrella';
 import { ModelingFourViews, frontFacingRotation } from './modeling-four-views';
-import { cartTopStructure, createCartSideShelves, extractCartSideShelves, extractCartUmbrellaHolderBounds } from './modeling-side-shelves';
+import { cartTopStructure, createCartSideShelves, extractCartSideShelves, extractCartUmbrellaHolderBounds, preparePlywoodSideThickness, sideShelfSideProfile, sideShelfSlotJoints, SIDE_SHELF_REFERENCE_SCENE } from './modeling-side-shelves';
 import { prepareRooflessCartSource, ROOFLESS_CART_NAME, ROOFLESS_CART_SLUG, ROOF_CART_SLUG } from './modeling-roofless';
 import { prepareTwoInOneCartSource, TWO_IN_ONE_CART_NAME, TWO_IN_ONE_CART_SLUG, SIDE_SHELF_CART_SLUG } from './modeling-two-in-one';
 import { prepareRoofSideShelfCartSource, roofSideShelfHeight, roofSideShelfIceHeight, roofSideShelfTabletopJoints, ROOF_SIDE_SHELF_CART_NAME, ROOF_SIDE_SHELF_CART_SLUG, ROOF_SIDE_SHELF_CUTOUTS } from './modeling-roof-side-shelf';
@@ -272,7 +272,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly umbrellaHole = signal(false);
   readonly umbrellaDiameter = signal(40);
   umbrellaDiameterMax():number {return this.isClassic()||this.isRooflessCart()||this.isTwoInOneCart()?80:umbrellaDiameterLimit(this.width(),this.depth());}
-  setUmbrellaHole(value:boolean):void {this.umbrellaHole.set(value);if(!value)this.showUmbrella.set(false);if(value&&(this.isClassic()||this.isRooflessCart()))void this.loadSideShelfReference();void this.setRounding(this.rounding());}
+  setUmbrellaHole(value:boolean):void {this.umbrellaHole.set(value);if(!value)this.showUmbrella.set(false);if(value&&(this.isClassic()||this.isRooflessCart()))void this.loadUmbrellaHolderReference();void this.setRounding(this.rounding());}
   setUmbrellaDiameter(value:number):void {if(!Number.isFinite(value))return;this.umbrellaDiameter.set(Math.max(32,Math.min(this.umbrellaDiameterMax(),Math.round(value))));void this.setRounding(this.rounding());}
   readonly umbrellaPosition = signal<'left'|'centre'|'right'>('centre');
   umbrellaX():number {return this.isClassic()||this.isRooflessCart()||this.isTwoInOneCart()?this.umbrellaPosition()==='left'?200:this.umbrellaPosition()==='right'?this.width()-200:this.width()/2:this.width()/2;}
@@ -310,7 +310,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if(this.isRoofSideShelfCart()&&!value)return;
     this.sideShelvesIncluded.set(value);
     if(this.isCharcuterieCart()){if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());else this.bindAssembly();}
-    else {if(value)void this.loadSideShelfReference();this.applyDimensions();this.bindAssembly();}
+    else {
+      if(value)void this.loadSideShelfReference();
+      if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());
+      else {this.applyDimensions();this.bindAssembly();}
+    }
   }
   private sideShelfExtensions?:THREE.Group;
   private sideShelfExtensionKey='';
@@ -321,23 +325,40 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private sideShelfReferencePromise?:Promise<void>;
   readonly sideShelfReferenceLoading=signal(false);
   private loadSideShelfReference():Promise<void> {
-    if(this.sideShelfReference&&this.umbrellaHolderBounds)return Promise.resolve();
+    if(this.sideShelfReference)return Promise.resolve();
     if(this.sideShelfReferencePromise)return this.sideShelfReferencePromise;
-    const record=this.models().find(model=>model.slug===SIDE_SHELF_CART_SLUG);
-    if(!record?.model_path){this.error.set('The 150 cm source cart is unavailable. Add its GLB in Hub and retry.');return Promise.resolve();}
+    const record=this.models().find(model=>model.slug===ROOF_CART_SLUG);
+    if(!record?.model_path){this.error.set('The owner side shelf reference is unavailable. Add the updated roof cart GLB and retry.');return Promise.resolve();}
     this.sideShelfReferenceLoading.set(true);
     this.sideShelfReferencePromise=(async()=>{
       const signed=await this.db.client.storage.from(BUCKET).createSignedUrl(record.model_path!,600);
-      if(signed.error||!signed.data?.signedUrl)throw signed.error||new Error('Could not retrieve the 150 cm source cart.');
+      if(signed.error||!signed.data?.signedUrl)throw signed.error||new Error('Could not retrieve the roof cart source.');
       const bytes=await this.modelCache.readFile(record.model_path!,signed.data.signedUrl);
       const gltf=await this.loader.parseAsync(bytes,new URL('.',signed.data.signedUrl).href);
-      const shelves=extractCartSideShelves(gltf.scene);
-      const holder=extractCartUmbrellaHolderBounds(gltf.scene);
-      this.sideShelfReference=shelves;this.umbrellaHolderBounds=holder;
-      if(this.alive&&this.body&&!this.isCharcuterieCart()&&(this.sideShelvesIncluded()||this.umbrellaHole())){this.applyDimensions();this.bindAssembly();}
-    })().catch(cause=>this.error.set(`Could not load the original side shelves and umbrella holder: ${this.message(cause)}. Retry the option after checking the 150 cm model.`))
+      const reference=gltf.scenes.find(scene=>scene.name.replace(/_/g,' ')===SIDE_SHELF_REFERENCE_SCENE);
+      if(!reference)throw new Error('Upload the roof cart GLB with the owner side shelf reference scene.');
+      this.sideShelfReference=extractCartSideShelves(reference);
+      if(this.alive&&this.body&&!this.isCharcuterieCart()&&this.sideShelvesIncluded())await this.setRounding(this.rounding());
+    })().catch(cause=>this.error.set(`Could not load the owner side shelves: ${this.message(cause)}. Retry Side shelves after checking the roof cart source.`))
       .finally(()=>{this.sideShelfReferenceLoading.set(false);this.sideShelfReferencePromise=undefined;});
     return this.sideShelfReferencePromise;
+  }
+  private umbrellaHolderReferencePromise?:Promise<void>;
+  private loadUmbrellaHolderReference():Promise<void> {
+    if(this.umbrellaHolderBounds)return Promise.resolve();
+    if(this.umbrellaHolderReferencePromise)return this.umbrellaHolderReferencePromise;
+    this.umbrellaHolderReferencePromise=(async()=>{
+      const record=this.models().find(model=>model.slug===SIDE_SHELF_CART_SLUG);
+      if(!record?.model_path)throw new Error('The 150 cm source cart is unavailable.');
+      const signed=await this.db.client.storage.from(BUCKET).createSignedUrl(record.model_path,600);
+      if(signed.error||!signed.data?.signedUrl)throw signed.error||new Error('Could not retrieve the umbrella holder source.');
+      const bytes=await this.modelCache.readFile(record.model_path,signed.data.signedUrl);
+      const gltf=await this.loader.parseAsync(bytes,new URL('.',signed.data.signedUrl).href);
+      this.umbrellaHolderBounds=extractCartUmbrellaHolderBounds(gltf.scene);
+      if(this.alive&&this.body&&this.umbrellaHole()){this.applyDimensions();this.bindAssembly();}
+    })().catch(cause=>this.error.set(`Could not load the bottom umbrella holder: ${this.message(cause)}. Retry Umbrella hole after checking the 150 cm source.`))
+      .finally(()=>{this.umbrellaHolderReferencePromise=undefined;});
+    return this.umbrellaHolderReferencePromise;
   }
   private updateSideShelfExtensions():boolean {
     const enabled=!this.isCharcuterieCart()&&this.sideShelvesIncluded(),key=JSON.stringify([this.activeSlug(),enabled,this.width(),this.height(),this.rounding()]);
@@ -346,7 +367,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.sideShelfExtensions=undefined;this.sideShelfExtensionKey=key;
     if(!enabled||!this.body||!this.sideShelfReference)return false;
     const top=cartTopStructure(this.body,this.isClassic(),this.height(),this.isPlywoodClassic());
-    this.sideShelfExtensions=createCartSideShelves(this.sideShelfReference,this.width(),this.height(),1500,850,top,this.rounding());this.body.add(this.sideShelfExtensions);
+    this.sideShelfExtensions=createCartSideShelves(this.sideShelfReference,this.width(),this.height(),top,this.rounding());this.body.add(this.sideShelfExtensions);
     if(this.isPlywoodClassic())this.sideShelfExtensions.traverse(node=>{if(node instanceof THREE.Mesh&&!node.userData['fixedMaterial'])this.addWoodUvs(node.geometry,node.name,/ 1$/.test(node.name),/ 2$/.test(node.name));});
     return true;
   }
@@ -741,11 +762,17 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.model = new THREE.Group();
     this.body = new THREE.Group();
     this.casters.clear();
+    const sideShelfScene=gltf.scenes.find(scene=>scene.name.replace(/_/g,' ')===SIDE_SHELF_REFERENCE_SCENE);
+    if(sideShelfScene){
+      this.sideShelfReference?.traverse(node=>{if(node instanceof THREE.Mesh){node.geometry.dispose();for(const material of Array.isArray(node.material)?node.material:[node.material])material.dispose();}});
+      this.sideShelfReference=extractCartSideShelves(sideShelfScene);
+    }
     if (this.isRoofFamily()) { fitFurnitureBolts(gltf.scene); shortenCastorBrakes(gltf.scene); turnCastorWheels(gltf.scene); }
     if (this.record?.derived_from_roof) prepareRooflessCartSource(gltf.scene);
     if (this.isRoofSideShelfCart()) prepareRoofSideShelfCartSource(gltf.scene);
     else if (this.record?.derived_from_side_shelf) prepareTwoInOneCartSource(gltf.scene);
     if (this.record?.derived_from_classic) prepareClassicMdfSource(gltf.scene);
+    if (this.isPlywoodClassic()) preparePlywoodSideThickness(gltf.scene);
     if (this.isCharcuterieCart()) prepareIceShelfSupports(gltf.scene);
     const nodes = [...gltf.scene.children];
     for (const node of nodes) {
@@ -991,8 +1018,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const plainClassicTop=this.isPlywoodClassic()&&/^Top[ _]part1$/i.test(part.name);
         const roofTop=this.isRoofSideShelfCart()&&/^Top[ _]part1(?:[ _]cutouts)?$/i.test(part.name);
         const solidSide=this.isCharcuterieCart()&&!this.sideShelvesIncluded()&&/^(Left|Right)[ _]side[ _]?1$/i.test(part.name);
+        const slottedSide=!this.isCharcuterieCart()&&this.sideShelvesIncluded()&&!!this.sideShelfReference&&/^(Left|Right)[ _]side[ _]?(?:part)?1$/i.test(part.name);
         const umbrellaPanel=(this.isCharcuterieCart()||this.isClassic()||this.isRooflessCart())&&this.umbrellaHole()&&/^(Top[ _](?:part)?1(?:[ _]cutouts)?|Shelf|Ice[ _]shelf[ _]4|Body5)$/i.test(part.name);
-        if (!umbrellaPanel&&((!raw&&!solidSide) || !supported || (!plainClassicTop&&!roofTop&&/^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts|[ _]cutout[ _]plug[ _]\d+)?$/i.test(part.name)))) {
+        if (!slottedSide&&!umbrellaPanel&&((!raw&&!solidSide) || !supported || (!plainClassicTop&&!roofTop&&/^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts|[ _]cutout[ _]plug[ _]\d+)?$/i.test(part.name)))) {
           const copy = part.clone(true);
           copy.traverse(node => {
             if (!(node instanceof THREE.Mesh)) return;
@@ -1019,11 +1047,17 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
             const sourceX=this.isTwoInOneCart()?.15+(this.umbrellaX()/1000-.15)*1.2/(this.width()/1000-.3):.75;
             bounds.min.x=sourceX-w/2;bounds.max.x=sourceX+w/2;bounds.min.z=.3-d/2;bounds.max.z=.3+d/2;}
           profile={axis:'y',origin:bounds.min.y,thickness:bounds.max.y-bounds.min.y,outline:[[bounds.min.x,bounds.min.z],[bounds.max.x,bounds.min.z],[bounds.max.x,bounds.max.z],[bounds.min.x,bounds.max.z]],holes:[]};}
+        if(!profile&&slottedSide){
+          const bounds=new THREE.Box3();part.traverse(node=>{if(node instanceof THREE.Mesh)bounds.union(new THREE.Box3().setFromBufferAttribute(this.sourcePositions.get(node.geometry)!));});
+          profile={axis:'x',origin:bounds.min.x,thickness:bounds.max.x-bounds.min.x,
+            outline:[[bounds.min.z,bounds.min.y],[bounds.max.z,bounds.min.y],[bounds.max.z,bounds.max.y],[bounds.min.z,bounds.max.y]],holes:[]};
+        }
         if (!profile) throw new Error('The GLB is missing a part profile. Upload an updated model.');
+        if(slottedSide)profile=sideShelfSideProfile(profile,this.sideShelfReference!);
         if(umbrellaPanel)profile=withUmbrellaHole(profile,this.umbrellaDiameter(),this.width(),this.umbrellaX(),this.isCharcuterieCart()?1500:1200,this.isRooflessCart()?200:150);
         if(solidSide){const us=profile.outline.map(p=>p[0]),vs=profile.outline.map(p=>p[1]),u0=Math.min(...us),u1=Math.max(...us),v0=Math.min(...vs),v1=Math.max(...vs);profile={...profile,outline:[[u0,v0],[u1,v0],[u1,v1],[u0,v1]],holes:[]};}
         const tabletopJoints=this.isRoofSideShelfCart()?roofSideShelfTabletopJoints(name,profile):[];
-        const partJoints = tabletopJoints.length?tabletopJoints:joints.get(name)||[];
+        const partJoints = [...(tabletopJoints.length?tabletopJoints:joints.get(name)||[]),...(slottedSide?sideShelfSlotJoints(profile):[])];
         const key = JSON.stringify([profile, raw, plainClassicTop, roofTop, /^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name), partJoints]);
         const geometry = this.modelCache.roundedPart(key, () => {
           const rounded = createRoundedPart(profile!, plainClassicTop||(umbrellaPanel&&/^Top/i.test(name))?0:raw);
@@ -1041,6 +1075,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         mesh.receiveShadow = true;
         mesh.name = name;
         mesh.userData['plywoodPart'] = name;
+        if(slottedSide)mesh.userData['sideShelfSlotBottom']=Math.min(...sideShelfSlotJoints(profile).map(joint=>joint.bounds.min.y));
         return mesh;
       });
       this.body!.clear();
@@ -1236,7 +1271,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
           ? resizeSideShelfCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height()) : this.isClassic()
           ? resizePlywoodPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height())
           : resizeRoofCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height(), this.frontStyle() !== 'shaker');
-        positions.setXYZ(i, reverse?this.width()/1000-x:x, y, z);
+        const slotBottom=node.userData['sideShelfSlotBottom'] as number|undefined;
+        const nextY=slotBottom!==undefined&&original.getY(i)>=slotBottom-.006?original.getY(i)+(this.height()-900)/1000:y;
+        positions.setXYZ(i, reverse?this.width()/1000-x:x, nextY, z);
       }
       positions.needsUpdate = true;
       if(cutout){

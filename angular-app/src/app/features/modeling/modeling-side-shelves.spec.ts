@@ -1,78 +1,95 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { cartTopStructure, createCartSideShelves, extractCartSideShelves, extractCartUmbrellaHolderBounds } from './modeling-side-shelves';
+import { cartTopStructure, createCartSideShelves, extractCartSideShelves, extractCartUmbrellaHolderBounds, preparePlywoodSideThickness, sideShelfSideProfile } from './modeling-side-shelves';
+import { createRoundedPart, RoundingProfile } from './modeling-rounding';
 
-function sourceScene():THREE.Group {
+export function ownerShelfFixture():THREE.Group {
  const scene=new THREE.Group();
- for(const side of ['left','right'])for(const index of [1,5,6]){
-  const part=new THREE.Group();part.name=`Side shelf ${side} ${index}`;
-  const mesh=new THREE.Mesh(new THREE.BoxGeometry(.012,.16,.012),new THREE.MeshPhysicalMaterial());
-  mesh.position.set(side==='left'?-.1:1.6,.7,index===5?.13:.47);
-  part.add(mesh);scene.add(part);
+ for(const side of ['left','right'])for(const index of [1,2,3,4,5,6]){
+  const min=side==='left'?.016:1.172,max=min+.012;
+  // Synthetic fork: its slot fits the 12 mm source side. The two legs and
+  // curved/free portions must survive adjustment to a 15 mm plywood side.
+  let profile:RoundingProfile={axis:'z',origin:index===5?.468:.096,thickness:.012,
+   outline:[[min-.02,.71],[min,.71],[min,.8],[max,.8],[max,.71],[max+.17,.88],[min-.02,.88]],holes:[]};
+  if(index<=4){
+   const x0=side==='left'?-.2:1.2,x1=x0+.2;
+   const a=index===4?(side==='left'?x0:x1-.016):index===1?(side==='left'?x0+.016:x0):x0;
+   const b=index===4?a+.016:index===1?(side==='left'?x1:x1-.016):x1;
+   const z0=index===3?.584:index===1?.016:0,z1=index===2?.016:index===1?.584:.6;
+   profile={axis:'y',origin:index===1?.884:.855,thickness:index===1?.016:.045,outline:[[a,z0],[b,z0],[b,z1],[a,z1]],holes:[]};
+  }
+  const mesh=new THREE.Mesh(createRoundedPart(profile,0),new THREE.MeshPhysicalMaterial());
+  mesh.name=`Side shelf ${side} ${index}`;mesh.userData['roundingProfile']=profile;scene.add(mesh);
  }
- const holder=new THREE.Mesh(new THREE.BoxGeometry(.075,.016,.075),new THREE.MeshPhysicalMaterial());
- holder.name='Body5';holder.position.set(.75,.127,.3);scene.add(holder);
+ const profile:RoundingProfile={axis:'x',origin:1.172,thickness:.012,
+  outline:[[.016,.239],[.56,.239],[.56,.884],[.48,.884],[.48,.801],[.468,.801],[.468,.884],[.108,.884],[.108,.801],[.096,.801],[.096,.884],[.016,.884]],holes:[]};
+ const panel=new THREE.Mesh(createRoundedPart(profile,0),new THREE.MeshPhysicalMaterial());panel.name='Side panel right cutouts';panel.userData['roundingProfile']=profile;scene.add(panel);
  return scene;
 }
-function topBody(classic:boolean):THREE.Group {
- const body=new THREE.Group(),top=classic?.85:.9;
- const panel=new THREE.Mesh(new THREE.BoxGeometry(1.2,.016,.6),new THREE.MeshPhysicalMaterial());
- panel.name=classic?'Top_part1':'Top_1';panel.position.set(.6,top-.008,.3);body.add(panel);
- const trim=new THREE.Mesh(new THREE.BoxGeometry(1.2,classic?.02:.045,classic?.02:.016),new THREE.MeshPhysicalMaterial());
- trim.name=classic?'Top_part2':'Top_2';trim.position.set(.6,classic?top-.026:top-.0225,.01);body.add(trim);
+function topBody(ply:boolean):THREE.Group {
+ const body=new THREE.Group();
+ const add=(name:string,x:number,y:number,z:number,w:number,h:number,d:number)=>{
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshPhysicalMaterial());mesh.name=name;mesh.position.set(x,y,z);body.add(mesh);return mesh;
+ };
+ add('Top part1',.6,ply?.8925:.892,.3,1.2,ply?.015:.016,.6);
+ add('Top part2',.6,ply?.879:.8775,.3,1.2,ply?.042:.045,.6);
+ for(const x of [ply?.0265:.022,ply?1.1735:1.178])add(x<.6?'Left side part1':'Right side part1',x,.5,.3,ply?.015:.012,.7,ply?.562:.544);
  return body;
 }
 const bounds=(group:THREE.Group,name:string)=>new THREE.Box3().setFromObject(group.getObjectByName(name)!);
 
-describe('Side shelves follow each cart top while reusing folding supports',()=>{
- it('keeps a solid Classic leaf above its deep tabletop edging and retains both folding brackets',()=>{
-  const body=topBody(true);
-  const trim=body.getObjectByName('Top_part2') as THREE.Mesh;
-  trim.geometry.dispose();trim.geometry=new THREE.BoxGeometry(1.2,.042,.019);
-  trim.position.y=.879;
-  const top=cartTopStructure(body,true,900,false);
-  expect(top.pineTrim).toBe(false);
-  const shelves=createCartSideShelves(extractCartSideShelves(sourceScene()),1200,900,1500,850,top,1.5);
+describe('Owner side shelf construction',()=>{
+ it.each([false,true])('keeps a flush 200 × 600 mm shelf, with the board inside the %s pine border',ply=>{
+  const top=cartTopStructure(topBody(ply),true,900,ply),source=extractCartSideShelves(ownerShelfFixture());
+  const shelves=createCartSideShelves(source,1200,900,top,1.5);
   for(const side of ['left','right']){
-   const panel=bounds(shelves,`Side shelf ${side} 1`);
-   expect(panel.max.x-panel.min.x).toBeCloseTo(.2,6);
-   expect(panel.min.z).toBeCloseTo(0,6);
-   expect(panel.max.z).toBeCloseTo(.6,6);
-   expect(bounds(shelves,`Side shelf ${side} 5`).max.y).toBeCloseTo(.83,3);
-   expect(bounds(shelves,`Side shelf ${side} 6`).max.y).toBeCloseTo(.83,3);
-   const join=side==='left'?0:1.2;
-   for(const number of [3,4]){
-    const member=shelves.getObjectByName(`Side shelf ${side} ${number}`) as THREE.Mesh;
-    const positions=member.geometry.getAttribute('position');let capVertices=0;
-    for(let i=0;i<positions.count;i++)if(Math.abs(positions.getX(i)-join)<.003001){
-      expect(positions.getX(i)).toBeCloseTo(join,6);capVertices++;
-    }
-    expect(capVertices).toBeGreaterThan(0);
-   }
+   const panel=bounds(shelves,`Side shelf ${side} 1`),outer=bounds(shelves,`Side shelf ${side} 4`);
+   expect(panel.max.x-panel.min.x).toBeCloseTo(ply?.181:.184,6);
+   expect(panel.max.z-panel.min.z).toBeCloseTo(ply?.562:.568,6);
+   expect(panel.max.y-panel.min.y).toBeCloseTo(ply?.015:.016,6);
+   expect(outer.max.x-outer.min.x).toBeCloseTo(ply?.019:.016,6);
+   expect(outer.max.y-outer.min.y).toBeCloseTo(ply?.042:.045,6);
+   for(const index of [1,2,3,4])expect(bounds(shelves,`Side shelf ${side} ${index}`).max.y).toBeCloseTo(.9,6);
+   const overall=new THREE.Box3();for(const index of [1,2,3,4])overall.union(bounds(shelves,`Side shelf ${side} ${index}`));
+   expect(overall.max.x-overall.min.x).toBeCloseTo(.2,6);expect(overall.max.z-overall.min.z).toBeCloseTo(.6,6);
   }
  });
- for(const classic of [true,false])it(`matches the ${classic?'Classic':'decorative-wheel'} top`,()=>{
-  const source=extractCartSideShelves(sourceScene());
-  expect(source.getObjectByName('Side shelf left 1')).toBeUndefined();
-  const top=cartTopStructure(topBody(classic),classic,classic?850:900);
-  const shelves=createCartSideShelves(source,1200,classic?850:900,1500,850,top,1.5);
-  for(const side of ['left','right']){
-   const panel=bounds(shelves,`Side shelf ${side} 1`),rim=bounds(shelves,`Side shelf ${side} 2`);
-   expect(panel.max.y).toBeCloseTo(classic?.85:.9,6);
-   expect(rim.min.y).toBeCloseTo(classic?.814:.855,6);
-   expect(panel.max.x-panel.min.x).toBeCloseTo(.2,6);
-   const copied=shelves.getObjectByName(`Side shelf ${side} 5`) as THREE.Mesh;
-   const original=source.getObjectByName(copied.name) as THREE.Mesh;
-   expect(copied.geometry.getAttribute('position').array).toEqual(original.geometry.getAttribute('position').array);
-   expect(copied.geometry).not.toBe(original.geometry);
+ it('retains 12 mm holders while widening their insertion slots to 15 mm plywood sides',()=>{
+  const top=cartTopStructure(topBody(true),true,900),shelves=createCartSideShelves(extractCartSideShelves(ownerShelfFixture()),1200,900,top,0);
+  for(const [side,index] of [['left',0],['right',1]] as const)for(const part of [5,6]){
+   const mesh=shelves.getObjectByName(`Side shelf ${side} ${part}`) as THREE.Mesh,box=new THREE.Box3().setFromObject(mesh),wall=top.sides[index];
+   expect(box.max.z-box.min.z).toBeCloseTo(.012,6);
+   const centreZ=(box.min.z+box.max.z)/2;
+   const hit=(x:number)=>new THREE.Raycaster(new THREE.Vector3(x,.6,centreZ),new THREE.Vector3(0,1,0)).intersectObject(mesh).length;
+   mesh.material=new THREE.MeshBasicMaterial({side:THREE.DoubleSide});
+   // Below the slot bridge, both side planes fit between the holder's legs.
+   const horizontal=(x:number)=>new THREE.Raycaster(new THREE.Vector3(x,.75,centreZ),new THREE.Vector3(0,-1,0)).intersectObject(mesh).length;
+   expect(horizontal(wall.min.x+.0001)).toBe(0);expect(horizontal(wall.max.x-.0001)).toBe(0);
+   expect(hit(wall.min.x-.005)).toBeGreaterThan(0);expect(hit(wall.max.x+.005)).toBeGreaterThan(0);
   }
-  expect(bounds(shelves,'Side shelf right 5').min.x).toBeCloseTo(1.2+1.6-.006-1.5,6);
  });
- it('retains the dimensions of the source bottom umbrella holder',()=>{
-  expect(extractCartUmbrellaHolderBounds(sourceScene()).getSize(new THREE.Vector3()).x).toBeCloseTo(.075,6);
+ it('cuts matching 12 mm slots 80 mm from both side edges and preserves the source depth',()=>{
+  const original:RoundingProfile={axis:'x',origin:.019,thickness:.015,outline:[[.034,.11],[.581,.11],[.581,.885],[.034,.885]],holes:[]};
+  const next=sideShelfSideProfile(original,ownerShelfFixture());
+  const mesh=new THREE.Mesh(createRoundedPart(next,0),new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
+  const hits=(z:number)=>new THREE.Raycaster(new THREE.Vector3(0,.84,z),new THREE.Vector3(1,0,0)).intersectObject(mesh).length;
+  expect(hits(.12)).toBe(0);expect(hits(.495)).toBe(0);expect(hits(.13)).toBeGreaterThan(0);expect(hits(.48)).toBeGreaterThan(0);
+  expect(next.outline.filter(p=>p[1]<.885&&p[1]>.7).every(p=>Math.abs(p[1]-.802)<1e-6)).toBe(true);
+  expect(original.outline).toHaveLength(4);
  });
- it('rejects a source without either folding support',()=>{
-  const scene=sourceScene();scene.remove(scene.getObjectByName('Side shelf right 5')!);
-  expect(()=>extractCartSideShelves(scene)).toThrow(/missing its right folding support/);
+ it('keeps measured top and side joints independent of camera rotation and pan',()=>{
+  const body=topBody(true),root=new THREE.Group();root.add(body);root.rotation.y=1;root.position.set(2,0,-1);
+  const top=cartTopStructure(body,true,900);expect(top.panelTop).toBeCloseTo(.9,6);expect(top.sides[0].min.x).toBeCloseTo(.019,6);
+ });
+ it('corrects source plywood sides to 15 mm and moves their inner reinforcement rails',()=>{
+  const scene=new THREE.Group();for(const [name,x] of [['Left side part1',.025],['Left side part2',.037],['Right side part1',1.175],['Right side part2',1.163]] as const){const mesh=new THREE.Mesh(new THREE.BoxGeometry(.012,.7,.55).translate(x,.5,.3));mesh.name=name;scene.add(mesh);}
+  preparePlywoodSideThickness(scene);
+  expect(bounds(scene,'Left side part1').min.x).toBeCloseTo(.019,6);expect(bounds(scene,'Left side part1').max.x).toBeCloseTo(.034,6);
+  expect(bounds(scene,'Right side part1').min.x).toBeCloseTo(1.166,6);expect(bounds(scene,'Right side part1').max.x).toBeCloseTo(1.181,6);
+  expect(bounds(scene,'Left side part2').min.x).toBeCloseTo(.034,6);expect(bounds(scene,'Right side part2').max.x).toBeCloseTo(1.166,6);
+ });
+ it('retains the original umbrella holder bounds and rejects incomplete shelf references',()=>{
+  const source=ownerShelfFixture();source.remove(source.getObjectByName('Side shelf right 5')!);expect(()=>extractCartSideShelves(source)).toThrow(/missing right part 5/);
+  const scene=new THREE.Group(),holder=new THREE.Mesh(new THREE.BoxGeometry(.075,.016,.075));holder.name='Body5';scene.add(holder);expect(extractCartUmbrellaHolderBounds(scene).getSize(new THREE.Vector3()).x).toBeCloseTo(.075,6);
  });
 });
