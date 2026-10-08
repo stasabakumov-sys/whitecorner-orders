@@ -591,6 +591,6 @@ it('Home restores the standard viewpoint after orbit, pan and zoom while keeping
  editor.controls={target:new THREE.Vector3(2,1,1),mouseButtons:{LEFT:THREE.MOUSE.PAN},enableDamping:true,reset:vi.fn(),update:vi.fn()};
  component.navigationMode.set('move');component.resetView();
  expect(editor.controls.target.toArray()).toEqual([.75,.45,.3]);expect(editor.camera.zoom).toBe(1);expect(editor.orbitCamera.zoom).toBe(1);
- expect(editor.turntable.rotation.y).toBe(0);expect(component.navigationMode()).toBe('rotate');expect(editor.controls.mouseButtons.LEFT).toBe(THREE.MOUSE.ROTATE);
+ expect(editor.turntable.rotation.y).toBe(Math.PI);expect(component.navigationMode()).toBe('rotate');expect(editor.controls.mouseButtons.LEFT).toBe(THREE.MOUSE.ROTATE);
  expect(editor.orbitCamera.position.toArray()).toEqual(editor.camera.position.toArray());expect(component.width()).toBe(1500);expect(component.sideShelvesIncluded()).toBe(true);
 });

@@ -10,7 +10,7 @@ import { fitFurnitureBolts, shortenCastorBrakes, turnCastorWheels } from './mode
 import { resizePlywoodPosition, resizeRoofCartPosition, resizeSideShelfCartPosition } from './modeling-geometry';
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { umbrellaDiameterLimit, withUmbrellaHole, createUmbrellaPreview, UMBRELLA_PREVIEW_HEIGHT } from './modeling-umbrella';
-import { ModelingFourViews } from './modeling-four-views';
+import { ModelingFourViews, frontFacingRotation } from './modeling-four-views';
 import { createCartSideShelves } from './modeling-side-shelves';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
@@ -189,7 +189,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       camera.position.copy(target).add(new THREE.Vector3(span*1.05,span*.4,span*1.65));camera.lookAt(target);
       this.scene.background=new THREE.Color('#eceae8');renderer.setSize(960,720,false);
       const capture=(angle:number)=>{turntable.rotation.y=angle;this.scene.updateMatrixWorld(true);renderer.render(this.scene,camera);return renderer.domElement.toDataURL('image/png');};
-      const front=this.isClassic()?Math.PI:0;return {front:capture(front),rear:capture(front+Math.PI)};
+      const front=frontFacingRotation(this.isClassic());return {front:capture(front),rear:capture(front+Math.PI)};
     }finally{
       for(const part of parts){part.node.position.copy(part.position);part.node.visible=part.visible;}
       turntable.rotation.y=rotation;this.scene.background=original;renderer.setSize(size.x,size.y,false);
@@ -223,7 +223,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.camera.updateProjectionMatrix();this.orbitCamera.updateProjectionMatrix();
       this.focusCamera();this.controls.enableDamping=damping;
     }else this.focusCamera();
-    if(this.turntable)this.turntable.rotation.y=0;
+    if(this.turntable)this.turntable.rotation.y=frontFacingRotation(this.isClassic());
   }
   readonly showUmbrella = signal(false);
   private umbrellaPreview?:THREE.Group;
@@ -545,7 +545,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const target = this.controls.target.clone().sub(centre).applyAxisAngle(new THREE.Vector3(0,1,0),this.viewAzimuth-spherical.theta).add(centre);
       this.camera.position.copy(target).add(new THREE.Vector3().setFromSphericalCoords(spherical.radius, spherical.phi, this.viewAzimuth));
       this.camera.lookAt(target);
-      if (this.turntable) this.turntable.rotation.y = this.viewAzimuth - spherical.theta;
+      if (this.turntable) this.turntable.rotation.y = frontFacingRotation(this.isClassic()) + this.viewAzimuth - spherical.theta;
     }
     this.assembly?.update();
     if (!this.loading()) {
@@ -1419,6 +1419,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.cameraSpan = span;
     this.camera.position.set(this.width() / 2000 + span * 1.1, this.overallHeight() / 2000 + span * 0.5, this.depth() / 2000 + span * 1.25);
     this.orbitCamera.position.copy(this.camera.position);
+    if(this.turntable)this.turntable.rotation.y=frontFacingRotation(this.isClassic());
     this.camera.lookAt(this.width() / 2000, this.previewHeight() / 2000, this.depth() / 2000);
     this.controls?.update();
   }
