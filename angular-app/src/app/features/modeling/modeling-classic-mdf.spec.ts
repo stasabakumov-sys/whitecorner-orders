@@ -16,7 +16,9 @@ describe('Classic MDF conversion from the private plywood construction',()=>{
   scene.add(part('Top_part2',0,1.2,.858,.9,0,.6,trimProfile(.858)));
   scene.add(part('Buttom_part2',0,1.2,.095,.137,0,.6,trimProfile(.095)));
   scene.add(part('Top_part1',.019,1.181,.885,.9,.019,.581));
-  scene.add(part('Buttom_part1',.019,1.181,.095,.11,.019,.581));
+  const bottom=part('Buttom_part1',.019,1.181,.095,.11,.019,.581);
+  bottom.geometry.getAttribute('normal').setXYZ(0,0,1,0);
+  scene.add(bottom);
   scene.add(part('Front_part1',.019,1.181,.11,.885,.019,.034));
   scene.add(part('Left_side_part1',.019,.031,.11,.885,.034,.581));
   scene.add(part('Caster_L_front_plate',.057,.125,.09,.095,.06,.142));
@@ -32,5 +34,6 @@ describe('Classic MDF conversion from the private plywood construction',()=>{
   expect(bounds('Front_part1').getSize(new THREE.Vector3()).z).toBeCloseTo(.016,5);
   expect(bounds('Left_side_part1').getSize(new THREE.Vector3()).x).toBeCloseTo(.012,5);
   expect(bounds('Caster_L_front_plate').min.x).toBeCloseTo(.057,5);
+  expect(bottom.geometry.getAttribute('normal').getY(0)).toBe(1);
  });
 });

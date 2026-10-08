@@ -56,7 +56,10 @@ export function prepareClassicMdfSource(scene: THREE.Group): void {
       for (let i = 0; i < positions.count; i++) positions.setXYZ(i,
         xAt(name, positions.getX(i)), yAt(name, positions.getY(i)), zAt(name, positions.getZ(i)));
       positions.needsUpdate = true;
-      node.geometry.computeVertexNormals();
+      // These indexed GLB meshes include unreferenced vertices. Recomputing
+      // normals zeroes the bottom face and makes it render black under light.
+      // The small dimension changes retain the source surface normals; rebuilt
+      // panels below receive new normals from createRoundedPart.
       node.geometry.computeBoundingBox();
       node.geometry.computeBoundingSphere();
       const profile = node.userData['roundingProfile'] as RoundingProfile | undefined;
