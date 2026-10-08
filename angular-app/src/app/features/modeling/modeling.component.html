@@ -4,7 +4,7 @@
       <h1>Modeling</h1>
       <p>{{modelLabel()}}</p>
     </div>
-    <div class="model-picker"><label for="model-choice">Model</label><select id="model-choice" [value]="activeSlug()" [disabled]="saving() || roundingBusy()" (change)="selectModel($any($event.target).value)">@for (model of models(); track model.slug) {<option [value]="model.slug" [selected]="model.slug === activeSlug()">{{productLabel(model.slug,model.product_name+' / '+model.material_name)}}</option>}</select><label for="pdf-prices">PDF</label><select id="pdf-prices" aria-label="PDF prices" [value]="pdfWithPrices() ? 'with' : 'without'" [disabled]="configurationBusy()" (change)="pdfWithPrices.set($any($event.target).value==='with')"><option value="without">Without prices</option><option value="with">With prices</option></select><button type="button" class="icon-action configuration-save" [disabled]="loading() || roundingBusy() || configurationBusy() || logoBusy()" title="Save configuration" aria-label="Save configuration" (click)="saveConfiguration()"><svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 3h13l4 4v14H3V3Z"/><path d="M7 3v6h10V3M7 21v-8h10v8"/></svg></button></div>
+    <div class="model-picker"><label for="pdf-prices">PDF</label><select id="pdf-prices" aria-label="PDF prices" [value]="pdfWithPrices() ? 'with' : 'without'" [disabled]="configurationBusy()" (change)="pdfWithPrices.set($any($event.target).value==='with')"><option value="without">Without prices</option><option value="with">With prices</option></select><button type="button" class="icon-action configuration-save" [disabled]="loading() || roundingBusy() || configurationBusy() || logoBusy()" title="Save configuration" aria-label="Save configuration" (click)="saveConfiguration()"><svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 3h13l4 4v14H3V3Z"/><path d="M7 3v6h10V3M7 21v-8h10v8"/></svg></button></div>
   </header>
   @if(configurationBusy()){<p class="progress" role="status">Preparing configuration PDF…</p>}
   @if(configurationError()){<p class="error" role="alert">{{configurationError()}}</p>}
@@ -25,19 +25,26 @@
       <div class="viewer-footer"><span>{{navigationMode()==='move' ? 'Drag to move' : 'Drag to rotate'}} · Scroll to zoom</span><span>{{width()}} × {{depth()}} × {{height()}} mm</span></div>
     </div>
     <div class="settings">
+      <div class="model-choice-card">
+        <div class="model-choice-heading">
+          @if(modelImageUrl()){<img [src]="modelImageUrl()" [alt]="modelLabel()+' product photo'" loading="lazy">}
+          <div><label for="model-choice">Model</label><span [title]="modelLabel()">{{modelLabel()}}</span></div>
+        </div>
+        <select id="model-choice" [value]="activeSlug()" [disabled]="saving() || roundingBusy()" (change)="selectModel($any($event.target).value)">@for (model of models(); track model.slug) {<option [value]="model.slug" [selected]="model.slug === activeSlug()">{{productLabel(model.slug,model.product_name)}}</option>}</select>
+      </div>
 
       <app-modeling-section class="setting-card" sectionId="dimensions" title="Dimensions" [summary]="sectionSummary('dimensions')" iconPath="M4 4h16v16H4zM8 4v3m4-3v3m4-3v3M4 8h3m-3 4h3m-3 4h3">
         <div class="setting-title"><button type="button" class="text-action" (click)="resetDimensions()">Reset</button></div>
         <p class="help">Tabletop height includes {{castorHeight()}} mm castors. @if (hasRoof()) { Roof height: {{overallHeight()}} mm. }</p>
         <label id="model-length-label">Length <output>{{width() / 10}} cm</output></label>
         <div class="length-options" role="group" aria-labelledby="model-length-label">
-          @for (length of (isSideShelfCart() ? [1500] : [1200, 1300, 1400, 1500]); track length) {
+          @for (length of (isSideShelfCart() ? [1500] : isTwoInOneCart() ? [1200] : [1200, 1300, 1400, 1500]); track length) {
             <button type="button" [class.selected]="width() === length" [attr.aria-pressed]="width() === length" (click)="setDimension('width', length.toString())">{{length / 10}} cm</button>
           }
         </div>
         <label id="model-height-label">Height <output>{{height() / 10}} cm</output></label>
         <div class="length-options" role="group" aria-labelledby="model-height-label">
-          @for (value of [850, 900, 950, 1000]; track value) {
+          @for (value of (isTwoInOneCart() ? [850] : [850, 900, 950, 1000]); track value) {
             <button type="button" [class.selected]="height() === value" [attr.aria-pressed]="height() === value" (click)="setDimension('height', value.toString())">{{value / 10}} cm</button>
           }
         </div>
@@ -92,8 +99,8 @@
       </app-modeling-section>
       <app-modeling-section class="setting-card shelf-card" sectionId="options" title="Options" [summary]="optionsSummary()" iconPath="M4 6h16M4 12h16M4 18h16M8 4v4m8 2v4m-6 2v4">
         <label class="shelf-option"><input type="checkbox" [checked]="shelfIncluded()" [disabled]="loading() || roundingBusy()" (change)="setShelfIncluded($any($event.target).checked)"><span>Internal shelf</span><span class="shelf-option-price">{{optionSurcharge('Internal shelf') || (catalogBusy() ? 'Loading…' : 'Quote required')}}</span></label>
-        <label class="shelf-option"><input type="checkbox" [checked]="sideShelvesIncluded()" [disabled]="loading() || roundingBusy()" (change)="setSideShelvesIncluded($any($event.target).checked)"><span>Side shelves · 2 × 200 × 600 mm</span><span class="shelf-option-price">{{optionSurcharge('Side shelves') || (catalogBusy() ? 'Loading…' : 'Quote required')}}</span></label>
-        @if(isSideShelfCart()) {
+        <label class="shelf-option"><input type="checkbox" [checked]="sideShelvesIncluded()" [disabled]="loading() || roundingBusy()" (change)="setSideShelvesIncluded($any($event.target).checked)"><span>Side shelves · 2 × 200 × 600 mm</span><span class="shelf-option-price">{{isTwoInOneCart() && sideShelvesIncluded() ? 'Included' : optionSurcharge('Side shelves') || (catalogBusy() ? 'Loading…' : 'Quote required')}}</span></label>
+        @if(isCharcuterieCart()) {
         <label class="shelf-option"><input type="checkbox" [checked]="iceShelfIncluded()" [disabled]="loading() || roundingBusy()" (change)="setIceShelfIncluded($any($event.target).checked)"><span>Ice shelf</span></label>
         } @else {
         <p class="help">Pine · 31 × 15 mm profile · 90 mm inset.</p>
@@ -108,9 +115,9 @@
         <label class="shelf-option"><input type="checkbox" [checked]="moulding()" [disabled]="loading() || roundingBusy()" (change)="setMoulding($any($event.target).checked)"><span>Moulding</span><span class="shelf-option-price">Quote required</span></label>
         }
         }
-        @if(isSideShelfCart()||isClassic()||isRooflessCart()) {
+        @if(isCharcuterieCart()||isClassic()||isRooflessCart()) {
         <label class="shelf-option"><input type="checkbox" [checked]="umbrellaHole()" [disabled]="loading() || roundingBusy() || umbrellaDiameterMax()<32" (change)="setUmbrellaHole($any($event.target).checked)"><span>Umbrella hole</span><span class="shelf-option-price">{{optionSurcharge('Umbrella hole') || (catalogBusy() ? 'Loading…' : 'Quote required')}}</span></label>
-        @if(umbrellaHole()) {@if(isClassic()){<div class="length-options" role="group" aria-label="Umbrella hole position">@for(position of ['left','centre','right'];track position){<button type="button" [disabled]="loading() || roundingBusy()" [class.selected]="umbrellaPosition()===position" [attr.aria-pressed]="umbrellaPosition()===position" (click)="setUmbrellaPosition($any(position))">{{position==='left'?'Left':position==='right'?'Right':'Centre'}}</button>}</div>}<label class="shelf-option"><input type="checkbox" [checked]="showUmbrella()" [disabled]="loading() || roundingBusy()" (change)="setShowUmbrella($any($event.target).checked)"><span>Show umbrella · preview only</span></label><label>Diameter <output>{{umbrellaDiameter()}} mm</output></label><input type="range" aria-label="Umbrella hole diameter" min="32" [max]="umbrellaDiameterMax()" [value]="umbrellaDiameter()" [disabled]="loading() || roundingBusy()" (change)="setUmbrellaDiameter(+$any($event.target).value)"><p class="help">Maximum {{umbrellaDiameterMax()}} mm.</p>}
+        @if(umbrellaHole()) {@if(isClassic()||isTwoInOneCart()){<div class="length-options" role="group" aria-label="Umbrella hole position">@for(position of ['left','centre','right'];track position){<button type="button" [disabled]="loading() || roundingBusy()" [class.selected]="umbrellaPosition()===position" [attr.aria-pressed]="umbrellaPosition()===position" (click)="setUmbrellaPosition($any(position))">{{position==='left'?'Left':position==='right'?'Right':'Middle'}}</button>}</div>}<label class="shelf-option"><input type="checkbox" [checked]="showUmbrella()" [disabled]="loading() || roundingBusy()" (change)="setShowUmbrella($any($event.target).checked)"><span>Show umbrella · preview only</span></label><label>Diameter <output>{{umbrellaDiameter()}} mm</output></label><input type="range" aria-label="Umbrella hole diameter" min="32" [max]="umbrellaDiameterMax()" [value]="umbrellaDiameter()" [disabled]="loading() || roundingBusy()" (change)="setUmbrellaDiameter(+$any($event.target).value)"><p class="help">Maximum {{umbrellaDiameterMax()}} mm.</p>}
         }
       </app-modeling-section>
       <app-modeling-section class="setting-card" sectionId="front-logo" title="Front logo" [summary]="frontLogo() ? 'Placed' : 'None'" [attention]="!!logoError()" iconPath="M4 4h16v16H4ZM4 16l5-5 4 4 3-3 4 4">
