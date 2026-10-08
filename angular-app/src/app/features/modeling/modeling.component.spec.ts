@@ -701,9 +701,19 @@ it.each(['classic-bar-plywood','decorative-wheel-roof-cart-mdf'])('adds optional
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(1.2,thickness,index===1?.6:classic?.02:.016),new THREE.MeshPhysicalMaterial());
   mesh.name=`Top_${index}`;mesh.position.set(.6,y,z);editor.body.add(mesh);
  }
- const reference=new THREE.Group();for(const side of ['left','right'])for(const index of [5,6]){
+ for(const [name,x] of [['Left side part1',.025],['Right side part1',1.175]] as const){const mesh=new THREE.Mesh(new THREE.BoxGeometry(.012,.7,.55).translate(x,.5,.3));mesh.name=name;editor.body.add(mesh);}
+ const reference=new THREE.Group();for(const side of ['left','right'])for(const index of [1,2,3,4,5,6]){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(.2,.016,.6),[new THREE.MeshPhysicalMaterial(),new THREE.MeshPhysicalMaterial()]);
   mesh.name=`Side shelf ${side} ${index}`;mesh.userData['plywoodPart']=mesh.name;
+  mesh.userData['roundingProfile']={axis:'z',origin:index===5?.468:.096,thickness:.012,
+   outline:[[side==='left'?.016:1.172,.71],[side==='left'?.028:1.184,.71],[side==='left'?.028:1.184,.88],[side==='left'?.016:1.172,.88]],holes:[]};
+  if(index<=4){
+   const x0=side==='left'?-.2:1.2,x1=x0+.2;
+   const a=index===4?(side==='left'?x0:x1-.016):index===1?(side==='left'?x0+.016:x0):x0;
+   const b=index===4?a+.016:index===1?(side==='left'?x1:x1-.016):x1;
+   const z0=index===3?.584:index===1?.016:0,z1=index===2?.016:index===1?.584:.6;
+   mesh.userData['roundingProfile']={axis:'y',origin:index===1?.884:.855,thickness:index===1?.016:.045,outline:[[a,z0],[b,z0],[b,z1],[a,z1]],holes:[]};
+  }
   mesh.geometry.translate(side==='left'?-.1:1.6,.842,.3);reference.add(mesh);
  }
  editor.sideShelfReference=reference;editor.umbrellaHolderBounds=new THREE.Box3(new THREE.Vector3(.71,.11,.26),new THREE.Vector3(.79,.126,.34));
@@ -712,7 +722,7 @@ it.each(['classic-bar-plywood','decorative-wheel-roof-cart-mdf'])('adds optional
  let group=editor.body.getObjectByName('Side shelf extensions');expect(group).toBeDefined();
  expect(group.getObjectByName('Side shelf left 1').material[0].map).toBe(editor.finishTextures.get('tasmanian-oak.png'));
  component.setDimension('width','1500');group=editor.body.getObjectByName('Side shelf extensions');
- expect(new THREE.Box3().setFromObject(group.getObjectByName('Side shelf right 2')).max.x).toBeCloseTo(1.7,6);
+ expect(new THREE.Box3().setFromObject(group.getObjectByName('Side shelf right 4')).max.x).toBeCloseTo(1.7,6);
  expect(group.getObjectByName('Side shelf right 1').material[0].map).toBe(editor.finishTextures.get('tasmanian-oak.png'));
  expect(component.previewWidth()).toBe(1900);component.setSideShelvesIncluded(false);expect(editor.body.getObjectByName('Side shelf extensions')).toBeUndefined();expect(component.previewWidth()).toBe(1500);
 });

@@ -45,7 +45,7 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3; prof
     const shaker = /^Front[ _]part[12]$/i.test(a.name) && /^Front[ _]part[12]$/i.test(b.name);
     // MDF body panels and their inner reinforcement rails meet on square faces.
     // Rounding the two mating faces independently opens a visible light slit.
-    const bodyPanel = (name: string) => /^Front[ _]part\d+\)?$/i.test(name.trim()) || /^(Left|Right)[ _]side[ _]?[12]$/i.test(name.trim());
+    const bodyPanel = (name: string) => /^Front[ _]part\d+\)?$/i.test(name.trim()) || /^(Left|Right)[ _]side[ _]?(?:part)?[12]$/i.test(name.trim());
     const body = bodyPanel(a.name) && bodyPanel(b.name);
     const borderFamily = (name:string) => /^(Top|Buttom|Bottom)[ _](?:part)?\d+$/i.exec(name)?.[1].toLowerCase().replace('buttom','bottom');
     const border=borderFamily(a.name)&&borderFamily(a.name)===borderFamily(b.name);
