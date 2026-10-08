@@ -176,6 +176,9 @@ export function createRoundedPart(profile: RoundingProfile, radiusMm: number): T
   const merged = mergeVertices(extrusion, 1e-7);
   merged.computeVertexNormals();
   const geometry = merged.toNonIndexed();
+  // A square joint needs separate cap and edge normals. Keeping the smoothed
+  // normals from the merged mesh makes top-face triangles look like edge faces.
+  if (r === 0) geometry.computeVertexNormals();
   extrusion.dispose(); merged.dispose();
   if (profile.axis === 'y') { geometry.rotateX(-Math.PI / 2); geometry.translate(0, profile.origin + r, 0); }
   else if (profile.axis === 'x') { geometry.rotateY(Math.PI / 2); geometry.translate(profile.origin + r, 0, 0); }
