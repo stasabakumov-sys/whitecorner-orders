@@ -11,6 +11,11 @@ function fixture():ModelingCatalog {
   {price:2060,choices:{Size:'Size I (W1200mm x D600mm x H900mm)',Colour:'White','Internal Shelf':'Yes','Tabletop material':'Plywood'}},
   {price:2360,choices:{Size:'Size I (W1200mm x D600mm x H900mm)',Colour:'White','Internal Shelf':'Yes','Tabletop material':'Tasmanian Oak'}},
  ]);
+ const classicMdf=product(MODEL_CATALOG_LINKS['classic-bar-mdf'],'Collapsible Mobile Bar "Classic"- Mobile Food Service - Event Bar Cart',[{name:'Size',values:['Size I (W1200mm x D600mm x H900mm)']}],[
+  {price:1050,choices:{Size:'Size I (W1200mm x D600mm x H900mm)',Colour:'Raw','Internal Shelf':'No','Tabletop material':'MDF'}},
+  {price:1350,choices:{Size:'Size I (W1200mm x D600mm x H900mm)',Colour:'Raw','Internal Shelf':'No','Tabletop material':'Tasmanian Oak'}},
+  {price:1550,choices:{Size:'Size I (W1200mm x D600mm x H900mm)',Colour:'White','Internal Shelf':'No','Tabletop material':'MDF'}},
+ ]);
  const roof=product(MODEL_CATALOG_LINKS['decorative-wheel-roof-cart-mdf'],'Roof from Hub',[],[
   {price:1650,choices:{Colour:'Raw','Internal Shelf':'No','Side shelves':'No'}},
   {price:1850,choices:{Colour:'Raw','Internal Shelf':'Yes','Side shelves':'No'}},
@@ -35,7 +40,7 @@ function fixture():ModelingCatalog {
   {price:300,choices:{Pans:'Shelf without steel pans',Colour:'Raw'}},
   {price:400,choices:{Pans:'Shelf without steel pans',Colour:'White'}},
  ]);
- return {publishedAt,products:[classic,roof,roofless,shelves,umbrella,two,ice]};
+ return {publishedAt,products:[classic,roof,roofless,shelves,umbrella,two,ice,classicMdf]};
 }
 const selection={slug:'decorative-wheel-cart-mdf',width:1200,depth:600,height:900,raw:true,colour:'#f6f6f3',shelf:true,topFinish:'body' as const,sideFinish:'body' as const};
 describe('Hub Modeling selling prices',()=>{
@@ -61,6 +66,14 @@ describe('Hub Modeling selling prices',()=>{
  it('uses Classic tabletop variants and a distinct side shelf product',()=>{
   const p=catalogPricing(fixture(),{...selection,slug:'classic-bar-plywood',raw:false,topFinish:'oak',sideShelves:false});expect(p.subtotal).toBe(2360);
   const raw=catalogPricing(fixture(),{...selection,slug:'classic-bar-plywood',topFinish:'plywood',sideFinish:'plywood',sideShelves:true});expect(raw.subtotal).toBe(2010);expect(raw.lines[1].amount).toBe(450);
+ });
+ it('uses the exact Classic MDF product and its MDF or oak tabletop variants',()=>{
+  const s={...selection,slug:'classic-bar-mdf',shelf:false};
+  expect(catalogPricing(fixture(),s).subtotal).toBe(1050);
+  expect(catalogPricing(fixture(),{...s,topFinish:'oak'}).subtotal).toBe(1350);
+  expect(catalogPricing(fixture(),{...s,raw:false}).subtotal).toBe(1550);
+  expect(catalogPricing(fixture(),{...s,topFinish:'plywood'}).subtotal).toBeNull();
+  expect(shortModelName(fixture().products[7].name)).toBe('Collapsible Mobile Bar "Classic"');
  });
  it('uses the exact 1200 mm 2-in-1 cart variant and prices only listed add-ons',()=>{
   const s={...selection,slug:'two-in-one-cart-mdf',height:850,shelf:false,sideShelves:true,iceShelf:false};
