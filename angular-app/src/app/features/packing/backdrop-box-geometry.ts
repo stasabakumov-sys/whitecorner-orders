@@ -39,15 +39,23 @@ function piece(length: number, width: number, depth: number, panelLength: number
 
 function wholePiece(length: number, width: number, depth: number, rim: number, rotated: boolean): BoxNet {
   const sheetWidth = width + 2 * rim, sheetHeight = length + 2 * rim;
-  const outline: Point[] = [[rim,0],[rim+width,0],[rim+width,rim],
-    [sheetWidth,rim],[sheetWidth,rim+length],[rim+width,rim+length],
-    [rim+width,sheetHeight],[rim,sheetHeight],[rim,rim+length],
-    [0,rim+length],[0,rim],[rim,rim],[rim,0]];
+  // Both end walls retain the corner wings and relief cuts of the original
+  // U-shaped CDR piece. Joining its open edges must not remove those wings.
+  const relief = Math.min(1.5, rim / 4);
+  const outline: Point[] = [
+    [rim,0],[rim+width,0],[sheetWidth,relief],[sheetWidth,rim-relief],
+    [rim+width,rim],[sheetWidth,rim],[sheetWidth,rim+length],
+    [rim+width,rim+length],[sheetWidth,rim+length+relief],
+    [sheetWidth,sheetHeight-relief],[rim+width,sheetHeight],
+    [rim,sheetHeight],[0,sheetHeight-relief],[0,rim+length+relief],
+    [rim,rim+length],[0,rim+length],[0,rim],
+    [rim,rim],[0,rim-relief],[0,relief],[rim,0],
+  ];
   const net:BoxNet={length,width,depth,panelLength:length,sheetWidth,sheetHeight,
     cuts:outline.slice(1).map((to,index)=>({from:outline[index],to})),
     folds:[
-      {from:[rim,rim],to:[rim,rim+length]},
-      {from:[rim+width,rim],to:[rim+width,rim+length]},
+      {from:[rim,0],to:[rim,sheetHeight]},
+      {from:[rim+width,0],to:[rim+width,sheetHeight]},
       {from:[rim,rim],to:[rim+width,rim]},
       {from:[rim,rim+length],to:[rim+width,rim+length]},
     ]};
