@@ -1,6 +1,20 @@
 import * as THREE from 'three';
 import { CHARCUTERIE_CUTOUTS } from './modeling-trays';
-import { RoundingProfile } from './modeling-rounding';
+import { createRoundedPart, RoundingProfile } from './modeling-rounding';
+
+export function createBottomUmbrellaHolder(sourceBounds:THREE.Box3, centreXmm:number, diameterMm:number, bottomTop:number):THREE.Mesh {
+ const radius=diameterMm/2000,cx=centreXmm/1000,cz=.3;
+ const halfWidth=Math.max(sourceBounds.max.x-sourceBounds.min.x,(diameterMm+15)/1000)/2;
+ const halfDepth=Math.max(sourceBounds.max.z-sourceBounds.min.z,(diameterMm+15)/1000)/2;
+ const circle=Array.from({length:128},(_,i)=>{const angle=2*Math.PI*i/128;return [cx+radius*Math.cos(angle),cz+radius*Math.sin(angle)];});
+ const profile:RoundingProfile={axis:'y',origin:bottomTop,thickness:sourceBounds.max.y-sourceBounds.min.y,
+  outline:[[cx-halfWidth,cz-halfDepth],[cx+halfWidth,cz-halfDepth],[cx+halfWidth,cz+halfDepth],[cx-halfWidth,cz+halfDepth]],holes:[circle]};
+ const face=new THREE.MeshPhysicalMaterial();face.name='umbrella holder face';
+ const edge=new THREE.MeshPhysicalMaterial();edge.name='plywood edge';
+ const holder=new THREE.Mesh(createRoundedPart(profile,0),[face,edge]);
+ holder.name='Body5';holder.userData['plywoodPart']='Body5';holder.castShadow=holder.receiveShadow=true;
+ return holder;
+}
 
 // Keep the centred pole clear of every possible tray flange, with 2 mm clearance.
 export function umbrellaDiameterLimit(widthMm=1500,depthMm=600):number {

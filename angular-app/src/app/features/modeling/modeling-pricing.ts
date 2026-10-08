@@ -42,7 +42,7 @@ function linkedProduct(catalog:ModelingCatalog,link:{id:string;path:string}):Mod
 export function linkedModelProduct(catalog:ModelingCatalog|null,slug:string):ModelingProduct|undefined {
  const link=MODEL_CATALOG_LINKS[slug];return catalog&&link?linkedProduct(catalog,link):undefined;
 }
-export function shortModelName(name:string):string {return name.split('.',1)[0].trim();}
+export function shortModelName(name:string):string {return name.split(/\.|\s+[–—-]\s+/,1)[0].trim();}
 function variant(product:ModelingProduct|undefined,choices:Record<string,string>):CatalogVariant|undefined {
  const matches=product?.variants.filter(v=>Object.keys(v.choices).length===Object.keys(choices).length&&Object.entries(choices).every(([key,value])=>v.choices[key]===value))||[];
  return matches.length===1?matches[0]:undefined;

@@ -26,7 +26,7 @@
 @media(min-width:981px){
  .workspace{display:block;position:relative}
  .viewer-card{position:relative;top:0;border-top:0;height:calc(100dvh - var(--viewer-top,80px) - 12px)}
- .settings{position:absolute;top:14px;right:14px;bottom:48px;width:288px;overflow-y:auto;overscroll-behavior:contain;display:block;padding:4px 10px;background:#ffffffed;border:1px solid #dce3e9;border-radius:12px;box-shadow:0 8px 24px #26324110;scrollbar-width:thin}
+ .settings{position:absolute;top:14px;right:14px;bottom:14px;width:288px;overflow-y:auto;overscroll-behavior:contain;display:block;padding:6px;background:#ffffffed;border:1px solid #dce3e9;border-radius:14px;box-shadow:0 8px 24px #26324110;scrollbar-width:none}
  .setting-card{padding:11px 0;background:transparent;border:0;border-bottom:1px solid #edf0f3;border-radius:0}
  .setting-card:last-child{border-bottom:0}
  .viewer-footer{padding-right:320px}
@@ -59,17 +59,25 @@
 .page-head>div:first-child{min-width:0}.model-picker{flex-wrap:wrap;justify-content:flex-end}.model-picker #model-choice{max-width:280px}.model-picker #pdf-prices{width:112px;font-family:inherit;font-size:10px}.price-total{display:flex;flex-direction:column;gap:4px;margin:10px 0}.modeling-page .settings .price-total strong{font-family:inherit;font-size:10px;font-weight:600;line-height:1.45}.price-total>span{font-size:9px;color:#798696}.pricing-card details{font-size:10px}.pricing-card summary{cursor:pointer;color:#526172}.price-line{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #e8ecef;padding:8px 0;font-size:10px}.price-line>span:last-child{white-space:nowrap}.option-price{font-size:9px;color:#798696}@media(max-width:640px){.model-picker{justify-content:flex-start}.model-picker #model-choice{max-width:100%}}
 
 .modeling-page .settings app-modeling-section.setting-card{padding:0;overflow:hidden;background:#fff;border:1px solid #e1e7ee;border-radius:12px;margin-bottom:8px}.modeling-page .settings .shelf-option{display:flex;align-items:center;justify-content:flex-start;gap:10px;margin:0;padding:4px 0;font-size:10px;font-weight:400;cursor:pointer}.shelf-option input{margin:0;width:14px;height:14px}.shelf-option-price{margin-left:auto;white-space:nowrap;color:#667587}
-.model-choice-card{min-width:0;margin-bottom:8px;padding:10px;background:#fff;border:1px solid #e1e7ee;border-radius:12px}
+.settings::-webkit-scrollbar{display:none}
+.modeling-page .settings app-modeling-section.setting-card{border-radius:8px}
+.model-choice-card{min-width:0;margin-bottom:8px;padding:10px;background:#fff;border:1px solid #e1e7ee;border-radius:8px}
 .model-choice-heading{display:flex;align-items:center;gap:9px;min-width:0}
 .model-choice-heading img{flex:none;width:42px;height:42px;object-fit:cover;border:1px solid #e1e7ee;border-radius:7px}
 .model-choice-heading>div{display:flex;flex-direction:column;gap:3px;min-width:0}
-.model-choice-heading label{font-family:inherit;font-size:10px;font-weight:600;line-height:1.45;color:#35455e}
+.model-choice-heading .model-choice-label{font-family:inherit;font-size:10px;font-weight:600;line-height:1.45;color:#35455e}
 .model-choice-heading span{font-size:10px;font-weight:400;line-height:1.45;color:#526172;overflow-wrap:anywhere}
-.model-choice-card select{display:block;width:100%;min-width:0;min-height:28px;margin-top:8px;padding:4px 7px;border:1px solid #d7dfe6;border-radius:8px;background:#fff;color:#263241;font-family:inherit;font-size:10px;font-weight:400;line-height:1.45}
+.model-choice-card .model-choice-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-width:0;min-height:28px;margin-top:8px;padding:4px 7px;border:1px solid #d7dfe6;border-radius:8px;background:#fff;color:#263241;text-align:left;cursor:pointer}
+.model-choice-trigger span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-choice-options{display:grid;gap:3px;margin-top:5px}
+.model-choice-options button{display:flex;align-items:center;gap:8px;width:100%;min-height:42px;padding:4px;border:1px solid transparent;border-radius:7px;background:#fff;color:#263241;text-align:left;cursor:pointer}
+.model-choice-options button:is(:hover,:focus-visible,.selected){border-color:#c9d7e5;background:#f3f7fb}
+.model-choice-options img,.model-choice-photo-placeholder{flex:none;width:34px;height:34px;object-fit:cover;border:1px solid #e1e7ee;border-radius:5px;background:#eef1f4}
+.model-choice-options button>span:last-child{min-width:0;overflow-wrap:anywhere}
 
 /* Shared compact typography for every projected settings control. */
 .modeling-page .settings :is(button:not(.icon-action),select,label,output,h3,p,.colour-value,.custom-colour){font-family:inherit;font-size:10px;font-weight:400;line-height:1.45}
-.modeling-page .settings .model-choice-heading label{font-weight:600}
+.modeling-page .settings .model-choice-heading .model-choice-label{font-weight:600;color:#35455e}
 .modeling-page .settings h3.setting-subtitle{font-size:10px;font-weight:600;color:#35455e;margin:12px 0 6px}
 .modeling-page .settings .colour-value{margin-top:8px;text-transform:none;color:#667587}
 .modeling-page .settings .custom-colour{font-size:10px;font-weight:400}
@@ -94,3 +102,7 @@
 .four-view-grid>div{border:1px solid rgb(125 137 145 / 25%);position:relative}
 .four-view-grid .fixed-view{pointer-events:auto;cursor:default}
 .four-view-grid span{position:absolute;bottom:8px;left:10px;color:#7b8790;font-family:inherit;font-size:10px;font-weight:400;line-height:1.45;pointer-events:none}
+.viewer-dimensions{position:absolute;top:45px;left:12px;z-index:2;padding:4px 7px;border-radius:5px;background:rgb(255 255 255 / 72%);color:#526172;font-family:inherit;font-size:10px;font-weight:400;line-height:1.45;pointer-events:none}
+.spin-hint{position:absolute;left:50%;bottom:18px;z-index:1;transform:translateX(-50%);display:flex;align-items:center;gap:7px;min-height:34px;padding:0 14px;border-radius:999px;background:#6b6b6b;color:#fff;font-family:inherit;font-size:10px;font-weight:400;line-height:1.45;white-space:nowrap;pointer-events:none}
+.spin-hint svg{width:15px;height:15px;flex:none}
+@media(min-width:981px){.spin-hint{left:calc((100% - 320px)/2)}}

@@ -5,6 +5,7 @@ import { HubMembersService } from '../../core/services/hub-members.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { TestBed } from '@angular/core/testing';
 import { ModelingCacheService } from './modeling-cache.service';
+import { MODEL_CATALOG_LINKS } from './modeling-pricing';
 
 function testCache() {
   return new ModelingCacheService({ client: { auth: { onAuthStateChange: vi.fn() } } } as unknown as SupabaseService);
@@ -139,11 +140,17 @@ describe('Independent editor models', () => {
       fixture.detectChanges();
       fixture.componentInstance.models.set([roof, classic]);
       await fixture.whenStable(); fixture.detectChanges();
-      const picker = fixture.nativeElement.querySelector('#model-choice') as HTMLSelectElement;
+      const picker = fixture.nativeElement.querySelector('#model-choice') as HTMLButtonElement;
       expect(picker.closest('.settings')).toBeTruthy();
-      expect(picker.value).toBe(classic.slug);
+      expect(picker.textContent).toContain('Classic Bar / Plywood');
+      fixture.componentInstance.catalog.set({publishedAt:'2026-10-08T00:00:00Z',products:[roof,classic].map(model=>({
+        ...MODEL_CATALOG_LINKS[model.slug],name:model.product_name,currency:'AUD' as const,options:[],variants:[],imageUrl:`https://example.com/${model.slug}.jpg`,
+      }))});
+      fixture.detectChanges();picker.click();fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.model-choice-options [role="option"]')).toHaveLength(2);
+      expect(fixture.nativeElement.querySelectorAll('.model-choice-options img')).toHaveLength(2);
       await fixture.componentInstance.selectModel(roof.slug);
-      fixture.detectChanges(); expect(picker.value).toBe(roof.slug);
+      fixture.detectChanges(); expect(picker.textContent).toContain(roof.product_name);
     } finally { fixture.destroy(); TestBed.resetTestingModule(); }
   });
 
@@ -586,6 +593,20 @@ it.each(['left','centre','right'] as const)('aligns the compact cart umbrella th
  for(const mesh of editor.body.children){mesh.updateMatrixWorld();expect(ray.intersectObject(mesh)).toHaveLength(0);}
 });
 
+it('switches the middle shelf between one panel and the Ice shelf divider cutout',async()=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('two-in-one-cart-mdf');component.width.set(1200);component.height.set(850);component.roundingSupported.set(true);component.shelfIncluded.set(true);component.iceShelfIncluded.set(false);
+ editor.body=new THREE.Group();editor.model=new THREE.Group();editor.model.add(editor.body);
+ const shelf=new THREE.Mesh(new THREE.BoxGeometry(1.436,.016,.556).translate(.75,.4645,.278),new THREE.MeshStandardMaterial());shelf.name='Shelf';
+ const divider=new THREE.Mesh(new THREE.BoxGeometry(.012,.589,.556).translate(.69075,.4055,.278),new THREE.MeshStandardMaterial());divider.name='Ice shelf 3';
+ for(const mesh of [shelf,divider]){editor.sourceParts.push(mesh);editor.sourcePositions.set(mesh.geometry,mesh.geometry.getAttribute('position').clone());}
+ vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});vi.spyOn(editor,'updateMoulding').mockImplementation(()=>{});
+ const shelfAt=()=>editor.body.children.find((part:THREE.Object3D)=>part.name==='Shelf') as THREE.Object3D;
+ const intersects=()=>{const part=shelfAt();part.updateMatrixWorld(true);return new THREE.Raycaster(new THREE.Vector3(.555,.6,.3),new THREE.Vector3(0,-1,0)).intersectObject(part,true).length>0;};
+ await component.setRounding(1.5);expect(intersects()).toBe(true);expect(shelfAt().children).toHaveLength(1);
+ component.setIceShelfIncluded(true);await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));expect(intersects()).toBe(false);expect(shelfAt().children).toHaveLength(2);
+ component.setIceShelfIncluded(false);await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));expect(intersects()).toBe(true);expect(shelfAt().children).toHaveLength(1);
+});
+
 
 it.each(['left','centre','right'] as const)('drills aligned Classic Ply holes at %s across product lengths and restores its panels',async position=>{
  const {component}=setup(),editor=component as any;component.activeSlug.set('classic-bar-plywood');component.roundingSupported.set(true);component.height.set(900);editor.body=new THREE.Group();
@@ -619,6 +640,17 @@ it('retains the previous side-shelf finish and reports a texture load failure',a
 
 it.each(['classic-bar-plywood','decorative-wheel-roof-cart-mdf'])('adds optional side shelves, preserves their finish on resizing and removes them for %s',slug=>{
  const {component}=setup(),editor=component as any;component.activeSlug.set(slug);editor.body=new THREE.Group();editor.model=new THREE.Group();editor.model.add(editor.body);
+ const classic=slug==='classic-bar-plywood';
+ for(const [index,thickness,y,z] of [[1,.016,.892,.3],[2,classic?.02:.045,classic?.874:.8775,.01]] as const){
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(1.2,thickness,index===1?.6:classic?.02:.016),new THREE.MeshPhysicalMaterial());
+  mesh.name=`Top_${index}`;mesh.position.set(.6,y,z);editor.body.add(mesh);
+ }
+ const reference=new THREE.Group();for(const side of ['left','right'])for(const index of [5,6]){
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(.2,.016,.6),[new THREE.MeshPhysicalMaterial(),new THREE.MeshPhysicalMaterial()]);
+  mesh.name=`Side shelf ${side} ${index}`;mesh.userData['plywoodPart']=mesh.name;
+  mesh.geometry.translate(side==='left'?-.1:1.6,.842,.3);reference.add(mesh);
+ }
+ editor.sideShelfReference=reference;editor.umbrellaHolderBounds=new THREE.Box3(new THREE.Vector3(.71,.11,.26),new THREE.Vector3(.79,.126,.34));
  editor.rawTexture=new THREE.Texture();editor.plywoodTexture=new THREE.Texture();editor.finishTextures.set('tasmanian-oak.png',new THREE.Texture());component.sideShelfFinish.set('oak');
  expect(component.sideShelvesIncluded()).toBe(false);component.setSideShelvesIncluded(true);
  let group=editor.body.getObjectByName('Side shelf extensions');expect(group).toBeDefined();
@@ -627,6 +659,22 @@ it.each(['classic-bar-plywood','decorative-wheel-roof-cart-mdf'])('adds optional
  expect(new THREE.Box3().setFromObject(group.getObjectByName('Side shelf right 2')).max.x).toBeCloseTo(1.7,6);
  expect(group.getObjectByName('Side shelf right 1').material[0].map).toBe(editor.finishTextures.get('tasmanian-oak.png'));
  expect(component.previewWidth()).toBe(1900);component.setSideShelvesIncluded(false);expect(editor.body.getObjectByName('Side shelf extensions')).toBeUndefined();expect(component.previewWidth()).toBe(1500);
+});
+
+it.each(['classic-bar-plywood','decorative-wheel-cart-mdf'])('aligns the bottom umbrella holder with left, middle and right holes for %s',slug=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set(slug);
+ editor.body=new THREE.Group();editor.body.add(new THREE.Mesh(new THREE.BoxGeometry(1.2,.016,.6),new THREE.MeshPhysicalMaterial()));
+ editor.body.children[0].name='Buttom_part1';editor.body.children[0].position.set(.6,.103,.3);
+ editor.umbrellaHolderBounds=new THREE.Box3(new THREE.Vector3(.71,.11,.26),new THREE.Vector3(.79,.126,.34));
+ component.umbrellaHole.set(true);
+ for(const [position,x] of [['left',.2],['centre',.6],['right',1]] as const){
+  component.umbrellaPosition.set(position);
+  expect(editor.updateUmbrellaHolder()).toBe(true);
+  const holder=editor.body.getObjectByName('Body5') as THREE.Mesh;
+  expect(new THREE.Box3().setFromObject(holder).getCenter(new THREE.Vector3()).x).toBeCloseTo(x,6);
+ }
+ component.umbrellaHole.set(false);expect(editor.updateUmbrellaHolder()).toBe(false);
+ expect(editor.body.getObjectByName('Body5')).toBeUndefined();
 });
 
 it('Home restores the standard viewpoint after orbit, pan and zoom while keeping the configuration',()=>{
