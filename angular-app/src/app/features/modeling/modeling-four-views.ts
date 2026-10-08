@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 
+// The Classic asset faces -Z; the MDF assets face +Z. Normalize the view,
+// without modifying private source geometry or manufacturing coordinates.
+export const frontFacingRotation=(classic:boolean):number=>classic?Math.PI:0;
+
 /** Three fixed orthographic elevations and one interactive perspective view. */
 export class ModelingFourViews {
  private readonly perspective=new THREE.PerspectiveCamera();
@@ -21,11 +25,11 @@ export class ModelingFourViews {
      const ortho=this.elevations[i===0?0:i-1],aspect=view.w/view.h,extent=span*.62/Math.min(1,aspect);
      ortho.left=-extent*aspect;ortho.right=extent*aspect;ortho.top=extent;ortho.bottom=-extent;ortho.near=.01;ortho.far=30;
      ortho.up.set(0,i===0?0:1,i===0?-1:0);
-     ortho.position.copy(target).add(i===0?new THREE.Vector3(0,span*3,0):i===2?new THREE.Vector3(0,0,span*3*(classic?-1:1)):new THREE.Vector3(span*3,0,0));
+     ortho.position.copy(target).add(i===0?new THREE.Vector3(0,span*3,0):i===2?new THREE.Vector3(0,0,span*3):new THREE.Vector3(span*3,0,0));
      ortho.lookAt(target);ortho.updateProjectionMatrix();active=ortho;
     }
     for(const floor of shadowFloors)floor.node.visible=i===1&&floor.visible;
-    if(turntable)turntable.rotation.y=i===1?rotation:0;
+    if(turntable)turntable.rotation.y=i===1?rotation:frontFacingRotation(classic);
     scene.updateMatrixWorld(true);renderer.render(scene,active);
    }
   } finally {
