@@ -40,7 +40,12 @@ function fixture():ModelingCatalog {
   {price:300,choices:{Pans:'Shelf without steel pans',Colour:'Raw'}},
   {price:400,choices:{Pans:'Shelf without steel pans',Colour:'White'}},
  ]);
- return {publishedAt,products:[classic,roof,roofless,shelves,umbrella,two,ice,classicMdf]};
+ const roofSide=product(MODEL_CATALOG_LINKS['roof-side-shelf-cart-mdf'],'Mobile Foldable Charcuterie Cart/Bar with roof and side shelves',[],[
+  {price:1650,choices:{Colour:'Raw',Size:'I','Tabletop design':'Plain - without cutouts','Set of 10 steel pans in a separate parcel':'No'}},
+  {price:1800,choices:{Colour:'Raw',Size:'II','Tabletop design':'Plain - without cutouts','Set of 10 steel pans in a separate parcel':'No'}},
+  {price:1950,choices:{Colour:'Raw',Size:'I','Tabletop design':'With cutouts','Set of 10 steel pans in a separate parcel':'Yes'}},
+ ]);
+ return {publishedAt,products:[classic,roof,roofless,shelves,umbrella,two,ice,classicMdf,roofSide]};
 }
 const selection={slug:'decorative-wheel-cart-mdf',width:1200,depth:600,height:900,raw:true,colour:'#f6f6f3',shelf:true,topFinish:'body' as const,sideFinish:'body' as const};
 describe('Hub Modeling selling prices',()=>{
@@ -84,6 +89,14 @@ describe('Hub Modeling selling prices',()=>{
   expect(catalogPricing(fixture(),{...s,sideShelves:false}).lines.find(line=>line.label==='Side shelves')?.amount).toBeNull();
   expect(catalogPricing(fixture(),{...s,sideFinish:'plywood'}).lines.find(line=>line.label==='Side shelves finish')?.amount).toBeNull();
   expect(catalogPricing(fixture(),{...s,width:1500}).subtotal).toBeNull();
+ });
+ it('matches Size I and II roof cart prices using exact catalog variants',()=>{
+  const s={...selection,slug:'roof-side-shelf-cart-mdf',height:850,shelf:false,sideShelves:true,iceShelf:false};
+  expect(catalogPricing(fixture(),s).subtotal).toBe(1650);
+  expect(catalogPricing(fixture(),{...s,height:950}).subtotal).toBe(1800);
+  expect(catalogPricing(fixture(),{...s,cutouts:10,trays:10}).subtotal).toBe(1950);
+  expect(catalogPricing(fixture(),{...s,height:900}).subtotal).toBeNull();
+  expect(catalogPricing(fixture(),{...s,cutouts:10,trays:9}).subtotal).toBeNull();
  });
  it('uses the first product image and shortens visible names at the first full stop',()=>{
   const data=fixture();(data.products[5] as ModelingProduct & {media?:unknown}).media=[{kind:'image',url:'https://example.supabase.co/storage/v1/object/public/catalog-media/cart.jpg'}];
