@@ -8,7 +8,11 @@ const token=process.env.SUPABASE_ACCESS_TOKEN;
 if(!token)throw Error('Supabase access token required');
 async function query(sql,read_only=true){
  const response=await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/database/query',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({query:sql,read_only})});
- if(!response.ok)throw Error(`Backdrop whole-cut release query failed: HTTP ${response.status}`);
+ if(!response.ok){
+  const payload=await response.json().catch(()=>({}));
+  const detail=String(payload?.message??payload?.error??'No database error detail').slice(0,400);
+  throw Error(`Backdrop whole-cut release query failed: HTTP ${response.status}: ${detail}`);
+ }
  return response.json();
 }
 const [before]=await query(`select
