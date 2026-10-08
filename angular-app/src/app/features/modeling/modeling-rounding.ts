@@ -177,6 +177,16 @@ export function createRoundedPart(profile: RoundingProfile, radiusMm: number): T
   const merged = mergeVertices(extrusion, 1e-7);
   merged.computeVertexNormals();
   const geometry = merged.toNonIndexed();
+  // Flat caps must not inherit the bevel's tilted normals. Otherwise a narrow
+  // shelf and a large coplanar top reflect different colours under the same
+  // paint, and the rounded rim loses its visible transition to the flat face.
+  const positions=geometry.getAttribute('position'),normals=geometry.getAttribute('normal');
+  const a=new THREE.Vector3(),b=new THREE.Vector3(),c=new THREE.Vector3();
+  for(const group of geometry.groups)if(group.materialIndex===0)for(let i=group.start;i<group.start+group.count;i+=3){
+    a.fromBufferAttribute(positions,i);b.fromBufferAttribute(positions,i+1);c.fromBufferAttribute(positions,i+2);
+    const sign=b.sub(a).cross(c.sub(a)).z>=0?1:-1;
+    for(let j=0;j<3;j++)normals.setXYZ(i+j,0,0,sign);
+  }
   // A square joint needs separate cap and edge normals. Keeping the smoothed
   // normals from the merged mesh makes top-face triangles look like edge faces.
   if (r === 0) geometry.computeVertexNormals();

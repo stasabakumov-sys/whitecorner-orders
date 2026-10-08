@@ -13,8 +13,8 @@ export function ownerShelfFixture():THREE.Group {
    outline:[[min-.02,.71],[min,.71],[min,.8],[max,.8],[max,.71],[max+.17,.88],[min-.02,.88]],holes:[]};
   if(index<=4){
    const x0=side==='left'?-.2:1.2,x1=x0+.2;
-   const a=index===4?(side==='left'?x0:x1-.016):index===1?(side==='left'?x0+.016:x0):x0;
-   const b=index===4?a+.016:index===1?(side==='left'?x1:x1-.016):x1;
+   const a=index===4?(side==='left'?x0:x1-.016):(side==='left'?x0+.016:x0);
+   const b=index===4?a+.016:(side==='left'?x1:x1-.016);
    const z0=index===3?.584:index===1?.016:0,z1=index===2?.016:index===1?.584:.6;
    profile={axis:'y',origin:index===1?.884:.855,thickness:index===1?.016:.045,outline:[[a,z0],[b,z0],[b,z1],[a,z1]],holes:[]};
   }
@@ -50,6 +50,12 @@ describe('Owner side shelf construction',()=>{
    expect(outer.max.x-outer.min.x).toBeCloseTo(ply?.019:.016,6);
    expect(outer.max.y-outer.min.y).toBeCloseTo(ply?.042:.045,6);
    for(const index of [1,2,3,4])expect(bounds(shelves,`Side shelf ${side} ${index}`).max.y).toBeCloseTo(.9,6);
+   const leaf=shelves.getObjectByName(`Side shelf ${side} 1`)!;
+   const seamX=side==='left'?-.0001:1.2001;
+   expect(new THREE.Raycaster(new THREE.Vector3(seamX,1,.3),new THREE.Vector3(0,-1,0)).intersectObject(leaf)[0]?.point.y).toBeCloseTo(.9,6);
+   const outerRail=shelves.getObjectByName(`Side shelf ${side} 4`)!;
+   const outerX=side==='left'?-.1999:1.3999;
+   expect(new THREE.Raycaster(new THREE.Vector3(outerX,1,.3),new THREE.Vector3(0,-1,0)).intersectObject(outerRail)[0]?.point.y).toBeLessThan(.8999);
    const overall=new THREE.Box3();for(const index of [1,2,3,4])overall.union(bounds(shelves,`Side shelf ${side} ${index}`));
    expect(overall.max.x-overall.min.x).toBeCloseTo(.2,6);expect(overall.max.z-overall.min.z).toBeCloseTo(.6,6);
   }
