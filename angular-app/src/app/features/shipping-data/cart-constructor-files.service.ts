@@ -14,7 +14,7 @@ export function cartConstructorDimensions(box:any,type:CartBoxType='card') {
  if(![length,width,depth].every(n=>Number.isFinite(n)&&n>0))throw Error(`Save valid packaging dimensions: L and W greater than ${allowance} mm, H greater than zero.`);
  return {length,width,depth};
 }
-export const constructorFileCount=(type:CartBoxType)=>type==='backdrop'?4:type==='small'?1:2;
+export const constructorFileCount=(type:CartBoxType,box?:any)=>type==='backdrop'&&box?(()=>{const net=backdropBox(Number(box.length_mm),Number(box.width_mm),Number(box.height_mm));return net.bottom.length+net.lid.length;})():type==='backdrop'?4:type==='small'?1:2;
 export const constructorCopies=(type:CartBoxType)=>type==='card'?2:1;
 export const validConstructorFileCount=(count:number)=>[0,1,2,4].includes(count);
 export function backdropConstructorData(box:any){
@@ -71,7 +71,7 @@ export class CartConstructorFilesService {
   return {drawing:data.drawing,files:data.rd_files};
  }
  async prepare(box:any,svg:string,files:RdFile[],settings:any,previous:CartConstructorState,replacements:string[],progress:(text:string)=>void,type:CartBoxType='card',tuck=40,scope:'cart'|'backdrop'='cart'):Promise<CartConstructorSave>{
-  const bottom=cartConstructorDimensions(box,type),count=constructorFileCount(type);
+  const bottom=cartConstructorDimensions(box,type),count=constructorFileCount(type,box);
   const geometry=type==='backdrop'?backdropConstructorData(box):type==='small'?{box:bottom,tuck}:{bottom,lid:{length:Number(drawingNumber(bottom.length+10)),width:Number(drawingNumber(bottom.width+10)),depth:bottom.depth}};
   if(files.length!==count)throw Error(`Generate ${count} RD file${count===1?'':'s'} first.`);
   if(!validConstructorFileCount(previous.files.length))throw Error('Review this RD set first; Constructor supports one, two or four saved files.');

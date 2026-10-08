@@ -41,9 +41,9 @@ export function prepareSmallRdRequest(net: BoxNet, settings: RdSettings, tuck = 
 }
 
 export function prepareBackdropRdRequest(box: BackdropBox, settings: RdSettings): RdRequest {
-  // Four different parts, one copy each. Include the split in the short name
-  // so changing it cannot reuse a different cutting file under the same name.
-  return prepareNetJobs([...box.bottom, ...box.lid], settings, ['A', 'B', 'C', 'D'], box.bottom[0].panelLength);
+  const names = [...box.bottom.map((_,index)=>index===0?'A':'B'),
+    ...box.lid.map((_,index)=>index===0?'C':'D')];
+  return prepareNetJobs([...box.bottom, ...box.lid], settings, names, box.rim + box.bottom[0].panelLength);
 }
 
 function shortRdFilename(kind: string, net: BoxNet, settings: RdSettings, tuck?: number): string {

@@ -23,30 +23,35 @@ test('stops on a partial controller failure and reports only acknowledged files'
  await assert.rejects(transferTask(files,{address:'192.168.1.100',fetchFile:async file=>data(file),sendFile:async()=>{if(++sent===2)throw Error('No ACK');},onFile:item=>progress.push(item)}),/No ACK/);
  assert.equal(sent,2);assert.equal(progress.length,1);
 });
-test('preserves distinct source names even when content is identical',async()=>{
+test('assigns distinct controller slots even when content is identical',async()=>{
  let sent=0;const progress=[];
  await transferTask(files,{address:'192.168.1.100',fetchFile:async()=>Buffer.from([1,2,3]),sendFile:async()=>{sent++;},onFile:item=>progress.push(item)});
  assert.equal(sent,4);assert.deepEqual(progress.map(item=>item.file.copies),[1,2,3,4]);
 });
-test('rejects conflicting or unsupported names before sending any file',async()=>{
- for(const input of [[files[0],{...files[1],filename:'d1.RD'}],[files[0],{...files[1],filename:'не ASCII.rd'}],[files[0],{...files[1],filename:'folder/name.rd'}],[{...files[0],filename:'.rd'}],[{...files[0],filename:'  .rd'}]]){
+test('rejects invalid saved RD names before sending any file',async()=>{
+ for(const input of [[{...files[0],filename:'name.svg'}],[{...files[0],filename:'.rd'}],[{...files[0],filename:'  .rd'}]]){
   let sent=0;
-  await assert.rejects(transferTask(input,{fetchFile:async file=>data(file),sendFile:async()=>{sent++;}}),/filename|same controller name/);
+  await assert.rejects(transferTask(input,{fetchFile:async file=>data(file),sendFile:async()=>{sent++;}}),/filename/);
   assert.equal(sent,0);
  }
 });
-test('removes only the final RD extension, retaining case, spaces and internal dots',async()=>{
- for(const [source,expected] of [['Arch Panel Painted.rd','Arch Panel Painted'],['D5.RD','D5'],['Panel.rd.v2.rd','Panel.rd.v2'],['Panel.rd.rd','Panel.rd']]){
+test('maps any saved RD name to the fixed controller slot',async()=>{
+ for(const source of ['Arch Panel Painted.rd','D5.RD','Panel.rd.v2.rd','не ASCII.rd']){
   const original={...files[0],filename:source};const names=[],progress=[];
   const mapping=await transferTask([original],{fetchFile:async file=>data(file),sendFile:async(_bytes,{filename})=>names.push(filename),onFile:item=>progress.push(item)});
-  assert.deepEqual(names,[expected]);assert.equal(mapping[0].filename,expected);
+  assert.deepEqual(names,['D1']);assert.equal(mapping[0].filename,'D1');
   assert.equal(original.filename,source);assert.equal(progress[0].file.filename,source);
  }
 });
-test('stores repeated identical names and content once',async()=>{
- let sent=0;
- await transferTask([files[0],files[0]],{fetchFile:async file=>data(file),sendFile:async()=>{sent++;}});
- assert.equal(sent,1);
+test('uses D1–D4 again on reload so names do not accumulate',async()=>{
+ const names=[];
+ for(let attempt=0;attempt<2;attempt++)await transferTask(files.map((file,index)=>({...file,filename:`saved-${attempt}-${index}.rd`})),{fetchFile:async file=>data(file),sendFile:async(_bytes,{filename})=>names.push(filename)});
+ assert.deepEqual(names,['D1','D2','D3','D4','D1','D2','D3','D4']);
+});
+test('uses only D1 and D2 for whole bottom and lid',async()=>{
+ const names=[];
+ await transferTask(files.slice(0,2),{fetchFile:async file=>data(file),sendFile:async(_bytes,{filename})=>names.push(filename)});
+ assert.deepEqual(names,['D1','D2']);
 });
 test('honours operator stop before sending the next file',async()=>{
  let sent=0;

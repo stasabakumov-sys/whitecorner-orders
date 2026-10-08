@@ -20,7 +20,7 @@ describe('Constructor box tabs',()=>{
     expect(root.querySelector('#constructor-tab-backdrop')!.getAttribute('aria-selected')).toBe('true');
     const backdropInput=root.querySelector<HTMLInputElement>('#backdrop-box-length')!;
     expect(backdropInput.value).toBe('930');
-    expect(root.querySelector('#constructor-panel-backdrop')!.textContent).toContain('two parts');
+    expect(root.querySelector('#constructor-panel-backdrop')!.textContent).toContain('Each piece stays whole when it fits');
     backdropInput.value='1215';backdropInput.dispatchEvent(new Event('input'));fixture.detectChanges();
     root.querySelector<HTMLButtonElement>('#constructor-tab-card')!.click();fixture.detectChanges();
     expect(root.querySelector<HTMLInputElement>('#box-length')!.value).toBe('1215');

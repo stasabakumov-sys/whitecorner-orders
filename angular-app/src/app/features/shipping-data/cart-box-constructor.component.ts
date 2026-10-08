@@ -14,7 +14,7 @@ import {qualifiedDrawingKey,sizeKeyLabel} from './product-sizes';
  <p-dialog [(visible)]="open" [modal]="true" appendTo="body" [draggable]="false" [closable]="!busy&&!pending" [closeOnEscape]="!busy&&!pending" [header]="'Constructor · '+(snapshot?.package_name||'Packaging box')" [style]="{width:'1100px',maxWidth:'calc(100vw - 24px)'}">
  @if(sharedKey){<p><strong>{{sizeLabel(sharedKey)}}</strong> · Shared by all matching Backdrops, Painted and Raw. The other folding option uses a separate box and files.</p>}
  @if(open){
- <p>Packaging: {{snapshot.length_mm}} × {{snapshot.width_mm}} × {{snapshot.height_mm}} mm. {{boxType==='small'?'Small box: L/W − 5 mm.':'Bottom: L/W − 15 mm. Lid: L/W − 5 mm.'}} Height stays unchanged.</p>
+ <p>Packaging: {{snapshot.length_mm}} × {{snapshot.width_mm}} × {{snapshot.height_mm}} mm. {{boxType==='small'?'Small box: L/W − 5 mm.':'Bottom: L/W − 15 mm. Lid: L/W − 5 mm.'}} {{boxType==='backdrop'?'Main fields stay unchanged; border height can shrink to fit the laser.':'Height stays unchanged.'}}</p>
  <label class="box-type" for="packing-constructor-type">Box type<select id="packing-constructor-type" [(ngModel)]="boxType" [disabled]="busy||!!pending||loading||editor?.rdBusy" (ngModelChange)="changeType()"><option value="card">Card box</option><option value="small">Small box</option><option value="backdrop">Backdrop box</option></select></label>
  @if(progress){<p role="status">{{progress}}</p>}
  @if(error){<p class="error" role="alert">{{error}} @if(loadFailed){<button type="button" (click)="load()">Retry load</button>}</p>}
@@ -53,16 +53,16 @@ export class CartBoxConstructorComponent {
   await this.load();
  }
  async load(){const version=++this.loadVersion;this.loading=true;this.loadFailed=false;this.error='';this.progress='Loading saved packaging files…';
-  try{const state=this.sharedKey?await this.files.loadBackdrop(this.sharedKey):this.profileSignature?await this.files.loadProfile(this.profileSignature,this.profileIndex):await this.files.load(this.snapshot.id);if(version!==this.loadVersion)return;this.state=state;const ids=this.state.drawing?.constructor_data?.rd_ids||[];const savedType=state.drawing?.constructor_data?.box_type;this.boxType=['card','small','backdrop'].includes(savedType)?savedType:(this.sharedKey||this.profileSignature)&&state.files.length===4?'backdrop':(this.sharedKey||this.profileSignature)&&state.files.length===1?'small':'card';this.changeType();this.tuckSeed=state.drawing?.constructor_data?.tuck??this.tuckSeed;this.replacementIds=this.fileLabels.map((_,i)=>this.state.files.some(file=>file.id===ids[i])?ids[i]:(this.sharedKey||this.profileSignature)&&this.state.files.length===this.fileCount?this.state.files[i]?.id||'':'');}
+  try{const state=this.sharedKey?await this.files.loadBackdrop(this.sharedKey):this.profileSignature?await this.files.loadProfile(this.profileSignature,this.profileIndex):await this.files.load(this.snapshot.id);if(version!==this.loadVersion)return;this.state=state;const ids=this.state.drawing?.constructor_data?.rd_ids||[];const savedType=state.drawing?.constructor_data?.box_type;this.boxType=['card','small','backdrop'].includes(savedType)?savedType:this.sharedKey&&!state.drawing?'backdrop':(this.sharedKey||this.profileSignature)&&state.files.length===4?'backdrop':(this.sharedKey||this.profileSignature)&&state.files.length===1?'small':'card';this.changeType();this.tuckSeed=state.drawing?.constructor_data?.tuck??this.tuckSeed;this.replacementIds=this.fileLabels.map((_,i)=>this.state.files.some(file=>file.id===ids[i])?ids[i]:(this.sharedKey||this.profileSignature)&&this.state.files.length===this.fileCount?this.state.files[i]?.id||'':'');}
   catch(error){if(version===this.loadVersion){this.loadFailed=true;this.error=`Could not load packaging files. ${this.message(error)} Retry load.`;}}
   finally{if(version===this.loadVersion){this.loading=false;this.progress='';this.cdr.markForCheck();}}
  }
  readonly validFileCount=validConstructorFileCount;
  get typeLabel(){return this.boxType==='backdrop'?'Backdrop box':this.boxType==='small'?'Small box':'Card box';}
- get fileCount(){return constructorFileCount(this.boxType);}
+ get fileCount(){try{return constructorFileCount(this.boxType,this.snapshot);}catch{return 0;}}
  get copies(){return constructorCopies(this.boxType);}
- get fileLabels(){return this.boxType==='backdrop'?['Bottom main','Bottom short','Lid main','Lid short']:this.boxType==='small'?['Box']:['Bottom','Lid'];}
- get saveLabel(){return `Save SVG and ${this.fileCount===1?'one RD file':this.fileCount===4?'four RD files':'two RD files'} to packaging`;}
+ get fileLabels(){return this.boxType==='backdrop'?(this.fileCount===2?['Bottom whole','Lid whole']:['Bottom main','Bottom short','Lid main','Lid short']):this.boxType==='small'?['Box']:['Bottom','Lid'];}
+ get saveLabel(){return `Save SVG and ${this.fileCount} RD ${this.fileCount===1?'file':'files'} to packaging`;}
  changeType(){this.error='';this.success='';this.confirmOpen=false;this.replacementIds=this.fileLabels.map(()=> '');
   try{this.seed=cartConstructorDimensions(this.snapshot,this.boxType);this.tuckSeed=Math.min(40,this.seed.depth,(this.seed.length-1)/2);}
   catch(error){this.seed=null;this.error=this.message(error);}this.cdr.markForCheck();
