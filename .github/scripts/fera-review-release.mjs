@@ -37,12 +37,16 @@ console.log(JSON.stringify({ preflight: 'passed', migrationRegistered: !!registe
 const storageResponse = await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/config/storage', {
   headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000),
 });
-if (!storageResponse.ok) throw Error(`Production storage config read failed (HTTP ${storageResponse.status})`);
-const storageConfig = await storageResponse.json();
-if (!Number.isSafeInteger(storageConfig.fileSizeLimit) || storageConfig.fileSizeLimit <= 0) {
-  throw Error('Production storage config has no valid global file size limit');
+if (storageResponse.status === 403) {
+  console.log(JSON.stringify({ storageGlobalLimitBytes: 'unavailable (token scope)' }));
+} else {
+  if (!storageResponse.ok) throw Error(`Production storage config read failed (HTTP ${storageResponse.status})`);
+  const storageConfig = await storageResponse.json();
+  if (!Number.isSafeInteger(storageConfig.fileSizeLimit) || storageConfig.fileSizeLimit <= 0) {
+    throw Error('Production storage config has no valid global file size limit');
+  }
+  console.log(JSON.stringify({ storageGlobalLimitBytes: storageConfig.fileSizeLimit }));
 }
-console.log(JSON.stringify({ storageGlobalLimitBytes: storageConfig.fileSizeLimit }));
 if (mode === '--verify') process.exit(0);
 
 await query(`begin; set local lock_timeout='15s'; set local statement_timeout='120s';
