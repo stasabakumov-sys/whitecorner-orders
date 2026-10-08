@@ -151,3 +151,27 @@ it.each([1,1.5,2,2.5,3])('removes the face bevel along a complete front mitre at
   expect(seam).toBeGreaterThan(0);expect(freeBevel).toBeGreaterThan(0);part.geometry.dispose();
  }
 });
+
+
+it.each([1,1.5,3])('removes the outline bevel between bonded front layers at %s mm',radius=>{
+ const base:RoundingProfile={axis:'z',origin:.556,thickness:.012,outline:[[.02,.111],[1.48,.111],[1.48,.834],[.02,.834]],holes:[]};
+ const frame:RoundingProfile={axis:'z',origin:.568,thickness:.012,outline:[[.02,.834],[.09,.764],[1.41,.764],[1.48,.834]],holes:[]};
+ const parts=[base,frame].map((profile,i)=>{const geometry=createRoundedPart(profile,radius);geometry.computeBoundingBox();return {name:'Front part'+(i+1),profile,geometry,bounds:geometry.boundingBox!.clone()};});
+ const joints=matingPartJoints(parts);
+ for(const part of parts){const layerJoints=joints.get(part.name)!;expect(layerJoints.some(j=>j.squareCapOutline)).toBe(true);keepPartJointsSquare(part.geometry,layerJoints,radius);const p=part.geometry.getAttribute('position');let seam=0;
+  for(let i=0;i<p.count;i++)if(Math.abs(p.getZ(i)-.568)<1e-6&&p.getY(i)>.834-radius/1000*2-1e-6){expect(p.getY(i)).toBeCloseTo(.834,6);seam++;}
+  expect(seam).toBeGreaterThan(0);part.geometry.dispose();
+ }
+});
+
+
+it.each(['left','right'])('keeps the %s side-shelf top and trim square at their joints',side=>{
+ const x=side==='left'?-.2:1.5;
+ const profile=(x0:number,x1:number,z0:number,z1:number,y:number):RoundingProfile=>({axis:'y',origin:y,thickness:.016,outline:[[x0,z0],[x1,z0],[x1,z1],[x0,z1]],holes:[]});
+ const parts=[profile(x,x+.2,0,.6,.834),profile(x,x+.02,0,.6,.818),profile(x+.02,x+.2,0,.02,.818)].map((profile,i)=>{const geometry=createRoundedPart(profile,1.5);geometry.computeBoundingBox();return {name:'Side shelf '+side+' '+(i+1),profile,geometry,bounds:geometry.boundingBox!.clone()};});
+ const joints=matingPartJoints(parts);expect(joints.get(parts[1].name)?.some(j=>j.cap)).toBe(true);
+ for(const part of parts){keepPartJointsSquare(part.geometry,joints.get(part.name)!,1.5);const p=part.geometry.getAttribute('position');let seam=0;
+  for(let i=0;i<p.count;i++)if(Math.abs(p.getY(i)-.834)<1e-6&&p.getX(i)<x+.003){expect(p.getX(i)).toBeCloseTo(x,6);seam++;}
+  if(part!==parts[2])expect(seam).toBeGreaterThan(0);part.geometry.dispose();
+ }
+});
