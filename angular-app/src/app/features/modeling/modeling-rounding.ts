@@ -21,8 +21,9 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3; prof
     // Parts in one panel share both their outline seam and their flat face.
     // Closing only the seam plane leaves the extrusion bevel as a visible groove.
     const family=(name:string)=>/^(Front[ _]part|Side[ _]shelf[ _](?:left|right)[ _]|(?:Left|Right)[ _]side[ _]?|Top[ _](?:part)?|(?:Buttom|Bottom)[ _](?:part)?)\d+$/i.exec(name.trim())?.[1].toLowerCase().replace(/[ _]/g,'').replace('buttom','bottom');
-    const tabletop=(name:string)=>/^(?:Top[ _]part[1-5]|Side[ _]shelf[ _](?:left|right)[ _][1-4])$/i.test(name);
-    const samePanel=!!family(a.name)&&(family(a.name)===family(b.name)||(tabletop(a.name)&&tabletop(b.name)));
+    // A folding leaf is a separate assembly: its edge and the adjacent
+    // tabletop edge both retain their bevel, even while the leaf is raised.
+    const samePanel=!!family(a.name)&&family(a.name)===family(b.name);
     if(samePanel&&a.profile&&b.profile&&a.profile.axis===b.profile.axis&&Math.abs(a.profile.origin-b.profile.origin)<1e-6){
       const ap=a.profile,bp=b.profile;
       const world=(p:number[],depth:number)=>ap.axis==='x'?new THREE.Vector3(depth,p[1],p[0]):ap.axis==='y'?new THREE.Vector3(p[0],depth,p[1]):new THREE.Vector3(p[0],p[1],depth);

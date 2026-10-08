@@ -40,20 +40,16 @@ export function roofSideShelfTopProfile(origin:number,thickness:number,cutouts:b
   return {axis:'y',origin,thickness,outline:rectangle(0,widthMm/1000,0,.6),holes};
 }
 
-export function roofSideShelfTabletopJoints(name:string,profile:RoundingProfile,sideShelves=true):PartJoint[] {
+export function roofSideShelfTabletopJoints(name:string,profile:RoundingProfile):PartJoint[] {
   const top=/^Top[ _]part1(?:[ _]cutouts)?$/i.test(name);
   const leaf=/^Side[ _]shelf[ _](left|right)[ _]1$/i.exec(name);
   if(profile.axis!=='y'||(!top&&!leaf))return [];
   const xs=profile.outline.map(p=>p[0]),zs=profile.outline.map(p=>p[1]);
   const x0=Math.min(...xs),x1=Math.max(...xs),z0=Math.min(...zs),z1=Math.max(...zs);
-  const y0=profile.origin,y1=y0+profile.thickness;
-  // The replacement top is already 1200 mm wide; the source leaves still use
-  // 1500 mm coordinates until resizing. Define each seam in its own profile.
-  const seams=!sideShelves?[]:top?[x0,x1]:[leaf![1].toLowerCase()==='left'?x1:x0];
-  // Close only the seam plane. Its endpoints retain the front/rear bevel so
-  // that the free outer edge continues smoothly across the assembled leaves.
-  const joints:PartJoint[]=seams.map(x=>({axis:'x',plane:x,
-    bounds:new THREE.Box3(new THREE.Vector3(x,y0,z0),new THREE.Vector3(x,y1,z1))}));
+  const y0=profile.origin;
+  // Raised folding leaves remain separate from the top. Only the glued
+  // underside is square; both edges at the folding joint stay rounded.
+  const joints:PartJoint[]=[];
   // The perimeter rails are glued beneath the sheet. Only the upper outer
   // edge is free; rounding the bonded underside would reopen the rail joint.
   joints.push({axis:'y',plane:y0,

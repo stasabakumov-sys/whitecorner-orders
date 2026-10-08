@@ -530,7 +530,7 @@ it('keeps source tabletop grouping flags independent across repeated geometry re
   } finally { frame.mockRestore(); editor.model = editor.body; component.ngOnDestroy(); }
 });
 
-it('rounds the roof cart outer top edge while keeping leaf seams and post openings square', async () => {
+it('rounds both sides of roof cart folding joints while keeping post openings square', async () => {
  const {component}=setup(),editor=component as any;
  component.activeSlug.set('roof-side-shelf-cart-mdf');component.roundingSupported.set(true);component.sideShelvesIncluded.set(true);
  editor.body=new THREE.Group();
@@ -547,13 +547,16 @@ it('rounds the roof cart outer top edge while keeping leaf seams and post openin
   await component.setRounding(radius);editor.body.updateMatrixWorld(true);
   for(const name of ['Top part1','Top part1 cutouts']){
    if(radius)expect(hit(name,.6,.0001)).toBeLessThan(.8499);else expect(hit(name,.6,.0001)).toBeCloseTo(.85,6);
-   for(const x of [.0001,1.1999])expect(hit(name,x,.3)).toBeCloseTo(.85,6);
+   for(const x of [.0001,1.1999]){
+    if(radius)expect(hit(name,x,.3)).toBeLessThan(.8499);else expect(hit(name,x,.3)).toBeCloseTo(.85,6);
+   }
    expect(hit(name,.0675,.3)).toBeUndefined();
    expect(hit(name,.047,.2795)).toBeUndefined();
    const bounds=new THREE.Box3().setFromObject(editor.body.getObjectByName(name));expect(bounds.max.y-bounds.min.y).toBeCloseTo(.016,6);
   }
-  expect(hit('Side shelf left 1',-.0001,.3)).toBeCloseTo(.85,6);
-  expect(hit('Side shelf right 1',1.5001,.3)).toBeCloseTo(.85,6);
+  for(const [name,x] of [['Side shelf left 1',-.0001],['Side shelf right 1',1.5001]] as const){
+   if(radius)expect(hit(name,x,.3)).toBeLessThan(.8499);else expect(hit(name,x,.3)).toBeCloseTo(.85,6);
+  }
   if(radius)expect(hit('Side shelf right 1',1.6999,.3)).toBeLessThan(.8499);
  }}finally{frame.mockRestore();}
 });
@@ -614,7 +617,7 @@ it.each(['classic-bar-plywood','classic-bar-mdf'])('rounds the Classic outer rim
   const front=hit('Top part2',.6,.0001)!;
   if(radius)expect(front,`radius ${radius}, leaves ${leaves}`).toBeLessThan(.8999);else expect(front).toBeCloseTo(.9,6);
   const end=hit('Top part2',.0001,.3)!;
-  if(radius&&!leaves)expect(end).toBeLessThan(.8999);else expect(end).toBeCloseTo(.9,6);
+  if(radius)expect(end).toBeLessThan(.8999);else expect(end).toBeCloseTo(.9,6);
   expect(hit('Top part1',rail+.0001,.3)).toBeCloseTo(.9,6);
   expect(hit('Top part2',rail-.0001,.3)).toBeCloseTo(.9,6);
   const box=new THREE.Box3().setFromObject(editor.body.getObjectByName('Top part2'));expect(box.max.x-box.min.x).toBeCloseTo(1.2,6);expect(box.max.y-box.min.y).toBeCloseTo(thickness,6);
@@ -635,7 +638,7 @@ it.each(['decorative-wheel-roof-cart-mdf','decorative-wheel-cart-mdf'])('retains
   const hit=new THREE.Raycaster(new THREE.Vector3(.6,1,.0001),new THREE.Vector3(0,-1,0)).intersectObject(top)[0];
   expect(hit.point.y).toBeLessThan(.8999);expect(top.geometry.boundingBox!.max.y-top.geometry.boundingBox!.min.y).toBeCloseTo(.016,6);
   const seam=new THREE.Raycaster(new THREE.Vector3(.0001,1,.3),new THREE.Vector3(0,-1,0)).intersectObject(top)[0].point.y;
-  if(leaves)expect(seam).toBeCloseTo(.9,6);else expect(seam).toBeLessThan(.8999);
+  expect(seam).toBeLessThan(.8999);
  }}finally{frame.mockRestore();}
 });
 

@@ -52,7 +52,13 @@ describe('Owner side shelf construction',()=>{
    for(const index of [1,2,3,4])expect(bounds(shelves,`Side shelf ${side} ${index}`).max.y).toBeCloseTo(.9,6);
    const leaf=shelves.getObjectByName(`Side shelf ${side} 1`)!;
    const seamX=side==='left'?-.0001:1.2001;
-   expect(new THREE.Raycaster(new THREE.Vector3(seamX,1,.3),new THREE.Vector3(0,-1,0)).intersectObject(leaf)[0]?.point.y).toBeCloseTo(.9,6);
+   expect(new THREE.Raycaster(new THREE.Vector3(seamX,1,.3),new THREE.Vector3(0,-1,0)).intersectObject(leaf)[0]?.point.y).toBeLessThan(.8999);
+   // The front and rear rails also end at the folding joint, independently
+   // of the square glued board-to-rail interfaces within this leaf.
+   for(const [index,z] of [[2,.008],[3,.592]]){
+    const rail=shelves.getObjectByName(`Side shelf ${side} ${index}`)!;
+    expect(new THREE.Raycaster(new THREE.Vector3(seamX,1,z),new THREE.Vector3(0,-1,0)).intersectObject(rail)[0]?.point.y).toBeLessThan(.8999);
+   }
    const outerRail=shelves.getObjectByName(`Side shelf ${side} 4`)!;
    const outerX=side==='left'?-.1999:1.3999;
    expect(new THREE.Raycaster(new THREE.Vector3(outerX,1,.3),new THREE.Vector3(0,-1,0)).intersectObject(outerRail)[0]?.point.y).toBeLessThan(.8999);
