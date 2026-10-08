@@ -37,9 +37,10 @@ if(mode==='--apply')await query(`begin;set local lock_timeout='15s';set local st
  end $release$;commit;`,false);
 const [after]=await query(`select
  exists(select 1 from supabase_migrations.schema_migrations where version='${version}') registered,
- (public.wc_backdrop_constructor_geometry('{"length_mm":830,"width_mm":780,"height_mm":80}'::jsonb)->>'main_panel')::numeric=815 whole_main,
- (public.wc_backdrop_constructor_geometry('{"length_mm":1150,"width_mm":400,"height_mm":80}'::jsonb)->>'rim')::numeric=12.5 rotated_rim,
- (public.wc_backdrop_constructor_geometry('{"length_mm":1500,"width_mm":930,"height_mm":80}'::jsonb)->>'main_panel')::numeric=910 split_main,
+ (select p.prosrc like '%if greatest(normal_rim,rotated_rim)>0 then%' and p.prosrc like '%main_panel:=l;%'
+    and p.prosrc like '%rotated_rim:=least(d,(1170-(l+10))/2,(990-(w+10))/2)%'
+    and p.prosrc like '%main_panel:=least(max_panel,greatest(greatest(l/2,l-129),l+10-max_panel))%'
+  from pg_proc p where p.oid='public.wc_backdrop_constructor_geometry(jsonb)'::regprocedure) geometry_rules,
  (select p.prosecdef and p.prosrc like '%wc_backdrop_constructor_geometry(current_box)%' and not has_function_privilege('anon',p.oid,'execute') and has_function_privilege('authenticated',p.oid,'execute') from pg_proc p where p.oid='public.wc_save_backdrop_constructor_files(uuid,text,jsonb,jsonb,jsonb,jsonb)'::regprocedure) save_guard,
  (select p.prosecdef and p.prosrc like '%constructor_data->''rd_ids''%' and not has_function_privilege('anon',p.oid,'execute') from pg_proc p where p.oid='public.wc_send_packing_task(uuid,text)'::regprocedure) ordered_send,
  not has_function_privilege('anon','public.wc_backdrop_constructor_geometry(jsonb)','execute') geometry_private;
