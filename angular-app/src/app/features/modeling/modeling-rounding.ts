@@ -50,7 +50,8 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3; prof
     const borderFamily = (name:string) => /^(Top|Buttom|Bottom)[ _](?:part)?\d+$/i.exec(name)?.[1].toLowerCase().replace('buttom','bottom');
     const border=borderFamily(a.name)&&borderFamily(a.name)===borderFamily(b.name);
     const sideShelf=family(a.name)?.startsWith('sideshelf')&&family(a.name)===family(b.name);
-    if (!roof && !shaker && !body && !border && !sideShelf && !samePanel) continue;
+    const iceShelf = /^Ice[ _]shelf[ _]\d+$/i.test(a.name) && /^Ice[ _]shelf[ _]\d+$/i.test(b.name);
+    if (!roof && !shaker && !body && !border && !sideShelf && !samePanel && !iceShelf) continue;
     for (const axis of axes) {
       const others = axes.filter(value => value !== axis);
       if (!others.every(value => Math.min(a.bounds.max[value], b.bounds.max[value]) - Math.max(a.bounds.min[value], b.bounds.min[value]) > 1e-5)) continue;
