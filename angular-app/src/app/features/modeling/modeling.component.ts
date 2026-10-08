@@ -155,7 +155,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         {label:'Shelf',value:this.shelfIncluded()?'Middle':'None'}];
       if(this.frontLogo()){const logo=fitLogo(this.logoPanel(),this.frontLogo()!);fields.push({label:'Front logo',value:`${logo.width.toFixed(1)} x ${logoHeight(logo).toFixed(1)} mm · left ${logo.x.toFixed(1)} · top ${logo.y.toFixed(1)} mm`});}
       if(this.isClassic()||this.isSideShelfCart())fields.push({label:'Umbrella hole',value:this.umbrellaHole()?'Ø'+this.umbrellaDiameter()+' mm · '+(this.isClassic()?this.umbrellaPosition()+' · top & shelf':'top, shelves & centred bottom holder'):'None'});
-      if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Cutouts',value:this.cutoutSummary()+(this.cutoutsIncluded()&&this.reverseCutoutLayout()?' · reversed 180°':'')},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
+      if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Cutouts',value:this.cutoutSummary()+(this.cutoutsIncluded()&&this.reverseCutoutLayout()?' · mirrored left/right':'')},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
       if(this.hasRoof())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
@@ -226,7 +226,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   umbrellaX():number {return this.isClassic()?this.umbrellaPosition()==='left'?200:this.umbrellaPosition()==='right'?this.width()-200:this.width()/2:this.width()/2;}
   setUmbrellaPosition(value:'left'|'centre'|'right'):void {this.umbrellaPosition.set(value);void this.setRounding(this.rounding());}
   readonly reverseCutoutLayout = signal(true);
-  trayLayoutIndices():number[] {const indices=this.traySlots.map((_,i)=>i);return this.reverseCutoutLayout()?indices.reverse():indices;}
+  trayLayoutIndices():number[] {const indices=this.traySlots.map((_,i)=>i);return this.reverseCutoutLayout()?[10,11,12,7,8,9,4,5,6,1,2,3,0]:indices;}
   setReverseCutoutLayout(value:boolean):void {this.reverseCutoutLayout.set(value);this.applyDimensions();this.applyFinishes();}
   readonly traysIncluded = signal(false);
   private trays?:THREE.Group;
@@ -1028,17 +1028,28 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (!this.body) return;
     for (const [node, original] of this.originalPositions) {
       const positions = node.geometry.getAttribute('position');
+      const name = node.userData['plywoodPart'] || node.name;
+      const cutout = this.isSideShelfCart() && /^Top[ _]part1[ _]cutout/i.test(name);
+      const reverse = cutout && this.reverseCutoutLayout();
       for (let i = 0; i < original.count; i++) {
-        const name = node.userData['plywoodPart'] || node.name;
         const [x, y, z] = this.isSideShelfCart()
           ? resizeSideShelfCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height()) : this.isClassic()
           ? resizePlywoodPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height())
           : resizeRoofCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height(), this.frontStyle() !== 'shaker');
-        const reverse=this.isSideShelfCart()&&this.reverseCutoutLayout()&&/^Top[ _]part1[ _]cutout/i.test(name);
-        positions.setXYZ(i, reverse?this.width()/1000-x:x, y, reverse?this.depth()/1000-z:z);
+        positions.setXYZ(i, reverse?this.width()/1000-x:x, y, z);
       }
       positions.needsUpdate = true;
-      if(this.isSideShelfCart()&&/^Top[ _]part1[ _]cutout/i.test(node.userData['plywoodPart']||node.name))node.geometry.computeVertexNormals();
+      if(cutout){
+        // Reflection reverses triangle winding. Restore it so the visible faces,
+        // normals and shadows remain outward-facing in either layout.
+        if(reverse!==(node.geometry.userData['mirroredWinding']===true)){
+          if(!node.geometry.index)node.geometry.setIndex(Array.from({length:positions.count},(_,i)=>i));
+          const index=node.geometry.index!;
+          for(let i=0;i<index.count;i+=3){const b=index.getX(i+1);index.setX(i+1,index.getX(i+2));index.setX(i+2,b);}
+          index.needsUpdate=true;node.geometry.userData['mirroredWinding']=reverse;
+        }
+        node.geometry.computeVertexNormals();
+      }
       node.geometry.computeBoundingBox();
       node.geometry.computeBoundingSphere();
       const materials = Array.isArray(node.material) ? node.material : [node.material];

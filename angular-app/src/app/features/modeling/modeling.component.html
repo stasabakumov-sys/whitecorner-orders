@@ -38,6 +38,48 @@
           }
         </div>
       </app-modeling-section>
+      <app-modeling-section class="setting-card" sectionId="finish" title="Finish" [attention]="!!finishError()" [summary]="'Body: '+sectionSummary('finish')+' · Top: '+sectionSummary('top')" iconPath="m14 3 7 7-9 9-7-7 9-9ZM4 13l-2 7 7-2M12 5l7 7">
+
+        <h3 class="setting-subtitle">Body</h3>
+        <div class="length-options paint-options" role="group" aria-label="Body finish">
+          <button type="button" [class.selected]="rawBody()" [attr.aria-pressed]="rawBody()" (click)="setRawBody()">RAW {{materialLabel()}}</button>
+          <button type="button" [class.selected]="!rawBody()" [attr.aria-pressed]="!rawBody()" [attr.aria-expanded]="!rawBody()" aria-controls="paint-colour-settings" (click)="setPaintedBody()">2-pack painted <span class="option-price">{{optionSurcharge('Finish / colour')}}</span></button>
+        </div>
+        @if (!rawBody()) {
+          <div id="paint-colour-settings">
+          <h3 class="setting-subtitle">Colour</h3>
+          <div class="swatches" role="group" aria-label="Body colour">
+          <button type="button" class="swatch" style="background:#f6f6f3!important" [class.selected]="bodyColor()==='#f6f6f3'" (click)="setBodyColor('#f6f6f3')" title="White · RGB 246, 246, 243" aria-label="White"></button>
+          <button type="button" class="swatch" style="background:#aecde5!important" [class.selected]="bodyColor()==='#aecde5'" (click)="setBodyColor('#aecde5')" title="Dulux Featherbed · RGB 174, 205, 229" aria-label="Dulux Featherbed"></button>
+          <button type="button" class="swatch" style="background:#33383e!important" [class.selected]="bodyColor()==='#33383e'" (click)="setBodyColor('#33383e')" title="Charcoal" aria-label="Charcoal"></button>
+          <button type="button" class="swatch" style="background:#708471!important" [class.selected]="bodyColor()==='#708471'" (click)="setBodyColor('#708471')" title="Sage" aria-label="Sage"></button>
+          <button type="button" class="swatch" style="background:#aa6553!important" [class.selected]="bodyColor()==='#aa6553'" (click)="setBodyColor('#aa6553')" title="Terracotta" aria-label="Terracotta"></button>
+          <label class="custom-colour" title="Custom colour">Custom <input type="color" [value]="bodyColor()" (input)="setBodyColor($any($event.target).value)" aria-label="Choose body colour"></label>
+        </div>
+          <div class="colour-value"><span class="colour-dot" [style.background]="bodyColor()"></span><span>Selected colour: {{bodyColourLabel()}}</span></div>
+          <h3 class="setting-subtitle">Paint finish</h3>
+          <div class="length-options paint-options" role="group" aria-label="Paint finish">
+            <button type="button" [class.selected]="paintFinish()==='matte'" [attr.aria-pressed]="paintFinish()==='matte'" (click)="setPaintFinish('matte')">Matte</button>
+            <button type="button" [class.selected]="paintFinish()==='semi-gloss'" [attr.aria-pressed]="paintFinish()==='semi-gloss'" (click)="setPaintFinish('semi-gloss')">Semi-gloss</button>
+          </div>
+          </div>
+        }
+        <h3 class="setting-subtitle">Table top</h3>
+        @if (finishLoading()) { <p class="help" role="status">Loading table top texture…</p> }
+        @if (finishError()) { <p class="error" role="alert">{{finishError()}}</p> }
+        <div class="finish-options" role="group" aria-label="Table top finish">
+          <button type="button" [class.selected]="topFinish()==='body'" (click)="setTopFinish('body')"><span class="finish-chip" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>In cart finish / colour</button>
+          <button type="button" [class.selected]="topFinish()==='oak'" (click)="setTopFinish('oak')"><span class="finish-chip oak"></span>Tasmanian oak</button>
+          <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>{{isClassic() ? "Varnished plywood" : "Plywood"}}</button>
+          @if (!isClassic()) { <button type="button" [class.selected]="topFinish()==='mdf'" (click)="setTopFinish('mdf')"><span class="finish-chip" style="background:#b99b78"></span>RAW MDF</button> }
+        </div>
+      </app-modeling-section>
+      <app-modeling-section class="setting-card" sectionId="front-logo" title="Front logo" [summary]="frontLogo() ? 'Placed' : 'None'" [attention]="!!logoError()" iconPath="M4 4h16v16H4ZM4 16l5-5 4 4 3-3 4 4">
+        <app-modeling-logo [panel]="logoPanel()" [modelKey]="activeSlug()" (placed)="placeFrontLogo($event)"/>
+        @if(logoBusy()){<p class="help" role="status">Placing logo…</p>}
+        @if(logoError()){<p class="error" role="alert">{{logoError()}}</p>}
+        @if(frontLogo()&&!logoBusy()&&!logoError()){<p class="help" role="status">Logo placed on the front panel.</p>}
+      </app-modeling-section>
       <app-modeling-section class="setting-card shelf-card" sectionId="options" title="Options" [summary]="optionsSummary()" iconPath="M4 6h16M4 12h16M4 18h16M8 4v4m8 2v4m-6 2v4">
         <label class="shelf-option"><input type="checkbox" [checked]="shelfIncluded()" [disabled]="loading() || roundingBusy()" (change)="setShelfIncluded($any($event.target).checked)"><span>Internal shelf</span><span class="shelf-option-price">{{optionSurcharge('Internal shelf') || (catalogBusy() ? 'Loading…' : 'Quote required')}}</span></label>
         @if(isSideShelfCart()) {
@@ -64,7 +106,7 @@
       @if (isSideShelfCart()) {
       <app-modeling-section class="setting-card" sectionId="cutouts-trays" title="Cutouts & trays" [summary]="cutoutTraySummary()" iconPath="M3 3h18v18H3zM6 6h5v12H6zM14 6h4v4h-4zM14 14h4v4h-4z">
         <p class="help">Choose cutouts, then add 65 mm stainless steel trays.</p>
-        <label class="shelf-option"><input type="checkbox" [checked]="reverseCutoutLayout()" [disabled]="loading() || roundingBusy()" (change)="setReverseCutoutLayout($any($event.target).checked)"><span>Reverse layout 180°</span></label>
+        <label class="shelf-option"><input type="checkbox" [checked]="reverseCutoutLayout()" [disabled]="loading() || roundingBusy()" (change)="setReverseCutoutLayout($any($event.target).checked)"><span>Mirror left / right</span></label>
         <div class="tray-actions"><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setCutoutsIncluded(true)">All cutouts</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setCutoutsIncluded(false)">Clear</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy() || !selectedCutouts().length" (click)="setTraysIncluded(true)">Fill trays</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy() || !selectedTrays().length" (click)="setTraysIncluded(false)">Remove trays</button></div>
         <div class="tray-layout" role="group" aria-label="Cutout and tray positions on tabletop">
           @for(index of trayLayoutIndices();track index){<div class="tray-slot" [class.tray-large]="index===0"><span>{{traySlots[index].type}}@if(index>0){<br>#{{index}}}</span><label><input type="checkbox" [attr.aria-label]="traySlots[index].type+' cutout '+(index||1)" [checked]="selectedCutouts().includes(index)" [disabled]="loading() || roundingBusy()" (change)="setCutoutIncluded(index,$any($event.target).checked)"><span>Cutout</span></label><label><input type="checkbox" [attr.aria-label]="traySlots[index].type+' tray '+(index||1)" [checked]="selectedTrays().includes(index)" [disabled]="loading() || roundingBusy() || !selectedCutouts().includes(index)" (change)="setTrayIncluded(index,$any($event.target).checked)"><span>Tray</span></label></div>}
@@ -100,50 +142,6 @@
         }
       </app-modeling-section>
       }
-      <app-modeling-section class="setting-card" sectionId="front-logo" title="Front logo" [summary]="frontLogo() ? 'Placed' : 'None'" [attention]="!!logoError()" iconPath="M4 4h16v16H4ZM4 16l5-5 4 4 3-3 4 4">
-        <app-modeling-logo [panel]="logoPanel()" [modelKey]="activeSlug()" (placed)="placeFrontLogo($event)"/>
-        @if(logoBusy()){<p class="help" role="status">Placing logo…</p>}
-        @if(logoError()){<p class="error" role="alert">{{logoError()}}</p>}
-        @if(frontLogo()&&!logoBusy()&&!logoError()){<p class="help" role="status">Logo placed on the front panel.</p>}
-      </app-modeling-section>
-      <app-modeling-section class="setting-card" sectionId="finish" title="Finish" [summary]="sectionSummary('finish')" iconPath="m14 3 7 7-9 9-7-7 9-9ZM4 13l-2 7 7-2M12 5l7 7">
-
-        <div class="length-options paint-options" role="group" aria-label="Body finish">
-          <button type="button" [class.selected]="rawBody()" [attr.aria-pressed]="rawBody()" (click)="setRawBody()">RAW {{materialLabel()}}</button>
-          <button type="button" [class.selected]="!rawBody()" [attr.aria-pressed]="!rawBody()" [attr.aria-expanded]="!rawBody()" aria-controls="paint-colour-settings" (click)="setPaintedBody()">2-pack painted <span class="option-price">{{optionSurcharge('Finish / colour')}}</span></button>
-        </div>
-        @if (!rawBody()) {
-          <div id="paint-colour-settings">
-          <h3 class="setting-subtitle">Colour</h3>
-          <div class="swatches" role="group" aria-label="Body colour">
-          <button type="button" class="swatch" style="background:#f6f6f3!important" [class.selected]="bodyColor()==='#f6f6f3'" (click)="setBodyColor('#f6f6f3')" title="White · RGB 246, 246, 243" aria-label="White"></button>
-          <button type="button" class="swatch" style="background:#aecde5!important" [class.selected]="bodyColor()==='#aecde5'" (click)="setBodyColor('#aecde5')" title="Dulux Featherbed · RGB 174, 205, 229" aria-label="Dulux Featherbed"></button>
-          <button type="button" class="swatch" style="background:#33383e!important" [class.selected]="bodyColor()==='#33383e'" (click)="setBodyColor('#33383e')" title="Charcoal" aria-label="Charcoal"></button>
-          <button type="button" class="swatch" style="background:#708471!important" [class.selected]="bodyColor()==='#708471'" (click)="setBodyColor('#708471')" title="Sage" aria-label="Sage"></button>
-          <button type="button" class="swatch" style="background:#aa6553!important" [class.selected]="bodyColor()==='#aa6553'" (click)="setBodyColor('#aa6553')" title="Terracotta" aria-label="Terracotta"></button>
-          <label class="custom-colour" title="Custom colour">Custom <input type="color" [value]="bodyColor()" (input)="setBodyColor($any($event.target).value)" aria-label="Choose body colour"></label>
-        </div>
-          <div class="colour-value"><span class="colour-dot" [style.background]="bodyColor()"></span><span>Selected colour: {{bodyColourLabel()}}</span></div>
-          <h3 class="setting-subtitle">Paint finish</h3>
-          <div class="length-options paint-options" role="group" aria-label="Paint finish">
-            <button type="button" [class.selected]="paintFinish()==='matte'" [attr.aria-pressed]="paintFinish()==='matte'" (click)="setPaintFinish('matte')">Matte</button>
-            <button type="button" [class.selected]="paintFinish()==='semi-gloss'" [attr.aria-pressed]="paintFinish()==='semi-gloss'" (click)="setPaintFinish('semi-gloss')">Semi-gloss</button>
-          </div>
-          </div>
-        }
-      </app-modeling-section>
-      <app-modeling-section class="setting-card" sectionId="top" title="Table top finish" [attention]="!!finishError()" [summary]="sectionSummary('top')" iconPath="M3 6h18v5H3zM5 11v8m14-8v8">
-
-        <p class="help">Choose the table top finish.</p>
-        @if (finishLoading()) { <p class="help" role="status">Loading table top texture…</p> }
-        @if (finishError()) { <p class="error" role="alert">{{finishError()}}</p> }
-        <div class="finish-options" role="group" aria-label="Table top finish">
-          <button type="button" [class.selected]="topFinish()==='body'" (click)="setTopFinish('body')"><span class="finish-chip" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>In cart finish / colour</button>
-          <button type="button" [class.selected]="topFinish()==='oak'" (click)="setTopFinish('oak')"><span class="finish-chip oak"></span>Tasmanian oak</button>
-          <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>{{isClassic() ? "Varnished plywood" : "Plywood"}}</button>
-          @if (!isClassic()) { <button type="button" [class.selected]="topFinish()==='mdf'" (click)="setTopFinish('mdf')"><span class="finish-chip" style="background:#b99b78"></span>RAW MDF</button> }
-        </div>
-      </app-modeling-section>
       @if (photographicScenesEnabled) {
       <app-modeling-section class="setting-card" sectionId="scene" title="Scene" [summary]="sectionSummary('scene')" iconPath="M3 4h18v16H3zM3 16l5-6 5 5 3-3 5 5M16 8h.01">
 

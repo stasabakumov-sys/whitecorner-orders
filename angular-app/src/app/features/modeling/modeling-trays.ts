@@ -41,7 +41,7 @@ export function createGastronormTrays(heightMm:number,environment:THREE.Texture|
     const cutout=CHARCUTERIE_CUTOUTS[index];if(!cutout)continue;
     const tray=new THREE.Mesh(gastronormTrayGeometry(cutout.type==='GN 1/1'?325:176,cutout.type==='GN 1/1'?530:162),material);
     const x=cutout.x+cutout.width/2,z=cutout.z+cutout.depth/2;
-    tray.name=cutout.type;tray.position.set((reverse?widthMm-x:x)/1000,heightMm/1000,(reverse?depthMm-z:z)/1000);tray.castShadow=true;tray.receiveShadow=true;group.add(tray);
+    tray.name=cutout.type;tray.position.set((reverse?widthMm-x:x)/1000,heightMm/1000,z/1000);tray.castShadow=true;tray.receiveShadow=true;group.add(tray);
   }
   return group;
 }

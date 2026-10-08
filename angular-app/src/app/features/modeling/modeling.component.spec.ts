@@ -510,11 +510,11 @@ it('fills only selected cutouts and removes a tray when its cutout is removed',(
 });
 
 
-it('reverses cutout geometry around the tabletop centre without cumulative transforms',()=>{
+it('mirrors cutout geometry left to right without changing rows or accumulating transforms',()=>{
  const {component}=setup(),editor=component as any;component.activeSlug.set('side-shelf-cart-mdf');component.width.set(1500);component.depth.set(600);component.height.set(850);
  editor.body=new THREE.Group();const mesh=new THREE.Mesh(new THREE.BoxGeometry(.152,.016,.14));mesh.name='Top_part1_cutout_plug_1';mesh.geometry.translate(.63347,.842,.12385);editor.body.add(mesh);editor.originalPositions.set(mesh,mesh.geometry.getAttribute('position').clone());vi.spyOn(editor,'updateMoulding').mockImplementation(()=>{});vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});
- const original=editor.originalPositions.get(mesh);component.setReverseCutoutLayout(true);let p=mesh.geometry.getAttribute('position');expect(p.getX(0)).toBeCloseTo(1.5-original.getX(0));expect(p.getZ(0)).toBeCloseTo(.6-original.getZ(0));
- component.setReverseCutoutLayout(false);expect(p.getX(0)).toBeCloseTo(original.getX(0));expect(p.getZ(0)).toBeCloseTo(original.getZ(0));component.setReverseCutoutLayout(true);expect(p.getX(0)).toBeCloseTo(1.5-original.getX(0));expect(component.trayLayoutIndices()).toEqual([12,11,10,9,8,7,6,5,4,3,2,1,0]);
+ const original=editor.originalPositions.get(mesh),normal=mesh.geometry.getAttribute('normal').clone(),indices=Array.from(mesh.geometry.index!.array);component.setReverseCutoutLayout(true);let p=mesh.geometry.getAttribute('position');expect(p.getX(0)).toBeCloseTo(1.5-original.getX(0));expect(p.getZ(0)).toBeCloseTo(original.getZ(0));
+ expect(mesh.geometry.getAttribute('normal').getX(0)).toBeCloseTo(-normal.getX(0));expect(mesh.geometry.getAttribute('normal').getY(0)).toBeCloseTo(normal.getY(0));component.setReverseCutoutLayout(false);expect(Array.from(mesh.geometry.index!.array)).toEqual(indices);expect(p.getX(0)).toBeCloseTo(original.getX(0));expect(p.getZ(0)).toBeCloseTo(original.getZ(0));component.setReverseCutoutLayout(true);expect(p.getX(0)).toBeCloseTo(1.5-original.getX(0));expect(component.trayLayoutIndices()).toEqual([10,11,12,7,8,9,4,5,6,1,2,3,0]);
 });
 
 
