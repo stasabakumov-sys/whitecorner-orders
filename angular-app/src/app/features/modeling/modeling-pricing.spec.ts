@@ -1,41 +1,61 @@
 import {describe,it,expect} from 'vitest';
-import {MODEL_CATALOG_LINKS,readModelingCatalog,catalogPricing,linkedModelProduct,formatModelingPrice,ModelingProduct} from './modeling-pricing';
-const classic=MODEL_CATALOG_LINKS['classic-bar-plywood'],roof=MODEL_CATALOG_LINKS['decorative-wheel-roof-cart-mdf'];
-function fixture(){
- const products:ModelingProduct[]=Object.entries({classic,roof}).map(([kind,link])=>({id:link.id,path:link.path,name:kind+' Hub name',currency:'AUD',options:kind==='classic'?[{name:'Size',values:['Size I (W1200mm x D600mm x H900mm)','Size II (W1300mm x D600mm x H900mm)']}]:[],variants:[]}));
- for(const [index,p] of products.entries())for(const size of index?[null]:p.options[0].values)for(const colour of ['Raw','White','Custom (provide Dulux Code)'])for(const shelf of ['No','Yes']){
-  const choices:Record<string,string>={Colour:colour,'Internal Shelf':shelf};if(size)choices['Size']=size;else choices['Side shelves']='No';
-  const base=size?.includes('1300')?110:100,paint=colour==='Raw'?0:colour==='White'?(base===100?50:40):75;
-  p.variants.push({id:index+'-'+p.variants.length,choices,price:base+paint+(shelf==='Yes'?20:0)});
- }
- return {publishedAt:'2026-10-04T00:00:00Z',products};
+import {MODEL_CATALOG_LINKS,MODEL_ADDON_LINKS,readModelingCatalog,catalogPricing,linkedModelProduct,formatModelingPrice,ModelingProduct,ModelingCatalog} from './modeling-pricing';
+const publishedAt='2026-10-08T00:00:00Z';
+function product(link:{id:string;path:string},name:string,options:{name:string;values:string[]}[],variants:{price:number;choices:Record<string,string>}[]):ModelingProduct {
+ return {id:link.id,path:link.path,name,currency:'AUD',options,variants:variants.map((v,i)=>({id:`${link.id}-${i}`,price:v.price,choices:v.choices}))};
 }
-const selection={slug:'classic-bar-plywood',width:1200,depth:600,height:900,raw:false,colour:'#f6f6f3',shelf:true};
-describe('Hub Modeling pricing',()=>{
- it('binds by exact Hub ID and path and retains the Hub name',()=>{
-  const data=fixture(),catalog=readModelingCatalog(data,data.publishedAt);expect(linkedModelProduct(catalog,selection.slug)?.name).toBe('classic Hub name');
-  data.products[0].id='another-product';expect(()=>readModelingCatalog(data,data.publishedAt)).toThrow('missing');
+function fixture():ModelingCatalog {
+ const classic=product(MODEL_CATALOG_LINKS['classic-bar-plywood'],'Classic from Hub',[{name:'Size',values:['Size I (W1200mm x D600mm x H900mm)']}],[
+  {price:1300,choices:{Size:'Size I (W1200mm x D600mm x H900mm)',Colour:'Raw','Internal Shelf':'No','Tabletop material':'Plywood'}},
+  {price:1560,choices:{Size:'Size I (W1200mm x D600mm x H900mm)',Colour:'Raw','Internal Shelf':'Yes','Tabletop material':'Plywood'}},
+  {price:2060,choices:{Size:'Size I (W1200mm x D600mm x H900mm)',Colour:'White','Internal Shelf':'Yes','Tabletop material':'Plywood'}},
+  {price:2360,choices:{Size:'Size I (W1200mm x D600mm x H900mm)',Colour:'White','Internal Shelf':'Yes','Tabletop material':'Tasmanian Oak'}},
+ ]);
+ const roof=product(MODEL_CATALOG_LINKS['decorative-wheel-roof-cart-mdf'],'Roof from Hub',[],[
+  {price:1650,choices:{Colour:'Raw','Internal Shelf':'No','Side shelves':'No'}},
+  {price:1850,choices:{Colour:'Raw','Internal Shelf':'Yes','Side shelves':'No'}},
+  {price:2100,choices:{Colour:'Raw','Internal Shelf':'Yes','Side shelves':'Yes - Raw finish'}},
+ ]);
+ const roofless=product(MODEL_CATALOG_LINKS['decorative-wheel-cart-mdf'],'Roofless from Hub',[],[
+  {price:1200,choices:{Colour:'Raw','Internal Shelf':'No','Side shelves':'No'}},
+  {price:1400,choices:{Colour:'Raw','Internal Shelf':'Yes','Side shelves':'No'}},
+  {price:1650,choices:{Colour:'Raw','Internal Shelf':'Yes','Side shelves':'Yes - Raw finish'}},
+ ]);
+ const shelves=product(MODEL_ADDON_LINKS.sideShelves,'Side shelves',[{name:'Material and Colour',values:['MDF - Raw','Varnished Plywood']}],[
+  {price:250,choices:{'Material and Colour':'MDF - Raw'}},
+  {price:450,choices:{'Material and Colour':'Varnished Plywood'}},
+ ]);
+ const umbrella=product(MODEL_ADDON_LINKS.umbrellaHole,'Umbrella hole',[{name:'Diameter of the Cutout',values:['33mm','38mm','custom']}],[{price:85,choices:{}}]);
+ return {publishedAt,products:[classic,roof,roofless,shelves,umbrella]};
+}
+const selection={slug:'decorative-wheel-cart-mdf',width:1200,depth:600,height:900,raw:true,colour:'#f6f6f3',shelf:true,topFinish:'body' as const,sideFinish:'body' as const};
+describe('Hub Modeling selling prices',()=>{
+ it('binds exact product IDs and paths, retaining the Hub name',()=>{
+  const data=fixture();expect(linkedModelProduct(readModelingCatalog(data,publishedAt),selection.slug)?.name).toBe('Roofless from Hub');
+  data.products[2].id='another-product';expect(linkedModelProduct(readModelingCatalog(data,publishedAt),selection.slug)).toBeUndefined();
  });
- it('rejects duplicate identities and invalid prices rather than using a name match',()=>{
-  const data=fixture();data.products.push(data.products[0]);expect(()=>readModelingCatalog(data,data.publishedAt)).toThrow('duplicated');
-  const invalid=fixture();invalid.products[0].variants[0].price=NaN;expect(()=>readModelingCatalog(invalid,invalid.publishedAt)).toThrow('prices');
+ it('rejects duplicated linked identities and invalid prices',()=>{
+  const data=fixture();data.products.push(data.products[0]);expect(()=>readModelingCatalog(data,publishedAt)).toThrow('duplicated');
+  const invalid=fixture();invalid.products[0].variants[0].price=NaN;expect(()=>readModelingCatalog(invalid,publishedAt)).toThrow('prices');
  });
- it('uses exact variant totals and size-specific paint differences',()=>{
-  const catalog=fixture();const small=catalogPricing(catalog,selection),large=catalogPricing(catalog,{...selection,width:1300});
-  expect(small.subtotal).toBe(170);expect(large.subtotal).toBe(170);expect(small.lines[1].amount).toBe(50);expect(large.lines[1].amount).toBe(40);
-  expect(small.lines.reduce((sum,line)=>sum+(line.amount??0),0)).toBe(small.subtotal);
+ it('selects the roofless product and its exact integrated side shelf variant',()=>{
+  const p=catalogPricing(fixture(),{...selection,sideShelves:true});expect(p.productId).toBe(MODEL_CATALOG_LINKS['decorative-wheel-cart-mdf'].id);expect(p.subtotal).toBe(1650);
+  expect(p.lines).toEqual([{label:'Cart configuration',amount:1650}]);
+  expect(catalogPricing(fixture(),{...selection,width:1300}).subtotal).toBeNull();
  });
- it('preserves colour semantics and removes the shelf charge',()=>{
-  const price=catalogPricing(fixture(),{...selection,colour:'#aecde5',shelf:false});expect(price.subtotal).toBe(175);expect(price.lines[2].amount).toBe(0);
+ it('prices an exact standalone finish and listed umbrella hole from Hub',()=>{
+  const p=catalogPricing(fixture(),{...selection,sideShelves:true,sideFinish:'mdf',umbrella:true,umbrellaDiameter:38});
+  expect(p.subtotal).toBe(1735); // integrated shelves plus listed hole
+  const custom=catalogPricing(fixture(),{...selection,umbrella:true,umbrellaDiameter:40});
+  expect(custom.lines.find(line=>line.label==='Umbrella hole')?.amount).toBeNull();
  });
- it('requires a quote for unknown sizes, missing and duplicate variants',()=>{
-  const data=fixture();expect(catalogPricing(data,{...selection,height:950}).subtotal).toBeNull();
-  data.products[0].variants=[];expect(catalogPricing(data,selection).variantId).toBeNull();
-  const duplicate=fixture();duplicate.products[0].variants.push({...duplicate.products[0].variants[3]});expect(catalogPricing(duplicate,selection).subtotal).toBeNull();
+ it('uses Classic tabletop variants and a distinct side shelf product',()=>{
+  const p=catalogPricing(fixture(),{...selection,slug:'classic-bar-plywood',raw:false,topFinish:'oak',sideShelves:false});expect(p.subtotal).toBe(2360);
+  const raw=catalogPricing(fixture(),{...selection,slug:'classic-bar-plywood',topFinish:'plywood',sideFinish:'plywood',sideShelves:true});expect(raw.subtotal).toBe(2010);expect(raw.lines[1].amount).toBe(450);
  });
- it('uses the linked MDF variant without adding unselected side shelves',()=>{
-  const data=fixture(),price=catalogPricing(data,{...selection,slug:'decorative-wheel-roof-cart-mdf'});expect(price.subtotal).toBe(170);expect(price.productId).toBe(roof.id);
-  expect(catalogPricing(data,{...selection,slug:'decorative-wheel-roof-cart-mdf',width:1300}).subtotal).toBeNull();
+ it('quotes unsupported colour, dimension, or variant combinations',()=>{
+  const data=fixture();expect(catalogPricing(data,{...selection,colour:'#aecde5',raw:false}).subtotal).toBeNull();
+  data.products[2].variants.push({...data.products[2].variants[1]});expect(catalogPricing(data,selection).subtotal).toBeNull();
+  expect(formatModelingPrice(null)).toBe('Quote required');expect(formatModelingPrice(20)).toBe('$20');
  });
- it('never formats an unknown price as zero',()=>{expect(formatModelingPrice(null)).toBe('Quote required');expect(formatModelingPrice(20)).toBe('$20');});
 });
