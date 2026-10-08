@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createRoundedPart, RoundingProfile } from './modeling-rounding';
+import { createRoundedPart, PartJoint, RoundingProfile } from './modeling-rounding';
 import { prepareTwoInOneCartSource } from './modeling-two-in-one';
 
 export const ROOF_SIDE_SHELF_CART_SLUG = 'roof-side-shelf-cart-mdf';
@@ -37,6 +37,28 @@ export function roofSideShelfTopProfile(origin:number,thickness:number,cutouts:b
   if(cutouts)for(const slot of ROOF_SIDE_SHELF_CUTOUTS)holes.push(rectangle(
     slot.x/1000,(slot.x+slot.width)/1000,slot.z/1000,(slot.z+slot.depth)/1000));
   return {axis:'y',origin,thickness,outline:rectangle(0,1.2,0,.6),holes};
+}
+
+export function roofSideShelfTabletopJoints(name:string,profile:RoundingProfile):PartJoint[] {
+  const top=/^Top[ _]part1(?:[ _]cutouts)?$/i.test(name);
+  const leaf=/^Side[ _]shelf[ _](left|right)[ _]1$/i.exec(name);
+  if(profile.axis!=='y'||(!top&&!leaf))return [];
+  const xs=profile.outline.map(p=>p[0]),zs=profile.outline.map(p=>p[1]);
+  const x0=Math.min(...xs),x1=Math.max(...xs),z0=Math.min(...zs),z1=Math.max(...zs);
+  const y0=profile.origin,y1=y0+profile.thickness;
+  // The replacement top is already 1200 mm wide; the source leaves still use
+  // 1500 mm coordinates until resizing. Define each seam in its own profile.
+  const seams=top?[x0,x1]:[leaf![1].toLowerCase()==='left'?x1:x0];
+  // Close only the seam plane. Its endpoints retain the front/rear bevel so
+  // that the free outer edge continues smoothly across the assembled leaves.
+  const joints:PartJoint[]=seams.map(x=>({axis:'x',plane:x,
+    bounds:new THREE.Box3(new THREE.Vector3(x,y0,z0),new THREE.Vector3(x,y1,z1))}));
+  // The perimeter rails are glued beneath the sheet. Only the upper outer
+  // edge is free; rounding the bonded underside would reopen the rail joint.
+  joints.push({axis:'y',plane:y0,
+    bounds:new THREE.Box3(new THREE.Vector3(x0,y0,z0),new THREE.Vector3(x1,y0,z1)),
+    squareCapOutline:profile.outline});
+  return joints;
 }
 
 // The 150 cm cart supplies the folding body, castors and complete side-shelf

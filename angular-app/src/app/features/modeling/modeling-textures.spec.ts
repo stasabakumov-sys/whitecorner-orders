@@ -21,6 +21,18 @@ describe('Image finishes on horizontal tops', () => {
     expect(geometry.boundingBox!.max.y-geometry.boundingBox!.min.y).toBeCloseTo(.016,6);
     geometry.dispose();
   });
+  it('retains the face material across a rounded tabletop cap',()=>{
+    const geometry=createRoundedPart({axis:'y',origin:.834,thickness:.016,
+      outline:[[0,0],[1.2,0],[1.2,.6],[0,.6]],holes:[]},1.5);
+    groupTopFacesAndEdges(geometry);
+    const position=geometry.getAttribute('position');let caps=0;
+    for(const group of geometry.groups)for(let i=group.start;i<group.start+group.count;i+=3){
+      if([i,i+1,i+2].every(vertex=>Math.abs(position.getY(vertex)-.85)<1e-6)){
+        expect(group.materialIndex).toBe(0);caps++;
+      }
+    }
+    expect(caps).toBeGreaterThan(0);geometry.dispose();
+  });
   it('runs oak grain along the tabletop length without stretching its scale', () => {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute([0, .9, 0, 1.2, .9, 0, 1.5, .9, .6], 3));

@@ -6,6 +6,8 @@ import { SupabaseService } from '../../core/services/supabase.service';
 import { TestBed } from '@angular/core/testing';
 import { ModelingCacheService } from './modeling-cache.service';
 import { MODEL_CATALOG_LINKS } from './modeling-pricing';
+import { createRoundedPart, RoundingProfile } from './modeling-rounding';
+import { roofSideShelfTopProfile } from './modeling-roof-side-shelf';
 
 function testCache() {
   return new ModelingCacheService({ client: { auth: { onAuthStateChange: vi.fn() } } } as unknown as SupabaseService);
@@ -526,6 +528,34 @@ it('keeps source tabletop grouping flags independent across repeated geometry re
       expect(copy.geometry.groups.every(group => group.materialIndex! < (copy.material as THREE.Material[]).length)).toBe(true);
     }
   } finally { frame.mockRestore(); editor.model = editor.body; component.ngOnDestroy(); }
+});
+
+it('rounds the roof cart outer top edge while keeping leaf seams and post openings square', async () => {
+ const {component}=setup(),editor=component as any;
+ component.activeSlug.set('roof-side-shelf-cart-mdf');component.roundingSupported.set(true);
+ editor.body=new THREE.Group();
+ const profiles:[string,RoundingProfile][]=[
+  ['Top part1',roofSideShelfTopProfile(.834,.016,false)],
+  ['Top part1 cutouts',roofSideShelfTopProfile(.834,.016,true)],
+  ...(['left','right'] as const).map(side=>{const x=side==='left'?-.2:1.5;return [`Side shelf ${side} 1`,{axis:'y',origin:.834,thickness:.016,outline:[[x,0],[x+.2,0],[x+.2,.6],[x,.6]],holes:[]}] as [string,RoundingProfile];}),
+ ];
+ for(const [name,profile] of profiles){const geometry=createRoundedPart(profile,0),mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial());mesh.name=name;mesh.userData['roundingProfile']=profile;editor.sourceParts.push(mesh);editor.sourcePositions.set(geometry,geometry.getAttribute('position').clone());}
+ const frame=vi.spyOn(globalThis,'requestAnimationFrame').mockImplementation(callback=>{callback(0);return 0;});
+ vi.spyOn(editor,'applyDimensions').mockImplementation(()=>{});vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});
+ const hit=(name:string,x:number,z:number)=>new THREE.Raycaster(new THREE.Vector3(x,1,z),new THREE.Vector3(0,-1,0)).intersectObject(editor.body.getObjectByName(name))[0]?.point.y;
+ try{for(const radius of [0,1.5,3]){
+  await component.setRounding(radius);editor.body.updateMatrixWorld(true);
+  for(const name of ['Top part1','Top part1 cutouts']){
+   if(radius)expect(hit(name,.6,.0001)).toBeLessThan(.8499);else expect(hit(name,.6,.0001)).toBeCloseTo(.85,6);
+   for(const x of [.0001,1.1999])expect(hit(name,x,.3)).toBeCloseTo(.85,6);
+   expect(hit(name,.0675,.3)).toBeUndefined();
+   expect(hit(name,.047,.2795)).toBeUndefined();
+   const bounds=new THREE.Box3().setFromObject(editor.body.getObjectByName(name));expect(bounds.max.y-bounds.min.y).toBeCloseTo(.016,6);
+  }
+  expect(hit('Side shelf left 1',-.0001,.3)).toBeCloseTo(.85,6);
+  expect(hit('Side shelf right 1',1.5001,.3)).toBeCloseTo(.85,6);
+  if(radius)expect(hit('Side shelf right 1',1.6999,.3)).toBeLessThan(.8499);
+ }}finally{frame.mockRestore();}
 });
 
 it('toggles shelf, ice shelf and side shelves independently without adding a roof', () => {
