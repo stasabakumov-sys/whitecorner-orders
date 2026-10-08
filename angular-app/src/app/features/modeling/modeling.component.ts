@@ -14,6 +14,7 @@ import { ModelingFourViews, frontFacingRotation } from './modeling-four-views';
 import { cartTopStructure, createCartSideShelves, extractCartSideShelves, extractCartUmbrellaHolderBounds } from './modeling-side-shelves';
 import { prepareRooflessCartSource, ROOFLESS_CART_NAME, ROOFLESS_CART_SLUG, ROOF_CART_SLUG } from './modeling-roofless';
 import { prepareTwoInOneCartSource, TWO_IN_ONE_CART_NAME, TWO_IN_ONE_CART_SLUG, SIDE_SHELF_CART_SLUG } from './modeling-two-in-one';
+import { prepareRoofSideShelfCartSource, roofSideShelfHeight, ROOF_SIDE_SHELF_CART_NAME, ROOF_SIDE_SHELF_CART_SLUG, ROOF_SIDE_SHELF_CUTOUTS } from './modeling-roof-side-shelf';
 import { CLASSIC_MDF_NAME, CLASSIC_MDF_SLUG, prepareClassicMdfSource } from './modeling-classic-mdf';
 import { shelfProfilesForIceShelf } from './modeling-ice-shelf';
 import { createFrontMoulding } from './modeling-moulding';
@@ -148,13 +149,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   isPlywoodClassic(): boolean { return this.activeSlug() === CLASSIC_SLUG; }
   isSideShelfCart(): boolean { return this.activeSlug() === SIDE_SHELF_CART_SLUG; }
   isTwoInOneCart(): boolean { return this.activeSlug() === TWO_IN_ONE_CART_SLUG; }
-  isCharcuterieCart(): boolean { return this.isSideShelfCart() || this.isTwoInOneCart(); }
+  isRoofSideShelfCart(): boolean { return this.activeSlug() === ROOF_SIDE_SHELF_CART_SLUG; }
+  isCharcuterieCart(): boolean { return this.isSideShelfCart() || this.isTwoInOneCart() || this.isRoofSideShelfCart(); }
   isRooflessCart(): boolean { return this.activeSlug() === ROOFLESS_CART_SLUG; }
-  isRoofFamily(): boolean { return this.hasRoof() || this.isRooflessCart(); }
-  hasRoof(): boolean { return this.activeSlug() === ROOF_CART_SLUG; }
+  isRoofFamily(): boolean { return this.activeSlug() === ROOF_CART_SLUG || this.isRooflessCart(); }
+  hasRoof(): boolean { return this.activeSlug() === ROOF_CART_SLUG || this.isRoofSideShelfCart(); }
   castorHeight(): number { return this.record?.caster_height_mm || (this.isClassic() ? 95 : 73); }
   materialLabel(): string { return this.record?.material_name || 'Plywood'; }
-  overallHeight(): number { return this.height() + (this.hasRoof() ? 1030 : 0); }
+  overallHeight(): number { return this.isRoofSideShelfCart()?(this.height()===850?1930:1968):this.height() + (this.hasRoof() ? 1030 : 0); }
 
   @ViewChild('configurationDialog') configurationDialog?: ElementRef<HTMLDialogElement>;
   readonly configurationBusy = signal(false);
@@ -183,9 +185,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         {label:'Castors',value:'Ø'+(this.isRoofFamily()?'50':'75')+' mm'},
         {label:'Shelf',value:this.shelfIncluded()?'Middle':'None'}];
       if(this.frontLogo()){const logo=fitLogo(this.logoPanel(),this.frontLogo()!);fields.push({label:'Front logo',value:`${logo.width.toFixed(1)} x ${logoHeight(logo).toFixed(1)} mm · left ${logo.x.toFixed(1)} · top ${logo.y.toFixed(1)} mm`});}
-      if(this.isClassic()||this.isCharcuterieCart()||this.isRooflessCart())fields.push({label:'Umbrella hole',value:this.umbrellaHole()?'Ø'+this.umbrellaDiameter()+' mm · '+(this.isClassic()||this.isRooflessCart()||this.isTwoInOneCart()?this.umbrellaPosition()+' · ':'')+(this.isCharcuterieCart()?'top, shelves & bottom holder':'top, shelf & bottom holder'):'None'});
+      if(this.isClassic()||(this.isCharcuterieCart()&&!this.isRoofSideShelfCart())||this.isRooflessCart())fields.push({label:'Umbrella hole',value:this.umbrellaHole()?'Ø'+this.umbrellaDiameter()+' mm · '+(this.isClassic()||this.isRooflessCart()||this.isTwoInOneCart()?this.umbrellaPosition()+' · ':'')+(this.isCharcuterieCart()?'top, shelves & bottom holder':'top, shelf & bottom holder'):'None'});
       if(this.isCharcuterieCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'});
-      if(this.isSideShelfCart())fields.push({label:'Cutouts',value:this.cutoutSummary()+(this.cutoutsIncluded()&&this.reverseCutoutLayout()?' · mirrored left/right':'')},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
+      if(this.isSideShelfCart()||this.isRoofSideShelfCart())fields.push({label:'Cutouts',value:this.cutoutSummary()+(this.cutoutsIncluded()&&this.reverseCutoutLayout()?' · mirrored left/right':'')},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
       if(!this.isCharcuterieCart())fields.push({label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'});
       if(this.sideShelvesIncluded())fields.push({label:'Side shelves finish',value:this.sideShelfFinishSummary()});
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isPlywoodClassic()?15:16} mm`});
@@ -224,7 +226,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   setPaintedBody():void{this.setBodyColor(this.bodyColor()==='#d4b894'?'#f6f6f3':this.bodyColor());}
 
   @ViewChild('shelfDrawingDialog') shelfDrawingDialog?: ElementRef<HTMLDialogElement>;
-  readonly traySlots = CHARCUTERIE_CUTOUTS;
+  get traySlots() { return this.isRoofSideShelfCart()?ROOF_SIDE_SHELF_CUTOUTS:CHARCUTERIE_CUTOUTS; }
   readonly selectedTrays = signal<number[]>([]);
   readonly selectedCutouts = signal<number[]>([]);
   readonly fourViews = signal(false);
@@ -276,7 +278,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   umbrellaX():number {return this.isClassic()||this.isRooflessCart()||this.isTwoInOneCart()?this.umbrellaPosition()==='left'?200:this.umbrellaPosition()==='right'?this.width()-200:this.width()/2:this.width()/2;}
   setUmbrellaPosition(value:'left'|'centre'|'right'):void {this.umbrellaPosition.set(value);void this.setRounding(this.rounding());}
   readonly reverseCutoutLayout = signal(true);
-  trayLayoutIndices():number[] {const indices=this.traySlots.map((_,i)=>i);return this.reverseCutoutLayout()?[10,11,12,7,8,9,4,5,6,1,2,3,0]:indices;}
+  trayLayoutIndices():number[] {const indices=this.traySlots.map((_,i)=>i);return this.reverseCutoutLayout()?this.isRoofSideShelfCart()?[7,8,9,4,5,6,1,2,3,0]:[10,11,12,7,8,9,4,5,6,1,2,3,0]:indices;}
   setReverseCutoutLayout(value:boolean):void {this.reverseCutoutLayout.set(value);this.applyDimensions();this.applyFinishes();}
   readonly traysIncluded = signal(false);
   private trays?:THREE.Group;
@@ -305,6 +307,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     else this.bindAssembly();
   }
   setSideShelvesIncluded(value:boolean):void {
+    if(this.isRoofSideShelfCart()&&!value)return;
     this.sideShelvesIncluded.set(value);
     if(this.isCharcuterieCart()){if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());else this.bindAssembly();}
     else {if(value)void this.loadSideShelfReference();this.applyDimensions();this.bindAssembly();}
@@ -482,7 +485,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly selectedFile = signal<File | null>(null);
   readonly assemblyMode = signal(false);
   readonly assemblyRevision = signal(0);
-  get parts() { return ASSEMBLY_PARTS.filter(part => this.isCharcuterieCart() ? !['roof','posts','legs','decorative-wheels'].includes(part.key) : this.isRooflessCart()
+  get parts() { return ASSEMBLY_PARTS.filter(part => this.isRoofSideShelfCart() ? !['legs','decorative-wheels'].includes(part.key) : this.isCharcuterieCart() ? !['roof','posts','legs','decorative-wheels'].includes(part.key) : this.isRooflessCart()
     ? !['roof','posts','ice-shelf'].includes(part.key) : this.isClassic()
     ? !['roof', 'posts', 'legs', 'decorative-wheels','ice-shelf'].includes(part.key)
     : !['ice-shelf'].includes(part.key)); }
@@ -650,6 +653,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         ...sideShelfCart, slug: TWO_IN_ONE_CART_SLUG, product_name: TWO_IN_ONE_CART_NAME,
         base_width_mm: 1200, derived_from_side_shelf: true,
       });
+      if (sideShelfCart && !records.some(model => model.slug === ROOF_SIDE_SHELF_CART_SLUG)) records.splice(records.indexOf(sideShelfCart),0,{
+        ...sideShelfCart, slug: ROOF_SIDE_SHELF_CART_SLUG, product_name: ROOF_SIDE_SHELF_CART_NAME,
+        base_width_mm: 1200, base_body_height_mm: 855, derived_from_side_shelf: true,
+      });
       this.models.set(records);
       const record = this.models().find(model => model.slug === this.activeSlug());
       if (!record) throw new Error('The selected model is not available to your account');
@@ -681,8 +688,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.moulding.set(this.isClassic());
     this.roundingEditing.set(false);
     this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
-    this.shelfIncluded.set(!this.isTwoInOneCart());
-    this.iceShelfIncluded.set(this.isSideShelfCart());this.sideShelvesIncluded.set(this.isCharcuterieCart());this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);this.selectedCutouts.set([]);this.reverseCutoutLayout.set(true);this.umbrellaHole.set(false);this.umbrellaPosition.set('centre');this.umbrellaDiameter.set(40);this.showUmbrella.set(false);
+    this.shelfIncluded.set(!this.isTwoInOneCart()&&!this.isRoofSideShelfCart());
+    this.iceShelfIncluded.set(this.isSideShelfCart());this.sideShelvesIncluded.set(this.isCharcuterieCart());this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);this.selectedCutouts.set([]);this.reverseCutoutLayout.set(!this.isRoofSideShelfCart());this.umbrellaHole.set(false);this.umbrellaPosition.set('centre');this.umbrellaDiameter.set(40);this.showUmbrella.set(false);
     this.roofClosed.set(false);
     this.glassRackCount.set(0);
     this.showGlasses.set(false);
@@ -736,7 +743,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.casters.clear();
     if (this.isRoofFamily()) { fitFurnitureBolts(gltf.scene); shortenCastorBrakes(gltf.scene); turnCastorWheels(gltf.scene); }
     if (this.record?.derived_from_roof) prepareRooflessCartSource(gltf.scene);
-    if (this.record?.derived_from_side_shelf) prepareTwoInOneCartSource(gltf.scene);
+    if (this.isRoofSideShelfCart()) prepareRoofSideShelfCartSource(gltf.scene);
+    else if (this.record?.derived_from_side_shelf) prepareTwoInOneCartSource(gltf.scene);
     if (this.record?.derived_from_classic) prepareClassicMdfSource(gltf.scene);
     const nodes = [...gltf.scene.children];
     for (const node of nodes) {
@@ -920,7 +928,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   setDimension(axis: 'width' | 'height', raw: string): void {
     const value = Number(raw);
     if (!Number.isFinite(value)) return;
-    if((this.isSideShelfCart() && axis==='width') || this.isTwoInOneCart())return;
+    if((this.isSideShelfCart() && axis==='width') || this.isTwoInOneCart() || (this.isRoofSideShelfCart() && axis==='width'))return;
+    if(this.isRoofSideShelfCart() && ![850,950].includes(value))return;
     const limits = axis === 'width' ? [1200, 1500] : [850, 1000];
     const step = axis === 'width' ? 100 : 50;
     const next = Math.round(Math.max(limits[0], Math.min(limits[1], value)) / step) * step;
@@ -1013,7 +1022,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const partJoints = joints.get(name) || [];
         const key = JSON.stringify([profile, raw, /^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name), partJoints]);
         const geometry = this.modelCache.roundedPart(key, () => {
-          const rounded = createRoundedPart(profile!, umbrellaPanel&&/^Top/i.test(name)?0:raw);
+          const rounded = createRoundedPart(profile!, (umbrellaPanel&&/^Top/i.test(name))||(this.isRoofSideShelfCart()&&/^Top[ _]part1/i.test(name))?0:raw);
           if (/^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name)) keepTrimJointSquare(rounded, profile!, raw);
           keepPartJointsSquare(rounded, partJoints, raw);
           return rounded;
@@ -1162,8 +1171,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
   private updateTrays():void {
     if(this.trays){this.trays.removeFromParent();this.trays.traverse(node=>{if(node instanceof THREE.Mesh)node.geometry.dispose();});const mesh=this.trays.children[0] as THREE.Mesh|undefined;if(mesh)(mesh.material as THREE.Material).dispose();this.trays=undefined;}
-    if(!this.model||!this.isSideShelfCart()||!this.cutoutsIncluded()||!this.traysIncluded())return;
-    this.trays=createGastronormTrays(this.height(),this.stainlessReflection(),this.selectedTrays(),this.reverseCutoutLayout(),this.width(),this.depth());this.model.add(this.trays);
+    if(!this.model||!(this.isSideShelfCart()||this.isRoofSideShelfCart())||!this.cutoutsIncluded()||!this.traysIncluded())return;
+    this.trays=createGastronormTrays(this.height(),this.stainlessReflection(),this.selectedTrays(),this.reverseCutoutLayout(),this.width(),this.depth(),this.traySlots);this.model.add(this.trays);
   }
   private updateUmbrella():void {
     const visible=(this.isCharcuterieCart()||this.isClassic()||this.isRooflessCart())&&this.umbrellaHole()&&this.showUmbrella(),key=JSON.stringify([visible,this.umbrellaDiameter(),this.umbrellaX(),this.width(),this.depth()]);if(key===this.umbrellaPreviewKey)return;this.umbrellaPreviewKey=key;
@@ -1211,7 +1220,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const cutout = this.isSideShelfCart() && /^Top[ _]part1[ _]cutout/i.test(name);
       const reverse = cutout && this.reverseCutoutLayout();
       for (let i = 0; i < original.count; i++) {
-        const [x, y, z] = this.isCharcuterieCart()
+        const roofPart=this.isRoofSideShelfCart()&&/^(?:Roof[ _]\d+|Dar\d+|Top[ _][34])$/i.test(name);
+        const roofTop=this.isRoofSideShelfCart()&&/^Top[ _]part1(?:[ _]cutouts)?$/i.test(name);
+        const icePart=this.isRoofSideShelfCart()&&/^Ice[ _]shelf/i.test(name);
+        const [x, y, z] = roofPart
+          ? [original.getX(i),roofSideShelfHeight(original.getY(i),this.height()),original.getZ(i)] : roofTop
+          ? [original.getX(i),roofSideShelfHeight(original.getY(i),this.height()),original.getZ(i)] : icePart
+          ? (()=>{const [px,py,pz]=resizeSideShelfCartPosition(name,original.getX(i),original.getY(i),original.getZ(i),this.width(),850);
+            const lift=/^Ice[ _]shelf[ _]3$/i.test(name)?(this.height()-850)/2000*(1+THREE.MathUtils.clamp((py-.45)/.4,0,1)):(this.height()-850)/1000;
+            return [px,py+lift,pz] as [number,number,number];})() : this.isCharcuterieCart()
           ? resizeSideShelfCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height()) : this.isClassic()
           ? resizePlywoodPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height())
           : resizeRoofCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height(), this.frontStyle() !== 'shaker');
@@ -1239,7 +1256,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     for (const [key, group] of this.casters) {
       const [side, row] = key.split('-');
       group.position.set(
-        side === 'R' ? (this.width() - (this.isTwoInOneCart()?1500:(this.record?.base_width_mm || 1200))) / 1000 : 0,
+        side === 'R' ? (this.width() - (this.record?.derived_from_side_shelf?1500:(this.record?.base_width_mm || 1200))) / 1000 : 0,
         0,
         row === 'rear' ? (this.depth() - 600) / 1000 : 0,
       );
@@ -1274,6 +1291,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   setRoofClosed(closed: boolean): void {
+    if(this.isRoofSideShelfCart())return;
     this.roofClosed.set(closed);
     this.updateRoofBottom();
     this.applyFinishes();
@@ -1293,7 +1311,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       materials.forEach(material => material.dispose());
       this.roofBottom = undefined;
     }
-    if (!this.body || !this.hasRoof() || !this.roofClosed()) return;
+    if (!this.body || !this.hasRoof() || this.isRoofSideShelfCart() || !this.roofClosed()) return;
     const skirts: THREE.Box3[] = [], posts: THREE.Box3[] = [];
     for (const part of this.body.children) {
       const name = part.userData['plywoodPart'] || part.name;
@@ -1545,11 +1563,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
 
   private focusCamera(): void {
     const span = Math.max(this.previewWidth(), this.depth(), this.previewHeight()) / 1000;
+    const target=new THREE.Vector3(this.width()/2000,this.previewHeight()/2000,this.depth()/2000);
     this.cameraSpan = span;
-    this.camera.position.set(this.width() / 2000 + span * 1.1, this.overallHeight() / 2000 + span * 0.5, this.depth() / 2000 + span * 1.25);
+    const distance=this.isRoofSideShelfCart()?1.8:1;
+    this.camera.position.set(this.width() / 2000 + span * 1.1*distance, this.overallHeight() / 2000 + span * 0.5, this.depth() / 2000 + span * 1.25*distance);
     this.orbitCamera.position.copy(this.camera.position);
     if(this.turntable)this.turntable.rotation.y=frontFacingRotation(this.isClassic());
-    this.camera.lookAt(this.width() / 2000, this.previewHeight() / 2000, this.depth() / 2000);
+    this.camera.lookAt(target);
+    if(this.controls)this.controls.target.copy(target);
     this.controls?.update();
   }
 

@@ -50,13 +50,13 @@
         <p class="help">Tabletop height includes {{castorHeight()}} mm castors. @if (hasRoof()) { Roof height: {{overallHeight()}} mm. }</p>
         <label id="model-length-label">Length <output>{{width() / 10}} cm</output></label>
         <div class="length-options" role="group" aria-labelledby="model-length-label">
-          @for (length of (isSideShelfCart() ? [1500] : isTwoInOneCart() ? [1200] : [1200, 1300, 1400, 1500]); track length) {
+          @for (length of (isSideShelfCart() ? [1500] : (isTwoInOneCart() || isRoofSideShelfCart()) ? [1200] : [1200, 1300, 1400, 1500]); track length) {
             <button type="button" [class.selected]="width() === length" [attr.aria-pressed]="width() === length" (click)="setDimension('width', length.toString())">{{length / 10}} cm</button>
           }
         </div>
         <label id="model-height-label">Height <output>{{height() / 10}} cm</output></label>
         <div class="length-options" role="group" aria-labelledby="model-height-label">
-          @for (value of (isTwoInOneCart() ? [850] : [850, 900, 950, 1000]); track value) {
+          @for (value of (isTwoInOneCart() ? [850] : isRoofSideShelfCart() ? [850, 950] : [850, 900, 950, 1000]); track value) {
             <button type="button" [class.selected]="height() === value" [attr.aria-pressed]="height() === value" (click)="setDimension('height', value.toString())">{{value / 10}} cm</button>
           }
         </div>
@@ -111,7 +111,7 @@
       </app-modeling-section>
       <app-modeling-section class="setting-card shelf-card" sectionId="options" title="Options" [summary]="optionsSummary()" iconPath="M4 6h16M4 12h16M4 18h16M8 4v4m8 2v4m-6 2v4">
         <label class="shelf-option"><input type="checkbox" [checked]="shelfIncluded()" [disabled]="loading() || roundingBusy()" (change)="setShelfIncluded($any($event.target).checked)"><span>Internal shelf</span><span class="shelf-option-price">{{optionSurcharge('Internal shelf') || (catalogBusy() ? 'Loading…' : 'Quote required')}}</span></label>
-        <label class="shelf-option"><input type="checkbox" [checked]="sideShelvesIncluded()" [disabled]="loading() || roundingBusy()" (change)="setSideShelvesIncluded($any($event.target).checked)"><span>Side shelves · 2 × 200 × 600 mm</span><span class="shelf-option-price">{{isTwoInOneCart() && sideShelvesIncluded() ? 'Included' : optionSurcharge('Side shelves') || (catalogBusy() ? 'Loading…' : 'Quote required')}}</span></label>
+        <label class="shelf-option"><input type="checkbox" [checked]="sideShelvesIncluded()" [disabled]="loading() || roundingBusy() || isRoofSideShelfCart()" (change)="setSideShelvesIncluded($any($event.target).checked)"><span>Side shelves · 2 × 200 × 600 mm</span><span class="shelf-option-price">{{(isTwoInOneCart() || isRoofSideShelfCart()) && sideShelvesIncluded() ? 'Included' : optionSurcharge('Side shelves') || (catalogBusy() ? 'Loading…' : 'Quote required')}}</span></label>
         @if(isCharcuterieCart()) {
         <label class="shelf-option"><input type="checkbox" [checked]="iceShelfIncluded()" [disabled]="loading() || roundingBusy()" (change)="setIceShelfIncluded($any($event.target).checked)"><span>Ice shelf</span></label>
         } @else {
@@ -127,7 +127,7 @@
         <label class="shelf-option"><input type="checkbox" [checked]="moulding()" [disabled]="loading() || roundingBusy()" (change)="setMoulding($any($event.target).checked)"><span>Moulding</span><span class="shelf-option-price">Quote required</span></label>
         }
         }
-        @if(isCharcuterieCart()||isClassic()||isRooflessCart()) {
+        @if((isCharcuterieCart()&&!isRoofSideShelfCart())||isClassic()||isRooflessCart()) {
         <label class="shelf-option"><input type="checkbox" [checked]="umbrellaHole()" [disabled]="loading() || roundingBusy() || umbrellaDiameterMax()<32" (change)="setUmbrellaHole($any($event.target).checked)"><span>Umbrella hole</span><span class="shelf-option-price">{{optionSurcharge('Umbrella hole') || (catalogBusy() ? 'Loading…' : 'Quote required')}}</span></label>
         @if(umbrellaHole()) {@if(isClassic()||isRooflessCart()||isTwoInOneCart()){<div class="length-options" role="group" aria-label="Umbrella hole position">@for(position of ['left','centre','right'];track position){<button type="button" [disabled]="loading() || roundingBusy()" [class.selected]="umbrellaPosition()===position" [attr.aria-pressed]="umbrellaPosition()===position" (click)="setUmbrellaPosition($any(position))">{{position==='left'?'Left':position==='right'?'Right':'Middle'}}</button>}</div>}<label class="shelf-option"><input type="checkbox" [checked]="showUmbrella()" [disabled]="loading() || roundingBusy()" (change)="setShowUmbrella($any($event.target).checked)"><span>Show umbrella · preview only</span></label><label>Diameter <output>{{umbrellaDiameter()}} mm</output></label><input type="range" aria-label="Umbrella hole diameter" min="32" [max]="umbrellaDiameterMax()" [value]="umbrellaDiameter()" [disabled]="loading() || roundingBusy()" (change)="setUmbrellaDiameter(+$any($event.target).value)"><p class="help">Maximum {{umbrellaDiameterMax()}} mm.</p>}
         }
@@ -139,10 +139,10 @@
         @if(logoError()){<p class="error" role="alert">{{logoError()}}</p>}
         @if(frontLogo()&&!logoBusy()&&!logoError()){<p class="help" role="status">Logo placed on the front panel.</p>}
       </app-modeling-section>
-      @if (isSideShelfCart()) {
+      @if (isSideShelfCart() || isRoofSideShelfCart()) {
       <app-modeling-section class="setting-card" sectionId="cutouts-trays" title="Cutouts & trays" [summary]="cutoutTraySummary()" iconPath="M3 3h18v18H3zM6 6h5v12H6zM14 6h4v4h-4zM14 14h4v4h-4z">
-        <p class="help">Choose cutouts, then add 65 mm stainless steel trays.</p>
-        <label class="shelf-option"><input type="checkbox" [checked]="reverseCutoutLayout()" [disabled]="loading() || roundingBusy()" (change)="setReverseCutoutLayout($any($event.target).checked)"><span>Mirror left / right</span></label>
+        <p class="help">{{isRoofSideShelfCart() ? 'Plain top or 1 × GN 1/1 plus 9 × GN 1/6 cutouts. Choose cutouts, then add steel trays.' : 'Choose cutouts, then add 65 mm stainless steel trays.'}}</p>
+        @if(!isRoofSideShelfCart()){<label class="shelf-option"><input type="checkbox" [checked]="reverseCutoutLayout()" [disabled]="loading() || roundingBusy()" (change)="setReverseCutoutLayout($any($event.target).checked)"><span>Mirror left / right</span></label>}
         <div class="tray-actions"><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setCutoutsIncluded(true)">All cutouts</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy()" (click)="setCutoutsIncluded(false)">Clear</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy() || !selectedCutouts().length" (click)="setTraysIncluded(true)">Fill trays</button><button type="button" class="text-action" [disabled]="loading() || roundingBusy() || !selectedTrays().length" (click)="setTraysIncluded(false)">Remove trays</button></div>
         <div class="tray-layout" role="group" aria-label="Cutout and tray positions on tabletop">
           @for(index of trayLayoutIndices();track index){<div class="tray-slot" [class.tray-large]="index===0"><span>{{traySlots[index].type}}@if(index>0){<br>#{{index}}}</span><label><input type="checkbox" [attr.aria-label]="traySlots[index].type+' cutout '+(index||1)" [checked]="selectedCutouts().includes(index)" [disabled]="loading() || roundingBusy()" (change)="setCutoutIncluded(index,$any($event.target).checked)"><span>Cutout</span></label><label><input type="checkbox" [attr.aria-label]="traySlots[index].type+' tray '+(index||1)" [checked]="selectedTrays().includes(index)" [disabled]="loading() || roundingBusy() || !selectedCutouts().includes(index)" (change)="setTrayIncluded(index,$any($event.target).checked)"><span>Tray</span></label></div>}
@@ -152,7 +152,9 @@
       }
       @if (hasRoof()) {
       <app-modeling-section class="setting-card" sectionId="roof" title="Roof" [summary]="sectionSummary('roof')" iconPath="M2 8 12 3l10 5M4 8h16v3H4zM5 11v9m14-9v9">
-
+        @if(isRoofSideShelfCart()){
+          <p class="help">Fixed open roof · {{overallHeight()}} mm overall height. Two posts pass through centred 42 × 42 mm tabletop openings into holders below.</p>
+        } @else {
         <p class="help">Closed roof adds a 12 mm MDF bottom panel with cutouts for the supports. Roof height stays unchanged.</p>
         <div class="length-options" role="group" aria-label="Roof structure">
           <button type="button" [disabled]="loading() || roundingBusy()" [class.selected]="!roofClosed()" [attr.aria-pressed]="!roofClosed()" (click)="setRoofClosed(false)">Open</button>
@@ -175,6 +177,7 @@
               @else { <p class="error" role="alert">These glasses exceed the spacing between racks. Reduce the bowl diameter or remove racks.</p> }
             }
           }
+        }
         }
       </app-modeling-section>
       }

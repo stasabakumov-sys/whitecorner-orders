@@ -7,6 +7,7 @@ export const MODEL_CATALOG_LINKS: Record<string,{id:string;path:string}> = {
  'decorative-wheel-cart-mdf': {id:'07ce16db-6737-44a2-a69e-29bf7de313e0',path:'/product-page/mdf-mobile-bar-cart-with-decorative-wheels-foldable-serving-cart'},
  'side-shelf-cart-mdf': {id:'bb41466d-c2a1-4c08-adb1-5ed4cd2f0576',path:'/product-page/mobile-foldable-charcuterie-cart-with-wheels-bar-cart-vendor-cart'},
  'two-in-one-cart-mdf': {id:'08f8e57a-50e3-49e7-a030-2bb6b6a27e33',path:'/product-page/2-in-1-mobile-bar-event-bar-mobile-food-service-charcuterie-cart'},
+ 'roof-side-shelf-cart-mdf': {id:'023d5e42-0795-4648-8652-68d9d92578b6',path:'/product-page/mobile-foldable-charcuterie-cart-bar-with-roof-and-side-shelves'},
 };
 export const MODEL_ADDON_LINKS = {
  sideShelves: {id:'a0ff6072-49be-413c-99f9-1a9cc2c9e770',path:'/product-page/side-shelves-for-mobile-carts-as-an-addition-to-the-main-order-only'},
@@ -82,6 +83,11 @@ export function catalogPricing(catalog:ModelingCatalog,s:PricingSelection):Confi
   else if(s.slug==='classic-bar-mdf'&&(s.topFinish==='body'||(s.topFinish==='mdf'&&s.raw)))choices['Tabletop material']='MDF';
   else if(s.slug==='classic-bar-plywood'&&(s.topFinish==='plywood'||s.topFinish==null))choices['Tabletop material']='Plywood';
   else return empty;
+ }else if(s.slug==='roof-side-shelf-cart-mdf'){
+  if(s.width!==1200||s.depth!==600||![850,950].includes(s.height)||!s.sideShelves||![0,10].includes(s.cutouts||0)||![0,10].includes(s.trays||0)||((s.trays||0)>0&&s.cutouts!==10))return empty;
+  choices['Size']=s.height===850?'I':'II';
+  choices['Tabletop design']=s.cutouts===10?'With cutouts':'Plain - without cutouts';
+  choices['Set of 10 steel pans in a separate parcel']=s.trays===10?'Yes':'No';
  }else if(s.slug==='side-shelf-cart-mdf'){
   if(s.width!==1500||s.depth!==600||s.height!==850||![0,13].includes(s.cutouts||0)||![0,13].includes(s.trays||0))return empty;
   choices['Tabletop design']=s.cutouts===13?'13 cutouts - 12 x 1/6 GS plus 1 x 1/1 GS':'Plain - without cutouts';
@@ -101,13 +107,14 @@ export function catalogPricing(catalog:ModelingCatalog,s:PricingSelection):Confi
  const selected=variant(product,choices);if(!selected)return empty;
  const lines:PricingLine[]=[{label:'Cart configuration',amount:selected.price}];let subtotal=selected.price;
  const add=(label:string,amount:number|null)=>{lines.push({label,amount});if(amount!=null)subtotal=Math.round((subtotal+amount)*100)/100;};
- if(s.sideShelves&&!integrated&&s.slug!=='two-in-one-cart-mdf'){const choice=shelfChoice(s,body);const addon=choice?variant(linkedProduct(catalog,MODEL_ADDON_LINKS.sideShelves),{'Material and Colour':choice}):undefined;add('Side shelves · 2 × 200 × 600 mm',addon?.price??null);}
+ if(s.sideShelves&&!integrated&&s.slug!=='two-in-one-cart-mdf'&&s.slug!=='roof-side-shelf-cart-mdf'){const choice=shelfChoice(s,body);const addon=choice?variant(linkedProduct(catalog,MODEL_ADDON_LINKS.sideShelves),{'Material and Colour':choice}):undefined;add('Side shelves · 2 × 200 × 600 mm',addon?.price??null);}
  if(s.slug==='two-in-one-cart-mdf'&&!s.sideShelves)add('Side shelves',null);
  if(s.slug==='two-in-one-cart-mdf'&&s.sideShelves&&s.sideFinish&&s.sideFinish!==s.topFinish)add('Side shelves finish',null);
  if(s.umbrella){const hole=linkedProduct(catalog,MODEL_ADDON_LINKS.umbrellaHole);const listed=hole?.options.find(o=>o.name==='Diameter of the Cutout')?.values.includes(`${s.umbrellaDiameter}mm`);add('Umbrella hole',listed?variant(hole,{})?.price??null:null);}
- if(s.slug==='side-shelf-cart-mdf'||s.slug==='two-in-one-cart-mdf'){
+ if(s.slug==='side-shelf-cart-mdf'||s.slug==='two-in-one-cart-mdf'||s.slug==='roof-side-shelf-cart-mdf'){
   if(s.slug==='side-shelf-cart-mdf'&&s.shelf)add('Internal shelf',null);
   if(s.slug==='two-in-one-cart-mdf'&&s.shelf)add('Internal shelf',null);
+  if(s.slug==='roof-side-shelf-cart-mdf'&&s.shelf)add('Internal shelf',null);
   if(s.iceShelf){const ice=variant(linkedProduct(catalog,MODEL_ADDON_LINKS.iceShelf),{Pans:'Shelf without steel pans',Colour:body});add('Ice shelf',ice?.price??null);}
  }
  if(s.topFinish&&s.slug!=='classic-bar-plywood'&&s.slug!=='classic-bar-mdf'&&s.slug!=='two-in-one-cart-mdf'&&s.topFinish!=='body')add('Table top finish',null);
