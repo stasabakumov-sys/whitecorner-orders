@@ -5,6 +5,7 @@ import { HubMembersService } from '../../core/services/hub-members.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { TestBed } from '@angular/core/testing';
 import { ModelingCacheService } from './modeling-cache.service';
+import { MODEL_CATALOG_LINKS } from './modeling-pricing';
 
 function testCache() {
   return new ModelingCacheService({ client: { auth: { onAuthStateChange: vi.fn() } } } as unknown as SupabaseService);
@@ -139,11 +140,17 @@ describe('Independent editor models', () => {
       fixture.detectChanges();
       fixture.componentInstance.models.set([roof, classic]);
       await fixture.whenStable(); fixture.detectChanges();
-      const picker = fixture.nativeElement.querySelector('#model-choice') as HTMLSelectElement;
+      const picker = fixture.nativeElement.querySelector('#model-choice') as HTMLButtonElement;
       expect(picker.closest('.settings')).toBeTruthy();
-      expect(picker.value).toBe(classic.slug);
+      expect(picker.textContent).toContain('Classic Bar / Plywood');
+      fixture.componentInstance.catalog.set({publishedAt:'2026-10-08T00:00:00Z',products:[roof,classic].map(model=>({
+        ...MODEL_CATALOG_LINKS[model.slug],name:model.product_name,currency:'AUD' as const,options:[],variants:[],imageUrl:`https://example.com/${model.slug}.jpg`,
+      }))});
+      fixture.detectChanges();picker.click();fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.model-choice-options [role="option"]')).toHaveLength(2);
+      expect(fixture.nativeElement.querySelectorAll('.model-choice-options img')).toHaveLength(2);
       await fixture.componentInstance.selectModel(roof.slug);
-      fixture.detectChanges(); expect(picker.value).toBe(roof.slug);
+      fixture.detectChanges(); expect(picker.textContent).toContain(roof.product_name);
     } finally { fixture.destroy(); TestBed.resetTestingModule(); }
   });
 
@@ -584,6 +591,20 @@ it.each(['left','centre','right'] as const)('aligns the compact cart umbrella th
  await component.setRounding(1.5);
  const x=component.umbrellaX()/1000,ray=new THREE.Raycaster(new THREE.Vector3(x,1,.3),new THREE.Vector3(0,-1,0));
  for(const mesh of editor.body.children){mesh.updateMatrixWorld();expect(ray.intersectObject(mesh)).toHaveLength(0);}
+});
+
+it('switches the middle shelf between one panel and the Ice shelf divider cutout',async()=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('two-in-one-cart-mdf');component.width.set(1200);component.height.set(850);component.roundingSupported.set(true);component.shelfIncluded.set(true);component.iceShelfIncluded.set(false);
+ editor.body=new THREE.Group();editor.model=new THREE.Group();editor.model.add(editor.body);
+ const shelf=new THREE.Mesh(new THREE.BoxGeometry(1.436,.016,.556).translate(.75,.4645,.278),new THREE.MeshStandardMaterial());shelf.name='Shelf';
+ const divider=new THREE.Mesh(new THREE.BoxGeometry(.012,.589,.556).translate(.69075,.4055,.278),new THREE.MeshStandardMaterial());divider.name='Ice shelf 3';
+ for(const mesh of [shelf,divider]){editor.sourceParts.push(mesh);editor.sourcePositions.set(mesh.geometry,mesh.geometry.getAttribute('position').clone());}
+ vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});vi.spyOn(editor,'updateMoulding').mockImplementation(()=>{});
+ const shelfAt=()=>editor.body.children.find((part:THREE.Object3D)=>part.name==='Shelf') as THREE.Object3D;
+ const intersects=()=>{const part=shelfAt();part.updateMatrixWorld(true);return new THREE.Raycaster(new THREE.Vector3(.555,.6,.3),new THREE.Vector3(0,-1,0)).intersectObject(part,true).length>0;};
+ await component.setRounding(1.5);expect(intersects()).toBe(true);expect(shelfAt().children).toHaveLength(1);
+ component.setIceShelfIncluded(true);await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));expect(intersects()).toBe(false);expect(shelfAt().children).toHaveLength(2);
+ component.setIceShelfIncluded(false);await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));expect(intersects()).toBe(true);expect(shelfAt().children).toHaveLength(1);
 });
 
 

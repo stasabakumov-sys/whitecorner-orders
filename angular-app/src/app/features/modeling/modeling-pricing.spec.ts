@@ -76,6 +76,8 @@ describe('Hub Modeling selling prices',()=>{
   const data=fixture();(data.products[5] as ModelingProduct & {media?:unknown}).media=[{kind:'image',url:'https://example.supabase.co/storage/v1/object/public/catalog-media/cart.jpg'}];
   const linked=linkedModelProduct(readModelingCatalog(data,publishedAt),'two-in-one-cart-mdf');
   expect(linked?.imageUrl).toContain('catalog-media/cart.jpg');expect(shortModelName(linked!.name)).toBe('2-in-1 Mobile Bar');
+  expect(shortModelName('MDF Mobile Bar Cart with Roof & Decorative Wheels – Foldable Serving Cart')).toBe('MDF Mobile Bar Cart with Roof & Decorative Wheels');
+  expect(shortModelName('2-in-1 Mobile Bar - Event Bar - Charcuterie Cart')).toBe('2-in-1 Mobile Bar');
  });
  it('quotes unsupported colour, dimension, or variant combinations',()=>{
   const data=fixture();expect(catalogPricing(data,{...selection,colour:'#aecde5',raw:false}).subtotal).toBeNull();

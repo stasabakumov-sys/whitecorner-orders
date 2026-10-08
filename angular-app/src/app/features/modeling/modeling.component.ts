@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, computed, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, signal } from '@angular/core';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -14,6 +14,7 @@ import { ModelingFourViews, frontFacingRotation } from './modeling-four-views';
 import { createCartSideShelves } from './modeling-side-shelves';
 import { prepareRooflessCartSource, ROOFLESS_CART_NAME, ROOFLESS_CART_SLUG, ROOF_CART_SLUG } from './modeling-roofless';
 import { prepareTwoInOneCartSource, TWO_IN_ONE_CART_NAME, TWO_IN_ONE_CART_SLUG, SIDE_SHELF_CART_SLUG } from './modeling-two-in-one';
+import { shelfProfilesForIceShelf } from './modeling-ice-shelf';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
 import { readModelingCatalog, linkedModelProduct, shortModelName, catalogPricing, formatModelingPrice, ModelingCatalog, ConfigurationPricing, PricingSelection } from './modeling-pricing';
@@ -80,6 +81,13 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly modelLabel = computed(()=>shortModelName(linkedModelProduct(this.catalog(),this.activeSlug())?.name||this.legacyModelLabel()));
   readonly modelImageUrl = computed(()=>linkedModelProduct(this.catalog(),this.activeSlug())?.imageUrl||'');
   productLabel(slug:string,fallback:string):string { return shortModelName(linkedModelProduct(this.catalog(),slug)?.name||fallback); }
+  productImageUrl(slug:string):string { return linkedModelProduct(this.catalog(),slug)?.imageUrl||''; }
+  readonly modelMenuOpen = signal(false);
+  async chooseModel(slug:string):Promise<void> { this.modelMenuOpen.set(false); await this.selectModel(slug); }
+  @HostListener('document:click', ['$event'])
+  closeModelMenuOutside(event:MouseEvent):void {
+    if(this.modelMenuOpen()&&event.target instanceof Element&&!event.target.closest('.model-choice-card'))this.modelMenuOpen.set(false);
+  }
   private pricingSelection():PricingSelection {return {slug:this.activeSlug(),width:this.width(),depth:this.depth(),height:this.height(),raw:this.rawBody(),colour:this.bodyColor(),shelf:this.shelfIncluded(),topFinish:this.topFinish(),sideShelves:this.sideShelvesIncluded(),sideFinish:this.effectiveSideShelfFinish(),umbrella:this.umbrellaHole(),umbrellaDiameter:this.umbrellaDiameter(),iceShelf:this.iceShelfIncluded(),cutouts:this.selectedCutouts().length,trays:this.selectedTrays().length,roofClosed:this.hasRoof()&&this.roofClosed(),glassRacks:this.hasRoof()?this.glassRackCount():0,frontStyle:this.frontStyle(),frontLogo:!!this.frontLogo(),moulding:this.isClassic()&&this.moulding()};}
   readonly pricing = computed<ConfigurationPricing|null>(()=>{
     const catalog=this.catalog();if(!catalog)return null;
@@ -286,7 +294,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   cutoutTraySummary():string {return this.selectedCutouts().length?this.selectedCutouts().length+' cutouts · '+this.selectedTrays().length+' trays':'None';}
   readonly iceShelfIncluded = signal(true);
   readonly sideShelvesIncluded = signal(false);
-  setIceShelfIncluded(value:boolean):void { this.iceShelfIncluded.set(value); this.bindAssembly(); }
+  setIceShelfIncluded(value:boolean):void {
+    this.iceShelfIncluded.set(value);
+    if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());
+    else this.bindAssembly();
+  }
   setSideShelvesIncluded(value:boolean):void {
     this.sideShelvesIncluded.set(value);
     if(this.isCharcuterieCart()){if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());else this.bindAssembly();}
@@ -887,6 +899,31 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         return { name: part.name, bounds, profile };
       }));
       const nodes = this.sourceParts.map(part => {
+        if(/^Shelf$/i.test(part.name)){
+          const shelfBounds=new THREE.Box3();
+          part.traverse(node=>{if(node instanceof THREE.Mesh)shelfBounds.union(new THREE.Box3().setFromBufferAttribute(this.sourcePositions.get(node.geometry)!));});
+          const dividers=this.sourceParts.filter(candidate=>/^Ice[ _]shelf/i.test(candidate.name)).map(candidate=>{
+            const bounds=new THREE.Box3();candidate.traverse(node=>{if(node instanceof THREE.Mesh)bounds.union(new THREE.Box3().setFromBufferAttribute(this.sourcePositions.get(node.geometry)!));});return bounds;
+          });
+          const profiles=shelfProfilesForIceShelf(shelfBounds,dividers,this.iceShelfIncluded());
+          if(dividers.length&&profiles.length){
+            const materials:THREE.Material[]=[];
+            part.traverse(node=>{if(node instanceof THREE.Mesh)materials.push(...(Array.isArray(node.material)?node.material:[node.material]));});
+            const face=materials.find(material=>!/plywood[ _]edge$/i.test(material.name))||materials[0];
+            const edge=materials.find(material=>/plywood[ _]edge$/i.test(material.name))||face;
+            const full=shelfProfilesForIceShelf(shelfBounds,[],false)[0];
+            const hole=this.umbrellaHole()?withUmbrellaHole(full,this.umbrellaDiameter(),this.width(),this.umbrellaX(),this.isCharcuterieCart()?1500:1200,this.isRooflessCart()?200:150).holes[0]:undefined;
+            const centreX=hole?hole.reduce((sum,point)=>sum+point[0],0)/hole.length:undefined;
+            const group=new THREE.Group();group.name=part.name;
+            for(const [index,base] of profiles.entries()){
+              const left=base.outline[0][0],right=base.outline[1][0];
+              const profile=hole&&centreX!==undefined&&centreX>=left&&centreX<=right?{...base,holes:[hole]}:base;
+              const geometry=createRoundedPart(profile,0);geometries.push(geometry);
+              const mesh=new THREE.Mesh(geometry,[face,edge]);mesh.name=`Shelf panel ${index+1}`;mesh.userData['plywoodPart']='Shelf';mesh.castShadow=true;mesh.receiveShadow=true;group.add(mesh);
+            }
+            return group;
+          }
+        }
         let supported = false;
         part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) supported = true; });
         const solidSide=this.isCharcuterieCart()&&!this.sideShelvesIncluded()&&/^(Left|Right)[ _]side[ _]?1$/i.test(part.name);

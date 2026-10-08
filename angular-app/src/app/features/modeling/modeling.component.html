@@ -28,9 +28,20 @@
       <div class="model-choice-card">
         <div class="model-choice-heading">
           @if(modelImageUrl()){<img [src]="modelImageUrl()" [alt]="modelLabel()+' product photo'" loading="lazy">}
-          <div><label for="model-choice">Model</label><span [title]="modelLabel()">{{modelLabel()}}</span></div>
+          <div><span class="model-choice-label">Model</span><span [title]="modelLabel()">{{modelLabel()}}</span></div>
         </div>
-        <select id="model-choice" [value]="activeSlug()" [disabled]="saving() || roundingBusy()" (change)="selectModel($any($event.target).value)">@for (model of models(); track model.slug) {<option [value]="model.slug" [selected]="model.slug === activeSlug()">{{productLabel(model.slug,model.product_name)}}</option>}</select>
+        <button id="model-choice" type="button" class="model-choice-trigger" aria-label="Model" aria-haspopup="listbox" aria-controls="model-choice-options" [attr.aria-expanded]="modelMenuOpen()" [disabled]="saving() || roundingBusy()" (click)="modelMenuOpen.set(!modelMenuOpen())" (keydown.escape)="modelMenuOpen.set(false)"><span>{{modelLabel()}}</span><span aria-hidden="true">⌄</span></button>
+        @if(modelMenuOpen()){
+          <div id="model-choice-options" class="model-choice-options" role="listbox" aria-label="Models" (keydown.escape)="modelMenuOpen.set(false)">
+            @for(model of models();track model.slug){
+              <button type="button" role="option" [attr.aria-selected]="model.slug===activeSlug()" [class.selected]="model.slug===activeSlug()" [disabled]="saving() || roundingBusy()" (click)="chooseModel(model.slug)">
+                @if(productImageUrl(model.slug)){<img [src]="productImageUrl(model.slug)" [alt]="productLabel(model.slug,model.product_name)+' product photo'" loading="lazy">}
+                @else{<span class="model-choice-photo-placeholder" aria-hidden="true"></span>}
+                <span>{{productLabel(model.slug,model.product_name)}}</span>
+              </button>
+            }
+          </div>
+        }
       </div>
 
       <app-modeling-section class="setting-card" sectionId="dimensions" title="Dimensions" [summary]="sectionSummary('dimensions')" iconPath="M4 4h16v16H4zM8 4v3m4-3v3m4-3v3M4 8h3m-3 4h3m-3 4h3">
