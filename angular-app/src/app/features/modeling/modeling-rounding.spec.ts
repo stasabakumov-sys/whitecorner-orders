@@ -175,3 +175,24 @@ it.each(['left','right'])('keeps the %s side-shelf top and trim square at their 
   if(part!==parts[2])expect(seam).toBeGreaterThan(0);part.geometry.dispose();
  }
 });
+
+
+it.each([1,1.5,3])('closes the outline endpoints of tabletop trim seams at %s mm',radius=>{
+ const profile=(x0:number,x1:number,z0:number,z1:number):RoundingProfile=>({axis:'y',origin:.818,thickness:.016,outline:[[x0,z0],[x1,z0],[x1,z1],[x0,z1]],holes:[]});
+ const parts=[profile(0,.02,0,.6),profile(.02,1.48,.58,.6)].map((profile,i)=>{const geometry=createRoundedPart(profile,radius);geometry.computeBoundingBox();return {name:'Top part'+(i+3),profile,geometry,bounds:geometry.boundingBox!.clone()};});
+ const joints=matingPartJoints(parts);
+ for(const part of parts){keepPartJointsSquare(part.geometry,joints.get(part.name)!,radius);const p=part.geometry.getAttribute('position');let corners=0;
+  for(let i=0;i<p.count;i++)if(Math.abs(p.getX(i)-.02)<1e-6&&p.getZ(i)>.6-radius/1000*2-1e-6){expect(p.getZ(i)).toBeCloseTo(.6,6);expect(Math.min(Math.abs(p.getY(i)-.818),Math.abs(p.getY(i)-.834))).toBeLessThan(1e-6);corners++;}
+  expect(corners).toBeGreaterThan(0);part.geometry.dispose();
+ }
+});
+
+it.each(['left','right'])('keeps the %s side-shelf join to the main tabletop square',side=>{
+ const x=side==='left'?-.2:1.5;
+ const profile=(lo:number,hi:number):RoundingProfile=>({axis:'y',origin:.834,thickness:.016,outline:[[lo,0],[hi,0],[hi,.6],[lo,.6]],holes:[]});
+ const parts=[profile(0,1.5),profile(x,x+.2)].map((profile,i)=>{const geometry=createRoundedPart(profile,1.5);geometry.computeBoundingBox();return {name:i?'Side shelf '+side+' 1':'Top part1',profile,geometry,bounds:geometry.boundingBox!.clone()};});
+ const joints=matingPartJoints(parts),seamX=side==='left'?0:1.5;
+ const shelf=parts[1];keepPartJointsSquare(shelf.geometry,joints.get(shelf.name)!,1.5);const p=shelf.geometry.getAttribute('position');let seam=0;
+ for(let i=0;i<p.count;i++)if(Math.abs(p.getX(i)-seamX)<.003){expect(p.getX(i)).toBeCloseTo(seamX,6);expect(Math.min(Math.abs(p.getY(i)-.834),Math.abs(p.getY(i)-.85))).toBeLessThan(1e-6);seam++;}
+ expect(seam).toBeGreaterThan(0);parts.forEach(p=>p.geometry.dispose());
+});

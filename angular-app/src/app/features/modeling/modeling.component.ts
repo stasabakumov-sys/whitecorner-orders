@@ -46,6 +46,10 @@ export function casterGroupKey(name: string): string | null {
   return match ? `${match[1].toUpperCase()}-${match[2].toLowerCase()}` : null;
 }
 
+export function isSideShelfTopName(name: string): boolean {
+  return /^Side[ _]shelf[ _](?:left|right)[ _][1-4]$/i.test(name);
+}
+
 export function isTopPanelName(name: string): boolean {
   return /^Top[ _](?:part)?\d/i.test(name);
 }
@@ -156,6 +160,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if(this.frontLogo()){const logo=fitLogo(this.logoPanel(),this.frontLogo()!);fields.push({label:'Front logo',value:`${logo.width.toFixed(1)} x ${logoHeight(logo).toFixed(1)} mm · left ${logo.x.toFixed(1)} · top ${logo.y.toFixed(1)} mm`});}
       if(this.isClassic()||this.isSideShelfCart())fields.push({label:'Umbrella hole',value:this.umbrellaHole()?'Ø'+this.umbrellaDiameter()+' mm · '+(this.isClassic()?this.umbrellaPosition()+' · top & shelf':'top, shelves & centred bottom holder'):'None'});
       if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Cutouts',value:this.cutoutSummary()+(this.cutoutsIncluded()&&this.reverseCutoutLayout()?' · mirrored left/right':'')},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
+      if(this.isSideShelfCart()&&this.sideShelvesIncluded())fields.push({label:'Side shelves finish',value:this.sideShelfFinishSummary()});
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
       if(this.hasRoof())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
@@ -360,6 +365,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly rawBody = signal(true);
   readonly paintFinish = signal<'matte' | 'semi-gloss'>('matte');
   readonly topFinish = signal<TopFinish>('plywood');
+  readonly sideShelfFinish = signal<TopFinish|'top'>('top');
+  readonly effectiveSideShelfFinish = computed(()=>this.sideShelfFinish()==='top'?this.topFinish():this.sideShelfFinish() as TopFinish);
+  finishLabel(finish:TopFinish):string {return finish==='body'?'In cart finish / colour':finish==='oak'?'Tasmanian oak':finish==='mdf'?'RAW MDF':'Plywood';}
+  sideShelfFinishSummary():string {return (this.sideShelfFinish()==='top'?'Same as table top · ':'')+this.finishLabel(this.effectiveSideShelfFinish());}
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
@@ -548,6 +557,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.showGlasses.set(false);
     this.glassDiameter.set(80);
     this.topFinish.set(this.isClassic() ? 'plywood' : 'body');
+    this.sideShelfFinish.set('top');
     this.paintFinish.set('matte');
     try { await this.loadRecord(record, version); }
     catch (cause) {
@@ -892,7 +902,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.applyFinishes();
   }
 
-  async setTopFinish(finish: TopFinish): Promise<void> {
+  async setSideShelfFinish(finish:TopFinish|'top'):Promise<void> {await this.setSurfaceFinish(finish,'side');}
+  async setTopFinish(finish: TopFinish): Promise<void> {await this.setSurfaceFinish(finish,'top');}
+  private async setSurfaceFinish(choice:TopFinish|'top',surface:'top'|'side'):Promise<void> {
+    const finish=choice==='top'?this.topFinish():choice;
     const version = ++this.finishVersion;
     this.finishError.set('');
     this.finishLoading.set(true);
@@ -902,10 +915,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         this.loadFinishTexture('plywood-face.jpg'), this.loadFinishTexture('plywood-edge.jpg'), this.loadFinishTexture('pine.jpg'),
       ]);
       if (!this.alive || version !== this.finishVersion) return;
-      this.topFinish.set(finish);
+      if(surface==='side')this.sideShelfFinish.set(choice);else this.topFinish.set(finish);
       this.applyFinishes();
     } catch (cause) {
-      if (this.alive && version === this.finishVersion) this.finishError.set(`Could not load the table top texture: ${this.message(cause)}. Check your connection and select the finish again.`);
+      if (this.alive && version === this.finishVersion) this.finishError.set(`Could not load the surface texture: ${this.message(cause)}. Check your connection and select the finish again.`);
     } finally {
       if (this.alive && version === this.finishVersion) this.finishLoading.set(false);
     }
@@ -1157,12 +1170,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if (!(node instanceof THREE.Mesh)) return;
       const partName = node.userData['plywoodPart'] || node.name;
       if (node.userData['fixedMaterial']) return;
-      if (!this.isClassic() && isTopPanelName(partName)) {
+      const sideShelfTop=this.isSideShelfCart()&&isSideShelfTopName(partName);
+      if (!this.isClassic() && (isTopPanelName(partName)||sideShelfTop)) {
         groupTopFacesAndEdges(node.geometry);
         const source = Array.isArray(node.material) ? node.material[0] : node.material;
-        if (!Array.isArray(node.material) || node.material.length < 2) {
-          const edge = source.clone(); edge.name = 'plywood edge';
-          node.material = [source, edge];
+        const existingEdge=Array.isArray(node.material)?node.material[1]:undefined;
+        if(!existingEdge||existingEdge===source||!/plywood[ _]edge$/i.test(existingEdge.name)){
+          const edge=(existingEdge||source).clone();edge.name='plywood edge';
+          node.material=[source,edge];
         }
       }
       if (!this.isClassic() && this.frontStyle() === 'shaker' && /^Front[ _]part1$/i.test(partName)) {
@@ -1181,7 +1196,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       node.material = Array.isArray(node.material) ? materials : materials[0];
       for (const material of materials) {
         if (!(material instanceof THREE.MeshStandardMaterial)) continue;
-        const finish = isTopPanelName(partName) ? this.topFinish() : 'body';
+        const finish = sideShelfTop?this.effectiveSideShelfFinish():isTopPanelName(partName)?this.topFinish():'body';
         const pine = /pine[ _]trim$/i.test(material.name);
         const edge = /plywood[ _]edge$/i.test(material.name);
         const plywood = (pine ? this.modelPineTexture : edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
