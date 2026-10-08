@@ -9,7 +9,7 @@ export interface RoundingProfile {
   holes: number[][][];
 }
 
-export interface PartJoint { axis: 'x' | 'y' | 'z'; plane: number; bounds: THREE.Box3; normal?: [number,number,number]; squareCapOutline?: number[][]; cap?: {axis: 'x'|'y'|'z';min:number;max:number}; }
+export interface PartJoint { axis: 'x' | 'y' | 'z'; plane: number; bounds: THREE.Box3; normal?: [number,number,number]; squareCapOutline?: number[][]; outlineEnds?: [THREE.Vector3, THREE.Vector3]; cap?: {axis: 'x'|'y'|'z';min:number;max:number}; }
 
 // STEP roof members meet on planar faces. Detect shared faces before rounding,
 // while excluding overlaps, edges and separate parts.
@@ -21,7 +21,9 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3; prof
     // Parts in one panel share both their outline seam and their flat face.
     // Closing only the seam plane leaves the extrusion bevel as a visible groove.
     const family=(name:string)=>/^(Front[ _]part|Side[ _]shelf[ _](?:left|right)[ _]|(?:Left|Right)[ _]side[ _]?|Top[ _](?:part)?|(?:Buttom|Bottom)[ _](?:part)?)\d+$/i.exec(name.trim())?.[1].toLowerCase().replace(/[ _]/g,'').replace('buttom','bottom');
-    if(family(a.name)&&family(a.name)===family(b.name)&&a.profile&&b.profile&&a.profile.axis===b.profile.axis&&Math.abs(a.profile.origin-b.profile.origin)<1e-6){
+    const tabletop=(name:string)=>/^(?:Top[ _]part[1-5]|Side[ _]shelf[ _](?:left|right)[ _][1-4])$/i.test(name);
+    const samePanel=!!family(a.name)&&(family(a.name)===family(b.name)||(tabletop(a.name)&&tabletop(b.name)));
+    if(samePanel&&a.profile&&b.profile&&a.profile.axis===b.profile.axis&&Math.abs(a.profile.origin-b.profile.origin)<1e-6){
       const ap=a.profile,bp=b.profile;
       const world=(p:number[],depth:number)=>ap.axis==='x'?new THREE.Vector3(depth,p[1],p[0]):ap.axis==='y'?new THREE.Vector3(p[0],depth,p[1]):new THREE.Vector3(p[0],p[1],depth);
       for(let ai=0;ai<ap.outline.length;ai++)for(let bi=0;bi<bp.outline.length;bi++){
@@ -35,7 +37,7 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3; prof
         const seam0=[a0[0]+du*lo/length,a0[1]+dv*lo/length],seam1=[a0[0]+du*hi/length,a0[1]+dv*hi/length];
         const normal=(ap.axis==='x'?new THREE.Vector3(0,-du,dv):ap.axis==='y'?new THREE.Vector3(dv,0,-du):new THREE.Vector3(dv,-du,0)).normalize();
         const max=ap.origin+Math.min(ap.thickness,bp.thickness),bounds=new THREE.Box3().setFromPoints([world(seam0,ap.origin),world(seam1,ap.origin),world(seam0,max),world(seam1,max)]);
-        const joint:PartJoint={axis:ap.axis,normal:normal.toArray() as [number,number,number],plane:normal.dot(world(a0,ap.origin)),bounds,cap:{axis:ap.axis,min:ap.origin,max}};
+        const joint:PartJoint={axis:ap.axis,normal:normal.toArray() as [number,number,number],plane:normal.dot(world(a0,ap.origin)),bounds,outlineEnds:[world(seam0,ap.origin),world(seam1,ap.origin)],cap:{axis:ap.axis,min:ap.origin,max}};
         for(const part of [a,b])joints.set(part.name,[...(joints.get(part.name)||[]),joint]);
       }
     }
@@ -48,7 +50,7 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3; prof
     const borderFamily = (name:string) => /^(Top|Buttom|Bottom)[ _](?:part)?\d+$/i.exec(name)?.[1].toLowerCase().replace('buttom','bottom');
     const border=borderFamily(a.name)&&borderFamily(a.name)===borderFamily(b.name);
     const sideShelf=family(a.name)?.startsWith('sideshelf')&&family(a.name)===family(b.name);
-    if (!roof && !shaker && !body && !border && !sideShelf) continue;
+    if (!roof && !shaker && !body && !border && !sideShelf && !samePanel) continue;
     for (const axis of axes) {
       const others = axes.filter(value => value !== axis);
       if (!others.every(value => Math.min(a.bounds.max[value], b.bounds.max[value]) - Math.max(a.bounds.min[value], b.bounds.min[value]) > 1e-5)) continue;
@@ -59,7 +61,7 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3; prof
       const bounds = new THREE.Box3(a.bounds.min.clone().max(b.bounds.min), a.bounds.max.clone().min(b.bounds.max));
       bounds.min[axis] = bounds.max[axis] = plane;
       for (const part of [a,b]) {
-        const squareCapOutline=family(a.name)&&family(a.name)===family(b.name)&&a.profile?.axis===axis&&b.profile?.axis===axis?part.profile?.outline:undefined;
+        const squareCapOutline=samePanel&&a.profile?.axis===axis&&b.profile?.axis===axis?part.profile?.outline:undefined;
         joints.set(part.name,[...(joints.get(part.name)||[]),{axis,plane,bounds,squareCapOutline}]);
       }
     }
@@ -82,6 +84,11 @@ export function keepPartJointsSquare(geometry: THREE.BufferGeometry, joints: Par
         point[axis] >= joint.bounds.min[axis] - tolerance && point[axis] <= joint.bounds.max[axis] + tolerance)) continue;
       if(normal)point.addScaledVector(normal,-distance);else point[joint.axis] = joint.plane;
       if(joint.cap){const cap=joint.cap;point[cap.axis]=point[cap.axis]<(cap.min+cap.max)/2?cap.min:cap.max;}
+      if(joint.cap&&joint.outlineEnds){
+        // Close the rounded outline corners at both ends of a shared seam.
+        // Projection onto the seam alone leaves an inset notch at its endpoints.
+        for(const end of joint.outlineEnds){const corner=end.clone();corner[joint.cap.axis]=point[joint.cap.axis];if(point.distanceTo(corner)<=tolerance*2){point.copy(corner);break;}}
+      }
       if(joint.squareCapOutline){
         // A bonded layer must meet across the whole face, including its outline.
         // Flattening depth alone leaves the in-plane bevel inset as a groove.

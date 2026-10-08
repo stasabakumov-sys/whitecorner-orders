@@ -552,3 +552,22 @@ it.each(['left','centre','right'] as const)('drills aligned Classic Ply holes at
  }
  component.umbrellaHole.set(false);await component.setRounding(1.5);const ray=new THREE.Raycaster(new THREE.Vector3(component.umbrellaX()/1000,1.2,.3),new THREE.Vector3(0,-1,0));for(const mesh of editor.body.children){mesh.updateMatrixWorld();expect(ray.intersectObject(mesh).length).toBeGreaterThan(0);}
 });
+
+
+it('follows the tabletop finish on side-shelf tops and full edges until separately overridden',async()=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('side-shelf-cart-mdf');editor.body=new THREE.Group();editor.rawTexture=new THREE.Texture();editor.plywoodTexture=new THREE.Texture();
+ const face=new THREE.Texture(),edge=new THREE.Texture(),oak=new THREE.Texture();editor.finishTextures.set('plywood-face.jpg',face);editor.finishTextures.set('plywood-edge.jpg',edge);editor.finishTextures.set('pine.jpg',new THREE.Texture());editor.finishTextures.set('tasmanian-oak.png',oak);
+ const make=(name:string)=>{const material=new THREE.MeshStandardMaterial();const mesh=new THREE.Mesh(new THREE.BoxGeometry(.2,.016,.6),[material,material]);mesh.name=name;editor.body.add(mesh);return mesh;};
+ const top=make('Top_part1'),left=make('Side_shelf_left_1'),trim=make('Side_shelf_right_3'),support=make('Side_shelf_right_5');
+ await component.setTopFinish('plywood');
+ for(const mesh of [top,left,trim]){const materials=mesh.material as THREE.MeshPhysicalMaterial[];expect(materials[0].map).toBe(face);expect(materials[1].map).toBe(edge);expect(materials[0]).not.toBe(materials[1]);}
+ expect((support.material as THREE.MeshPhysicalMaterial[])[0].map).toBeNull();
+ await component.setSideShelfFinish('body');expect((left.material as THREE.MeshPhysicalMaterial[])[1].map).toBeNull();expect((top.material as THREE.MeshPhysicalMaterial[])[1].map).toBe(edge);
+ await component.setTopFinish('oak');expect(component.effectiveSideShelfFinish()).toBe('body');expect((left.material as THREE.MeshPhysicalMaterial[])[0].map).toBeNull();
+ await component.setSideShelfFinish('top');expect((left.material as THREE.MeshPhysicalMaterial[])[1].map).toBe(oak);expect(component.sideShelfFinishSummary()).toBe('Same as table top · Tasmanian oak');
+});
+
+it('retains the previous side-shelf finish and reports a texture load failure',async()=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('side-shelf-cart-mdf');vi.spyOn(editor,'loadFinishTexture').mockRejectedValue(new Error('Offline'));
+ await component.setSideShelfFinish('plywood');expect(component.sideShelfFinish()).toBe('top');expect(component.finishError()).toContain('Offline');expect(component.finishLoading()).toBe(false);
+});
