@@ -25,6 +25,12 @@ export function addTopFinishUvs(geometry: THREE.BufferGeometry, turnGrain = fals
 
 export function groupTopFacesAndEdges(geometry: THREE.BufferGeometry): void {
   if (geometry.userData['topFinishGroups']) return;
+  // Extruded panels already identify their caps and bevels. Smoothed normals
+  // at the perimeter must not reclassify a cap triangle as textured end grain.
+  if (geometry.userData['plywoodFacesAndEdges']) {
+    geometry.userData['topFinishGroups'] = true;
+    return;
+  }
   const normal = geometry.getAttribute('normal'), index = geometry.getIndex();
   geometry.clearGroups();
   const count = index?.count || normal.count;
