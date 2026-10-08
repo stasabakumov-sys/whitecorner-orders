@@ -14,7 +14,7 @@ import { ModelingFourViews, frontFacingRotation } from './modeling-four-views';
 import { cartTopStructure, createCartSideShelves, extractCartSideShelves, extractCartUmbrellaHolderBounds } from './modeling-side-shelves';
 import { prepareRooflessCartSource, ROOFLESS_CART_NAME, ROOFLESS_CART_SLUG, ROOF_CART_SLUG } from './modeling-roofless';
 import { prepareTwoInOneCartSource, TWO_IN_ONE_CART_NAME, TWO_IN_ONE_CART_SLUG, SIDE_SHELF_CART_SLUG } from './modeling-two-in-one';
-import { prepareRoofSideShelfCartSource, roofSideShelfHeight, ROOF_SIDE_SHELF_CART_NAME, ROOF_SIDE_SHELF_CART_SLUG, ROOF_SIDE_SHELF_CUTOUTS } from './modeling-roof-side-shelf';
+import { prepareRoofSideShelfCartSource, roofSideShelfHeight, roofSideShelfIceHeight, ROOF_SIDE_SHELF_CART_NAME, ROOF_SIDE_SHELF_CART_SLUG, ROOF_SIDE_SHELF_CUTOUTS } from './modeling-roof-side-shelf';
 import { CLASSIC_MDF_NAME, CLASSIC_MDF_SLUG, prepareClassicMdfSource } from './modeling-classic-mdf';
 import { shelfProfilesForIceShelf } from './modeling-ice-shelf';
 import { createFrontMoulding } from './modeling-moulding';
@@ -987,9 +987,10 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         }
         let supported = false;
         part.traverse(node => { if (node instanceof THREE.Mesh && node.userData['roundingProfile']) supported = true; });
+        const plainClassicTop=this.isPlywoodClassic()&&/^Top[ _]part1$/i.test(part.name);
         const solidSide=this.isCharcuterieCart()&&!this.sideShelvesIncluded()&&/^(Left|Right)[ _]side[ _]?1$/i.test(part.name);
         const umbrellaPanel=(this.isCharcuterieCart()||this.isClassic()||this.isRooflessCart())&&this.umbrellaHole()&&/^(Top[ _](?:part)?1(?:[ _]cutouts)?|Shelf|Ice[ _]shelf[ _]4|Body5)$/i.test(part.name);
-        if (!umbrellaPanel&&((!raw&&!solidSide) || !supported || /^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts|[ _]cutout[ _]plug[ _]\d+)?$/i.test(part.name))) {
+        if (!umbrellaPanel&&((!raw&&!solidSide) || !supported || (!plainClassicTop&&/^(Top|Buttom|Bottom)[ _](?:part)?1(?:[ _]cutouts|[ _]cutout[ _]plug[ _]\d+)?$/i.test(part.name)))) {
           const copy = part.clone(true);
           copy.traverse(node => {
             if (!(node instanceof THREE.Mesh)) return;
@@ -1020,9 +1021,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         if(umbrellaPanel)profile=withUmbrellaHole(profile,this.umbrellaDiameter(),this.width(),this.umbrellaX(),this.isCharcuterieCart()?1500:1200,this.isRooflessCart()?200:150);
         if(solidSide){const us=profile.outline.map(p=>p[0]),vs=profile.outline.map(p=>p[1]),u0=Math.min(...us),u1=Math.max(...us),v0=Math.min(...vs),v1=Math.max(...vs);profile={...profile,outline:[[u0,v0],[u1,v0],[u1,v1],[u0,v1]],holes:[]};}
         const partJoints = joints.get(name) || [];
-        const key = JSON.stringify([profile, raw, /^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name), partJoints]);
+        const key = JSON.stringify([profile, raw, plainClassicTop, /^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name), partJoints]);
         const geometry = this.modelCache.roundedPart(key, () => {
-          const rounded = createRoundedPart(profile!, (umbrellaPanel&&/^Top/i.test(name))||(this.isRoofSideShelfCart()&&/^Top[ _]part1/i.test(name))?0:raw);
+          const rounded = createRoundedPart(profile!, plainClassicTop||(umbrellaPanel&&/^Top/i.test(name))||(this.isRoofSideShelfCart()&&/^Top[ _]part1/i.test(name))?0:raw);
           if (/^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name)) keepTrimJointSquare(rounded, profile!, raw);
           keepPartJointsSquare(rounded, partJoints, raw);
           return rounded;
@@ -1030,7 +1031,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         geometries.push(geometry);
         const face = materials.find(material => !/plywood[ _]edge$/i.test(material.name)) || materials[0];
         let edge = materials.find(material => /plywood[ _]edge$/i.test(material.name)) || face;
-        if(umbrellaPanel&&/^Top/i.test(name)&&edge===face){edge=face.clone();edge.name='plywood edge';}
+        if((umbrellaPanel&&/^Top/i.test(name)||plainClassicTop)&&edge===face){edge=face.clone();edge.name='plywood edge';}
         const mesh = new THREE.Mesh(geometry, [face, edge]);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -1227,8 +1228,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
           ? [original.getX(i),roofSideShelfHeight(original.getY(i),this.height()),original.getZ(i)] : roofTop
           ? [original.getX(i),roofSideShelfHeight(original.getY(i),this.height()),original.getZ(i)] : icePart
           ? (()=>{const [px,py,pz]=resizeSideShelfCartPosition(name,original.getX(i),original.getY(i),original.getZ(i),this.width(),850);
-            const lift=/^Ice[ _]shelf[ _]3$/i.test(name)?(this.height()-850)/2000*(1+THREE.MathUtils.clamp((py-.45)/.4,0,1)):(this.height()-850)/1000;
-            return [px,py+lift,pz] as [number,number,number];})() : this.isCharcuterieCart()
+            return [px,roofSideShelfIceHeight(name,py,this.height()),pz] as [number,number,number];})() : this.isCharcuterieCart()
           ? resizeSideShelfCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height()) : this.isClassic()
           ? resizePlywoodPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height())
           : resizeRoofCartPosition(name, original.getX(i), original.getY(i), original.getZ(i), this.width(), this.height(), this.frontStyle() !== 'shaker');

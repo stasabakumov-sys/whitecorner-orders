@@ -1,8 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
+import { createRoundedPart } from './modeling-rounding';
 
 describe('Image finishes on horizontal tops', () => {
+  it('keeps a square 16 mm top face separate from its textured edge', () => {
+    const geometry=createRoundedPart({axis:'y',origin:.834,thickness:.016,
+      outline:[[0,0],[1.2,0],[1.2,.6],[0,.6]],holes:[]},0);
+    groupTopFacesAndEdges(geometry);
+    const position=geometry.getAttribute('position');
+    let topTriangles=0,edgeTriangles=0;
+    for(const group of geometry.groups)for(let i=group.start;i<group.start+group.count;i+=3){
+      const flat=Math.abs(position.getY(i)-position.getY(i+1))<1e-6&&Math.abs(position.getY(i)-position.getY(i+2))<1e-6;
+      if(flat){expect(group.materialIndex).toBe(0);topTriangles++;}
+      else {expect(group.materialIndex).toBe(1);edgeTriangles++;}
+    }
+    expect(topTriangles).toBeGreaterThan(0);
+    expect(edgeTriangles).toBeGreaterThan(0);
+    geometry.computeBoundingBox();
+    expect(geometry.boundingBox!.max.y-geometry.boundingBox!.min.y).toBeCloseTo(.016,6);
+    geometry.dispose();
+  });
   it('runs oak grain along the tabletop length without stretching its scale', () => {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute([0, .9, 0, 1.2, .9, 0, 1.5, .9, .6], 3));

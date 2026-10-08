@@ -25,6 +25,13 @@ export function roofSideShelfHeight(y:number,heightMm:number):number {
   return roofUnderside+(y-1.8)*(roofTop-roofUnderside)/.13;
 }
 
+export function roofSideShelfIceHeight(name:string,y:number,heightMm:number):number {
+  const lift=(heightMm-850)/1000;
+  if(/^Ice[ _]shelf[ _][12]$/i.test(name))return y;
+  if(/^Ice[ _]shelf[ _]3$/i.test(name))return y+lift*THREE.MathUtils.clamp((y-.111)/(.7-.111),0,1);
+  return y+lift;
+}
+
 export function roofSideShelfTopProfile(origin:number,thickness:number,cutouts:boolean):RoundingProfile {
   const holes=postCentres.map(x=>square(x,300,42));
   if(cutouts)for(const slot of ROOF_SIDE_SHELF_CUTOUTS)holes.push(rectangle(
@@ -40,7 +47,8 @@ export function prepareRoofSideShelfCartSource(scene:THREE.Group):void {
   if(!original)throw new Error('The 150 cm source cart is missing its plain tabletop.');
   const sourceMesh=original instanceof THREE.Mesh?original:original.children.find(node=>node instanceof THREE.Mesh) as THREE.Mesh|undefined;
   if(!sourceMesh)throw new Error('The 150 cm source cart has no tabletop mesh.');
-  const bounds=new THREE.Box3().setFromObject(original),thickness=bounds.max.y-bounds.min.y;
+  const bounds=new THREE.Box3().setFromObject(original);
+  const thickness=bounds.max.y-bounds.min.y;
   const material=Array.isArray(sourceMesh.material)?sourceMesh.material: [sourceMesh.material];
   for(const cutouts of [false,true]){
     const profile=roofSideShelfTopProfile(bounds.min.y,thickness,cutouts);
@@ -66,12 +74,20 @@ export function prepareRoofSideShelfCartSource(scene:THREE.Group):void {
   // This product's drawing locates two posts, rather than the four on that cart.
   for(const [index,x] of postCentres.entries()){
     const cx=x/1000;
-    addBox(`Dar${index+1}`,cx,(.775+1.8)/2,.3,.0418,1.8-.775,.0418);
-    const profile:RoundingProfile={axis:'y',origin:.78,thickness:.054,
-      outline:square(x,300,60),holes:[square(x,300,42)]};
-    const holder=new THREE.Mesh(createRoundedPart(profile,0),[new THREE.MeshPhysicalMaterial(),new THREE.MeshPhysicalMaterial()]);
-    holder.name=`Top ${index+3}`;holder.userData={plywoodPart:holder.name,roundingProfile:profile};
-    holder.castShadow=holder.receiveShadow=true;scene.add(holder);
+    addBox(`Dar${index+1}`,cx,(.734+1.8)/2,.3,.0418,1.8-.734,.0418);
+    const holder=new THREE.Group();holder.name=`Top ${index+3}`;
+    // Match the source roof cart's Top_3/Top_4 sockets: 66 mm outside,
+    // 42 mm opening, 112 mm overall height and a solid 12 mm floor.
+    const profiles:[string,RoundingProfile][]=[
+      ['wall',{axis:'y',origin:.734,thickness:.1,outline:square(x,300,66),holes:[square(x,300,42)]}],
+      ['bottom',{axis:'y',origin:.722,thickness:.012,outline:square(x,300,66),holes:[]}],
+    ];
+    for(const [suffix,profile] of profiles){
+      const mesh=new THREE.Mesh(createRoundedPart(profile,0),[new THREE.MeshPhysicalMaterial(),new THREE.MeshPhysicalMaterial()]);
+      mesh.name=`${holder.name} ${suffix}`;mesh.userData['plywoodPart']=holder.name;
+      mesh.castShadow=mesh.receiveShadow=true;holder.add(mesh);
+    }
+    scene.add(holder);
   }
   // Four separate fascia rails leave the underside open like the reference roof.
   addBox('Roof 1',.6,1.922,.3,1.2,.016,.6);
