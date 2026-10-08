@@ -558,15 +558,15 @@ it('rounds the roof cart outer top edge while keeping leaf seams and post openin
  }}finally{frame.mockRestore();}
 });
 
-it('resizes the two-post roof cart without stretching openings, and supports optional leaves, closed roof and glasses',async()=>{
- const {component}=setup(),editor=component as any;component.activeSlug.set('roof-side-shelf-cart-mdf');component.roundingSupported.set(true);component.height.set(950);
+it.each([1200,1300,1500])('resizes the two-post roof cart to %i mm without stretching openings, with optional leaves, closed roof and glasses',async width=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set('roof-side-shelf-cart-mdf');component.roundingSupported.set(true);component.height.set(950);component.moulding.set(false);
  editor.body=new THREE.Group();editor.model=new THREE.Group();editor.model.add(editor.body);
  const source=new THREE.Group(),top=new THREE.Mesh(new THREE.BoxGeometry(1.5,.016,.6).translate(.75,.842,.3),new THREE.MeshPhysicalMaterial());top.name='Top_part1';source.add(top);
  prepareRoofSideShelfCartSource(source);
  for(const part of source.children){editor.sourceParts.push(part);part.traverse(node=>{if(node instanceof THREE.Mesh)editor.sourcePositions.set(node.geometry,node.geometry.getAttribute('position').clone());});}
  vi.spyOn(editor,'applyFinishes').mockImplementation(()=>{});
  const frame=vi.spyOn(globalThis,'requestAnimationFrame').mockImplementation(callback=>{callback(0);return 0;});
- try{for(const width of [1200,1300,1500,1200]){
+ try{
   component.setDimension('width',String(width));await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));
   await component.setRounding(1.5);expect(component.error()).toBe('');
   const panel=editor.body.getObjectByName('Top part1') as THREE.Mesh,box=panel.geometry.boundingBox!;
@@ -591,8 +591,7 @@ it('resizes the two-post roof cart without stretching openings, and supports opt
   component.setRoofClosed(false);expect(editor.body.getObjectByName('Roof bottom panel')).toBeUndefined();expect(editor.body.getObjectByName('Roof glass racks')).toBeUndefined();
   component.setSideShelvesIncluded(true);await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));expect(component.previewWidth()).toBe(width+400);
   component.setSideShelvesIncluded(false);await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));expect(component.previewWidth()).toBe(width);
- }
- component.setDimension('width','1400');expect(component.width()).toBe(1200);
+ component.setDimension('width','1400');expect(component.width()).toBe(width);
  component.setDimension('width','1500');await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));
  component.resetDimensions();await vi.waitFor(()=>expect(component.roundingBusy()).toBe(false));
  expect((editor.body.getObjectByName('Top part1') as THREE.Mesh).geometry.boundingBox!.max.x).toBeCloseTo(1.2,6);
