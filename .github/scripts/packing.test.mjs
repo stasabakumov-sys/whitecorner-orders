@@ -4,7 +4,6 @@ import {pathToFileURL} from 'node:url';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-
 const {PGlite}=await import(pathToFileURL(path.resolve(process.argv[2])).href);
 const db=new PGlite();
 try{
@@ -751,5 +750,28 @@ try{
  }
  await db.exec('set role anon');
  await assert.rejects(db.query('select wc_backdrop_constructor_geometry($1)',[largeBox]),/permission denied/);
+ // Rehearse the whole-piece release on the fully migrated schema.
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/migrations/20261008000100_backdrop_box_whole_cut.sql','utf8'));
+ const wholeGeometry=(await db.query('select wc_backdrop_constructor_geometry($1) result',[{length_mm:830,width_mm:780,height_mm:80}])).rows[0].result;
+ assert.deepEqual(wholeGeometry,{bottom:{length:815,width:765,depth:80},lid:{length:825,width:775,depth:80},rim:80,main_panel:815});
+ const turnedGeometry=(await db.query('select wc_backdrop_constructor_geometry($1) result',[{length_mm:1150,width_mm:400,height_mm:80}])).rows[0].result;
+ assert.equal(turnedGeometry.rim,12.5);assert.equal(turnedGeometry.main_panel,1135);
+ const splitGeometry=(await db.query('select wc_backdrop_constructor_geometry($1) result',[{length_mm:1500,width_mm:930,height_mm:80}])).rows[0].result;
+ assert.equal(splitGeometry.rim,80);assert.equal(splitGeometry.main_panel,910);
+ const wholeKey='830x780:foldable',wholeId=randomUUID(),wholeSvg=`${managerA}/${wholeId}/source.svg`;
+ await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-drawings',$1,'{\"size\":20}')",[wholeSvg]);
+ const wholeFiles=[0,1].map(i=>({id:null,expected:null,path:`${managerA}/${wholeId}/${i}.rd`,filename:i?'LID.rd':'BOTTOM.rd',bytes:120}));
+ for(const file of wholeFiles)await db.query("insert into storage.objects(bucket_id,name,metadata) values('box-rd-files',$1,'{\"size\":120}')",[file.path]);
+ await db.query("select set_config('test.actor',$1,false)",[managerA]);await db.exec('set role authenticated');
+ await db.query('select wc_save_backdrop_packaging_dimensions($1,$2,830,780,80,null)',[wholeKey,'Whole box']);
+ const wholeArgs=[wholeId,wholeKey,{package_name:'Whole box',length_mm:830,width_mm:780,height_mm:80},{box_type:'backdrop',...wholeGeometry},{path:wholeSvg,filename:'whole.svg',bytes:20,expected:null},wholeFiles];
+ const wholeSaved=(await db.query('select wc_save_backdrop_constructor_files($1,$2,$3,$4,$5,$6) result',wholeArgs)).rows[0].result;
+ assert.equal(wholeSaved.rd_files.length,2);assert.deepEqual(wholeSaved.rd_files.map(file=>file.copies),[1,1]);
+ const extra=structuredClone(wholeArgs);extra[0]=randomUUID();extra[5]=[...wholeFiles,wholeFiles[0],wholeFiles[1]];
+ await assert.rejects(db.query('select wc_save_backdrop_constructor_files($1,$2,$3,$4,$5,$6)',extra),/Prepare 2 RD files/);
+ await db.exec('reset role;set role anon');
+ await assert.rejects(db.query('select wc_backdrop_constructor_geometry($1)',[{length_mm:830,width_mm:780,height_mm:80}]),/permission denied|does not exist/);
+ await db.exec('reset role');
  console.log('Packing checks passed, including shared Backdrop Constructor, atomic retries, folding isolation, cutting guards and RLS.');
 }finally{await db.close();}

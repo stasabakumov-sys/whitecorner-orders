@@ -5,16 +5,23 @@ import {CartBoxConstructorComponent} from './cart-box-constructor.component';
 import {HubMembersService} from '../../core/services/hub-members.service';
 import {backdropBox} from '../packing/backdrop-box-geometry';
 
-const box={id:'box',package_name:'Arch box',length_mm:930,width_mm:930,height_mm:80};
+const box={id:'box',package_name:'Arch box',length_mm:1500,width_mm:930,height_mm:80};
 const size='1800x900:foldable';
 const rd=Array.from({length:4},(_,i)=>({filename:`PART${i}.rd`,bytes:new Uint8Array(120)}));
 describe('Backdrop box in saved packaging',()=>{
  it('seeds package dimensions unchanged and derives the reference only once',()=>{
-  expect(cartConstructorDimensions(box,'backdrop')).toEqual({length:930,width:930,depth:80});
+  expect(cartConstructorDimensions(box,'backdrop')).toEqual({length:1500,width:930,depth:80});
   const seed=cartConstructorDimensions(box,'backdrop'),net=backdropBox(seed.length,seed.width,seed.depth);
-  expect(net.bottom[0].length).toBe(915);expect(net.lid[0].length).toBe(925);
-  expect(backdropConstructorData(box)).toEqual({bottom:{length:915,width:915,depth:80},lid:{length:925,width:925,depth:80},rim:80,main_panel:786});
+  expect(net.bottom[0].length).toBe(1485);expect(net.lid[0].length).toBe(1495);
+  expect(backdropConstructorData(box)).toEqual({bottom:{length:1485,width:915,depth:80},lid:{length:1495,width:925,depth:80},rim:80,main_panel:910});
   expect(backdropConstructorData({...box,length_mm:1850,width_mm:1100})).toMatchObject({rim:37.5,main_panel:952.5});
+ });
+ it('keeps an 830 × 780 × 80 box whole with two RD files',()=>{
+  const whole={...box,length_mm:830,width_mm:780};
+  expect(backdropConstructorData(whole)).toMatchObject({rim:80,main_panel:815});
+  expect(backdropBox(830,780,80).bottom).toHaveLength(1);
+  expect(backdropBox(830,780,80).lid).toHaveLength(1);
+  expect(backdropBox(830,780,80).drawing.pieces).toBe(2);
  });
  it('uploads SVG and four distinct RD files, preserves revisions and requires one-copy confirmation',async()=>{
   const upload=vi.fn().mockResolvedValue({error:null}),rpc=vi.fn();
@@ -22,7 +29,7 @@ describe('Backdrop box in saved packaging',()=>{
   const previous={drawing:{revision:'svg'},files:[{id:'old',revision:'rd'}]} as any;
   const request=await service.prepareBackdrop(size,box,'<svg/>',rd,{},previous,[],()=>{},'backdrop');
   expect(upload).toHaveBeenCalledTimes(5);expect(request.p_constructor.replace_files).toEqual([{id:'old',expected:'rd'}]);
-  expect(request.p_constructor).toMatchObject({box_type:'backdrop',rim:80,main_panel:786});
+  expect(request.p_constructor).toMatchObject({box_type:'backdrop',rim:80,main_panel:910});
   expect(new Set(request.p_rd_files.map(file=>file.path)).size).toBe(4);
   expect(request.p_rd_files.every(file=>file.id===null)).toBe(true);
   const data={drawing:{size_key:size,object_path:request.p_svg.path},rd_files:request.p_rd_files.map(file=>({backdrop_size_key:size,object_path:file.path,copies:2}))};
@@ -45,9 +52,9 @@ describe('Backdrop box in saved packaging',()=>{
   const files={loadBackdrop:vi.fn().mockResolvedValue(previous),prepareBackdrop:vi.fn().mockResolvedValue(request),saveBackdrop:vi.fn().mockRejectedValueOnce(Error('Lost response')).mockResolvedValue(previous)};
   TestBed.configureTestingModule({providers:[{provide:CartConstructorFilesService,useValue:files},{provide:HubMembersService,useValue:{manager:signal(true)}}]});
   const c=TestBed.createComponent(CartBoxConstructorComponent).componentInstance;c.box=box;c.sharedSize=size;await c.show();
-  expect(c.boxType).toBe('backdrop');expect(c.seed).toEqual({length:930,width:930,depth:80});expect(c.replacementIds).toEqual(['d','c','b','a']);
-  expect(c.fileLabels).toEqual(['Bottom main','Bottom short','Lid main','Lid short']);expect(c.copies).toBe(1);expect(c.saveLabel).toContain('four RD files');
-  c.editor={drawing:backdropBox(930,930,80).drawing,rdFiles:rd,rdSettings:{}} as any;
+  expect(c.boxType).toBe('backdrop');expect(c.seed).toEqual({length:1500,width:930,depth:80});expect(c.replacementIds).toEqual(['d','c','b','a']);
+  expect(c.fileLabels).toEqual(['Bottom main','Bottom short','Lid main','Lid short']);expect(c.copies).toBe(1);expect(c.saveLabel).toContain('4 RD files');
+  c.editor={drawing:backdropBox(1500,930,80).drawing,rdFiles:rd,rdSettings:{}} as any;
   c.save();expect(c.confirmOpen).toBe(true);expect(files.prepareBackdrop).not.toHaveBeenCalled();
   await c.confirmSave();expect(c.pending).toBe(request);expect(c.error).toContain('Retry Save');
   await c.confirmSave();expect(files.prepareBackdrop).toHaveBeenCalledTimes(1);expect(files.saveBackdrop).toHaveBeenLastCalledWith(request);expect(c.success).toContain('4 RD files');
