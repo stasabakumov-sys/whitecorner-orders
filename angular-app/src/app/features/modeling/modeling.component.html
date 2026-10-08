@@ -77,11 +77,11 @@
           <h3 class="setting-subtitle">Side shelves</h3>
           <p class="help">{{sideShelfFinishSummary()}}</p>
           <div class="finish-options" role="group" aria-label="Side shelves finish">
-            <button type="button" [class.selected]="sideShelfFinish()==='top'" [attr.aria-pressed]="sideShelfFinish()==='top'" (click)="setSideShelfFinish('top')">Same as table top</button>
-            <button type="button" [class.selected]="sideShelfFinish()==='body'" [attr.aria-pressed]="sideShelfFinish()==='body'" (click)="setSideShelfFinish('body')">In cart finish / colour</button>
-            <button type="button" [class.selected]="sideShelfFinish()==='oak'" [attr.aria-pressed]="sideShelfFinish()==='oak'" (click)="setSideShelfFinish('oak')">Tasmanian oak</button>
-            <button type="button" [class.selected]="sideShelfFinish()==='plywood'" [attr.aria-pressed]="sideShelfFinish()==='plywood'" (click)="setSideShelfFinish('plywood')">Plywood</button>
-            <button type="button" [class.selected]="sideShelfFinish()==='mdf'" [attr.aria-pressed]="sideShelfFinish()==='mdf'" (click)="setSideShelfFinish('mdf')">RAW MDF</button>
+            <button type="button" [class.selected]="sideShelfFinish()==='top'" [attr.aria-pressed]="sideShelfFinish()==='top'" (click)="setSideShelfFinish('top')"><span class="finish-chip" [class.oak]="topFinish()==='oak'" [class.plywood]="topFinish()==='plywood'" [style.background]="topFinish()==='body'?(rawBody()?'#d5b88d':bodyColor()):topFinish()==='mdf'?'#b99b78':null" aria-hidden="true"></span>Same as table top</button>
+            <button type="button" [class.selected]="sideShelfFinish()==='body'" [attr.aria-pressed]="sideShelfFinish()==='body'" (click)="setSideShelfFinish('body')"><span class="finish-chip" [style.background]="rawBody() ? '#d5b88d' : bodyColor()" aria-hidden="true"></span>In cart finish / colour</button>
+            <button type="button" [class.selected]="sideShelfFinish()==='oak'" [attr.aria-pressed]="sideShelfFinish()==='oak'" (click)="setSideShelfFinish('oak')"><span class="finish-chip oak" aria-hidden="true"></span>Tasmanian oak</button>
+            <button type="button" [class.selected]="sideShelfFinish()==='plywood'" [attr.aria-pressed]="sideShelfFinish()==='plywood'" (click)="setSideShelfFinish('plywood')"><span class="finish-chip plywood" aria-hidden="true"></span>Plywood</button>
+            <button type="button" [class.selected]="sideShelfFinish()==='mdf'" [attr.aria-pressed]="sideShelfFinish()==='mdf'" (click)="setSideShelfFinish('mdf')"><span class="finish-chip" style="background:#b99b78" aria-hidden="true"></span>RAW MDF</button>
           </div>
         }
       </app-modeling-section>
