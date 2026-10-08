@@ -40,6 +40,15 @@ describe('Side shelves follow each cart top while reusing folding supports',()=>
    expect(panel.max.z).toBeCloseTo(.6,6);
    expect(bounds(shelves,`Side shelf ${side} 5`).max.y).toBeCloseTo(.83,3);
    expect(bounds(shelves,`Side shelf ${side} 6`).max.y).toBeCloseTo(.83,3);
+   const join=side==='left'?0:1.2;
+   for(const number of [3,4]){
+    const member=shelves.getObjectByName(`Side shelf ${side} ${number}`) as THREE.Mesh;
+    const positions=member.geometry.getAttribute('position');let capVertices=0;
+    for(let i=0;i<positions.count;i++)if(Math.abs(positions.getX(i)-join)<.003001){
+      expect(positions.getX(i)).toBeCloseTo(join,6);capVertices++;
+    }
+    expect(capVertices).toBeGreaterThan(0);
+   }
   }
  });
  for(const classic of [true,false])it(`matches the ${classic?'Classic':'decorative-wheel'} top`,()=>{

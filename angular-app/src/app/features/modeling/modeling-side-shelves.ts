@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createRoundedPart, keepTrimJointSquare, RoundingProfile } from './modeling-rounding';
+import { createRoundedPart, keepPartJointsSquare, keepTrimJointSquare, RoundingProfile } from './modeling-rounding';
 
 export interface CartTopStructure {
   panelBottom:number;
@@ -89,8 +89,13 @@ export function createCartSideShelves(source: THREE.Group, widthMm: number, heig
     add(`Side shelf ${side} 1`,base(top.panelBottom,top.panelTop-top.panelBottom,rectangle(x0,x1,0,.6)),false,0);
     const outer=left?rectangle(x0,x0+rail,0,.6):rectangle(x1-rail,x1,0,.6);
     add(`Side shelf ${side} 2`,base(top.trimBottom,top.trimTop-top.trimBottom,outer),true);
-    add(`Side shelf ${side} 3`,base(top.trimBottom,top.trimTop-top.trimBottom,rectangle(x0+rail,x1-rail,0,rail)),true);
-    add(`Side shelf ${side} 4`,base(top.trimBottom,top.trimTop-top.trimBottom,rectangle(x0+rail,x1-rail,.6-rail,.6)),true);
+    const railStart=left?x0+rail:x0,railEnd=left?x1:x1-rail;
+    for(const [index,z0,z1] of [[3,0,rail],[4,.6-rail,.6]]){
+      const member=add(`Side shelf ${side} ${index}`,base(top.trimBottom,top.trimTop-top.trimBottom,rectangle(railStart,railEnd,z0,z1)),true);
+      keepPartJointsSquare(member.geometry,[{axis:'x',plane:left?x1:x0,
+        bounds:new THREE.Box3(new THREE.Vector3(left?x1:x0,top.trimBottom,z0),new THREE.Vector3(left?x1:x0,top.trimTop,z1)),
+        cap:{axis:'y',min:top.trimBottom,max:top.trimTop}}],radiusMm);
+    }
   }
   for (const part of source.children) {
     if (!(part instanceof THREE.Mesh)) continue;
