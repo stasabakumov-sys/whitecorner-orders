@@ -34,6 +34,15 @@ const [registered] = await query(`select replace(statements[1],E'\\r','')=${quot
 if (registered && !registered.source_matches) throw Error('Registered Fera migration differs from reviewed source');
 if (before.review_table_present && !registered) throw Error('Fera review table exists without a registered migration');
 console.log(JSON.stringify({ preflight: 'passed', migrationRegistered: !!registered }));
+const storageResponse = await fetch('https://api.supabase.com/v1/projects/zgvnrpspwluapaxnycrg/config/storage', {
+  headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000),
+});
+if (!storageResponse.ok) throw Error(`Production storage config read failed (HTTP ${storageResponse.status})`);
+const storageConfig = await storageResponse.json();
+if (!Number.isSafeInteger(storageConfig.fileSizeLimit) || storageConfig.fileSizeLimit <= 0) {
+  throw Error('Production storage config has no valid global file size limit');
+}
+console.log(JSON.stringify({ storageGlobalLimitBytes: storageConfig.fileSizeLimit }));
 if (mode === '--verify') process.exit(0);
 
 await query(`begin; set local lock_timeout='15s'; set local statement_timeout='120s';

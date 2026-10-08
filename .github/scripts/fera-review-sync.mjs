@@ -163,7 +163,7 @@ for (const item of linkedMedia) {
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   const storagePath = `${reviewId}/${createHash('sha256').update(item.id).digest('hex')}.${suffix}`;
   const { error: uploadError } = await db.storage.from('fera-review-media').upload(storagePath, bytes, { contentType: mime, upsert: true });
-  if (uploadError) throw Error(`Hub media upload failed (${uploadError.statusCode ?? 'storage error'})`);
+  if (uploadError) throw Error(`Hub ${item.type} upload failed (${uploadError.statusCode ?? 'storage error'}; ${bytes.length} bytes)`);
   const saved = await rows(db.from('wc_fera_review_media').upsert({ review_id: reviewId, fera_media_id: item.id,
     source_url: item.sourceUrl, media_type: item.type, storage_path: storagePath, content_type: mime,
     bytes: bytes.length, sha256, copied_at: new Date().toISOString() }, { onConflict: 'fera_media_id' }).select('id'), 'Hub media save');
