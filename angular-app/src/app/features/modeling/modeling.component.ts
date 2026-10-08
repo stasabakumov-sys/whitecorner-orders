@@ -420,7 +420,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly assemblyMode = signal(false);
   readonly assemblyRevision = signal(0);
   get parts() { return ASSEMBLY_PARTS.filter(part => this.isSideShelfCart() ? !['roof','posts','legs','decorative-wheels'].includes(part.key) : this.isRooflessCart()
-    ? !['roof','posts','legs','ice-shelf'].includes(part.key) : this.isClassic()
+    ? !['roof','posts','ice-shelf'].includes(part.key) : this.isClassic()
     ? !['roof', 'posts', 'legs', 'decorative-wheels','ice-shelf'].includes(part.key)
     : !['ice-shelf'].includes(part.key)); }
   private assembly?: AssemblyController;

@@ -6,7 +6,10 @@ export const ROOF_CART_SLUG = 'decorative-wheel-roof-cart-mdf';
 export const ROOFLESS_CART_NAME = 'MDF Mobile Bar Cart with Decorative Wheels – Foldable Serving Cart';
 
 export function rooflessCartPartIncluded(name: string): boolean {
-  return !/^(?:Roof[ _]\d+|Dar[ _]?\d+|Legs[ _]?\d+|Top[ _][3-6])\s*$/i.test(name);
+  // GLTFLoader changes spaces to underscores, including trailing spaces on
+  // source names such as "Roof 5 ". Keep the short legs below the body: they
+  // carry the castors and are not roof posts.
+  return !/^(?:Roof[ _]\d+|Dar[ _]?\d+|Top[ _][3-6])[ _]*$/i.test(name);
 }
 
 // The roof GLB is a private construction source. The roofless model retains its
