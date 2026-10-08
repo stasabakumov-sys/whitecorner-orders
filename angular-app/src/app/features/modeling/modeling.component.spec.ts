@@ -478,7 +478,7 @@ it('keeps source tabletop grouping flags independent across repeated geometry re
 });
 
 it('toggles shelf, ice shelf and side shelves independently without adding a roof', () => {
-  const {component}=setup();component.activeSlug.set('side-shelf-cart-mdf');
+  const {component}=setup();component.activeSlug.set('side-shelf-cart-mdf');component.sideShelvesIncluded.set(true);
   component.height.set(850);component.width.set(1500);
   const body=new THREE.Group(), model=new THREE.Group();model.add(body);
   const make=(name:string)=>{const part=new THREE.Mesh(new THREE.BoxGeometry(1,1,1));part.name=name;body.add(part);return part;};
@@ -492,7 +492,7 @@ it('toggles shelf, ice shelf and side shelves independently without adding a roo
   component.setIceShelfIncluded(true);expect(ice.visible).toBe(true);expect(shelf.visible).toBe(false);expect(side.visible).toBe(false);
   expect(component.overallHeight()).toBe(850);expect(component.hasRoof()).toBe(false);
   expect(component.parts.some(part=>part.key==='side-shelves')).toBe(true);
-  component.activeSlug.set('classic-bar-plywood');expect(component.parts.some(part=>part.key==='side-shelves')).toBe(false);
+  component.activeSlug.set('classic-bar-plywood');expect(component.parts.some(part=>part.key==='side-shelves')).toBe(true);
 });
 
 it('selects individual trays, includes matching cutouts, and clears trays when cutouts are removed',()=>{
@@ -570,4 +570,27 @@ it('follows the tabletop finish on side-shelf tops and full edges until separate
 it('retains the previous side-shelf finish and reports a texture load failure',async()=>{
  const {component}=setup(),editor=component as any;component.activeSlug.set('side-shelf-cart-mdf');vi.spyOn(editor,'loadFinishTexture').mockRejectedValue(new Error('Offline'));
  await component.setSideShelfFinish('plywood');expect(component.sideShelfFinish()).toBe('top');expect(component.finishError()).toContain('Offline');expect(component.finishLoading()).toBe(false);
+});
+
+it.each(['classic-bar-plywood','decorative-wheel-roof-cart-mdf'])('adds optional side shelves, preserves their finish on resizing and removes them for %s',slug=>{
+ const {component}=setup(),editor=component as any;component.activeSlug.set(slug);editor.body=new THREE.Group();editor.model=new THREE.Group();editor.model.add(editor.body);
+ editor.rawTexture=new THREE.Texture();editor.plywoodTexture=new THREE.Texture();editor.finishTextures.set('tasmanian-oak.png',new THREE.Texture());component.sideShelfFinish.set('oak');
+ expect(component.sideShelvesIncluded()).toBe(false);component.setSideShelvesIncluded(true);
+ let group=editor.body.getObjectByName('Side shelf extensions');expect(group).toBeDefined();
+ expect(group.getObjectByName('Side shelf left 1').material[0].map).toBe(editor.finishTextures.get('tasmanian-oak.png'));
+ component.setDimension('width','1500');group=editor.body.getObjectByName('Side shelf extensions');
+ expect(new THREE.Box3().setFromObject(group.getObjectByName('Side shelf right 2')).max.x).toBeCloseTo(1.7,6);
+ expect(group.getObjectByName('Side shelf right 1').material[0].map).toBe(editor.finishTextures.get('tasmanian-oak.png'));
+ expect(component.previewWidth()).toBe(1900);component.setSideShelvesIncluded(false);expect(editor.body.getObjectByName('Side shelf extensions')).toBeUndefined();expect(component.previewWidth()).toBe(1500);
+});
+
+it('Home restores the standard viewpoint after orbit, pan and zoom while keeping the configuration',()=>{
+ const {component}=setup(),editor=component as any;component.width.set(1500);component.sideShelvesIncluded.set(true);
+ editor.turntable=new THREE.Group();editor.turntable.rotation.y=1.8;
+ editor.camera.position.set(4,2,3);editor.orbitCamera.position.set(-2,3,4);editor.camera.zoom=editor.orbitCamera.zoom=2;
+ editor.controls={target:new THREE.Vector3(2,1,1),mouseButtons:{LEFT:THREE.MOUSE.PAN},enableDamping:true,reset:vi.fn(),update:vi.fn()};
+ component.navigationMode.set('move');component.resetView();
+ expect(editor.controls.target.toArray()).toEqual([.75,.45,.3]);expect(editor.camera.zoom).toBe(1);expect(editor.orbitCamera.zoom).toBe(1);
+ expect(editor.turntable.rotation.y).toBe(0);expect(component.navigationMode()).toBe('rotate');expect(editor.controls.mouseButtons.LEFT).toBe(THREE.MOUSE.ROTATE);
+ expect(editor.orbitCamera.position.toArray()).toEqual(editor.camera.position.toArray());expect(component.width()).toBe(1500);expect(component.sideShelvesIncluded()).toBe(true);
 });

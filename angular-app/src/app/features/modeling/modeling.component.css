@@ -73,6 +73,16 @@
 .tray-layout{grid-template-columns:repeat(5,minmax(0,1fr))}.tray-slot{min-width:0;padding:4px 0}.tray-slot label{flex-direction:column;gap:0}.tray-slot>span{overflow-wrap:anywhere}
 
 .viewer-navigation{position:absolute;top:12px;left:12px;z-index:2;display:flex;gap:5px}
-.viewer-navigation button{min-height:28px;padding:5px 10px;border:1px solid #dce3e9;border-radius:8px;background:#fff;color:#425162;font-family:inherit;font-size:10px;font-weight:400;line-height:1.45;cursor:pointer}
-.viewer-navigation button.selected{border-color:#556b82;background:#f3f6f9;color:#25384a}
+.viewer-navigation button{display:grid;place-items:center;width:28px;height:28px;padding:5px;border:0;border-radius:3px;background:rgb(255 255 255 / 25%);color:rgb(66 81 98 / 65%);font-family:inherit;font-size:10px;font-weight:400;line-height:1.45;cursor:pointer}
+.viewer-navigation button svg{width:18px;height:18px;pointer-events:none}
+.viewer-navigation button:hover{background:rgb(255 255 255 / 80%);color:#25384a}
+.viewer-navigation button.selected{background:rgb(190 225 240 / 55%);color:rgb(48 75 94 / 85%)}
 .viewer-navigation button:focus-visible{outline:2px solid #35485d;outline-offset:2px}
+
+.canvas-host.orbit-mode{cursor:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2232%22%20height%3D%2232%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%2335434d%22%20stroke-width%3D%221.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M24%2011c-2-4-5-7-8-7-5%200-8%206-8%2012s3%2012%208%2012c3%200%205-2%206-5M21%207l3%204%203-4%22%2F%3E%3Cpath%20d%3D%22M26%2013c3%201%204%203%204%205%200%204-6%206-14%206S2%2022%202%2018c0-3%203-5%207-6M26%2010v3h-3%22%2F%3E%3C%2Fg%3E%3Cpath%20d%3D%22M16%2013v7m-3.5-3.5h7%22%20stroke%3D%22%233482aa%22%20stroke-width%3D%221.6%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E") 16 16,grab}
+.canvas-host.move-mode{cursor:default}
+
+.four-view-grid{position:absolute;inset:0 auto 0 0;width:var(--stage-width,100%);display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;pointer-events:none}
+.four-view-grid>div{border:1px solid rgb(125 137 145 / 25%);position:relative}
+.four-view-grid .fixed-view{pointer-events:auto;cursor:default}
+.four-view-grid span{position:absolute;bottom:8px;left:10px;color:#7b8790;font-family:inherit;font-size:10px;font-weight:400;line-height:1.45;pointer-events:none}
