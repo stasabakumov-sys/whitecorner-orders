@@ -10,6 +10,8 @@ import { fitFurnitureBolts, shortenCastorBrakes, turnCastorWheels } from './mode
 import { resizePlywoodPosition, resizeRoofCartPosition, resizeSideShelfCartPosition } from './modeling-geometry';
 import { createRoundedPart, keepTrimJointSquare, keepPartJointsSquare, matingPartJoints, RoundingProfile } from './modeling-rounding';
 import { umbrellaDiameterLimit, withUmbrellaHole, createUmbrellaPreview, UMBRELLA_PREVIEW_HEIGHT } from './modeling-umbrella';
+import { ModelingFourViews } from './modeling-four-views';
+import { createCartSideShelves } from './modeling-side-shelves';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
 import { readModelingCatalog, linkedModelProduct, catalogPricing, formatModelingPrice, ModelingCatalog, ConfigurationPricing } from './modeling-pricing';
@@ -77,6 +79,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const catalog=this.catalog();if(!catalog)return null;
     const price=catalogPricing(catalog,{slug:this.activeSlug(),width:this.width(),depth:this.depth(),height:this.height(),raw:this.rawBody(),colour:this.bodyColor(),shelf:this.shelfIncluded()});
     price.lines.push({label:'Front panel',amount:null},{label:'Table top finish',amount:null});
+    if(this.sideShelvesIncluded())price.lines.push({label:'Side shelves',amount:null});
     if(this.hasRoof()&&this.roofClosed())price.lines.push({label:'Closed roof',amount:null});
     if(this.hasRoof()&&this.roofClosed()&&this.glassRackCount())price.lines.push({label:this.glassRackCount()+' × Wine Glass Rack Chrome 405mm',amount:null});
     return price;
@@ -160,7 +163,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if(this.frontLogo()){const logo=fitLogo(this.logoPanel(),this.frontLogo()!);fields.push({label:'Front logo',value:`${logo.width.toFixed(1)} x ${logoHeight(logo).toFixed(1)} mm · left ${logo.x.toFixed(1)} · top ${logo.y.toFixed(1)} mm`});}
       if(this.isClassic()||this.isSideShelfCart())fields.push({label:'Umbrella hole',value:this.umbrellaHole()?'Ø'+this.umbrellaDiameter()+' mm · '+(this.isClassic()?this.umbrellaPosition()+' · top & shelf':'top, shelves & centred bottom holder'):'None'});
       if(this.isSideShelfCart())fields.push({label:'Ice shelf',value:this.iceShelfIncluded()?'Included':'None'},{label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'},{label:'Castor assembly height',value:'95 mm'},{label:'Cutouts',value:this.cutoutSummary()+(this.cutoutsIncluded()&&this.reverseCutoutLayout()?' · mirrored left/right':'')},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
-      if(this.isSideShelfCart()&&this.sideShelvesIncluded())fields.push({label:'Side shelves finish',value:this.sideShelfFinishSummary()});
+      if(!this.isSideShelfCart())fields.push({label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'});
+      if(this.sideShelvesIncluded())fields.push({label:'Side shelves finish',value:this.sideShelfFinishSummary()});
       if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
       if(this.hasRoof())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
@@ -178,7 +182,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.assembly?.setEnabled(false);
     this.model!.traverse(node=>{if(Array.isArray(node.userData['assemblyBasePosition'])){parts.push({node,position:node.position.clone(),visible:node.visible});node.position.fromArray(node.userData['assemblyBasePosition']);node.visible=!node.userData['assemblyHidden'];}});
     try {
-      const span=Math.max(this.width(),this.depth(),this.previewHeight())/1000;
+      const span=Math.max(this.previewWidth(),this.depth(),this.previewHeight())/1000;
       const target=new THREE.Vector3(this.width()/2000,this.previewHeight()/2000,this.depth()/2000);
       const camera=new THREE.PerspectiveCamera(42,4/3,.01,30);
       camera.zoom=1.25;camera.updateProjectionMatrix();
@@ -199,11 +203,27 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly traySlots = CHARCUTERIE_CUTOUTS;
   readonly selectedTrays = signal<number[]>([]);
   readonly selectedCutouts = signal<number[]>([]);
+  readonly fourViews = signal(false);
+  private readonly multiView=new ModelingFourViews();
+  private stageWidth=0;
+  setFourViews(value:boolean):void {this.fourViews.set(value);this.setAssemblyMode(false);this.resize();}
   readonly navigationMode = signal<'rotate'|'move'>('rotate');
   setNavigationMode(mode:'rotate'|'move'):void {
     this.navigationMode.set(mode);
     if(this.controls)this.controls.mouseButtons.LEFT=mode==='move'?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;
     this.setAssemblyMode(false);
+  }
+  resetView():void {
+    this.setNavigationMode('rotate');
+    if(this.controls){
+      const damping=this.controls.enableDamping;
+      this.controls.enableDamping=false;this.controls.reset();
+      this.controls.target.set(this.width()/2000,this.previewHeight()/2000,this.depth()/2000);
+      this.camera.zoom=this.orbitCamera.zoom=1;
+      this.camera.updateProjectionMatrix();this.orbitCamera.updateProjectionMatrix();
+      this.focusCamera();this.controls.enableDamping=damping;
+    }else this.focusCamera();
+    if(this.turntable)this.turntable.rotation.y=0;
   }
   readonly showUmbrella = signal(false);
   private umbrellaPreview?:THREE.Group;
@@ -211,8 +231,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   optionsSummary():string {
     const selected:string[]=[];
     if(this.shelfIncluded())selected.push('Shelf: Middle');
+    if(this.sideShelvesIncluded())selected.push('Side shelves');
     if(this.isSideShelfCart()){
-      if(this.sideShelvesIncluded())selected.push('Side shelves');
       if(this.iceShelfIncluded())selected.push('Ice shelf');
       if(this.umbrellaHole())selected.push('Hole: Ø'+this.umbrellaDiameter()+' mm');
     }
@@ -220,6 +240,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if(this.isClassic()&&this.umbrellaHole())selected.push('Hole: '+this.umbrellaPosition()+' Ø'+this.umbrellaDiameter()+' mm');
     return selected.join(' · ') || 'None';
   }
+  previewWidth():number {return this.width()+(this.sideShelvesIncluded()?400:0);}
   previewHeight():number {return this.showUmbrella()&&this.umbrellaHole()?UMBRELLA_PREVIEW_HEIGHT*1000:this.overallHeight();}
   setShowUmbrella(value:boolean):void {this.showUmbrella.set(value);this.applyDimensions();}
   readonly umbrellaHole = signal(false);
@@ -253,9 +274,25 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   cutoutSummary():string {const selected=this.selectedCutouts();return selected.length?(selected.includes(0)?'1 × GN 1/1':'')+(selected.includes(0)&&selected.length>1?' · ':'')+(selected.filter(i=>i>0).length?selected.filter(i=>i>0).length+' × GN 1/6':''):'None';}
   cutoutTraySummary():string {return this.selectedCutouts().length?this.selectedCutouts().length+' cutouts · '+this.selectedTrays().length+' trays':'None';}
   readonly iceShelfIncluded = signal(true);
-  readonly sideShelvesIncluded = signal(true);
+  readonly sideShelvesIncluded = signal(false);
   setIceShelfIncluded(value:boolean):void { this.iceShelfIncluded.set(value); this.bindAssembly(); }
-  setSideShelvesIncluded(value:boolean):void { this.sideShelvesIncluded.set(value); if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());else this.bindAssembly(); }
+  setSideShelvesIncluded(value:boolean):void {
+    this.sideShelvesIncluded.set(value);
+    if(this.isSideShelfCart()){if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());else this.bindAssembly();}
+    else {this.applyDimensions();this.bindAssembly();}
+  }
+  private sideShelfExtensions?:THREE.Group;
+  private sideShelfExtensionKey='';
+  private updateSideShelfExtensions():boolean {
+    const enabled=!this.isSideShelfCart()&&this.sideShelvesIncluded(),key=JSON.stringify([this.activeSlug(),enabled,this.width(),this.height(),this.rounding()]);
+    if(key===this.sideShelfExtensionKey&&(!enabled||this.sideShelfExtensions?.parent===this.body))return false;
+    this.sideShelfExtensions?.removeFromParent();this.sideShelfExtensions?.traverse(node=>{if(node instanceof THREE.Mesh){node.geometry.dispose();for(const material of Array.isArray(node.material)?node.material:[node.material])material.dispose();}});
+    this.sideShelfExtensions=undefined;this.sideShelfExtensionKey=key;
+    if(!enabled||!this.body)return false;
+    this.sideShelfExtensions=createCartSideShelves(this.isClassic(),this.width(),this.height(),this.rounding());this.body.add(this.sideShelfExtensions);
+    if(this.isClassic())this.sideShelfExtensions.traverse(node=>{if(node instanceof THREE.Mesh&&!node.userData['fixedMaterial'])this.addWoodUvs(node.geometry,node.name,/ 1$/.test(node.name),/ 2$/.test(node.name));});
+    return true;
+  }
   readonly shelfIncluded = signal(true);
   setShelfIncluded(included:boolean):void {
     this.shelfIncluded.set(included);
@@ -378,8 +415,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly assemblyMode = signal(false);
   readonly assemblyRevision = signal(0);
   get parts() { return ASSEMBLY_PARTS.filter(part => this.isSideShelfCart() ? !['roof','posts','legs','decorative-wheels'].includes(part.key) : this.isClassic()
-    ? !['roof', 'posts', 'legs', 'decorative-wheels','side-shelves','ice-shelf'].includes(part.key)
-    : !['side-shelves','ice-shelf'].includes(part.key)); }
+    ? !['roof', 'posts', 'legs', 'decorative-wheels','ice-shelf'].includes(part.key)
+    : !['ice-shelf'].includes(part.key)); }
   private assembly?: AssemblyController;
 
   private readonly scene = new THREE.Scene();
@@ -485,11 +522,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (window.matchMedia('(min-width: 981px)').matches) {
       const settings = this.canvasHost.nativeElement.parentElement?.parentElement?.querySelector('.settings');
       const panelWidth = settings?.getBoundingClientRect().width || 0;
+      this.stageWidth=width-panelWidth-28;
       // Keep the product centred in the exposed stage while rendering behind the panel.
       this.camera.setViewOffset(width, height, (panelWidth + 28) / 2, 0, width, height);
     } else {
       this.camera.clearViewOffset();
+      this.stageWidth=width;
     }
+    this.canvasHost.nativeElement.style.setProperty('--stage-width',this.stageWidth+'px');
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);
   }
@@ -508,7 +548,13 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if (this.turntable) this.turntable.rotation.y = this.viewAzimuth - spherical.theta;
     }
     this.assembly?.update();
-    if (!this.loading()) this.renderer.render(this.scene, this.camera);
+    if (!this.loading()) {
+      if(this.fourViews()){
+        const size=this.renderer.getSize(new THREE.Vector2());
+        this.multiView.render(this.renderer,this.scene,this.camera,this.turntable,size.x,size.y,this.stageWidth,
+          new THREE.Vector3(this.width()/2000,this.previewHeight()/2000,this.depth()/2000),Math.max(this.previewWidth(),this.depth(),this.previewHeight())/1000,this.isClassic());
+      }else this.renderer.render(this.scene, this.camera);
+    }
   };
 
   private async loadSavedModel(): Promise<void> {
@@ -551,7 +597,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.roundingEditing.set(false);
     this.frontStyle.set(this.isClassic() ? 'plain' : 'shaker');
     this.shelfIncluded.set(true);
-    this.iceShelfIncluded.set(true);this.sideShelvesIncluded.set(true);this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);this.selectedCutouts.set([]);this.reverseCutoutLayout.set(true);this.umbrellaHole.set(false);this.umbrellaPosition.set('centre');this.umbrellaDiameter.set(40);this.showUmbrella.set(false);
+    this.iceShelfIncluded.set(true);this.sideShelvesIncluded.set(this.isSideShelfCart());this.cutoutsIncluded.set(false);this.traysIncluded.set(false);this.selectedTrays.set([]);this.selectedCutouts.set([]);this.reverseCutoutLayout.set(true);this.umbrellaHole.set(false);this.umbrellaPosition.set('centre');this.umbrellaDiameter.set(40);this.showUmbrella.set(false);
     this.roofClosed.set(false);
     this.glassRackCount.set(0);
     this.showGlasses.set(false);
@@ -682,6 +728,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.roofBottom = undefined;
     this.glassRacks = undefined;
     this.trays = undefined;
+    this.sideShelfExtensions=undefined;this.sideShelfExtensionKey='';
     this.umbrellaPreview=undefined;this.umbrellaPreviewKey='';
     this.model = undefined;
     this.body = undefined;
@@ -976,7 +1023,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   setAssemblyMode(enabled: boolean): void {
-    if(enabled){this.navigationMode.set('rotate');if(this.controls)this.controls.mouseButtons.LEFT=THREE.MOUSE.ROTATE;}
+    if(enabled){this.fourViews.set(false);this.navigationMode.set('rotate');if(this.controls)this.controls.mouseButtons.LEFT=THREE.MOUSE.ROTATE;}
     this.assemblyMode.set(enabled);
     this.assembly?.setEnabled(enabled);
   }
@@ -1023,6 +1070,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       const included=key==='ice-shelf'?this.iceShelfIncluded():this.sideShelvesIncluded();
       node.userData['assemblyHidden']=!included;node.visible=included&&(this.assembly?.state.visible[key]??true);
     });
+    if(this.sideShelfExtensions){const visible=this.sideShelvesIncluded();this.sideShelfExtensions.userData['assemblyHidden']=!visible;this.sideShelfExtensions.visible=visible&&(this.assembly?.state.visible['side-shelves']??true);}
     this.body.traverse(node=>{
       if(!/^Shelf/i.test(node.userData['plywoodPart']||node.name))return;
       node.userData['assemblyHidden']=!this.shelfIncluded();
@@ -1078,7 +1126,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         row === 'rear' ? (this.depth() - 600) / 1000 : 0,
       );
     }
-    const span = Math.max(this.width(), this.depth(), this.previewHeight()) / 1000;
+    const span = Math.max(this.previewWidth(), this.depth(), this.previewHeight()) / 1000;
     const centerX = this.width() / 2000, centerZ = this.depth() / 2000;
     this.turntable?.position.set(centerX, 0, centerZ);
     this.model?.position.set(-centerX, 0, -centerZ);
@@ -1092,8 +1140,17 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.controls.update();
     }
     this.cameraSpan = span;
+    if(!this.isSideShelfCart()&&this.sideShelvesIncluded()){
+      const top=this.height()/1000,thickness=this.isClassic()?.042:.045;
+      for(const node of this.originalPositions.keys())if(/^Top[ _](?:part)?2$/i.test(node.userData['plywoodPart']||node.name)){
+        keepPartJointsSquare(node.geometry,[0,this.width()/1000].map(x=>({axis:'x' as const,plane:x,
+          bounds:new THREE.Box3(new THREE.Vector3(x,top-thickness,0),new THREE.Vector3(x,top,.6)),
+          cap:{axis:'y' as const,min:top-thickness,max:top},outlineEnds:[new THREE.Vector3(x,top,0),new THREE.Vector3(x,top,.6)]})),this.rounding());
+      }
+    }
+    const shelvesChanged=this.updateSideShelfExtensions();
     this.updateRoofBottom();
-    if (this.roofClosed()) this.applyFinishes();
+    if (this.roofClosed()||shelvesChanged) this.applyFinishes();
     else this.updateMoulding();
   }
 
@@ -1170,7 +1227,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if (!(node instanceof THREE.Mesh)) return;
       const partName = node.userData['plywoodPart'] || node.name;
       if (node.userData['fixedMaterial']) return;
-      const sideShelfTop=this.isSideShelfCart()&&isSideShelfTopName(partName);
+      const sideShelfTop=isSideShelfTopName(partName);
       if (!this.isClassic() && (isTopPanelName(partName)||sideShelfTop)) {
         groupTopFacesAndEdges(node.geometry);
         const source = Array.isArray(node.material) ? node.material[0] : node.material;
@@ -1284,7 +1341,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const width = this.modelPlywoodTexture ? 2.439 : 0.32;
     const textureImage = this.modelPlywoodTexture?.image;
     const height = textureImage?.width && textureImage?.height ? width * textureImage.height / textureImage.width : width;
-    const horizontal = /^(Top|Buttom|Bottom)[ _]part|^Shelf/i.test(partName);
+    const horizontal = /^(Top|Buttom|Bottom)[ _]part|^Shelf|^Side[ _]shelf[ _](?:left|right)[ _][12]$/i.test(partName);
     const ring = /^(Top|Buttom|Bottom)[ _]part2/i.test(partName);
     const side = /^(Left|Right)[ _]side/i.test(partName);
     let groupIndex = 0;
@@ -1358,7 +1415,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   private focusCamera(): void {
-    const span = Math.max(this.width(), this.depth(), this.previewHeight()) / 1000;
+    const span = Math.max(this.previewWidth(), this.depth(), this.previewHeight()) / 1000;
     this.cameraSpan = span;
     this.camera.position.set(this.width() / 2000 + span * 1.1, this.overallHeight() / 2000 + span * 0.5, this.depth() / 2000 + span * 1.25);
     this.orbitCamera.position.copy(this.camera.position);
