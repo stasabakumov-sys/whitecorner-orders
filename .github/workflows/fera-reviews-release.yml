@@ -1,0 +1,60 @@
+name: Fera reviews production archive
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Audit Fera or import reviews and media into private Hub tables
+        type: choice
+        options: [audit, apply]
+        default: audit
+      media_hosts:
+        description: Exact comma-separated media hosts from the audit (required for apply)
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: fera-reviews-production-archive
+  cancel-in-progress: false
+jobs:
+  archive:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test review and media mapping
+        run: node --test .github/scripts/fera-review-domain.test.mjs
+      - name: Rehearse private schema in isolated PostgreSQL
+        run: |
+          npm install --prefix "$RUNNER_TEMP/fera-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/fera-reviews-migration.test.mjs "$RUNNER_TEMP/fera-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Audit all Fera reviews and attached media
+        env:
+          FERA_SECRET_KEY: ${{ secrets.FERA_SECRET_KEY }}
+        run: node .github/scripts/fera-review-sync.mjs --audit
+      - name: Verify Hub production prerequisites
+        if: inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/fera-review-release.mjs --verify
+      - name: Install Supabase client
+        if: inputs.mode == 'apply'
+        run: npm ci --prefix angular-app
+      - name: Apply private review schema
+        if: inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/fera-review-release.mjs --apply
+      - name: Import and verify reviews with photos and videos
+        if: inputs.mode == 'apply'
+        env:
+          FERA_SECRET_KEY: ${{ secrets.FERA_SECRET_KEY }}
+          FERA_MEDIA_HOSTS: ${{ inputs.media_hosts }}
+          SUPABASE_URL: https://zgvnrpspwluapaxnycrg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node .github/scripts/fera-review-sync.mjs --apply
