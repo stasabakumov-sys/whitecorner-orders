@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createRoundedPart, keepPartJointsSquare, keepTrimJointSquare, RoundingProfile } from './modeling-rounding';
+import { createRoundedPart, keepTrimJointSquare, RoundingProfile } from './modeling-rounding';
 
 export interface CartTopStructure {
   panelBottom:number;
@@ -7,11 +7,10 @@ export interface CartTopStructure {
   trimBottom:number;
   trimTop:number;
   trimWidth:number;
-  insetPanel:boolean;
   pineTrim:boolean;
 }
 
-export function cartTopStructure(body:THREE.Group,classic:boolean,heightMm:number):CartTopStructure {
+export function cartTopStructure(body:THREE.Group,classic:boolean,heightMm:number,pineTrim=classic):CartTopStructure {
   const panel=body.children.find(part=>/^Top[ _](?:part)?1$/i.test(part.name));
   const trim=body.children.find(part=>/^Top[ _](?:part)?2$/i.test(part.name));
   if(!panel||!trim)throw new Error('The cart top is incomplete. Upload its panel and trim before adding side shelves.');
@@ -19,13 +18,17 @@ export function cartTopStructure(body:THREE.Group,classic:boolean,heightMm:numbe
   const top=heightMm/1000,dy=top-panelBounds.max.y;
   const panelBottom=panelBounds.min.y+dy,panelTop=panelBounds.max.y+dy;
   const trimBottom=trimBounds.min.y+dy,trimTop=trimBounds.max.y+dy;
-  const profile=trim.userData['roundingProfile'] as RoundingProfile|undefined;
+  let profile=trim.userData['roundingProfile'] as RoundingProfile|undefined;
+  trim.traverse(node=>{profile ||= node.userData['roundingProfile'] as RoundingProfile|undefined;});
   const outer=profile?.outline.map(p=>p[0])||[],inner=profile?.holes[0]?.map(p=>p[0])||[];
   const profileRail=outer.length&&inner.length?Math.min(...inner)-Math.min(...outer):0;
   const trimSize=trimBounds.getSize(new THREE.Vector3());
   const dimensionRail=Math.min(trimSize.x,trimSize.z);
   const trimWidth=profileRail>.005&&profileRail<.08?profileRail:dimensionRail>.005&&dimensionRail<.08?dimensionRail:classic?.02:.016;
-  return {panelBottom,panelTop,trimBottom,trimTop,trimWidth,insetPanel:trimTop>panelBottom+.002,pineTrim:classic};
+  // Folding leaves use a full-width board on top of three edge rails. A
+  // miniature copy of the table's inset rim leaves a visible hollow underside
+  // and obscures the two source folding brackets when viewed from below.
+  return {panelBottom,panelTop,trimBottom,trimTop,trimWidth,pineTrim};
 }
 
 // Reuse only the actual folding brackets from the 150 cm cart. Shelf panels
@@ -81,19 +84,13 @@ export function createCartSideShelves(source: THREE.Group, widthMm: number, heig
   };
   const width=widthMm/1000;
   for(const side of ['left','right'] as const){
-    const left=side==='left',x0=left?-.2:width,x1=x0+.2,join=left?0:width,rail=top.trimWidth;
+    const left=side==='left',x0=left?-.2:width,x1=x0+.2,rail=top.trimWidth;
     const base=(origin:number,thickness:number,outline:number[][],holes:number[][][]=[])=>({axis:'y' as const,origin,thickness,outline,holes});
-    if(top.insetPanel){
-      add(`Side shelf ${side} 1`,base(top.panelBottom,top.panelTop-top.panelBottom,rectangle(x0+rail,x1-rail,rail,.6-rail)),false,0);
-      const rim=add(`Side shelf ${side} 2`,base(top.trimBottom,top.trimTop-top.trimBottom,rectangle(x0,x1,0,.6),[rectangle(x0+rail,x1-rail,rail,.6-rail)]),true);
-      keepPartJointsSquare(rim.geometry,[{axis:'x',plane:join,bounds:new THREE.Box3(new THREE.Vector3(join,top.trimBottom,0),new THREE.Vector3(join,top.trimTop,.6)),cap:{axis:'y',min:top.trimBottom,max:top.trimTop}}],radiusMm);
-    }else{
-      add(`Side shelf ${side} 1`,base(top.panelBottom,top.panelTop-top.panelBottom,rectangle(x0,x1,0,.6)),false,0);
-      const outer=left?rectangle(x0,x0+rail,0,.6):rectangle(x1-rail,x1,0,.6);
-      add(`Side shelf ${side} 2`,base(top.trimBottom,top.trimTop-top.trimBottom,outer),true);
-      add(`Side shelf ${side} 3`,base(top.trimBottom,top.trimTop-top.trimBottom,rectangle(x0+rail,x1-rail,0,rail)),true);
-      add(`Side shelf ${side} 4`,base(top.trimBottom,top.trimTop-top.trimBottom,rectangle(x0+rail,x1-rail,.6-rail,.6)),true);
-    }
+    add(`Side shelf ${side} 1`,base(top.panelBottom,top.panelTop-top.panelBottom,rectangle(x0,x1,0,.6)),false,0);
+    const outer=left?rectangle(x0,x0+rail,0,.6):rectangle(x1-rail,x1,0,.6);
+    add(`Side shelf ${side} 2`,base(top.trimBottom,top.trimTop-top.trimBottom,outer),true);
+    add(`Side shelf ${side} 3`,base(top.trimBottom,top.trimTop-top.trimBottom,rectangle(x0+rail,x1-rail,0,rail)),true);
+    add(`Side shelf ${side} 4`,base(top.trimBottom,top.trimTop-top.trimBottom,rectangle(x0+rail,x1-rail,.6-rail,.6)),true);
   }
   for (const part of source.children) {
     if (!(part instanceof THREE.Mesh)) continue;

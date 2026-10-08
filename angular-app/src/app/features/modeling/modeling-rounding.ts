@@ -9,7 +9,7 @@ export interface RoundingProfile {
   holes: number[][][];
 }
 
-export interface PartJoint { axis: 'x' | 'y' | 'z'; plane: number; bounds: THREE.Box3; normal?: [number,number,number]; squareCapOutline?: number[][]; outlineEnds?: [THREE.Vector3, THREE.Vector3]; cap?: {axis: 'x'|'y'|'z';min:number;max:number}; }
+export interface PartJoint { axis: 'x' | 'y' | 'z'; plane: number; bounds: THREE.Box3; normal?: [number,number,number]; squareCapOutline?: number[][]; outlineEnds?: [THREE.Vector3, THREE.Vector3]; cap?: {axis: 'x'|'y'|'z';min:number;max:number}; exposedEdge?: {axis:'x'|'z';plane:number}; }
 
 // STEP roof members meet on planar faces. Detect shared faces before rounding,
 // while excluding overlaps, edges and separate parts.
@@ -62,7 +62,11 @@ export function matingPartJoints(parts: { name: string; bounds: THREE.Box3; prof
       bounds.min[axis] = bounds.max[axis] = plane;
       for (const part of [a,b]) {
         const squareCapOutline=samePanel&&a.profile?.axis===axis&&b.profile?.axis===axis?part.profile?.outline:undefined;
-        joints.set(part.name,[...(joints.get(part.name)||[]),{axis,plane,bounds,squareCapOutline}]);
+        // On a front-to-side joint the mating face stays square, but the
+        // outward vertical edge of the side panel remains rounded.
+        const front= /^Front[ _]part/i.test(a.name)&&/^(Left|Right)[ _]side/i.test(b.name)?a:/^Front[ _]part/i.test(b.name)&&/^(Left|Right)[ _]side/i.test(a.name)?b:undefined;
+        const exposedEdge=body&&front&&part!==front&&axis==='z'?{axis:'x' as const,plane:part.bounds.getCenter(new THREE.Vector3()).x<front.bounds.getCenter(new THREE.Vector3()).x?part.bounds.min.x:part.bounds.max.x}:undefined;
+        joints.set(part.name,[...(joints.get(part.name)||[]),{axis,plane,bounds,squareCapOutline,exposedEdge}]);
       }
     }
   }
@@ -77,6 +81,7 @@ export function keepPartJointsSquare(geometry: THREE.BufferGeometry, joints: Par
   for (let i = 0; i < positions.count; i++) {
     const point = new THREE.Vector3().fromBufferAttribute(positions, i);
     for (const joint of joints) {
+      if(joint.exposedEdge&&Math.abs(point[joint.exposedEdge.axis]-joint.exposedEdge.plane)<radiusMm/1000+1e-6)continue;
       const normal=joint.normal?new THREE.Vector3(...joint.normal):null;
       const distance=normal?point.dot(normal)-joint.plane:point[joint.axis]-joint.plane;
       if (Math.abs(distance) > tolerance) continue;

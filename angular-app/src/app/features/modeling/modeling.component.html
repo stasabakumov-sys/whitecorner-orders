@@ -94,8 +94,8 @@
         <div class="finish-options" role="group" aria-label="Table top finish">
           <button type="button" [class.selected]="topFinish()==='body'" (click)="setTopFinish('body')"><span class="finish-chip" [style.background]="rawBody() ? '#d5b88d' : bodyColor()"></span>In cart finish / colour</button>
           <button type="button" [class.selected]="topFinish()==='oak'" (click)="setTopFinish('oak')"><span class="finish-chip oak"></span>Tasmanian oak</button>
-          <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>{{isClassic() ? "Varnished plywood" : "Plywood"}}</button>
-          @if (!isClassic()) { <button type="button" [class.selected]="topFinish()==='mdf'" (click)="setTopFinish('mdf')"><span class="finish-chip" style="background:#b99b78"></span>RAW MDF</button> }
+          @if (!isClassicMdf()) { <button type="button" [class.selected]="topFinish()==='plywood'" (click)="setTopFinish('plywood')"><span class="finish-chip plywood"></span>{{isClassic() ? "Varnished plywood" : "Plywood"}}</button> }
+          @if (!isPlywoodClassic()) { <button type="button" [class.selected]="topFinish()==='mdf'" (click)="setTopFinish('mdf')"><span class="finish-chip" style="background:#b99b78"></span>RAW MDF</button> }
         </div>
         @if(sideShelvesIncluded()) {
           <h3 class="setting-subtitle">Side shelves</h3>
@@ -252,7 +252,7 @@
               <button type="button" [class.selected]="shelfSupport()==='plastic'" [attr.aria-pressed]="shelfSupport()==='plastic'" (click)="shelfSupport.set('plastic')">Plastic support</button>
               <button type="button" [class.selected]="shelfSupport()==='rail'" [attr.aria-pressed]="shelfSupport()==='rail'" (click)="shelfSupport.set('rail')">Support rail</button>
             </div>
-            <p class="help">{{shelfSupport()==='rail' ? 'Rail section: 20 × '+(isClassic() ? '15' : '16')+' mm.' : 'Two Ø5 mm support holes per side.'}}</p>
+            <p class="help">{{shelfSupport()==='rail' ? 'Rail section: 20 × '+(isPlywoodClassic() ? '15' : '16')+' mm.' : 'Two Ø5 mm support holes per side.'}}</p>
             <button type="button" class="building-ok" [disabled]="loading() || roundingBusy() || !shelfIncluded()" (click)="generateShelfDrawing()">OK</button>
             @if (!shelfIncluded()) { <p class="help">Turn Shelf on to generate the drawing.</p> }
             @if (buildingError()) { <p class="error" role="alert">{{buildingError()}}</p> }

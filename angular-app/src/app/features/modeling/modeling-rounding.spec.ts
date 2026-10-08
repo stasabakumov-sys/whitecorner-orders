@@ -111,12 +111,13 @@ it('closes MDF front-to-side mating faces for Shaker and 16 mm Plain without mov
   const geometries=[front,side].map(p=>createRoundedPart(p,radius));
   geometries.forEach((g,index)=>{
    const name=index?'Right_side1':'Front_part1';keepPartJointsSquare(g,joints.get(name)!,radius);
-   const p=g.getAttribute('position');let seam=0;
+   const p=g.getAttribute('position');let seam=0,outerBevel=0;
    for(let i=0;i<p.count;i++)if(p.getX(i)<=.028&&Math.abs(p.getZ(i)-.5600004)<radius/1000*2){
     const z=resizeRoofCartPosition(name,p.getX(i),p.getY(i),p.getZ(i),1200,900,plain)[2];
+    if(index&&p.getX(i)<.016+radius/1000+1e-6&&Math.abs(z-(plain?.5680004:.5600004))>1e-6){outerBevel++;continue;}
     expect(z).toBeCloseTo(plain?.5680004:.5600004,6);seam++;
    }
-   expect(seam).toBeGreaterThan(0);g.dispose();
+   expect(seam).toBeGreaterThan(0);if(index)expect(outerBevel).toBeGreaterThan(0);g.dispose();
   });
  }
 });

@@ -14,6 +14,7 @@ import { ModelingFourViews, frontFacingRotation } from './modeling-four-views';
 import { cartTopStructure, createCartSideShelves, extractCartSideShelves, extractCartUmbrellaHolderBounds } from './modeling-side-shelves';
 import { prepareRooflessCartSource, ROOFLESS_CART_NAME, ROOFLESS_CART_SLUG, ROOF_CART_SLUG } from './modeling-roofless';
 import { prepareTwoInOneCartSource, TWO_IN_ONE_CART_NAME, TWO_IN_ONE_CART_SLUG, SIDE_SHELF_CART_SLUG } from './modeling-two-in-one';
+import { CLASSIC_MDF_NAME, CLASSIC_MDF_SLUG, prepareClassicMdfSource } from './modeling-classic-mdf';
 import { shelfProfilesForIceShelf } from './modeling-ice-shelf';
 import { createFrontMoulding } from './modeling-moulding';
 import { pineWoodUv, addTopFinishUvs, groupTopFacesAndEdges, groupShakerRecess } from './modeling-textures';
@@ -40,6 +41,7 @@ interface ModelRecord {
   caster_height_mm: number;
   derived_from_roof?: boolean;
   derived_from_side_shelf?: boolean;
+  derived_from_classic?: boolean;
 }
 
 type TopFinish = 'body' | 'oak' | 'plywood' | 'mdf';
@@ -141,7 +143,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     }
   }
   private selectionVersion = 0;
-  isClassic(): boolean { return this.activeSlug() === CLASSIC_SLUG; }
+  isClassic(): boolean { return this.activeSlug() === CLASSIC_SLUG || this.isClassicMdf(); }
+  isClassicMdf(): boolean { return this.activeSlug() === CLASSIC_MDF_SLUG; }
+  isPlywoodClassic(): boolean { return this.activeSlug() === CLASSIC_SLUG; }
   isSideShelfCart(): boolean { return this.activeSlug() === SIDE_SHELF_CART_SLUG; }
   isTwoInOneCart(): boolean { return this.activeSlug() === TWO_IN_ONE_CART_SLUG; }
   isCharcuterieCart(): boolean { return this.isSideShelfCart() || this.isTwoInOneCart(); }
@@ -184,7 +188,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if(this.isSideShelfCart())fields.push({label:'Cutouts',value:this.cutoutSummary()+(this.cutoutsIncluded()&&this.reverseCutoutLayout()?' · mirrored left/right':'')},{label:'Trays',value:this.traysIncluded()?this.traySummary()+' · 65 mm deep':'None'});
       if(!this.isCharcuterieCart())fields.push({label:'Side shelves',value:this.sideShelvesIncluded()?'2 × 200 × 600 mm':'None'},{label:'Overall width',value:(this.width()+(this.sideShelvesIncluded()?400:0))+' mm'});
       if(this.sideShelvesIncluded())fields.push({label:'Side shelves finish',value:this.sideShelfFinishSummary()});
-      if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isClassic()?15:16} mm`});
+      if(this.shelfIncluded())fields.push({label:'Shelf support',value:this.shelfSupport()==='plastic'?'Plastic support - diameter 5 mm':`Support rail - 20 x ${this.isPlywoodClassic()?15:16} mm`});
+      if(this.isClassicMdf())fields.push({label:'Construction',value:'Top, bottom and front: 16 mm MDF · sides: 12 mm MDF · top and bottom border: 45 × 16 mm'});
       if(this.hasRoof())fields.push({label:'Roof',value:(this.roofClosed()?'Closed - 12 mm MDF bottom':'Open')+' - '+this.overallHeight()+' mm overall height'},
         {label:'Glass racks',value:this.roofClosed()&&this.glassRackCount()?`${this.glassRackCount()} x Wine Glass Rack Chrome 405mm`:'None'});
       const snapshot:ConfigurationDocument={product:linkedModelProduct(this.catalog(),this.activeSlug())?.name||this.record?.product_name||this.modelLabel(),material:this.materialLabel(),code:this.activeSlug(),produced:new Intl.DateTimeFormat('en-AU',{day:'numeric',month:'long',year:'numeric',timeZone:'Australia/Brisbane'}).format(new Date()),logo,...views,fields,...(prices?{pricing:prices}:{})};
@@ -337,9 +342,9 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.sideShelfExtensions?.removeFromParent();this.sideShelfExtensions?.traverse(node=>{if(node instanceof THREE.Mesh){node.geometry.dispose();for(const material of Array.isArray(node.material)?node.material:[node.material])material.dispose();}});
     this.sideShelfExtensions=undefined;this.sideShelfExtensionKey=key;
     if(!enabled||!this.body||!this.sideShelfReference)return false;
-    const top=cartTopStructure(this.body,this.isClassic(),this.height());
+    const top=cartTopStructure(this.body,this.isClassic(),this.height(),this.isPlywoodClassic());
     this.sideShelfExtensions=createCartSideShelves(this.sideShelfReference,this.width(),this.height(),1500,850,top,this.rounding());this.body.add(this.sideShelfExtensions);
-    if(this.isClassic())this.sideShelfExtensions.traverse(node=>{if(node instanceof THREE.Mesh&&!node.userData['fixedMaterial'])this.addWoodUvs(node.geometry,node.name,/ 1$/.test(node.name),/ 2$/.test(node.name));});
+    if(this.isPlywoodClassic())this.sideShelfExtensions.traverse(node=>{if(node instanceof THREE.Mesh&&!node.userData['fixedMaterial'])this.addWoodUvs(node.geometry,node.name,/ 1$/.test(node.name),/ 2$/.test(node.name));});
     return true;
   }
   private updateUmbrellaHolder():boolean {
@@ -381,7 +386,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if (!sides.length || !shelf) throw new Error('Side panel or shelf geometry is missing. Load the complete model and retry.');
       const size = sides[0].getSize(new THREE.Vector3());
       const dimension = (n:number) => Math.round(n*10000)/10;
-      const svg = shelfDrawingSvg({width:dimension(size.z),height:dimension(size.y),panelThickness:dimension(size.x),shelfThickness:this.isClassic()?15:16,support:this.shelfSupport(),material:this.isClassic()?'Plywood':'MDF',product:`${this.modelLabel()} - ${this.width()} x ${this.depth()} x ${this.height()} mm`});
+      const svg = shelfDrawingSvg({width:dimension(size.z),height:dimension(size.y),panelThickness:dimension(size.x),shelfThickness:this.isPlywoodClassic()?15:16,support:this.shelfSupport(),material:this.isPlywoodClassic()?'Plywood':'MDF',product:`${this.modelLabel()} - ${this.width()} x ${this.depth()} x ${this.height()} mm`});
       const previous = this.shelfDrawing(); if (previous) URL.revokeObjectURL(previous.url);
       this.shelfDrawing.set({url:URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'})),filename:`${this.activeSlug()}-side-middle-${this.shelfSupport()}.svg`});
       this.drawingZoomed.set(false);
@@ -401,7 +406,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   readonly frontLogo=signal<LogoPlacement|null>(null);
   readonly logoError=signal('');
   readonly logoBusy=signal(false);
-  readonly logoPanel=computed(()=>this.isCharcuterieCart()?{width:this.width()-40,height:this.height()-127,inset:73}:({width:this.width()-(this.isClassic()?38:32),height:this.height()-(this.isClassic()?125:255),inset:this.moulding()?121:!this.isClassic()&&this.frontStyle()==='shaker'?Math.max(73,70*(this.height()-255)/645+3):0}));
+  readonly logoPanel=computed(()=>this.isCharcuterieCart()?{width:this.width()-40,height:this.height()-127,inset:73}:({width:this.width()-(this.isPlywoodClassic()?38:32),height:this.height()-(this.isClassic()?125:255),inset:this.moulding()?121:!this.isClassic()&&this.frontStyle()==='shaker'?Math.max(73,70*(this.height()-255)/645+3):0}));
   private logoMesh?:THREE.Mesh<THREE.PlaneGeometry,THREE.MeshStandardMaterial>;
   private logoTexture?:THREE.Texture;
   private logoVersion=0;
@@ -423,7 +428,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     const panel=this.logoPanel(),logo=fitLogo(panel,saved),h=logoHeight(logo);
     const mesh=new THREE.Mesh(new THREE.PlaneGeometry(logo.width/1000,h/1000),new THREE.MeshStandardMaterial({map:this.logoTexture,transparent:true,alphaTest:.01,depthWrite:false,roughness:.8,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));
     mesh.name='Front logo';
-    mesh.position.set(this.isClassic()?(this.width()-19-logo.x-logo.width/2)/1000:((this.isCharcuterieCart()?20:16)+logo.x+logo.width/2)/1000,(this.height()-(this.isClassic()?15:16)-logo.y-h/2)/1000,this.isClassic()?.0185:this.isCharcuterieCart()?.5685:this.frontStyle()==='shaker'?.5725004:.5845004);
+    mesh.position.set(this.isClassic()?(this.width()-(this.isClassicMdf()?16:19)-logo.x-logo.width/2)/1000:((this.isCharcuterieCart()?20:16)+logo.x+logo.width/2)/1000,(this.height()-(this.isPlywoodClassic()?15:16)-logo.y-h/2)/1000,this.isClassic()?(this.isClassicMdf()?.0155:.0185):this.isCharcuterieCart()?.5685:this.frontStyle()==='shaker'?.5725004:.5845004);
     if(this.isClassic())mesh.rotation.y=Math.PI;
     mesh.receiveShadow=true;this.logoMesh=mesh;this.model.add(mesh);
   }
@@ -630,6 +635,11 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       if (error) throw error;
       if (!this.alive || requestVersion !== this.selectionVersion) return;
       const records = data as ModelRecord[];
+      const classic = records.find(model => model.slug === CLASSIC_SLUG);
+      if (classic && !records.some(model => model.slug === CLASSIC_MDF_SLUG)) records.splice(records.indexOf(classic) + 1, 0, {
+        ...classic, slug: CLASSIC_MDF_SLUG, product_name: CLASSIC_MDF_NAME,
+        material_name: 'MDF', derived_from_classic: true,
+      });
       const roof = records.find(model => model.slug === ROOF_CART_SLUG);
       if (roof && !records.some(model => model.slug === ROOFLESS_CART_SLUG)) records.splice(records.indexOf(roof),0,{
         ...roof, slug: ROOFLESS_CART_SLUG, product_name: ROOFLESS_CART_NAME,
@@ -677,7 +687,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.glassRackCount.set(0);
     this.showGlasses.set(false);
     this.glassDiameter.set(80);
-    this.topFinish.set(this.isClassic() ? 'plywood' : 'body');
+    this.topFinish.set(this.isPlywoodClassic() ? 'plywood' : 'body');
     this.sideShelfFinish.set('top');
     this.paintFinish.set('matte');
     try { await this.loadRecord(record, version); }
@@ -727,6 +737,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if (this.isRoofFamily()) { fitFurnitureBolts(gltf.scene); shortenCastorBrakes(gltf.scene); turnCastorWheels(gltf.scene); }
     if (this.record?.derived_from_roof) prepareRooflessCartSource(gltf.scene);
     if (this.record?.derived_from_side_shelf) prepareTwoInOneCartSource(gltf.scene);
+    if (this.record?.derived_from_classic) prepareClassicMdfSource(gltf.scene);
     const nodes = [...gltf.scene.children];
     for (const node of nodes) {
       const key = casterGroupKey(node.name);
@@ -822,7 +833,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   onFileChange(event: Event): void {
-    if (this.record?.derived_from_roof || this.record?.derived_from_side_shelf) { this.error.set('This cart uses another saved model as its private source. Upload a new model through its own Hub record.'); return; }
+    if (this.record?.derived_from_roof || this.record?.derived_from_side_shelf || this.record?.derived_from_classic) { this.error.set('This cart uses another saved model as its private source. Upload a new model through its own Hub record.'); return; }
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -857,7 +868,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   }
 
   async saveModel(): Promise<void> {
-    if (this.record?.derived_from_roof || this.record?.derived_from_side_shelf) { this.error.set('This derived cart cannot overwrite its saved source model.'); return; }
+    if (this.record?.derived_from_roof || this.record?.derived_from_side_shelf || this.record?.derived_from_classic) { this.error.set('This derived cart cannot overwrite its saved source model.'); return; }
     const file = this.selectedFile();
     if (!file || !this.members.manager() || this.saving()) return;
     this.saving.set(true);
@@ -1065,7 +1076,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     this.finishLoading.set(true);
     try {
       if (finish === 'oak') await this.loadFinishTexture('tasmanian-oak.png');
-      else if (finish === 'plywood' && !this.isClassic()) await Promise.all([
+      else if (finish === 'plywood' && !this.isPlywoodClassic()) await Promise.all([
         this.loadFinishTexture('plywood-face.jpg'), this.loadFinishTexture('plywood-edge.jpg'), this.loadFinishTexture('pine.jpg'),
       ]);
       if (!this.alive || version !== this.finishVersion) return;
@@ -1221,7 +1232,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       node.geometry.computeBoundingBox();
       node.geometry.computeBoundingSphere();
       const materials = Array.isArray(node.material) ? node.material : [node.material];
-      if (this.isClassic()) this.addWoodUvs(node.geometry,
+      if (this.isPlywoodClassic()) this.addWoodUvs(node.geometry,
         node.userData['plywoodPart'] || node.name, materials.some(material => /plywood[ _]edge$/i.test(material.name)),
         materials.some(material => /pine[ _]trim$/i.test(material.name)));
     }
@@ -1248,7 +1259,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     }
     this.cameraSpan = span;
     if(!this.isCharcuterieCart()&&this.sideShelvesIncluded()){
-      const top=this.height()/1000,thickness=this.isClassic()?.042:.045;
+      const top=this.height()/1000,thickness=this.isPlywoodClassic()?.042:.045;
       for(const node of this.originalPositions.keys())if(/^Top[ _](?:part)?2$/i.test(node.userData['plywoodPart']||node.name)){
         keepPartJointsSquare(node.geometry,[0,this.width()/1000].map(x=>({axis:'x' as const,plane:x,
           bounds:new THREE.Box3(new THREE.Vector3(x,top-thickness,0),new THREE.Vector3(x,top,.6)),
@@ -1366,13 +1377,13 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         const edge = /plywood[ _]edge$/i.test(material.name);
         const plywood = (pine ? this.modelPineTexture : edge ? this.modelPlywoodEdgeTexture : this.modelPlywoodTexture) || this.modelPlywoodTexture;
         const map = finish === 'oak' ? this.finishTextures.get('tasmanian-oak.png') || null
-          : finish === 'mdf' ? null : !this.isClassic() ? finish === 'plywood' ? this.finishTextures.get(pine ? 'pine.jpg' : edge ? 'plywood-edge.jpg' : 'plywood-face.jpg') || null : null
+          : finish === 'mdf' ? null : !this.isPlywoodClassic() ? finish === 'plywood' ? this.finishTextures.get(pine ? 'pine.jpg' : edge ? 'plywood-edge.jpg' : 'plywood-face.jpg') || null : null
           : finish === 'plywood' ? plywood || this.rawTexture : this.rawBody() ? plywood || this.rawTexture : null;
-        const rawMdf = !this.isClassic() && !map && (this.rawBody() || finish === 'mdf');
+        const rawMdf = (!this.isPlywoodClassic()) && !map && (this.rawBody() || finish === 'mdf');
         const source = rawMdf ? new THREE.Color('#b99b78') : map ? new THREE.Color('#ffffff') : body;
         if (map && !node.geometry.hasAttribute('uv')) this.addWoodUvs(node.geometry, partName, edge, pine);
-        if (map && !this.isClassic() && finish === 'plywood' && pine) this.addWoodUvs(node.geometry, partName, false, true);
-        if (map && (finish === 'oak' || (finish === 'plywood' && !this.isClassic() && !pine))) addTopFinishUvs(node.geometry, finish === 'oak' && !this.isClassic() && /^Top[ _][3-6]$/i.test(partName));
+        if (map && !this.isPlywoodClassic() && finish === 'plywood' && pine) this.addWoodUvs(node.geometry, partName, false, true);
+        if (map && (finish === 'oak' || (finish === 'plywood' && !this.isPlywoodClassic() && !pine))) addTopFinishUvs(node.geometry, finish === 'oak' && !this.isClassic() && /^Top[ _][3-6]$/i.test(partName));
         if (!map && this.modelPaintBumpTexture && !node.geometry.hasAttribute('uv1')) this.addPaintUvs(node.geometry);
         material.color.copy(source);
         if (!this.isClassic() && this.frontStyle() === 'shaker' && material.name === 'Shaker recessed face') material.color.multiplyScalar(.92);
@@ -1380,6 +1391,15 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         if (edge && map && finish !== 'oak' && !pine) material.color.multiplyScalar(1.30);
         if (pine && map && finish !== 'oak') material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
         material.map = map;
+        if (this.isClassicMdf() && !map) {
+          material.normalMap = null;
+          material.roughnessMap = null;
+          material.metalnessMap = null;
+          material.aoMap = null;
+          material.lightMap = null;
+          material.displacementMap = null;
+          material.alphaMap = null;
+        }
         material.bumpMap = rawMdf || map || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
         material.bumpScale = 0.00015;
         material.roughness = rawMdf ? 0.85 : map ? finish === 'oak' ? 0.55 : 0.78 : this.paintRoughness();
@@ -1420,13 +1440,14 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     }
     if (!this.moulding()) { this.bindAssembly(); return; }
     const material = new THREE.MeshPhysicalMaterial({
-      map: this.rawBody() ? this.modelPineTexture || this.modelPlywoodTexture || this.rawTexture : null,
-      color: this.rawBody() ? '#ffffff' : this.bodyColor(), roughness: this.rawBody() ? 0.78 : this.paintRoughness(), side: THREE.DoubleSide,
+      map: this.rawBody() && !this.isClassicMdf() ? this.modelPineTexture || this.modelPlywoodTexture || this.rawTexture : null,
+      color: this.rawBody() ? (this.isClassicMdf() ? '#b99b78' : '#ffffff') : this.bodyColor(), roughness: this.rawBody() ? 0.78 : this.paintRoughness(), side: THREE.DoubleSide,
       envMap: this.rawBody() ? null : this.paintReflection(), envMapIntensity: 0.128,
       clearcoat: !this.rawBody() && this.paintFinish() === 'semi-gloss' ? 0.2 : 0, clearcoatRoughness: 0.16,
     });
-    if (this.rawBody() && this.modelPineTexture) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
-    this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height(), this.isClassic() ? undefined
+    if (this.rawBody() && this.modelPineTexture && !this.isClassicMdf()) material.color.multiply(new THREE.Color().setRGB(1.15, 1.5, 2.4)).multiplyScalar(1.05);
+    this.frontMoulding = new THREE.Mesh(createFrontMoulding(this.width(), this.height(), this.isClassicMdf()
+      ? { panelLeft: 0.016, panelBottom: 0.111, panelTopInset: 0.016, front: 0.016, direction: -1 } : this.isClassic() ? undefined
       : { panelLeft: 0.016, panelBottom: 0.239, panelTopInset: 0.016, front: 0.5840004, direction: 1 }), material);
     material.bumpMap = this.rawBody() || this.paintFinish() === 'semi-gloss' ? null : this.modelPaintBumpTexture || null;
     material.bumpScale = 0.00015;

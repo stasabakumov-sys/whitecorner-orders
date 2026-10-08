@@ -171,6 +171,19 @@ describe('Independent editor models', () => {
     expect(component.isClassic()).toBe(true);
   });
 
+  it('opens Classic MDF as a separate source-derived product with its own finish', async () => {
+    const {component,upload}=setup();
+    const mdf={...classic,slug:'classic-bar-mdf',product_name:'Collapsible Mobile Bar "Classic"',material_name:'MDF',derived_from_classic:true};
+    component.models.set([classic,mdf]);await component.selectModel(mdf.slug);
+    expect(component.isClassic()).toBe(true);
+    expect(component.isClassicMdf()).toBe(true);
+    expect(component.materialLabel()).toBe('MDF');
+    expect(component.topFinish()).toBe('body');
+    expect(component.height()).toBe(900);
+    component.selectedFile.set(new File(['cart'],'cart.glb'));
+    await component.saveModel();expect(upload).not.toHaveBeenCalled();
+  });
+
   it('keeps the roofless cart separate from the roof record and blocks a derived upload', async () => {
     const {component,upload}=setup();
     component.models.set([classic,roof,{...roof,slug:'decorative-wheel-cart-mdf',product_name:'MDF Mobile Bar Cart with Decorative Wheels – Foldable Serving Cart',derived_from_roof:true}]);

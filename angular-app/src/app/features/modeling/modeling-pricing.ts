@@ -2,6 +2,7 @@
 // Exact product IDs and option choices are required; names never merge products.
 export const MODEL_CATALOG_LINKS: Record<string,{id:string;path:string}> = {
  'classic-bar-plywood': {id:'750a0827-801d-4cb4-b630-1e07167ad400',path:'/product-page/collapsible-plywood-mobile-bar-classic-mobile-food-service-event-bar-cart'},
+ 'classic-bar-mdf': {id:'b9ebe0f7-489a-41c5-9dfe-e0150c5c02d7',path:'/product-page/collapsible-mobile-bar-classic-mobile-food-service-event-bar-cart'},
  'decorative-wheel-roof-cart-mdf': {id:'f33d3815-564c-47d9-b4c0-8ffa6dd4541d',path:'/product-page/mdf-mobile-bar-cart-with-roof-decorative-wheels-foldable-serving-cart'},
  'decorative-wheel-cart-mdf': {id:'07ce16db-6737-44a2-a69e-29bf7de313e0',path:'/product-page/mdf-mobile-bar-cart-with-decorative-wheels-foldable-serving-cart'},
  'side-shelf-cart-mdf': {id:'bb41466d-c2a1-4c08-adb1-5ed4cd2f0576',path:'/product-page/mobile-foldable-charcuterie-cart-with-wheels-bar-cart-vendor-cart'},
@@ -42,7 +43,7 @@ function linkedProduct(catalog:ModelingCatalog,link:{id:string;path:string}):Mod
 export function linkedModelProduct(catalog:ModelingCatalog|null,slug:string):ModelingProduct|undefined {
  const link=MODEL_CATALOG_LINKS[slug];return catalog&&link?linkedProduct(catalog,link):undefined;
 }
-export function shortModelName(name:string):string {return name.split(/\.|\s+[–—-]\s+/,1)[0].trim();}
+export function shortModelName(name:string):string {return name.split(/\.|[–—-]\s+/,1)[0].trim();}
 function variant(product:ModelingProduct|undefined,choices:Record<string,string>):CatalogVariant|undefined {
  const matches=product?.variants.filter(v=>Object.keys(v.choices).length===Object.keys(choices).length&&Object.entries(choices).every(([key,value])=>v.choices[key]===value))||[];
  return matches.length===1?matches[0]:undefined;
@@ -73,12 +74,13 @@ export function catalogPricing(catalog:ModelingCatalog,s:PricingSelection):Confi
  const empty:ConfigurationPricing={productId:product?.id||'',variantId:null,publishedAt:catalog.publishedAt,subtotal:null,lines:[{label:'Cart configuration',amount:null}]};
  if(!product)return empty;
  const body=colour(s),choices:Record<string,string>={Colour:body};let integrated=false;
- if(s.slug==='classic-bar-plywood'){
+ if(s.slug==='classic-bar-plywood'||s.slug==='classic-bar-mdf'){
   const size=product.options.find(o=>o.name==='Size')?.values.find(value=>{const dimensions=/W(\d+)mm\s*x\s*D(\d+)mm\s*x\s*H(\d+)mm/i.exec(value);return dimensions&&+dimensions[1]===s.width&&+dimensions[2]===s.depth&&+dimensions[3]===s.height;});
   if(!size)return empty;
   choices['Size']=size;choices['Internal Shelf']=s.shelf?'Yes':'No';
   if(s.topFinish==='oak')choices['Tabletop material']='Tasmanian Oak';
-  else if(s.topFinish==='plywood'||s.topFinish==null)choices['Tabletop material']='Plywood';
+  else if(s.slug==='classic-bar-mdf'&&(s.topFinish==='body'||(s.topFinish==='mdf'&&s.raw)))choices['Tabletop material']='MDF';
+  else if(s.slug==='classic-bar-plywood'&&(s.topFinish==='plywood'||s.topFinish==null))choices['Tabletop material']='Plywood';
   else return empty;
  }else if(s.slug==='side-shelf-cart-mdf'){
   if(s.width!==1500||s.depth!==600||s.height!==850||![0,13].includes(s.cutouts||0)||![0,13].includes(s.trays||0))return empty;
@@ -108,9 +110,9 @@ export function catalogPricing(catalog:ModelingCatalog,s:PricingSelection):Confi
   if(s.slug==='two-in-one-cart-mdf'&&s.shelf)add('Internal shelf',null);
   if(s.iceShelf){const ice=variant(linkedProduct(catalog,MODEL_ADDON_LINKS.iceShelf),{Pans:'Shelf without steel pans',Colour:body});add('Ice shelf',ice?.price??null);}
  }
- if(s.topFinish&&s.slug!=='classic-bar-plywood'&&s.slug!=='two-in-one-cart-mdf'&&s.topFinish!=='body')add('Table top finish',null);
- if(s.frontStyle&&s.frontStyle!==(s.slug==='classic-bar-plywood'?'plain':'shaker'))add('Front panel',null);
- if(s.slug==='classic-bar-plywood'&&s.moulding)add('Moulding',null);
+ if(s.topFinish&&s.slug!=='classic-bar-plywood'&&s.slug!=='classic-bar-mdf'&&s.slug!=='two-in-one-cart-mdf'&&s.topFinish!=='body')add('Table top finish',null);
+ if(s.frontStyle&&s.frontStyle!==((s.slug==='classic-bar-plywood'||s.slug==='classic-bar-mdf')?'plain':'shaker'))add('Front panel',null);
+ if((s.slug==='classic-bar-plywood'||s.slug==='classic-bar-mdf')&&s.moulding)add('Moulding',null);
  if(s.frontLogo)add('Front logo',null);
  if(s.roofClosed)add('Closed roof',null);
  if(s.glassRacks)add(`${s.glassRacks} × Wine Glass Rack Chrome 405mm`,null);
