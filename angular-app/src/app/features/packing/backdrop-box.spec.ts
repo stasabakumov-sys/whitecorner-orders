@@ -14,6 +14,15 @@ describe('Backdrop box layout',()=>{
     expect(box.drawing.pieces).toBe(2);
     expect(prepareBackdropRdRequest(box,settings).jobs).toHaveLength(2);
     expect(exportBoxSvg(box.drawing)).toContain('id="Bottom"');
+    for(const net of [...box.bottom,...box.lid]){
+      const rim=box.rim, end=net.sheetHeight;
+      // The end flap includes both outer corner wings from the supplied CDR.
+      expect(net.cuts).toContainEqual({from:[rim,end],to:[0,end-1.5]});
+      expect(net.cuts).toContainEqual({from:[net.sheetWidth,end-1.5],to:[rim+net.width,end]});
+      expect(net.folds).toContainEqual({from:[rim,0],to:[rim,end]});
+      expect(net.folds).toContainEqual({from:[rim+net.width,0],to:[rim+net.width,end]});
+      expect(net.cuts.at(-1)?.to).toEqual(net.cuts[0].from);
+    }
   });
 
   it('lowers only the border when a whole lid almost exceeds the laser field',()=>{
