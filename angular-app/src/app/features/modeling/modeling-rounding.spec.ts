@@ -199,12 +199,20 @@ it.each([1,1.5,3])('closes the outline endpoints of tabletop trim seams at %s mm
  }
 });
 
-it.each(['left','right'])('keeps the %s side-shelf join to the main tabletop square',side=>{
+it.each(['left','right'])('rounds both separate edges at the %s side-shelf folding joint',side=>{
  const x=side==='left'?-.2:1.5;
  const profile=(lo:number,hi:number):RoundingProfile=>({axis:'y',origin:.834,thickness:.016,outline:[[lo,0],[hi,0],[hi,.6],[lo,.6]],holes:[]});
  const parts=[profile(0,1.5),profile(x,x+.2)].map((profile,i)=>{const geometry=createRoundedPart(profile,1.5);geometry.computeBoundingBox();return {name:i?'Side shelf '+side+' 1':'Top part1',profile,geometry,bounds:geometry.boundingBox!.clone()};});
  const joints=matingPartJoints(parts),seamX=side==='left'?0:1.5;
- const shelf=parts[1];keepPartJointsSquare(shelf.geometry,joints.get(shelf.name)!,1.5);const p=shelf.geometry.getAttribute('position');let seam=0;
- for(let i=0;i<p.count;i++)if(Math.abs(p.getX(i)-seamX)<.003){expect(p.getX(i)).toBeCloseTo(seamX,6);expect(Math.min(Math.abs(p.getY(i)-.834),Math.abs(p.getY(i)-.85))).toBeLessThan(1e-6);seam++;}
- expect(seam).toBeGreaterThan(0);parts.forEach(p=>p.geometry.dispose());
+ for(const [index,part] of parts.entries()){
+  expect(joints.get(part.name)||[]).toHaveLength(0);
+  keepPartJointsSquare(part.geometry,joints.get(part.name)||[],1.5);
+  const mesh=new THREE.Mesh(part.geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
+  const inside=(side==='left'?1:-1)*(index?-1:1),x=seamX+inside*.0001;
+  const down=new THREE.Raycaster(new THREE.Vector3(x,1,.3),new THREE.Vector3(0,-1,0)).intersectObject(mesh)[0];
+  const up=new THREE.Raycaster(new THREE.Vector3(x,.8,.3),new THREE.Vector3(0,1,0)).intersectObject(mesh)[0];
+  expect(down.point.y).toBeLessThan(.8499);expect(up.point.y).toBeGreaterThan(.8341);
+  expect(part.geometry.boundingBox!.max.y-part.geometry.boundingBox!.min.y).toBeCloseTo(.016,6);
+ }
+ parts.forEach(p=>p.geometry.dispose());
 });

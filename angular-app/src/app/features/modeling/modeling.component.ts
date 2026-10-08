@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, Injector, OnDestroy, ViewChild, afterNextRender, computed, signal } from '@angular/core';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -306,7 +306,16 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
     if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());
     else this.bindAssembly();
   }
-  setSideShelvesIncluded(value:boolean):void {
+  setSideShelvesIncluded(value:boolean,toggle?:HTMLInputElement):void {
+    const panel=toggle?.closest<HTMLElement>('.settings');
+    if(panel&&toggle&&this.injector){
+      const top=toggle.getBoundingClientRect().top;
+      // Wait for every child section summary and projected Finish control,
+      // then keep the clicked row in place before the next paint.
+      afterNextRender(()=>{
+        if(toggle.isConnected)panel.scrollTop+=toggle.getBoundingClientRect().top-top;
+      },{injector:this.injector});
+    }
     this.sideShelvesIncluded.set(value);
     if(this.isCharcuterieCart()){if(this.body&&this.roundingSupported()&&!this.roundingBusy())void this.setRounding(this.rounding());else this.bindAssembly();}
     else {
@@ -542,7 +551,7 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
   private modelPaintBumpTexture?: THREE.Texture;
   private paintEnvironment?: THREE.WebGLRenderTarget;
 
-  constructor(readonly members: HubMembersService, private readonly db: SupabaseService, private readonly modelCache: ModelingCacheService) {}
+  constructor(readonly members: HubMembersService, private readonly db: SupabaseService, private readonly modelCache: ModelingCacheService, private readonly injector?:Injector) {}
 
   ngAfterViewInit(): void {
     void this.loadCatalog();
@@ -1057,13 +1066,8 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
         if(slottedSide)profile=sideShelfSideProfile(profile,this.sideShelfReference!);
         if(umbrellaPanel)profile=withUmbrellaHole(profile,this.umbrellaDiameter(),this.width(),this.umbrellaX(),this.isCharcuterieCart()?1500:1200,this.isRooflessCart()?200:150);
         if(solidSide){const us=profile.outline.map(p=>p[0]),vs=profile.outline.map(p=>p[1]),u0=Math.min(...us),u1=Math.max(...us),v0=Math.min(...vs),v1=Math.max(...vs);profile={...profile,outline:[[u0,v0],[u1,v0],[u1,v1],[u0,v1]],holes:[]};}
-        const tabletopJoints=this.isRoofSideShelfCart()?roofSideShelfTabletopJoints(name,profile,this.sideShelvesIncluded()):[];
+        const tabletopJoints=this.isRoofSideShelfCart()?roofSideShelfTabletopJoints(name,profile):[];
         const partJoints = [...(tabletopJoints.length?tabletopJoints:joints.get(name)||[]),...(slottedSide?sideShelfSlotJoints(profile):[])];
-        if(!this.isCharcuterieCart()&&this.sideShelvesIncluded()&&(this.isClassic()?/^Top[ _]part2$/i:/^Top[ _](?:part)?1$/i).test(name)){
-          const xs=profile.outline.map(p=>p[0]),zs=profile.outline.map(p=>p[1]);
-          for(const plane of [Math.min(...xs),Math.max(...xs)])partJoints.push({axis:'x',plane,
-            bounds:new THREE.Box3(new THREE.Vector3(plane,profile.origin,Math.min(...zs)),new THREE.Vector3(plane,profile.origin+profile.thickness,Math.max(...zs)))});
-        }
         const key = JSON.stringify([profile, raw, plainClassicTop, roofTop, /^(Top|Buttom|Bottom)[ _](?:part)?2$/i.test(name), partJoints]);
         const geometry = this.modelCache.roundedPart(key, () => {
           const rounded = createRoundedPart(profile!, plainClassicTop?0:raw);
@@ -1323,13 +1327,6 @@ export class ModelingComponent implements AfterViewInit, OnDestroy {
       this.controls.update();
     }
     this.cameraSpan = span;
-    if(!this.isCharcuterieCart()&&this.sideShelvesIncluded()){
-      const top=this.height()/1000,thickness=this.isPlywoodClassic()?.042:.045;
-      for(const node of this.originalPositions.keys())if(/^Top[ _](?:part)?2$/i.test(node.userData['plywoodPart']||node.name)){
-        keepPartJointsSquare(node.geometry,[0,this.width()/1000].map(x=>({axis:'x' as const,plane:x,
-          bounds:new THREE.Box3(new THREE.Vector3(x,top-thickness,0),new THREE.Vector3(x,top,.6))})),this.rounding());
-      }
-    }
     const shelvesChanged=this.updateSideShelfExtensions();
     const holderChanged=this.updateUmbrellaHolder();
     this.updateRoofBottom();

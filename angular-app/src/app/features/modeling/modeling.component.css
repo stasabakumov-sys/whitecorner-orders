@@ -107,5 +107,6 @@
 .spin-hint svg{width:15px;height:15px;flex:none}
 @media(min-width:981px){.spin-hint{left:calc((100% - 320px)/2)}}
 /* Keep the selected cart visible while scrolling the settings panel. */
+.settings{overflow-anchor:none}
 .model-choice-card{position:sticky;top:0;z-index:2;box-shadow:0 6px 10px #26324108}
 .model-choice-card::before{content:"";position:absolute;left:-6px;right:-6px;top:-6px;height:6px;background:#fff}
