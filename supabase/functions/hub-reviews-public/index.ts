@@ -1,5 +1,5 @@
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
-import {publicReviewAuthor} from './public-fields.mjs';
+import {publicReviewAuthor,coverFirst} from './public-fields.mjs';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -89,8 +89,8 @@ Deno.serve(async request => {
     if (error) return fail(503, 'Reviews could not be loaded');
     const reviewIds = (reviews || []).map((review: any) => review.id);
     const {data: media, error: mediaError} = reviewIds.length
-      ? await db.from('wc_fera_review_media').select('id,review_id,media_type,storage_path')
-        .in('review_id', reviewIds).not('storage_path', 'is', null).limit(1000)
+      ? await db.from('wc_fera_review_media').select('id,review_id,media_type,storage_path,is_cover')
+        .in('review_id', reviewIds).not('storage_path', 'is', null).order('id').limit(1000)
       : {data: [], error: null};
     if (mediaError) return fail(503, 'Review media could not be loaded');
     const productIds = [...new Set((reviews || []).map((row: any) => row.product_override_id || row.shipping_product_id).filter(Boolean))];
@@ -100,13 +100,14 @@ Deno.serve(async request => {
     if (productError) return fail(503, 'Review products could not be loaded');
     const productNames = new Map((products || []).map((row: any) => [row.id, row.product_name]));
     const mediaByReview = new Map<string, any[]>();
-    for (const item of media || []) {
+    for (const item of coverFirst(media || [])) {
       const list = mediaByReview.get(item.review_id) || [];
       list.push({id: item.id, type: item.media_type, url: `${url}/functions/v1/hub-reviews-public/media/${item.id}`});
       mediaByReview.set(item.review_id, list);
     }
     return json({reviews: (reviews || []).map((row: any) => ({
       id: row.id, subject: row.subject, wixProductId: row.wix_product_id,
+      productId: row.product_override_id || row.shipping_product_id || null,
       productName: productNames.get(row.product_override_id || row.shipping_product_id) || null,
       rating: row.rating, title: row.title, body: row.body, reviewedAt: row.reviewed_at,
       verified: row.verified === true, author: publicReviewAuthor(row.source_data,row.public_author_name),

@@ -23,6 +23,11 @@ jobs:
           node .github/scripts/fera-reviews-migration.test.mjs "$RUNNER_TEMP/fera-db/node_modules/@electric-sql/pglite/dist/index.js"
       - name: Check public author privacy rules
         run: node --test supabase/functions/hub-reviews-public/public-fields.test.mjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.6
+      - name: Type-check public reviews function
+        run: deno check --no-lock supabase/functions/hub-reviews-public/index.ts
       - name: Apply publication migration with security postflight
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -31,6 +36,10 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/fera-product-override-release.mjs
+      - name: Apply review cover migration
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/fera-cover-release.mjs
       - uses: supabase/setup-cli@v1
         with:
           version: latest
