@@ -194,6 +194,12 @@ for (const item of linkedMedia) {
   try { downloaded = await download(item.downloadUrls, item.type); }
   catch (error) {
     if (error?.message === 'Fera media download failed: HTTP 404 on every source URL') {
+      if (!prior) {
+        await rows(db.from('wc_fera_review_media').upsert({ review_id: reviewId, fera_media_id: item.id,
+          source_url: item.sourceUrl, media_type: item.type, storage_path: null, storage_parts: [],
+          content_type: null, bytes: null, sha256: null, copied_at: null },
+        { onConflict: 'fera_media_id' }).select('id'), 'Hub missing-media marker');
+      }
       unavailable.push(item.id);
       continue;
     }
@@ -231,6 +237,8 @@ for (const item of linkedMedia) {
   copied += 1;
 }
 const confirmedMedia = linkedMedia.length === copied + retained;
+console.log(JSON.stringify({ reviewsConfirmed: savedReviews.size, mediaCopiedThisRun: copied,
+  mediaRetained: retained, sourceMediaUnavailable: unavailable.length }));
 if (unavailable.length) throw Error(`${unavailable.length} Fera review media returned HTTP 404; media IDs: ${unavailable.join(', ')}`);
 if (!confirmedMedia) throw Error('Hub did not confirm every linked photo/video');
 console.log(JSON.stringify({ result: 'confirmed', reviews: savedReviews.size, linkedMedia: linkedMedia.length,
