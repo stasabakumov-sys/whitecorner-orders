@@ -10,10 +10,13 @@ by the exact source match; a manager override stays separate.
 The first publication migration enables only reviews whose Fera state is
 `approved` or `published`, matching the existing Wix storefront editorial
 decision. New imports default to private. A Hub manager can change publication
-status. Display names default to `Customer`; a manager can enter an approved
-public display name. Storefront payloads contain an explicit list of review
+status. The public API uses Fera's `display_name` only when name visibility is
+explicitly enabled; anonymous or hidden names remain `Anonymous`. A manager
+can enter an approved display name where visibility permits it. Otherwise the
+display name defaults to `Customer`. Storefront payloads contain an explicit list of review
 fields, the Hub product name, and media IDs. They exclude the private Fera
-payload, source URLs, email, location and customer IDs. Product association
+payload, source URLs, email, location and customer IDs. The server reads the
+private source payload only to enforce these display-name flags. Product association
 uses the exact saved Wix/Hub mapping or an explicit manager override, never an
 automatic name match.
 
