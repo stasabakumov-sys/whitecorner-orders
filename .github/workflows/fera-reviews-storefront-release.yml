@@ -1,0 +1,34 @@
+name: Release reviews storefront backend
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rehearse review migrations
+        run: |
+          npm install --prefix "$RUNNER_TEMP/fera-db" --no-save --ignore-scripts @electric-sql/pglite@0.5.8
+          node .github/scripts/fera-reviews-migration.test.mjs "$RUNNER_TEMP/fera-db/node_modules/@electric-sql/pglite/dist/index.js"
+      - name: Apply publication migration with security postflight
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/fera-publication-release.mjs
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Deploy read-only reviews function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy hub-reviews-public --project-ref zgvnrpspwluapaxnycrg --no-verify-jwt

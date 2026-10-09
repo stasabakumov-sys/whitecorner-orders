@@ -34,5 +34,6 @@ export const routes:Routes=[
   {path:'finance',component:FinanceComponent},
   {path:'address-review',component:AddressReviewComponent},
   {path:'shipping-data',loadComponent:()=>import('./features/shipping-data/shipping-data.component').then(m=>m.ShippingDataComponent)},
+  {path:'reviews',loadComponent:()=>import('./features/reviews/reviews.component').then(m=>m.ReviewsComponent)},
   {path:'**',redirectTo:'home'}
 ];

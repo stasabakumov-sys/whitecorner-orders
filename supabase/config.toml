@@ -23,3 +23,8 @@ verify_jwt = true
 
 [functions.hub-users]
 verify_jwt = true
+
+# Public, read-only storefront contract. Its handler returns only manager-published
+# fields and media; the private archive remains protected by RLS.
+[functions.hub-reviews-public]
+verify_jwt = false
