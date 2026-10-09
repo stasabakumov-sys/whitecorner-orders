@@ -5,7 +5,7 @@ import {SupabaseService} from '../../core/services/supabase.service';
 import {HubMembersService} from '../../core/services/hub-members.service';
 
 type Review = {
-  id: string; subject: 'product'|'store'; shipping_product_id: string|null; product_override_id: string|null;
+  id: string; subject: 'product'|'store'; fera_product_id: string|null; shipping_product_id: string|null; product_override_id: string|null;
   rating: number|null; title: string|null; body: string|null;
   author_display_name: string|null; public_author_name: string|null;
   reviewed_at: string|null; source_state: string|null; is_published: boolean;
@@ -36,6 +36,7 @@ type Product = {id:string;product_name:string};
           <td><div class="stars" [attr.aria-label]="(review.rating || 0) + ' of 5 stars'">{{stars(review.rating)}}</div><strong>{{review.title || 'Untitled review'}}</strong><p>{{review.body || 'No text'}}</p><small>Fera: {{review.author_display_name || 'Unknown'}} · {{review.source_state || 'Unknown state'}}</small></td>
           <td>{{review.subject}}@if(review.subject==='product'){
             <small class="product-name">{{productName(review.product_override_id || review.shipping_product_id) || 'Unmatched product'}}</small>
+            @if(!review.shipping_product_id && !review.product_override_id && review.fera_product_id){<small class="product-name">Fera ID: {{review.fera_product_id}}</small>}
             @if(editing()===review.id){<label>Product link
               <select aria-label="Product link" [(ngModel)]="draftProductOverride">
                 <option value="">Use imported match</option>
@@ -98,7 +99,7 @@ export class ReviewsComponent implements OnInit {
     this.loading.set(true);this.error.set('');
     try{
       const [reviewResult,mediaResult,productResult]=await Promise.all([
-        this.db.client.from('wc_fera_reviews').select('id,subject,shipping_product_id,product_override_id,rating,title,body,author_display_name,public_author_name,reviewed_at,source_state,is_published,published_at').order('reviewed_at',{ascending:false}).limit(500),
+        this.db.client.from('wc_fera_reviews').select('id,subject,fera_product_id,shipping_product_id,product_override_id,rating,title,body,author_display_name,public_author_name,reviewed_at,source_state,is_published,published_at').order('reviewed_at',{ascending:false}).limit(500),
         this.db.client.from('wc_fera_review_media').select('id,review_id,media_type,storage_path,storage_parts').limit(1000),
         this.db.client.from('wc_shipping_products').select('id,product_name').order('product_name').limit(1000),
       ]);
