@@ -10,3 +10,7 @@ export function publicReviewAuthor(sourceData, managerName) {
   }
   return 'Customer';
 }
+
+export function coverFirst(media) {
+  return [...media].sort((a, b) => Number(b.is_cover === true) - Number(a.is_cover === true));
+}

@@ -79,6 +79,25 @@ try {
     has_column_privilege('authenticated','public.wc_fera_reviews','shipping_product_id','UPDATE') source_link_editable`)).rows[0];
   assert.equal(overrides.override_allowed, true);
   assert.equal(overrides.source_link_editable, false);
+  await db.exec(await readFile('supabase/migrations/20261009000400_fera_review_cover.sql', 'utf8'));
+  assert.equal((await db.query("select is_cover from public.wc_fera_review_media where fera_media_id='fm_one'")).rows[0].is_cover, false);
+  await db.query(`update public.wc_fera_review_media set media_type='photo',storage_path='first.jpg',bytes=10,
+    sha256='first',copied_at=now() where fera_media_id='fm_one'`);
+  await db.query(`insert into public.wc_fera_review_media
+    (review_id,fera_media_id,source_url,media_type,storage_path,bytes,sha256,copied_at)
+    values ($1,'fm_two','https://example.invalid/second.jpg','photo','second.jpg',10,'second',now())`,[reviewId]);
+  const photos=(await db.query("select id,fera_media_id from public.wc_fera_review_media order by fera_media_id")).rows;
+  await db.query('select public.wc_set_fera_review_cover($1,$2)',[reviewId,photos[1].id]);
+  assert.equal((await db.query('select count(*)::int count from public.wc_fera_review_media where review_id=$1 and is_cover',[reviewId])).rows[0].count,1);
+  await db.query('select public.wc_set_fera_review_cover($1,$2)',[reviewId,photos[0].id]);
+  assert.equal((await db.query('select fera_media_id from public.wc_fera_review_media where is_cover')).rows[0].fera_media_id,'fm_one');
+  await assert.rejects(db.query("update public.wc_fera_review_media set is_cover=true where fera_media_id='fm_two'"),/unique/);
+  await assert.rejects(db.query("update public.wc_fera_review_media set media_type='video' where fera_media_id='fm_one'"),/check constraint/);
+  await assert.rejects(db.query('select public.wc_set_fera_review_cover($1,$2)',[
+    'e315116f-284e-47c6-b87d-4ef6f8987eaf',photos[0].id]),/Select an available photo/);
+  await db.exec("create or replace function public.wc_is_hub_manager() returns boolean language sql stable as $$select false$$");
+  await assert.rejects(db.query('select public.wc_set_fera_review_cover($1,$2)',[reviewId,photos[0].id]),/Manager access required/);
+  assert.equal((await db.query("select has_function_privilege('anon','public.wc_set_fera_review_cover(uuid,uuid)','EXECUTE') allowed")).rows[0].allowed,false);
   console.log('Fera review migration rehearsal passed');
 } finally {
   await db.close();
