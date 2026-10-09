@@ -29,8 +29,9 @@ type Product = {id:string;product_name:string};
         <div class="overview-panel"><h2>Review management</h2><p>Review publication, product links and the first photo are managed in the Reviews and Photos & videos sections. Imported Fera content remains the source of review text.</p></div>
       }
       @if (section()==='media') {
+        @if(!coverReady()){<p class="notice">First-photo selection will be available after the database update.</p>}
         <div class="controls"><select aria-label="Media type" [ngModel]="typeFilter()" (ngModelChange)="typeFilter.set($event)"><option value="all">All media</option><option value="photo">Photos</option><option value="video">Videos</option></select><button type="button" (click)="load()" [disabled]="loading()">{{loading()?'Loading…':'Refresh'}}</button></div>
-        <div class="media-grid">@for(item of media();track item.id){@if(item.storage_path && (typeFilter()==='all'||item.media_type===typeFilter())){<div class="media-card"><button type="button" class="media-preview" (click)="openMedia(item)" [title]="item.media_type==='photo'?'Open photo':'Open video'">@if(item.media_type==='photo'){<img [src]="previewUrls()[item.id] || ''" alt="Customer review photo" />}@else{<span>▶ Video</span>}</button><div class="media-meta"><span>{{item.media_type==='photo'?'Photo':'Video'}} @if(item.is_cover){· First photo}</span>@if(item.media_type==='photo'){<button type="button" class="icon" [disabled]="savingCover()!==null || item.is_cover" (click)="setCover(item)" [attr.aria-label]="item.is_cover?'First photo of review':'Set as first photo of review'" [title]="item.is_cover?'First photo':'Set as first photo'">{{item.is_cover?'★':'☆'}}</button>}</div></div>}}</div>
+        <div class="media-grid">@for(item of media();track item.id){@if(item.storage_path && (typeFilter()==='all'||item.media_type===typeFilter())){<div class="media-card"><button type="button" class="media-preview" (click)="openMedia(item)" [title]="item.media_type==='photo'?'Open photo':'Open video'">@if(item.media_type==='photo'){<img [src]="previewUrls()[item.id] || ''" alt="Customer review photo" />}@else{<span>▶ Video</span>}</button><div class="media-meta"><span>{{item.media_type==='photo'?'Photo':'Video'}} @if(item.is_cover){· First photo}</span>@if(item.media_type==='photo'){<button type="button" class="icon" [disabled]="!coverReady() || savingCover()!==null || item.is_cover" (click)="setCover(item)" [attr.aria-label]="item.is_cover?'First photo of review':'Set as first photo of review'" [title]="item.is_cover?'First photo':'Set as first photo'">{{item.is_cover?'★':'☆'}}</button>}</div></div>}}</div>
       }
       @if (section()==='products') {
         <div class="table-wrap"><table><thead><tr><th>Product</th><th>Review count</th><th>Average rating</th><th>Action</th></tr></thead><tbody>@for(row of productRows();track row.id){<tr><td>{{row.name}}</td><td>{{row.count}}</td><td>{{row.average}} ★</td><td><button type="button" class="icon" title="Show reviews" [attr.aria-label]="'Show reviews for '+row.name" (click)="showProductReviews(row.id)">↗</button></td></tr>}@empty{<tr><td colspan="4" class="empty">No product reviews are linked to catalog products yet.</td></tr>}</tbody></table></div>
@@ -61,7 +62,7 @@ type Product = {id:string;product_name:string};
           }</td>
           <td><span>{{mediaFor(review.id).length}} attached</span>@if(missingFor(review.id)){<b class="missing">{{missingFor(review.id)}} unavailable</b>}
             <div class="thumbs">@for(item of mediaFor(review.id);track item.id){
-              @if(item.media_type==='photo'){<div class="thumb"><button type="button" (click)="openMedia(item)" title="Open photo" aria-label="Open review photo"><img [src]="previewUrls()[item.id] || ''" alt="Review photo" /></button><button type="button" class="cover" [disabled]="savingCover()!==null || item.is_cover" (click)="setCover(item)" [title]="item.is_cover?'First photo':'Set as first photo'" [attr.aria-label]="item.is_cover?'First photo of review':'Set as first photo of review'">{{item.is_cover?'★':'☆'}}</button></div>}
+              @if(item.media_type==='photo'){<div class="thumb"><button type="button" (click)="openMedia(item)" title="Open photo" aria-label="Open review photo"><img [src]="previewUrls()[item.id] || ''" alt="Review photo" /></button><button type="button" class="cover" [disabled]="!coverReady() || savingCover()!==null || item.is_cover" (click)="setCover(item)" [title]="item.is_cover?'First photo':'Set as first photo'" [attr.aria-label]="item.is_cover?'First photo of review':'Set as first photo of review'">{{item.is_cover?'★':'☆'}}</button></div>}
               @else {<button type="button" (click)="openMedia(item)" title="Open video" aria-label="Open review video">▶ Video</button>}
             }</div>
           </td>
@@ -94,6 +95,7 @@ export class ReviewsComponent implements OnInit {
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly savingCover = signal<string|null>(null);
+  readonly coverReady = signal(true);
   readonly error = signal('');
   readonly success = signal('');
   readonly editing = signal<string|null>(null);
@@ -128,9 +130,20 @@ export class ReviewsComponent implements OnInit {
         this.db.client.from('wc_fera_review_media').select('id,review_id,media_type,storage_path,storage_parts,is_cover').limit(1000),
         this.db.client.from('wc_shipping_products').select('id,product_name').order('product_name').limit(1000),
       ]);
-      if(reviewResult.error)throw reviewResult.error;if(mediaResult.error)throw mediaResult.error;if(productResult.error)throw productResult.error;
-      this.reviews.set((reviewResult.data||[]) as Review[]);this.media.set((mediaResult.data||[]) as Media[]);this.products.set((productResult.data||[]) as Product[]);
-      const photos=(mediaResult.data||[]).filter(row=>row.media_type==='photo'&&row.storage_path&&!row.storage_parts?.length);
+      if(reviewResult.error)throw reviewResult.error;if(productResult.error)throw productResult.error;
+      let mediaRows:Media[];
+      if(mediaResult.error && /is_cover/i.test(mediaResult.error.message)){
+        const fallback=await this.db.client.from('wc_fera_review_media').select('id,review_id,media_type,storage_path,storage_parts').limit(1000);
+        if(fallback.error)throw fallback.error;
+        mediaRows=(fallback.data||[]).map(row=>({...row,is_cover:false})) as Media[];
+        this.coverReady.set(false);
+      }else{
+        if(mediaResult.error)throw mediaResult.error;
+        mediaRows=(mediaResult.data||[]) as Media[];
+        this.coverReady.set(true);
+      }
+      this.reviews.set((reviewResult.data||[]) as Review[]);this.media.set(mediaRows);this.products.set((productResult.data||[]) as Product[]);
+      const photos=mediaRows.filter(row=>row.media_type==='photo'&&row.storage_path&&!row.storage_parts?.length);
       const urls:Record<string,string>={};
       await Promise.all(photos.map(async item=>{const {data}=await this.db.client.storage.from('fera-review-media').createSignedUrl(item.storage_path!,3600);if(data?.signedUrl)urls[item.id]=data.signedUrl;}));
       this.previewUrls.set(urls);
@@ -163,7 +176,7 @@ export class ReviewsComponent implements OnInit {
     }catch(e){this.error.set('Media could not be opened: '+((e as Error)?.message||'connection error')+'. Retry.');}
   }
   async setCover(item:Media){
-    if(this.savingCover()||item.media_type!=='photo'||!item.storage_path)return;
+    if(this.savingCover()||!this.coverReady()||item.media_type!=='photo'||!item.storage_path)return;
     this.savingCover.set(item.id);this.error.set('');this.success.set('');
     try{
       const {error}=await this.db.client.rpc('wc_set_fera_review_cover',{p_review_id:item.review_id,p_media_id:item.id});
