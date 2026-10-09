@@ -27,14 +27,21 @@ const media = await fetchAllFera(page => feraPage('media', page), 'media');
 const reviewIds = new Set(reviews.map(row => String(row.id)));
 const expected = new Map();
 const expectedUrls = new Map();
+const embeddedMedia = new Map();
 for (const review of reviews) {
   for (const item of Array.isArray(review.media) ? review.media : []) {
-    if (item?.id) expected.set(String(item.id), String(review.id));
+    if (item?.id) {
+      expected.set(String(item.id), String(review.id));
+      embeddedMedia.set(String(item.id), item);
+    }
     else if (item?.url) expectedUrls.set(String(item.url), String(review.id));
   }
 }
 const normalizedMedia = media.map(raw => {
   const item = mediaFields(raw);
+  const embedded = embeddedMedia.get(item.id);
+  item.downloadUrls = [...new Set([raw.url, raw.original_url, embedded?.url, embedded?.original_url]
+    .filter(value => typeof value === 'string' && /^https:\/\//i.test(value)))];
   const expectedReview = expected.get(item.id) ?? expectedUrls.get(item.sourceUrl);
   if (expectedReview && item.reviewId && expectedReview !== item.reviewId) {
     throw Error('Fera media/review relationship disagrees between endpoints');
@@ -60,8 +67,10 @@ const fieldCoverage = {
 };
 const hosts = new Map();
 for (const item of linkedMedia) {
-  const host = new URL(item.sourceUrl).hostname.toLowerCase();
-  hosts.set(host, (hosts.get(host) ?? 0) + 1);
+  for (const candidate of item.downloadUrls) {
+    const host = new URL(candidate).hostname.toLowerCase();
+    hosts.set(host, (hosts.get(host) ?? 0) + 1);
+  }
 }
 console.log(JSON.stringify({ mode, reviews: reviews.length, subjects, media: media.length,
   linkedMedia: linkedMedia.length, standaloneMedia, fieldCoverage, mediaHosts: Object.fromEntries(hosts) }));
@@ -118,7 +127,7 @@ function checkedUrl(value) {
   }
   return url;
 }
-async function download(urlString, type) {
+async function downloadOne(urlString, type) {
   let url = checkedUrl(urlString);
   for (let redirects = 0; redirects <= 3; redirects += 1) {
     const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(120000) });
@@ -145,6 +154,16 @@ async function download(urlString, type) {
   }
   throw Error('Fera media redirected too many times');
 }
+async function download(urls, type) {
+  for (const url of urls) {
+    try { return await downloadOne(url, type); }
+    catch (error) {
+      if (error?.message === 'Fera media download failed: HTTP 404') continue;
+      throw error;
+    }
+  }
+  throw Error('Fera media download failed: HTTP 404 on every source URL');
+}
 const extension = new Map([['image/jpeg', 'jpg'], ['image/png', 'png'], ['image/webp', 'webp'],
   ['image/gif', 'gif'], ['video/mp4', 'mp4'], ['video/webm', 'webm'], ['video/quicktime', 'mov']]);
 async function previouslyCopied(prior, reviewId, sourceUrl) {
@@ -165,12 +184,22 @@ async function previouslyCopied(prior, reviewId, sourceUrl) {
 }
 let copied = 0;
 let retained = 0;
+const unavailable = [];
 for (const item of linkedMedia) {
   const reviewId = savedReviews.get(item.reviewId);
   if (!reviewId) throw Error('Fera media refers to a review not confirmed in Hub');
   const prior = priorMedia.get(item.id);
   if (await previouslyCopied(prior, reviewId, item.sourceUrl)) { retained += 1; continue; }
-  const { bytes, mime } = await download(item.sourceUrl, item.type);
+  let downloaded;
+  try { downloaded = await download(item.downloadUrls, item.type); }
+  catch (error) {
+    if (error?.message === 'Fera media download failed: HTTP 404 on every source URL') {
+      unavailable.push(item.id);
+      continue;
+    }
+    throw error;
+  }
+  const { bytes, mime } = downloaded;
   const suffix = extension.get(mime);
   if (!suffix) throw Error(`Fera media format ${mime} needs review`);
   const sha256 = createHash('sha256').update(bytes).digest('hex');
@@ -202,6 +231,7 @@ for (const item of linkedMedia) {
   copied += 1;
 }
 const confirmedMedia = linkedMedia.length === copied + retained;
+if (unavailable.length) throw Error(`${unavailable.length} Fera review media returned HTTP 404; media IDs: ${unavailable.join(', ')}`);
 if (!confirmedMedia) throw Error('Hub did not confirm every linked photo/video');
 console.log(JSON.stringify({ result: 'confirmed', reviews: savedReviews.size, linkedMedia: linkedMedia.length,
   copied, previouslyCopied: retained, productLinksUnresolved: unresolved }));
