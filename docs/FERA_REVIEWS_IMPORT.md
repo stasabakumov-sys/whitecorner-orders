@@ -33,6 +33,9 @@ The private API uses a `Secret-Key` header; its key must be held only in the
    media. On failure, rerun `apply`: existing records are retained and absent
    source records are never deleted. Check any oversized, inaccessible or
    unrecognised media format manually before declaring the archive complete.
+   When Fera returns HTTP 404 for all listed addresses of an attachment, the
+   import continues with other media and reports its opaque Fera media ID for
+   source-side recovery; the run stays failed until every attachment is copied.
 
 The script logs no review text, customer contact data, media URLs or secret
 values. Source payloads, including possible customer contact details, remain
