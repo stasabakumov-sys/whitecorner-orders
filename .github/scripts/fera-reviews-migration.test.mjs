@@ -73,6 +73,12 @@ try {
   assert.equal(published.public_author_name, null);
   assert.equal((await db.query("select has_table_privilege('anon','public.wc_fera_reviews','SELECT') allowed")).rows[0].allowed, false);
   assert.equal((await db.query("select count(*)::int count from pg_policies where tablename='wc_fera_reviews' and policyname='fera_reviews_manager_update'")).rows[0].count, 1);
+  await db.exec(await readFile('supabase/migrations/20261009000300_fera_review_product_override.sql', 'utf8'));
+  const overrides = (await db.query(`select
+    has_column_privilege('authenticated','public.wc_fera_reviews','product_override_id','UPDATE') override_allowed,
+    has_column_privilege('authenticated','public.wc_fera_reviews','shipping_product_id','UPDATE') source_link_editable`)).rows[0];
+  assert.equal(overrides.override_allowed, true);
+  assert.equal(overrides.source_link_editable, false);
   console.log('Fera review migration rehearsal passed');
 } finally {
   await db.close();

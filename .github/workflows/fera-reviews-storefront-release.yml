@@ -25,6 +25,10 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/fera-publication-release.mjs
+      - name: Apply explicit product override migration
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/fera-product-override-release.mjs
       - uses: supabase/setup-cli@v1
         with:
           version: latest
