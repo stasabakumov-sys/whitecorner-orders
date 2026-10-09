@@ -49,6 +49,7 @@ const inviteEntry = new URLSearchParams(window.location.hash.replace(/^#/, '')).
         <a routerLink="/finance" routerLinkActive="active"><span>$</span>Finance</a>
         <a routerLink="/product-costing" routerLinkActive="active"><span>▤</span>Order Costing</a>
         <a routerLink="/shipping-data" routerLinkActive="active"><span>⇄</span>Products</a>
+        @if(members.manager()){<a routerLink="/reviews" routerLinkActive="active"><span>★</span>Reviews</a>}
         @if(members.manager()){<a routerLink="/users" routerLinkActive="active"><span>♙</span>Users</a>}
         <button (click)="auth.signOut()">Sign out</button>
       </aside>

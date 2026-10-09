@@ -39,8 +39,8 @@ try {
   await db.query('insert into public.wc_shipping_products(id) values($1)', [productId]);
   await db.query(`
     insert into public.wc_fera_reviews
-      (fera_review_id, subject, wix_product_id, shipping_product_id, rating, source_data)
-    values ('frev_one', 'product', 'wix-one', $1, 5, '{"id":"frev_one"}')
+      (fera_review_id, subject, wix_product_id, shipping_product_id, rating, source_state, source_data)
+    values ('frev_one', 'product', 'wix-one', $1, 5, 'approved', '{"id":"frev_one"}')
   `, [productId]);
   await assert.rejects(db.query(`
     insert into public.wc_fera_reviews(fera_review_id, subject, rating, source_data)
@@ -67,6 +67,12 @@ try {
     order by tablename, policyname
   `);
   assert.equal(policies.rows.length, 4);
+  await db.exec(await readFile('supabase/migrations/20261009000200_fera_review_publication.sql', 'utf8'));
+  const published = (await db.query("select is_published, public_author_name from public.wc_fera_reviews where fera_review_id='frev_one'")).rows[0];
+  assert.equal(published.is_published, true);
+  assert.equal(published.public_author_name, null);
+  assert.equal((await db.query("select has_table_privilege('anon','public.wc_fera_reviews','SELECT') allowed")).rows[0].allowed, false);
+  assert.equal((await db.query("select count(*)::int count from pg_policies where tablename='wc_fera_reviews' and policyname='fera_reviews_manager_update'")).rows[0].count, 1);
   console.log('Fera review migration rehearsal passed');
 } finally {
   await db.close();
