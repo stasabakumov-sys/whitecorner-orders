@@ -1,4 +1,4 @@
-import {ChangeDetectorRef,Component,Input,OnChanges,Optional} from '@angular/core';
+import {ChangeDetectorRef,Component,Input,OnChanges,Optional,signal} from '@angular/core';
 import {DialogModule} from 'primeng/dialog';
 import {SupabaseService} from '../../core/services/supabase.service';
 import {BoxDrawingComponent,baseDrawingBox,sameDrawingBox} from './box-drawing.component';
@@ -34,12 +34,13 @@ import {HubMembersService} from '../../core/services/hub-members.service';
 export class PackingFilesCellComponent implements OnChanges{
  @Input()box:any={};@Input()kind:'cdr'|'rd'='rd';@Input()signature='';@Input()index=0;@Input()sharedSize='';@Input()backdrop=false;@Input()dimensions:any=null;@Input()readOnly=false;@Input()locked=false;@Input()refreshVersion=0;
  viewBox:any={};resolvedId='';qualifiedKey=qualifiedDrawingKey;svgDrawing:any=null;svgBusy=false;svgError='';
+ readonly fileIdentity=signal({packageId:'',loading:true,error:false});
  open=false;sendOnLoad=false;present=false;loading=false;error=false;private generation=0;
  constructor(private db:SupabaseService,private cdr:ChangeDetectorRef,@Optional() readonly members?:HubMembersService){}
  get enabled(){return (!this.backdrop||!!this.sharedSize)&&(!this.sharedSize||this.kind==='cdr'||qualifiedDrawingKey(this.sharedSize))&&!!(this.viewBox.id||this.signature||this.sharedSize);}
  get label(){return `${this.kind==='cdr'&&this.svgDrawing?'CDR / SVG':this.kind.toUpperCase()}: ${this.loading?'checking files':this.error?'check failed':this.present?'file uploaded':'no saved file'}`;}
  ngOnChanges(){this.viewBox=this.dimensions?{...this.box,package_name:this.dimensions.package_name,length_mm:Number(this.dimensions.length_mm),width_mm:Number(this.dimensions.width_mm),height_mm:Number(this.dimensions.height_mm)}:this.box;void this.load();}
- async load(){const version=++this.generation;this.loading=true;this.error=false;this.svgDrawing=null;this.svgError='';
+ async load(){const version=++this.generation;this.loading=true;this.error=false;this.svgDrawing=null;this.svgError='';this.fileIdentity.set({packageId:'',loading:true,error:false});
   try{
    // Direct instances also support explicit load after the dialog is closed.
    if(!this.signature&&!this.sharedSize)this.viewBox=this.box;
@@ -61,7 +62,7 @@ export class PackingFilesCellComponent implements OnChanges{
     this.present=!!this.svgDrawing||(drawing&&!this.sharedSize?rows.some((row:any)=>sameDrawingBox(row.box_snapshot,row.cart_base_package_id?baseDrawingBox(this.viewBox):this.viewBox)):rows.length>0);
    }
   }catch{if(version===this.generation)this.error=true;}
-  finally{if(version===this.generation){this.loading=false;this.cdr.markForCheck();}}
+  finally{if(version===this.generation){this.loading=false;this.fileIdentity.set({packageId:this.resolvedId,loading:false,error:this.error});this.cdr.markForCheck();}}
  }
  async downloadSvg(){if(!this.svgDrawing||this.svgBusy)return;this.svgBusy=true;this.svgError='';
   try{const file=this.svgDrawing;const response=await this.db.client.storage.from('box-drawings').createSignedUrl(file.object_path,60,{download:file.filename});

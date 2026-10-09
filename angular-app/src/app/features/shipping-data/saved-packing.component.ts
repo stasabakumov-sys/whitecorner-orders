@@ -4,6 +4,7 @@ import {SupabaseService} from '../../core/services/supabase.service';
 import {PackingFilesCellComponent} from './packing-files-cell.component';
 import {CartBoxConstructorComponent} from './cart-box-constructor.component';
 import {HubMembersService} from '../../core/services/hub-members.service';
+import {isCartProduct} from './cart-size';
 import {packagingError,reviewComponents} from '../../../../../supabase/functions/_shared/delivery-review-domain';
 
 @Component({selector:'app-saved-packing',standalone:true,imports:[FormsModule,PackingFilesCellComponent,CartBoxConstructorComponent],template:`
@@ -47,7 +48,10 @@ import {packagingError,reviewComponents} from '../../../../../supabase/functions
  @if(replacing){<button type="button" [disabled]="saving()" (click)="draft.splice($index,1)">Remove box</button>}</td>
  }@else{
  <td>{{canonical(box).package_name}}</td><td>{{canonical(box).length_mm}}</td><td>{{canonical(box).width_mm}}</td><td>{{canonical(box).height_mm}}</td><td>{{box.weight_kg??'Enter weight'}}</td>
- <td><app-packing-files-cell [signature]="profile.signature" [index]="$index" [box]="box" [dimensions]="backdropDimensions" [backdrop]="backdrop" [sharedSize]="backdrop?sharedSize:''" kind="cdr" /></td><td><app-packing-files-cell [signature]="profile.signature" [index]="$index" [box]="box" [dimensions]="backdropDimensions" [backdrop]="backdrop" [sharedSize]="backdrop?sharedSize:''" kind="rd" /></td>
+ <td><app-packing-files-cell [signature]="profile.signature" [index]="$index" [box]="box" [dimensions]="backdropDimensions" [backdrop]="backdrop" [sharedSize]="backdrop?sharedSize:''" kind="cdr" [refreshVersion]="constructorRefresh" /></td>
+ <td><div class="file-actions"><app-packing-files-cell #rdFiles [signature]="profile.signature" [index]="$index" [box]="box" [dimensions]="backdropDimensions" [backdrop]="backdrop" [sharedSize]="backdrop?sharedSize:''" kind="rd" [refreshVersion]="constructorRefresh" />
+ @if(isCart(product)&&!backdrop){<app-cart-box-constructor [box]="constructorBox(box,rdFiles.fileIdentity().packageId)" [profileSignature]="rdFiles.fileIdentity().packageId?'':profile.signature" [profileIndex]="$index" [locked]="rdFiles.fileIdentity().loading||rdFiles.fileIdentity().error||!rdFiles.enabled" (filesSaved)="constructorRefresh=constructorRefresh+1" />}
+ </div></td>
  }
  </tr>}
  </tbody></table></div>
@@ -58,6 +62,8 @@ export class SavedPackingComponent implements OnChanges{
  @Input()product:any;@Input()profile:any;@Input()rules:any[]=[];@Input()backdrop=false;@Input()sharedSize='';@Input()sharedSizeLabel='';@Input()fallbackOptions:Record<string,string>={};@Input()backdropDimensions:any=null;
  @Output()profileSaved=new EventEmitter<any>();@Output()dimensionsSaved=new EventEmitter<any>();
  constructorRefresh=0;editing=false;replacing=false;draft:any[]=[];saving=signal(false);error=signal('');saved=signal(false);
+ readonly isCart=isCartProduct;
+ constructorBox(box:any,packageId:string){return packageId?{...box,id:packageId}:box;}
  constructor(private db:SupabaseService,@Optional() readonly members?:HubMembersService){}
  weightDraft:number|null=null;private weightIdentity='';private editDimensionsRevision:string|null=null;
  ngOnChanges(){const identity=this.product?.id+'|'+this.profile?.signature;if(identity!==this.weightIdentity){this.weightIdentity=identity;this.resetWeight();}}
