@@ -1,4 +1,5 @@
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
+import {publicReviewAuthor} from './public-fields.mjs';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -83,7 +84,7 @@ Deno.serve(async request => {
   if (request.method === 'HEAD') return new Response(null, {headers: cors});
   try {
     const {data: reviews, error} = await db.from('wc_fera_reviews')
-      .select('id,subject,wix_product_id,shipping_product_id,rating,title,body,reviewed_at,verified,public_author_name')
+      .select('id,subject,wix_product_id,shipping_product_id,product_override_id,rating,title,body,reviewed_at,verified,public_author_name,source_data')
       .eq('is_published', true).order('reviewed_at', {ascending: false}).limit(500);
     if (error) return fail(503, 'Reviews could not be loaded');
     const reviewIds = (reviews || []).map((review: any) => review.id);
@@ -92,7 +93,7 @@ Deno.serve(async request => {
         .in('review_id', reviewIds).not('storage_path', 'is', null).limit(1000)
       : {data: [], error: null};
     if (mediaError) return fail(503, 'Review media could not be loaded');
-    const productIds = [...new Set((reviews || []).map((row: any) => row.shipping_product_id).filter(Boolean))];
+    const productIds = [...new Set((reviews || []).map((row: any) => row.product_override_id || row.shipping_product_id).filter(Boolean))];
     const {data: products, error: productError} = productIds.length
       ? await db.from('wc_shipping_products').select('id,product_name').in('id', productIds)
       : {data: [], error: null};
@@ -106,9 +107,9 @@ Deno.serve(async request => {
     }
     return json({reviews: (reviews || []).map((row: any) => ({
       id: row.id, subject: row.subject, wixProductId: row.wix_product_id,
-      productName: productNames.get(row.shipping_product_id) || null,
+      productName: productNames.get(row.product_override_id || row.shipping_product_id) || null,
       rating: row.rating, title: row.title, body: row.body, reviewedAt: row.reviewed_at,
-      verified: row.verified === true, author: row.public_author_name || 'Customer',
+      verified: row.verified === true, author: publicReviewAuthor(row.source_data,row.public_author_name),
       media: mediaByReview.get(row.id) || [],
     }))});
   } catch {return fail(503, 'Reviews are temporarily unavailable');}
