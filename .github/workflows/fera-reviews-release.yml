@@ -50,6 +50,11 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: node .github/scripts/fera-review-release.mjs --apply
+      - name: Enable exact oversized-media archive
+        if: inputs.mode == 'apply'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node .github/scripts/fera-media-parts-release.mjs
       - name: Import and verify reviews with photos and videos
         if: inputs.mode == 'apply'
         env:

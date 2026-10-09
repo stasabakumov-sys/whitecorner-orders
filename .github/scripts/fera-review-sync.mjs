@@ -106,7 +106,7 @@ if (savedReviews.size !== reviews.length) throw Error('Hub did not confirm every
 
 const priorMedia = new Map();
 for (let offset = 0; ; offset += 500) {
-  const page = await rows(db.from('wc_fera_review_media').select('fera_media_id,review_id,source_url,storage_path,bytes').range(offset, offset + 499), 'Hub media');
+  const page = await rows(db.from('wc_fera_review_media').select('fera_media_id,review_id,source_url,storage_path,storage_parts,bytes').range(offset, offset + 499), 'Hub media');
   for (const item of page) priorMedia.set(item.fera_media_id, item);
   if (page.length < 500) break;
 }
@@ -147,25 +147,56 @@ async function download(urlString, type) {
 }
 const extension = new Map([['image/jpeg', 'jpg'], ['image/png', 'png'], ['image/webp', 'webp'],
   ['image/gif', 'gif'], ['video/mp4', 'mp4'], ['video/webm', 'webm'], ['video/quicktime', 'mov']]);
+async function previouslyCopied(prior, reviewId, sourceUrl) {
+  if (!prior?.storage_path || prior.review_id !== reviewId || prior.source_url !== sourceUrl) return false;
+  const parts = Array.isArray(prior.storage_parts) ? prior.storage_parts : [];
+  if (parts.length) {
+    let total = 0;
+    for (const part of parts) {
+      if (!part?.path || !Number.isInteger(part.bytes) || part.bytes <= 0) return false;
+      const { data: stored } = await db.storage.from('fera-review-media').info(part.path);
+      if (!stored || Number(stored.size) !== part.bytes) return false;
+      total += part.bytes;
+    }
+    return parts[0].path === prior.storage_path && total === Number(prior.bytes);
+  }
+  const { data: stored } = await db.storage.from('fera-review-media').info(prior.storage_path);
+  return !!stored && Number(stored.size) === Number(prior.bytes);
+}
 let copied = 0;
 let retained = 0;
 for (const item of linkedMedia) {
   const reviewId = savedReviews.get(item.reviewId);
   if (!reviewId) throw Error('Fera media refers to a review not confirmed in Hub');
   const prior = priorMedia.get(item.id);
-  if (prior?.storage_path && prior.review_id === reviewId && prior.source_url === item.sourceUrl) {
-    const { data: stored } = await db.storage.from('fera-review-media').info(prior.storage_path);
-    if (stored && Number(stored.size) === Number(prior.bytes)) { retained += 1; continue; }
-  }
+  if (await previouslyCopied(prior, reviewId, item.sourceUrl)) { retained += 1; continue; }
   const { bytes, mime } = await download(item.sourceUrl, item.type);
   const suffix = extension.get(mime);
   if (!suffix) throw Error(`Fera media format ${mime} needs review`);
   const sha256 = createHash('sha256').update(bytes).digest('hex');
-  const storagePath = `${reviewId}/${createHash('sha256').update(item.id).digest('hex')}.${suffix}`;
+  const stem = `${reviewId}/${createHash('sha256').update(item.id).digest('hex')}`;
+  let storagePath = `${stem}.${suffix}`;
+  const storageParts = [];
   const { error: uploadError } = await db.storage.from('fera-review-media').upload(storagePath, bytes, { contentType: mime, upsert: true });
-  if (uploadError) throw Error(`Hub ${item.type} upload failed (${uploadError.statusCode ?? 'storage error'}; ${bytes.length} bytes)`);
+  if (String(uploadError?.statusCode) === '413') {
+    // The project-wide Storage limit can be smaller than a source video. Keep
+    // the original byte-for-byte as small, ordered objects in the private bucket.
+    const partSize = 4 * 1024 * 1024;
+    for (let offset = 0, index = 0; offset < bytes.length; offset += partSize, index += 1) {
+      const partBytes = bytes.subarray(offset, Math.min(offset + partSize, bytes.length));
+      const partPath = `${stem}.part${String(index).padStart(4, '0')}`;
+      const { error } = await db.storage.from('fera-review-media').upload(partPath, partBytes,
+        { contentType: 'application/octet-stream', upsert: true });
+      if (error) throw Error(`Hub ${item.type} part upload failed (${error.statusCode ?? 'storage error'}; ${partBytes.length} bytes)`);
+      storageParts.push({ path: partPath, bytes: partBytes.length,
+        sha256: createHash('sha256').update(partBytes).digest('hex') });
+    }
+    storagePath = storageParts[0].path;
+  } else if (uploadError) {
+    throw Error(`Hub ${item.type} upload failed (${uploadError.statusCode ?? 'storage error'}; ${bytes.length} bytes)`);
+  }
   const saved = await rows(db.from('wc_fera_review_media').upsert({ review_id: reviewId, fera_media_id: item.id,
-    source_url: item.sourceUrl, media_type: item.type, storage_path: storagePath, content_type: mime,
+    source_url: item.sourceUrl, media_type: item.type, storage_path: storagePath, storage_parts: storageParts, content_type: mime,
     bytes: bytes.length, sha256, copied_at: new Date().toISOString() }, { onConflict: 'fera_media_id' }).select('id'), 'Hub media save');
   if (saved.length !== 1) throw Error('Hub did not confirm a media record');
   copied += 1;

@@ -24,6 +24,9 @@ The private API uses a `Secret-Key` header; its key must be held only in the
 4. Run `mode=apply`. It rehearses the migration, verifies production
    prerequisites, creates manager-only tables and a private Storage bucket,
    upserts reviews by Fera ID, then copies attached photos/videos into Hub.
+   Videos rejected by the project's single-object size limit are stored as
+   ordered 4 MiB private parts; the archive records each part and a SHA-256 of
+   the original full file so it can be served or reconstructed byte-for-byte.
    Exact Wix external IDs link reviews to existing Hub product UUIDs. Missing
    product IDs remain unresolved for manual review; names never auto-link.
 5. The run succeeds only after Hub confirms all fetched reviews and linked

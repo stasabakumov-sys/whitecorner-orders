@@ -24,6 +24,7 @@ try {
     create table storage.objects(id uuid primary key, bucket_id text);
   `);
   await db.exec(await readFile('supabase/migrations/20261008000200_fera_reviews.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/20261009000100_fera_media_parts.sql', 'utf8'));
   const tables = await db.query(`
     select relname, relrowsecurity from pg_class
     where oid in ('public.wc_fera_reviews'::regclass, 'public.wc_fera_review_media'::regclass)
@@ -54,6 +55,8 @@ try {
     insert into public.wc_fera_review_media(review_id, fera_media_id, source_url)
     values ($1, 'fm_one', 'https://example.invalid/photo.jpg')
   `, [reviewId]);
+  const parts = (await db.query("select storage_parts from public.wc_fera_review_media where fera_media_id='fm_one'")).rows[0];
+  assert.deepEqual(parts.storage_parts, []);
   await assert.rejects(db.query(`
     insert into public.wc_fera_review_media(review_id, fera_media_id, source_url)
     values ($1, 'fm_one', 'https://example.invalid/another.jpg')
